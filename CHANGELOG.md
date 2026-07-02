@@ -4,6 +4,12 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+### Changed
+- Aligned OpenPost Cloud plan links, environment examples, docs, and landing-page pricing with the full Starter/Creator/Pro/Team/Agency billing catalog.
+
+### Fixed
+- Fixed the pre-push lint hook's tag-push detection and no-devenv fallback directory handling.
+
 ## [1.0.23] - 2026-07-01
 
 ### Fixed

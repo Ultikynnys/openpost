@@ -40,7 +40,7 @@ changes live in [Developer Docs](/development/).
 - [ ] Set `OPENPOST_S3_PUBLIC_BASE_URL` to a stable public media origin.
 - [ ] Verify the S3 bucket lifecycle policy and object access model before launch.
 - [ ] Set `OPENPOST_POLAR_ACCESS_TOKEN`, `OPENPOST_POLAR_WEBHOOK_SECRET`, `OPENPOST_POLAR_CHECKOUT_SUCCESS_URL`, and `OPENPOST_POLAR_RETURN_URL`.
-- [ ] Set `OPENPOST_POLAR_STARTER_PRODUCT_ID`, `OPENPOST_POLAR_CREATOR_PRODUCT_ID`, and `OPENPOST_POLAR_PRO_PRODUCT_ID`.
+- [ ] Set `OPENPOST_POLAR_STARTER_PRODUCT_ID`, `OPENPOST_POLAR_CREATOR_PRODUCT_ID`, `OPENPOST_POLAR_PRO_PRODUCT_ID`, `OPENPOST_POLAR_TEAM_PRODUCT_ID`, and `OPENPOST_POLAR_AGENCY_PRODUCT_ID`.
 - [ ] Set `OPENPOST_POLAR_API_BASE_URL=https://sandbox-api.polar.sh/v1` only for sandbox testing; production defaults to `https://api.polar.sh/v1`.
 - [ ] Send a signed Polar webhook test event and confirm it is stored once.
 - [ ] Confirm a new hosted user can create the bootstrap workspace and is blocked from extra workspaces before checkout.

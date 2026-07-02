@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-test("marketing page presents the cloud product and demo slot", async ({
+test("marketing page presents the cloud product and product preview", async ({
   page,
 }) => {
   await page.goto("/");
@@ -34,11 +34,17 @@ test("marketing page presents the cloud product and demo slot", async ({
     "href",
     "https://app.openpost.social/register?plan=pro",
   );
+  await expect(page.getByRole("link", { name: "Start Team" })).toHaveAttribute(
+    "href",
+    "https://app.openpost.social/register?plan=team",
+  );
   await expect(
-    page.getByLabel("OpenPost product demo placeholder"),
-  ).toBeVisible();
+    page.getByRole("link", { name: "Start Agency" }),
+  ).toHaveAttribute("href", "https://app.openpost.social/register?plan=agency");
+  await expect(page.getByLabel("OpenPost product preview")).toBeVisible();
+  await expect(page.getByText("Current product surface.")).toBeVisible();
   await expect(
-    page.getByText("Replace this with the recorded walkthrough."),
+    page.getByText("Review drafts, schedule posts, manage media"),
   ).toBeVisible();
   await expect(
     page.getByRole("heading", {

@@ -14,8 +14,20 @@ set -euo pipefail
 
 cd "$(git rev-parse --show-toplevel)"
 
-remote="${1:-}"
-url="${2:-}"
+is_tag_only_push() {
+  local saw_ref=0
+  local local_ref="" local_sha="" remote_ref="" remote_sha=""
+
+  while IFS=" " read -r local_ref local_sha remote_ref remote_sha || [ -n "$local_ref$local_sha$remote_ref$remote_sha" ]; do
+    saw_ref=1
+    case "$remote_ref" in
+      refs/tags/*) ;;
+      *) return 1 ;;
+    esac
+  done
+
+  [ "$saw_ref" -eq 1 ]
+}
 
 # Skip when explicitly disabled. The release workflow sets this when
 # pushing the tag for a release that has already been CI-gated.
@@ -24,9 +36,10 @@ if [ "${OPENPOST_SKIP_PRE_PUSH_LINT:-0}" = "1" ]; then
   exit 0
 fi
 
-# Skip tag pushes: the release workflow already gated the commit
-# being tagged with the same lint suite.
-if [ -n "$url" ] && echo "$url" | grep -qE "tags/"; then
+# Skip tag-only pushes: the release workflow already gated the commit
+# being tagged with the same lint suite. Git passes pushed refs on stdin,
+# not through the remote URL argument.
+if is_tag_only_push; then
   echo "pre-push-lint: tag push detected, skipping (CI already gated)"
   exit 0
 fi
@@ -41,9 +54,14 @@ denv_lint() {
     # Fallback: run the underlying commands directly. Used when the
     # developer hasn't entered the devenv shell (e.g. CI machines).
     (
-      cd backend && gofmt -l . | { read -r line && [ -n "$line" ] && { echo "$line"; exit 1; } || true; }
-      cd backend && golangci-lint run ./...
-      cd cli && golangci-lint run ./...
+      unformatted=$(cd backend && gofmt -l .)
+      if [ -n "$unformatted" ]; then
+        echo "$unformatted"
+        exit 1
+      fi
+
+      (cd backend && golangci-lint run ./...)
+      (cd cli && golangci-lint run ./...)
       pnpm --filter @openpost/web lint
     )
   fi

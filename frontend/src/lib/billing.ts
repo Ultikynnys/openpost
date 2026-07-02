@@ -1,4 +1,4 @@
-export const hostedPlanIDs = ['starter', 'creator', 'pro'] as const;
+export const hostedPlanIDs = ['starter', 'creator', 'pro', 'team', 'agency'] as const;
 
 export type HostedPlanID = (typeof hostedPlanIDs)[number];
 

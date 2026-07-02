@@ -93,8 +93,8 @@
       "Yes. Self-hosting stays a core trust signal, but this site is focused on the managed cloud product.",
     ],
     [
-      "Where does the demo go?",
-      "The hero has a dedicated demo stage that can be replaced with the recorded product walkthrough.",
+      "Can I see the product before signing up?",
+      "Yes. The page shows current dashboard screenshots, and the hosted app is available at app.openpost.social during the beta rollout.",
     ],
     [
       "Why not just use a generic scheduler?",
@@ -143,6 +143,32 @@
         "15 social accounts",
         "2,500 scheduled posts/mo",
         "25 GB media",
+      ],
+    },
+    {
+      id: "team",
+      name: "Team",
+      price: "$49",
+      description:
+        "Seat-based collaboration for small teams and multi-brand operators.",
+      limits: [
+        "10 workspaces",
+        "25 social accounts",
+        "5,000 scheduled posts/mo",
+        "3 included seats",
+      ],
+    },
+    {
+      id: "agency",
+      name: "Agency",
+      price: "$99",
+      description:
+        "Agency workspace management with higher account and media limits.",
+      limits: [
+        "50 workspaces",
+        "150 social accounts",
+        "25,000 scheduled posts/mo",
+        "5 included seats",
       ],
     },
   ];
@@ -209,14 +235,10 @@
       </p>
     </div>
 
-    <div
-      id="demo"
-      class="demo-stage"
-      aria-label="OpenPost product demo placeholder"
-    >
+    <div id="demo" class="demo-stage" aria-label="OpenPost product preview">
       <div class="demo-toolbar">
         <span></span><span></span><span></span>
-        <strong>Demo recording slot</strong>
+        <strong>Dashboard preview</strong>
       </div>
       <div class="demo-screen">
         <img
@@ -226,10 +248,10 @@
         <div class="play-button" aria-hidden="true">▶</div>
       </div>
       <div class="demo-caption">
-        <strong>Replace this with the recorded walkthrough.</strong>
+        <strong>Current product surface.</strong>
         <span
-          >Show idea input, AI renditions, review, scheduling, CLI, and MCP
-          handoff.</span
+          >Review drafts, schedule posts, manage media, inspect accounts, and
+          keep assistant/CLI workflows visible from the dashboard.</span
         >
       </div>
     </div>
