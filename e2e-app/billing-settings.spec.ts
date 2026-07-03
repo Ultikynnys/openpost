@@ -19,11 +19,14 @@ test("settings shows billing plan controls for an authenticated workspace", asyn
   await page.addInitScript((token) => {
     window.localStorage.setItem("token", token);
   }, auth.token);
-  await page.goto("/settings");
+  await page.goto("/settings?tab=organization");
 
-  await expect(page.getByTestId("settings-tabs")).toBeVisible();
-  await page.getByRole("tab", { name: "Organization" }).click();
-  await expect(page.getByRole("heading", { name: "Billing" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Billing E2E settings" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Billing", exact: true }),
+  ).toBeVisible();
   await expect(page.getByText("No active plan")).toBeVisible();
   await expect(
     page.getByRole("button", { name: "Customer Portal" }),
@@ -188,9 +191,11 @@ test("settings lets instance admins manage provider apps", async ({ page }) => {
     });
   });
 
-  await page.goto("/settings");
+  await page.goto("/settings?tab=admin");
 
-  await page.getByRole("tab", { name: "Admin" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Instance admin" }),
+  ).toBeVisible();
   await expect(page.getByTestId("provider-apps-settings")).toBeVisible();
 
   await page.locator("#provider-app-name").fill("Production X");
@@ -255,8 +260,7 @@ test("settings shows recent MCP activity for an authenticated user", async ({
   await page.addInitScript((token) => {
     window.localStorage.setItem("token", token);
   }, auth.token);
-  await page.goto("/settings");
-  await page.getByRole("tab", { name: "Account" }).click();
+  await page.goto("/settings?tab=account");
 
   await expect(
     page.getByRole("heading", { name: "Recent MCP Activity" }),
@@ -314,8 +318,7 @@ test("settings lists and revokes active web sessions", async ({
   await page.addInitScript((token) => {
     window.localStorage.setItem("token", token);
   }, auth.token);
-  await page.goto("/settings");
-  await page.getByRole("tab", { name: "Account" }).click();
+  await page.goto("/settings?tab=account");
 
   await expect(
     page.getByRole("heading", { name: "Active Sessions" }),
@@ -348,8 +351,7 @@ test("settings creates MCP-scoped API tokens", async ({ page, request }) => {
   await page.addInitScript((token) => {
     window.localStorage.setItem("token", token);
   }, auth.token);
-  await page.goto("/settings");
-  await page.getByRole("tab", { name: "Account" }).click();
+  await page.goto("/settings?tab=account");
 
   await expect(page.getByTestId("api-token-scope")).toContainText(
     "MCP / ChatGPT App",
@@ -379,8 +381,7 @@ test("settings creates and accepts workspace invitations", async ({
   await page.addInitScript((token) => {
     window.localStorage.setItem("token", token);
   }, adminAuth.token);
-  await page.goto("/settings");
-  await page.getByRole("tab", { name: "Organization" }).click();
+  await page.goto("/settings?tab=organization");
 
   await expect(
     page.locator("#team").getByRole("heading", { name: "Team" }),
