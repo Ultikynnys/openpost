@@ -4,6 +4,11 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [1.0.25] - 2026-07-03
+
+### Fixed
+- Made Postgres migration normalization use `ADD COLUMN IF NOT EXISTS` so fresh cloud databases created from models can still record column-add migrations cleanly.
+
 ## [1.0.24] - 2026-07-03
 
 ### Changed

@@ -136,6 +136,8 @@ CREATE UNIQUE INDEX social_accounts_active_idx ON social_accounts (workspace_id)
 
 	got := normalizeMigrationSQL(dialect.PG, raw)
 
+	require.Contains(t, got, "ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_secret_encrypted BYTEA")
+	require.Contains(t, got, "ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_enabled_at TIMESTAMPTZ")
 	require.Contains(t, got, "totp_secret_encrypted BYTEA")
 	require.Contains(t, got, "totp_enabled_at TIMESTAMPTZ")
 	require.Contains(t, got, "is_active = FALSE")

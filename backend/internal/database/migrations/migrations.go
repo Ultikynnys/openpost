@@ -94,6 +94,7 @@ var (
 	postgresDateTimeTypeExpr     = regexp.MustCompile(`(?i)\bDATETIME\b`)
 	postgresBooleanIsActiveFalse = regexp.MustCompile(`\bis_active\s*=\s*0\b`)
 	postgresBooleanIsActiveTrue  = regexp.MustCompile(`\bis_active\s*=\s*1\b`)
+	postgresAddColumnExpr        = regexp.MustCompile(`(?i)\bADD\s+COLUMN\s+`)
 )
 
 func normalizeMigrationSQL(name dialect.Name, raw string) string {
@@ -105,7 +106,26 @@ func normalizeMigrationSQL(name dialect.Name, raw string) string {
 	out = postgresDateTimeTypeExpr.ReplaceAllString(out, "TIMESTAMPTZ")
 	out = postgresBooleanIsActiveFalse.ReplaceAllString(out, "is_active = FALSE")
 	out = postgresBooleanIsActiveTrue.ReplaceAllString(out, "is_active = TRUE")
+	out = postgresAddColumnIfNotExists(out)
 	return out
+}
+
+func postgresAddColumnIfNotExists(raw string) string {
+	var out strings.Builder
+	lines := strings.Split(raw, "\n")
+	for i, line := range lines {
+		upper := strings.ToUpper(line)
+		if strings.Contains(upper, "ALTER TABLE") &&
+			strings.Contains(upper, " ADD COLUMN") &&
+			!strings.Contains(upper, " ADD COLUMN IF NOT EXISTS") {
+			line = postgresAddColumnExpr.ReplaceAllString(line, "ADD COLUMN IF NOT EXISTS ")
+		}
+		if i > 0 {
+			out.WriteByte('\n')
+		}
+		out.WriteString(line)
+	}
+	return out.String()
 }
 
 type migration struct {
