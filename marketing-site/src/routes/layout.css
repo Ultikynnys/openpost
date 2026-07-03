@@ -1,0 +1,4 @@
+@import '../../../frontend/src/routes/layout.css';
+
+@source './**/*.{svelte,ts}';
+@source '../../../frontend/src/lib/components';

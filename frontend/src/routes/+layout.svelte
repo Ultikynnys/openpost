@@ -54,11 +54,7 @@
 
 	let needsOnboarding = $state(false);
 	let onboardingChecked = $state(false);
-	let lastOnboardingCheckedPath = $state('');
 	let onboardingCheckInFlightForPath = $state('');
-	let onboardingFreshForPath = $derived(
-		onboardingChecked && lastOnboardingCheckedPath === currentPath
-	);
 
 	function authenticatedPublicTarget() {
 		if (currentPath !== '/login') return '/';
@@ -92,7 +88,7 @@
 		}
 
 		if (authState.isAuthenticated) {
-			if (!onboardingFreshForPath) return;
+			if (!onboardingChecked) return;
 
 			if (needsOnboarding) {
 				if (!isOnboardingPage && currentPath !== '/invite') {
@@ -135,14 +131,8 @@
 	$effect(() => {
 		if (authState.isLoading || !authState.isAuthenticated) {
 			onboardingChecked = false;
-			lastOnboardingCheckedPath = '';
 			onboardingCheckInFlightForPath = '';
 			return;
-		}
-
-		if (currentPath !== lastOnboardingCheckedPath) {
-			onboardingChecked = false;
-			lastOnboardingCheckedPath = currentPath;
 		}
 
 		if (!onboardingChecked && onboardingCheckInFlightForPath !== currentPath) {
@@ -156,7 +146,7 @@
 </svelte:head>
 
 <ModeWatcher />
-{#if instance.isLoading || authState.isLoading || (authState.isAuthenticated && !onboardingFreshForPath)}
+{#if instance.isLoading || authState.isLoading || (authState.isAuthenticated && !onboardingChecked)}
 	<div class="flex min-h-screen flex-col items-center justify-center gap-3">
 		<Skeleton class="h-12 w-12 rounded-lg" />
 		<Skeleton class="h-3 w-32 rounded" />

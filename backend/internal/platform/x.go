@@ -166,11 +166,14 @@ func (x *XAdapter) ExchangeCode(_ context.Context, _ string, extra map[string]st
 		if err != nil {
 			return nil, fmt.Errorf("x oauth1 request token lookup failed: %w", err)
 		}
-		if !found {
-			return nil, fmt.Errorf("missing request token secret for oauth_token")
+		if found {
+			meta = consumed
+			ok = true
+		} else if metaRaw, found := x.requestMeta.Load(oauthToken); found {
+			meta = metaRaw.(XRequestMeta)
+			x.requestMeta.Delete(oauthToken)
+			ok = true
 		}
-		meta = consumed
-		ok = true
 	} else {
 		metaRaw, found := x.requestMeta.Load(oauthToken)
 		if !found {

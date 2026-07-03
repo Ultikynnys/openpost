@@ -4,6 +4,20 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- Replaced the marketing site with a minimal static SvelteKit index that reuses the main app theme and shared UI components.
+- Removed the old marketing content routes from the public sitemap.
+
+### Fixed
+
+- Bridged the Paraglide Vite plugin type for the frontend Vite 7 config.
+- Kept authenticated sidebar navigation inside the app shell without re-running the full onboarding loading state on every section change.
+- Redirected OAuth callback failures back to Accounts with user-safe error messages instead of raw callback JSON pages.
+- Encoded LinkedIn OAuth scopes with percent-escaped spaces so LinkedIn does not reject the scope string.
+- Reused X OAuth request-token metadata through the callback token exchange so approved X connections can be saved.
+- Dropped the legacy one-active-social-account workspace index from older databases.
+
 ## [1.0.26] - 2026-07-03
 
 ### Changed

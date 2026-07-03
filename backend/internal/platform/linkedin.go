@@ -56,7 +56,7 @@ func (l *LinkedInAdapter) GenerateAuthURL(state string) (string, map[string]stri
 		"scope":               scope,
 		"state":               state,
 	}
-	return "https://www.linkedin.com/oauth/v2/authorization?" + encodeQueryString(params), nil
+	return "https://www.linkedin.com/oauth/v2/authorization?" + encodeLinkedInAuthQuery(params), nil
 }
 
 func (l *LinkedInAdapter) ExchangeCode(ctx context.Context, code string, _ map[string]string) (*TokenResult, error) {
@@ -461,10 +461,14 @@ func linkedinHeaders(accessToken, apiVersion string) map[string]string {
 	}
 }
 
-func encodeQueryString(params map[string]string) string {
+func encodeLinkedInAuthQuery(params map[string]string) string {
 	parts := make([]string, 0, len(params))
 	for k, v := range params {
-		parts = append(parts, url.QueryEscape(k)+"="+url.QueryEscape(v))
+		encodedValue := url.QueryEscape(v)
+		if k == "scope" {
+			encodedValue = strings.ReplaceAll(encodedValue, "+", "%20")
+		}
+		parts = append(parts, url.QueryEscape(k)+"="+encodedValue)
 	}
 	return strings.Join(parts, "&")
 }

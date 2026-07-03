@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"log"
 	"net/http"
 	"net/url"
@@ -594,7 +595,7 @@ func (h *OAuthHandler) Callback(api huma.API) {
 			var err error
 			adapter, err = h.getProvider(input.Platform, input.ServerName)
 			if err != nil {
-				return nil, huma.Error400BadRequest(err.Error())
+				return h.redirectWithError(err.Error())
 			}
 			extra["oauth_token"] = input.OAuthToken
 			extra["oauth_verifier"] = input.Verifier
@@ -603,20 +604,20 @@ func (h *OAuthHandler) Callback(api huma.API) {
 		if input.Platform == "x" {
 			xAdapter, ok := adapter.(*platform.XAdapter)
 			if !ok {
-				return nil, huma.Error500InternalServerError("x adapter type mismatch")
+				return h.redirectWithError("x adapter type mismatch")
 			}
 			ws, ok := xAdapter.GetWorkspaceIDForRequestToken(input.OAuthToken)
 			if !ok {
-				return nil, huma.Error400BadRequest("invalid or expired oauth request token")
+				return h.redirectWithError("invalid or expired oauth request token")
 			}
 			workspaceID = ws
 		} else {
 			statePayload, err := h.oauthStates.Consume(ctx, input.State)
 			if err != nil {
-				return nil, huma.Error400BadRequest("invalid or expired state")
+				return h.redirectWithError("invalid or expired state")
 			}
 			if statePayload.Platform != input.Platform {
-				return nil, huma.Error400BadRequest("oauth state platform mismatch")
+				return h.redirectWithError("oauth state platform mismatch")
 			}
 			userID = statePayload.UserID
 			workspaceID = statePayload.WorkspaceID
@@ -627,12 +628,12 @@ func (h *OAuthHandler) Callback(api huma.API) {
 			if input.Platform == mastodonProvider {
 				adapter, _, err = h.getMastodonProvider(ctx, input.ServerName, "")
 				if err != nil {
-					return nil, huma.Error400BadRequest(err.Error())
+					return h.redirectWithError(err.Error())
 				}
 			} else {
 				adapter, err = h.getProvider(input.Platform, input.ServerName)
 				if err != nil {
-					return nil, huma.Error400BadRequest(err.Error())
+					return h.redirectWithError(err.Error())
 				}
 			}
 		}
@@ -676,7 +677,8 @@ func (h *OAuthHandler) Callback(api huma.API) {
 		}
 
 		if err := h.checkWorkspaceAccess(ctx, workspaceID, userID); err != nil {
-			return nil, err
+			log.Printf("[Callback] Workspace access check failed: %v", err)
+			return h.redirectWithError("workspace access denied")
 		}
 
 		return h.saveAccountAndRedirect(ctx, userID, input.Platform, workspaceID, profile.ID, profile.Username, instanceRef, tokenResp)
@@ -684,6 +686,10 @@ func (h *OAuthHandler) Callback(api huma.API) {
 }
 
 func (h *OAuthHandler) redirectWithError(msg string) (*huma.StreamResponse, error) {
+	msg = strings.TrimSpace(html.UnescapeString(msg))
+	if msg == "" {
+		msg = "OAuth connection failed"
+	}
 	location := h.frontendURL + "/accounts?error=" + url.QueryEscape(msg)
 	return &huma.StreamResponse{
 		Body: func(ctx huma.Context) {
@@ -705,7 +711,8 @@ func (h *OAuthHandler) redirectWithAccountSelection(platformName, connectionID s
 
 func (h *OAuthHandler) saveAccountSelectionAndRedirect(ctx context.Context, userID, platformName, workspaceID, instanceURL string, tokenResp *platform.TokenResult, selector platform.AccountSelectionAdapter) (*huma.StreamResponse, error) {
 	if err := h.checkWorkspaceAccess(ctx, workspaceID, userID); err != nil {
-		return nil, err
+		log.Printf("[Callback] Workspace access check failed: %v", err)
+		return h.redirectWithError("workspace access denied")
 	}
 
 	options, err := selector.ListAccountSelections(ctx, tokenResp)
@@ -719,7 +726,7 @@ func (h *OAuthHandler) saveAccountSelectionAndRedirect(ctx context.Context, user
 	pending, err := h.createPendingAccountSelection(ctx, userID, platformName, workspaceID, instanceURL, tokenResp, options)
 	if err != nil {
 		log.Printf("[Callback] Failed to save pending account selection: %v", err)
-		return nil, huma.Error500InternalServerError("failed to save pending account selection")
+		return h.redirectWithError("failed to save pending account selection")
 	}
 
 	log.Printf("[Callback] Pending account selection created: ID=%s platform=%s", pending.ID, platformName)
@@ -798,7 +805,7 @@ func (h *OAuthHandler) saveAccountAndRedirect(ctx context.Context, userID, platf
 	account, err := h.accountSaver.SaveAccount(ctx, userID, platformName, workspaceID, accountID, accountUsername, instanceURL, tokenResp)
 	if err != nil {
 		log.Printf("[Callback] Failed to save account: %v", err)
-		return nil, huma.Error500InternalServerError("failed to save account")
+		return h.redirectWithError(accountConnectionErrorMessage(err))
 	}
 
 	successPath := h.frontendURL + "/accounts/callback?status=success&platform=" + url.QueryEscape(platformName)
@@ -810,6 +817,20 @@ func (h *OAuthHandler) saveAccountAndRedirect(ctx context.Context, userID, platf
 			ctx.SetHeader("Location", successPath)
 		},
 	}, nil
+}
+
+func accountConnectionErrorMessage(err error) string {
+	msg := strings.TrimSpace(err.Error())
+	switch {
+	case strings.EqualFold(msg, "active subscription required"):
+		return "Active subscription required to connect social accounts. Choose a plan in Billing, then try connecting again."
+	case strings.Contains(msg, "social_accounts limit exceeded"), strings.Contains(msg, "social account limit exceeded"):
+		return "Social account limit reached for this workspace. Upgrade your plan or disconnect an account, then try again."
+	case msg != "":
+		return msg
+	default:
+		return "Failed to save account"
+	}
 }
 
 func (h *OAuthHandler) ExchangeCode(api huma.API) {
@@ -847,7 +868,7 @@ func (h *OAuthHandler) ExchangeCode(api huma.API) {
 		// Delegate saving the account (encrypting tokens and inserting) to AccountSaver
 		if _, err := h.accountSaver.SaveAccount(ctx, userID, mastodonProvider, input.Body.WorkspaceID, profile.ID, profile.Username, instanceURL, tokenResp); err != nil {
 			log.Printf("[ExchangeCode] Failed to save account: %v", err)
-			return nil, huma.Error500InternalServerError(fmt.Sprintf("failed to save account: %s", err.Error()))
+			return nil, huma.Error403Forbidden(accountConnectionErrorMessage(err))
 		}
 
 		log.Printf("[ExchangeCode] Account saved successfully")
@@ -904,7 +925,7 @@ func (h *OAuthHandler) BlueskyLogin(api huma.API) {
 
 		if _, err := h.accountSaver.SaveAccount(ctx, userID, "bluesky", input.Body.WorkspaceID, did, input.Body.Handle, "https://bsky.social", tokenResp); err != nil {
 			log.Printf("[BlueskyLogin] Failed to save account: %v", err)
-			return nil, huma.Error500InternalServerError("failed to save account")
+			return nil, huma.Error403Forbidden(accountConnectionErrorMessage(err))
 		}
 
 		return nil, nil
@@ -1003,7 +1024,7 @@ func (h *OAuthHandler) CompleteAccountSelection(api huma.API) {
 		})
 		if err != nil {
 			log.Printf("[OAuth Selection] Failed to save selected account: %v", err)
-			return nil, huma.Error500InternalServerError("failed to save selected account")
+			return nil, huma.Error403Forbidden(accountConnectionErrorMessage(err))
 		}
 
 		if _, err := h.db.NewUpdate().

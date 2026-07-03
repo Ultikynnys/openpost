@@ -4,6 +4,13 @@ import { playwright } from '@vitest/browser-playwright';
 import tailwindcss from '@tailwindcss/vite';
 import { sveltekit } from '@sveltejs/kit/vite';
 import { VitePWA } from 'vite-plugin-pwa';
+import type { PluginOption } from 'vite';
+
+const paraglidePlugin = paraglideVitePlugin({
+	project: './project.inlang',
+	outdir: './src/lib/paraglide'
+}) as unknown as PluginOption;
+const chromiumExecutablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH;
 
 export default defineConfig({
 	define: {
@@ -12,7 +19,7 @@ export default defineConfig({
 	plugins: [
 		tailwindcss(),
 		sveltekit(),
-		paraglideVitePlugin({ project: './project.inlang', outdir: './src/lib/paraglide' }),
+		paraglidePlugin,
 		VitePWA({
 			registerType: 'autoUpdate',
 			injectRegister: 'auto',
@@ -52,7 +59,11 @@ export default defineConfig({
 					name: 'client',
 					browser: {
 						enabled: true,
-						provider: playwright(),
+						provider: playwright({
+							launchOptions: chromiumExecutablePath
+								? { executablePath: chromiumExecutablePath }
+								: undefined
+						}),
 						instances: [{ browser: 'chromium', headless: true }]
 					},
 					include: ['src/**/*.svelte.{test,spec}.{js,ts}'],

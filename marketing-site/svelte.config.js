@@ -7,7 +7,10 @@ const config = {
 			pages: 'dist',
 			assets: 'dist',
 			strict: true
-		})
+		}),
+		files: {
+			lib: '../frontend/src/lib'
+		}
 	},
 	vitePlugin: {
 		dynamicCompileOptions: ({ filename }) =>
