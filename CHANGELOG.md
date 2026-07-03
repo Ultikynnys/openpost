@@ -4,6 +4,12 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [1.0.30] - 2026-07-03
+
+### Fixed
+
+- Removed the obsolete provider-app admin E2E coverage after the admin UI moved out of the app.
+
 ## [1.0.29] - 2026-07-03
 
 ### Changed
