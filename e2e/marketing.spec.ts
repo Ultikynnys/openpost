@@ -18,10 +18,9 @@ test("marketing index links to the app and documentation", async ({ page }) => {
     "href",
     "https://docs.openpost.social",
   );
-  await expect(page.getByRole("link", { name: "Docs" })).toHaveAttribute(
-    "href",
-    "https://docs.openpost.social",
-  );
+  await expect(
+    page.getByRole("link", { name: "Docs", exact: true }),
+  ).toHaveAttribute("href", "https://docs.openpost.social");
   await expect(page.getByRole("link", { name: "Source" })).toHaveAttribute(
     "href",
     "https://github.com/rodrgds/openpost",
