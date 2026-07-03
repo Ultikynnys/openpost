@@ -2,9 +2,7 @@ package handlers
 
 import (
 	"context"
-	"crypto/rand"
 	"database/sql"
-	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -18,8 +16,8 @@ import (
 	"github.com/openpost/backend/internal/api/middleware"
 	dbexpr "github.com/openpost/backend/internal/database"
 	"github.com/openpost/backend/internal/models"
-	"github.com/openpost/backend/internal/platform"
 	"github.com/openpost/backend/internal/services/entitlements"
+	postservice "github.com/openpost/backend/internal/services/posts"
 	"github.com/openpost/backend/internal/services/usage"
 	"github.com/uptrace/bun"
 )
@@ -28,7 +26,6 @@ const (
 	statusDraft       = "draft"
 	statusScheduled   = "scheduled"
 	workspaceIDClause = " AND p.workspace_id = ?"
-	severityError     = "error"
 )
 
 type PostHandler struct {
@@ -36,10 +33,10 @@ type PostHandler struct {
 	auth        middleware.Authenticator
 	entitlement entitlements.Service
 	usage       *usage.Service
+	posts       *postservice.Service
 }
 
 func NewPostHandler(db *bun.DB, authenticator middleware.Authenticator, entitlement ...entitlements.Service) *PostHandler {
-	platform.RegisterAllMediaValidators()
 	entitlementService := entitlements.Service(entitlements.NewSelfHostedService())
 	if len(entitlement) > 0 && entitlement[0] != nil {
 		entitlementService = entitlement[0]
@@ -49,6 +46,7 @@ func NewPostHandler(db *bun.DB, authenticator middleware.Authenticator, entitlem
 		auth:        authenticator,
 		entitlement: entitlementService,
 		usage:       usage.NewService(db),
+		posts:       postservice.NewService(db),
 	}
 }
 
@@ -219,174 +217,6 @@ func (h *PostHandler) validateMediaBelongsToWorkspace(ctx context.Context, works
 	return nil
 }
 
-func validateScheduledProviderMedia(ctx context.Context, db *bun.DB, workspaceID string, accountIDs []string, mediaIDs []string) error {
-	if len(accountIDs) == 0 {
-		return nil
-	}
-
-	platforms, err := platformsForAccounts(ctx, db, workspaceID, accountIDs)
-	if err != nil {
-		return err
-	}
-	if len(platforms) == 0 {
-		return nil
-	}
-
-	mediaItems, err := mediaItemsForIDs(ctx, db, workspaceID, mediaIDs)
-	if err != nil {
-		return err
-	}
-
-	for _, platformName := range platforms {
-		for _, issue := range platform.ValidateMedia(platformName, mediaItems) {
-			if issue.Severity != severityError {
-				continue
-			}
-			return huma.Error400BadRequest(providerMediaIssueMessage(issue))
-		}
-	}
-	return nil
-}
-
-func platformsForAccounts(ctx context.Context, db *bun.DB, workspaceID string, accountIDs []string) ([]string, error) {
-	uniqueIDs := uniqueNonEmptyStrings(accountIDs)
-	if len(uniqueIDs) == 0 {
-		return nil, nil
-	}
-
-	var accounts []models.SocialAccount
-	if err := db.NewSelect().
-		Model(&accounts).
-		Column("id", "platform").
-		Where("workspace_id = ?", workspaceID).
-		Where("is_active = ?", true).
-		Where("id IN (?)", bun.List(uniqueIDs)).
-		Scan(ctx); err != nil {
-		return nil, huma.Error500InternalServerError("failed to load social account platforms")
-	}
-
-	platformByID := make(map[string]string, len(accounts))
-	for _, account := range accounts {
-		platformByID[account.ID] = account.Platform
-	}
-
-	platforms := make([]string, 0, len(accounts))
-	seenPlatforms := make(map[string]struct{}, len(accounts))
-	for _, accountID := range uniqueIDs {
-		platformName := platformByID[accountID]
-		if platformName == "" {
-			continue
-		}
-		if _, seen := seenPlatforms[platformName]; seen {
-			continue
-		}
-		seenPlatforms[platformName] = struct{}{}
-		platforms = append(platforms, platformName)
-	}
-	return platforms, nil
-}
-
-func mediaItemsForIDs(ctx context.Context, db *bun.DB, workspaceID string, mediaIDs []string) ([]platform.MediaItem, error) {
-	uniqueIDs := uniqueNonEmptyStrings(mediaIDs)
-	if len(uniqueIDs) == 0 {
-		return nil, nil
-	}
-
-	var media []models.MediaAttachment
-	if err := db.NewSelect().
-		Model(&media).
-		Column("id", "mime_type", "size", "original_filename").
-		Where("workspace_id = ?", workspaceID).
-		Where("id IN (?)", bun.List(uniqueIDs)).
-		Scan(ctx); err != nil {
-		return nil, huma.Error500InternalServerError("failed to load media metadata")
-	}
-
-	mediaByID := make(map[string]models.MediaAttachment, len(media))
-	for _, item := range media {
-		mediaByID[item.ID] = item
-	}
-
-	items := make([]platform.MediaItem, 0, len(mediaIDs))
-	for _, mediaID := range mediaIDs {
-		item, ok := mediaByID[mediaID]
-		if !ok {
-			continue
-		}
-		items = append(items, platform.MediaItem{
-			ID:               item.ID,
-			MimeType:         item.MimeType,
-			Size:             item.Size,
-			OriginalFilename: item.OriginalFilename,
-		})
-	}
-	return items, nil
-}
-
-func providerMediaIssueMessage(issue platform.MediaValidationIssue) string {
-	message := strings.TrimSpace(issue.Message)
-	if message == "" {
-		message = "media is not compatible with this provider"
-	}
-	if issue.Provider == "" {
-		return message
-	}
-	return fmt.Sprintf("%s: %s", issue.Provider, message)
-}
-
-func uniqueNonEmptyStrings(values []string) []string {
-	unique := make([]string, 0, len(values))
-	seen := make(map[string]struct{}, len(values))
-	for _, value := range values {
-		value = strings.TrimSpace(value)
-		if value == "" {
-			continue
-		}
-		if _, ok := seen[value]; ok {
-			continue
-		}
-		seen[value] = struct{}{}
-		unique = append(unique, value)
-	}
-	return unique
-}
-
-func postDestinationAccountIDs(ctx context.Context, db *bun.DB, postID string) ([]string, error) {
-	var destinations []models.PostDestination
-	if err := db.NewSelect().
-		Model(&destinations).
-		Column("social_account_id").
-		Where("post_id = ?", postID).
-		Order("id ASC").
-		Scan(ctx); err != nil {
-		return nil, huma.Error500InternalServerError("failed to load post destinations")
-	}
-
-	accountIDs := make([]string, 0, len(destinations))
-	for _, destination := range destinations {
-		accountIDs = append(accountIDs, destination.SocialAccountID)
-	}
-	return accountIDs, nil
-}
-
-func postMediaIDs(ctx context.Context, db *bun.DB, postID string) ([]string, error) {
-	var media []models.PostMedia
-	if err := db.NewSelect().
-		Model(&media).
-		Column("media_id", "display_order").
-		Where("post_id = ?", postID).
-		Order("display_order ASC").
-		Scan(ctx); err != nil {
-		return nil, huma.Error500InternalServerError("failed to load post media")
-	}
-
-	mediaIDs := make([]string, 0, len(media))
-	for _, item := range media {
-		mediaIDs = append(mediaIDs, item.MediaID)
-	}
-	return mediaIDs, nil
-}
-
 func (h *PostHandler) checkScheduledPostQuota(ctx context.Context, workspaceID string, amount int64, scheduledAt time.Time) error {
 	current, err := h.usage.CurrentMonthly(ctx, workspaceID, entitlements.LimitScheduledPostsMonthly, scheduledAt)
 	if err != nil {
@@ -419,28 +249,15 @@ func (h *PostHandler) recordScheduledPostUsage(ctx context.Context, workspaceID 
 	return nil
 }
 
-// applyRandomDelay applies a random delay of ±N minutes to the scheduled time.
-func applyRandomDelay(scheduledAt time.Time, randomDelayMinutes int) time.Time {
-	if randomDelayMinutes <= 0 {
-		return scheduledAt
+func postServiceError(err error, fallback string) error {
+	if err == nil {
+		return nil
 	}
-
-	maxOffset := 2*randomDelayMinutes + 1
-	randomOffset := secureRandomInt(maxOffset) - randomDelayMinutes
-	return scheduledAt.Add(time.Duration(randomOffset) * time.Minute)
-}
-
-func secureRandomInt(n int) int {
-	if n <= 1 {
-		return 0
+	var userErr postservice.UserError
+	if errors.As(err, &userErr) {
+		return huma.Error400BadRequest(userErr.Message)
 	}
-
-	var buf [8]byte
-	if _, err := rand.Read(buf[:]); err == nil {
-		return int(binary.BigEndian.Uint64(buf[:]) % uint64(n))
-	}
-
-	return int(time.Now().UnixNano() % int64(n))
+	return huma.Error500InternalServerError(fallback)
 }
 
 //nolint:gocyclo
@@ -470,8 +287,8 @@ func (h *PostHandler) CreatePost(api huma.API) {
 			status = statusScheduled
 		}
 		if status == statusScheduled {
-			if err := validateScheduledProviderMedia(ctx, h.db, input.Body.WorkspaceID, input.Body.SocialAccountIDs, input.Body.MediaIDs); err != nil {
-				return nil, err
+			if err := h.posts.ValidateScheduledProviderMedia(ctx, input.Body.WorkspaceID, input.Body.SocialAccountIDs, input.Body.MediaIDs); err != nil {
+				return nil, postServiceError(err, "failed to validate provider media")
 			}
 			if err := h.checkScheduledPostQuota(ctx, input.Body.WorkspaceID, 1, *input.Body.ScheduledAt); err != nil {
 				return nil, err
@@ -496,7 +313,7 @@ func (h *PostHandler) CreatePost(api huma.API) {
 		// in `content`. The result is a clean `posts.content` and an
 		// optional `thread_drafts.draft_json` to be written below.
 		var draftJSON *string
-		post.Content, draftJSON = resolveThreadDraftInput(input.Body.Content, input.Body.ThreadDraft)
+		post.Content, draftJSON = postservice.ResolveThreadDraftInput(input.Body.Content, input.Body.ThreadDraft)
 
 		destinations := make([]models.PostDestination, 0, len(input.Body.SocialAccountIDs))
 		for _, accID := range input.Body.SocialAccountIDs {
@@ -537,7 +354,7 @@ func (h *PostHandler) CreatePost(api huma.API) {
 					return fmt.Errorf("failed to marshal job payload: %w", err)
 				}
 				// Apply random delay to job run time
-				jobRunAt := applyRandomDelay(post.ScheduledAt, post.RandomDelayMinutes)
+				jobRunAt := postservice.ApplyRandomDelay(post.ScheduledAt, post.RandomDelayMinutes)
 				post.ActualRunAt = jobRunAt
 				job := &models.Job{
 					ID:      uuid.New().String(),
@@ -555,7 +372,7 @@ func (h *PostHandler) CreatePost(api huma.API) {
 			}
 			// Persist the thread_drafts row if the request carried a
 			// thread draft. The migration has ensured the table exists.
-			return upsertThreadDraftTx(txCtx, tx, post.ID, draftJSON)
+			return postservice.UpsertThreadDraftTx(txCtx, tx, post.ID, draftJSON)
 		})
 		if err != nil {
 			return nil, huma.Error500InternalServerError("failed to create post")
@@ -1153,8 +970,8 @@ func (h *PostHandler) CreateThread(api huma.API) {
 		}
 		if status == statusScheduled {
 			for _, threadPost := range input.Body.Posts {
-				if err := validateScheduledProviderMedia(ctx, h.db, input.Body.WorkspaceID, input.Body.SocialAccountIDs, threadPost.MediaIDs); err != nil {
-					return nil, err
+				if err := h.posts.ValidateScheduledProviderMedia(ctx, input.Body.WorkspaceID, input.Body.SocialAccountIDs, threadPost.MediaIDs); err != nil {
+					return nil, postServiceError(err, "failed to validate provider media")
 				}
 			}
 			if err := h.checkScheduledPostQuota(ctx, input.Body.WorkspaceID, int64(len(input.Body.Posts)), *input.Body.ScheduledAt); err != nil {
@@ -1222,7 +1039,7 @@ func (h *PostHandler) CreateThread(api huma.API) {
 			if status == statusScheduled {
 				payload, _ := json.Marshal(map[string]string{postIDKey: posts[0].ID})
 				// Apply random delay to job run time (using first post's delay setting)
-				jobRunAt := applyRandomDelay(*input.Body.ScheduledAt, input.Body.RandomDelayMinutes)
+				jobRunAt := postservice.ApplyRandomDelay(*input.Body.ScheduledAt, input.Body.RandomDelayMinutes)
 				// Update all posts with actual_run_at
 				for _, post := range posts {
 					post.ActualRunAt = jobRunAt
@@ -1401,11 +1218,11 @@ func (h *PostHandler) GetPost(api huma.API) {
 		// Fall back to the legacy in-content blob for any rows that
 		// somehow escaped the migration (shouldn't happen on a clean
 		// upgrade, but the fallback is cheap and self-healing).
-		threadDraft, err := loadThreadDraft(ctx, h.db, input.PathID)
+		threadDraft, err := h.posts.LoadThreadDraft(ctx, input.PathID)
 		if err != nil {
 			return nil, huma.Error500InternalServerError("failed to load thread draft")
 		}
-		if threadDraft == nil && isThreadDraft(post.Content) {
+		if threadDraft == nil && postservice.IsThreadDraft(post.Content) {
 			blob := post.Content
 			threadDraft = &blob
 		}
@@ -1428,138 +1245,6 @@ type UpdatePostInput struct {
 
 type UpdatePostOutput struct {
 	Body *PostDetailResponse
-}
-
-const threadDraftPrefix = "__openpost_thread__:"
-
-func isThreadDraft(content string) bool {
-	return len(content) > len(threadDraftPrefix) && content[:len(threadDraftPrefix)] == threadDraftPrefix
-}
-
-type threadDraftData struct {
-	P []struct {
-		K string   `json:"k"`
-		C string   `json:"c"`
-		M []string `json:"m"`
-	} `json:"p"`
-	V map[string]map[string]string `json:"v"`
-}
-
-// resolveThreadDraftInput normalises the thread-draft half of a post write
-// request. It accepts the new explicit `thread_draft` field as the
-// preferred path, and falls back to detecting the legacy blob in
-// `content` for clients that have not been updated yet.
-//
-// Returns:
-//   - contentToStore: the value to put in `posts.content` (never starts
-//     with the thread prefix, even if the request supplied a blob).
-//   - draftJSON: nil if the post is a regular single post, or a pointer
-//     to the encoded thread JSON (with prefix) to be stored in
-//     `thread_drafts.draft_json`.
-//
-// If both the explicit field and a blob in content are present, the
-// explicit field wins and the blob is silently dropped (it is already
-// superseded by the new field).
-func resolveThreadDraftInput(content string, threadDraftField *string) (contentToStore string, draftJSON *string) {
-	if threadDraftField != nil {
-		// Explicit field set. Use it as the source of truth; ignore any
-		// blob that may also be in content.
-		if isThreadDraft(*threadDraftField) && len(*threadDraftField) > len(threadDraftPrefix) {
-			draft := *threadDraftField
-			draftJSON = &draft
-		}
-		// The parent's content is left as the caller sent it. The
-		// composer is expected to set it to the first thread post's
-		// text; the backend does not second-guess that.
-		return content, draftJSON
-	}
-	if isThreadDraft(content) {
-		// Legacy path: the client packed the whole thread into
-		// `content`. Pull it out into the dedicated field and clear
-		// `content` so the parent row no longer carries a magic blob.
-		draft := content
-		draftJSON = &draft
-		return "", draftJSON
-	}
-	return content, nil
-}
-
-// upsertThreadDraftTx writes or clears the thread_drafts row for a given
-// post. Pass nil to clear, or a non-empty string to set. An empty string
-// is treated as nil for safety (the row will be deleted, since storing
-// an empty blob serves no purpose).
-func upsertThreadDraftTx(ctx context.Context, tx bun.Tx, postID string, draftJSON *string) error {
-	if draftJSON == nil || *draftJSON == "" {
-		_, err := tx.NewDelete().Model((*models.ThreadDraft)(nil)).Where("post_id = ?", postID).Exec(ctx)
-		if err != nil {
-			return fmt.Errorf("failed to clear thread_drafts for %s: %w", postID, err)
-		}
-		return nil
-	}
-	// Upsert via SQLite's ON CONFLICT. The migration ensures the table
-	// exists with post_id as PRIMARY KEY.
-	_, err := tx.NewRaw(`
-		INSERT INTO thread_drafts (post_id, draft_json, created_at, updated_at)
-		VALUES (?, ?, current_timestamp, current_timestamp)
-		ON CONFLICT(post_id) DO UPDATE SET
-			draft_json = excluded.draft_json,
-			updated_at = current_timestamp
-	`, postID, *draftJSON).Exec(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to upsert thread_drafts for %s: %w", postID, err)
-	}
-	return nil
-}
-
-// loadThreadDraft fetches the encoded thread draft for a post, returning
-// nil if no draft exists. Used by GetPost and ListPosts to populate the
-// optional `thread_draft` field in API responses.
-func loadThreadDraft(ctx context.Context, db *bun.DB, postID string) (*string, error) {
-	var draft models.ThreadDraft
-	err := db.NewSelect().Model(&draft).Where("post_id = ?", postID).Scan(ctx)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("failed to load thread_drafts for %s: %w", postID, err)
-	}
-	return &draft.DraftJSON, nil
-}
-
-func getThreadPostIDsTx(ctx context.Context, tx bun.Tx, rootPostID string, includeRoot bool) ([]string, error) {
-	cte := `WITH RECURSIVE thread AS (
-		SELECT id FROM posts WHERE id = ?
-		UNION ALL
-		SELECT p.id FROM posts p JOIN thread t ON p.parent_post_id = t.id
-	) SELECT id FROM thread`
-
-	var ids []string
-	if err := tx.NewRaw(cte, rootPostID).Scan(ctx, &ids); err != nil {
-		return nil, fmt.Errorf("failed to fetch thread posts: %w", err)
-	}
-	if includeRoot || len(ids) == 0 {
-		return ids, nil
-	}
-	return ids[1:], nil
-}
-
-func deletePostsCascadeTx(ctx context.Context, tx bun.Tx, postIDs []string) error {
-	if len(postIDs) == 0 {
-		return nil
-	}
-	if _, err := tx.NewDelete().Model(&models.PostMedia{}).Where("post_id IN (?)", bun.List(postIDs)).Exec(ctx); err != nil {
-		return fmt.Errorf("failed to delete post media: %w", err)
-	}
-	if _, err := tx.NewDelete().Model(&models.PostDestination{}).Where("post_id IN (?)", bun.List(postIDs)).Exec(ctx); err != nil {
-		return fmt.Errorf("failed to delete destinations: %w", err)
-	}
-	if _, err := tx.NewDelete().Model(&models.PostVariant{}).Where("post_id IN (?)", bun.List(postIDs)).Exec(ctx); err != nil {
-		return fmt.Errorf("failed to delete variants: %w", err)
-	}
-	if _, err := tx.NewDelete().Model(&models.Post{}).Where("id IN (?)", bun.List(postIDs)).Exec(ctx); err != nil {
-		return fmt.Errorf("failed to delete posts: %w", err)
-	}
-	return nil
 }
 
 //nolint:gocyclo
@@ -1604,7 +1289,7 @@ func (h *PostHandler) UpdatePost(api huma.API) {
 				return nil, err
 			}
 		}
-		if input.Body.Content != nil && isThreadDraft(*input.Body.Content) {
+		if input.Body.Content != nil && postservice.IsThreadDraft(*input.Body.Content) {
 			// Legacy fallback: a client that still packs the thread into
 			// `content` instead of using the explicit `thread_draft`
 			// field. We accept it and route it to the same path below
@@ -1612,26 +1297,14 @@ func (h *PostHandler) UpdatePost(api huma.API) {
 			// UpdatePost handlers then store the blob in
 			// `thread_drafts.draft_json` and clear `posts.content` so
 			// the parent row no longer carries a magic prefix.
-			var draftMediaIDs []string
-			var draft threadDraftData
-			if err := json.Unmarshal([]byte((*input.Body.Content)[len(threadDraftPrefix):]), &draft); err == nil {
-				for _, item := range draft.P {
-					draftMediaIDs = append(draftMediaIDs, item.M...)
-				}
-			}
+			draftMediaIDs := postservice.ThreadDraftMediaIDs(*input.Body.Content)
 			if err := h.validateMediaBelongsToWorkspace(ctx, post.WorkspaceID, draftMediaIDs); err != nil {
 				return nil, err
 			}
-		} else if input.Body.ThreadDraft != nil && *input.Body.ThreadDraft != "" && isThreadDraft(*input.Body.ThreadDraft) {
+		} else if input.Body.ThreadDraft != nil && *input.Body.ThreadDraft != "" && postservice.IsThreadDraft(*input.Body.ThreadDraft) {
 			// New explicit path: validate the media IDs inside the
 			// thread draft up front. Invalid media is a 400, not a 500.
-			var draftMediaIDs []string
-			var draft threadDraftData
-			if err := json.Unmarshal([]byte((*input.Body.ThreadDraft)[len(threadDraftPrefix):]), &draft); err == nil {
-				for _, item := range draft.P {
-					draftMediaIDs = append(draftMediaIDs, item.M...)
-				}
-			}
+			draftMediaIDs := postservice.ThreadDraftMediaIDs(*input.Body.ThreadDraft)
 			if err := h.validateMediaBelongsToWorkspace(ctx, post.WorkspaceID, draftMediaIDs); err != nil {
 				return nil, err
 			}
@@ -1645,21 +1318,21 @@ func (h *PostHandler) UpdatePost(api huma.API) {
 			accountIDs := input.Body.SocialAccountIDs
 			if accountIDs == nil {
 				var err error
-				accountIDs, err = postDestinationAccountIDs(ctx, h.db, post.ID)
+				accountIDs, err = h.posts.DestinationAccountIDs(ctx, post.ID)
 				if err != nil {
-					return nil, err
+					return nil, postServiceError(err, "failed to load post destinations")
 				}
 			}
 			mediaIDs := input.Body.MediaIDs
 			if mediaIDs == nil {
 				var err error
-				mediaIDs, err = postMediaIDs(ctx, h.db, post.ID)
+				mediaIDs, err = h.posts.MediaIDs(ctx, post.ID)
 				if err != nil {
-					return nil, err
+					return nil, postServiceError(err, "failed to load post media")
 				}
 			}
-			if err := validateScheduledProviderMedia(ctx, h.db, post.WorkspaceID, accountIDs, mediaIDs); err != nil {
-				return nil, err
+			if err := h.posts.ValidateScheduledProviderMedia(ctx, post.WorkspaceID, accountIDs, mediaIDs); err != nil {
+				return nil, postServiceError(err, "failed to validate provider media")
 			}
 		}
 
@@ -1672,7 +1345,7 @@ func (h *PostHandler) UpdatePost(api huma.API) {
 				if input.Body.Content != nil {
 					requestedContent = *input.Body.Content
 				}
-				newContent, draftJSON := resolveThreadDraftInput(requestedContent, input.Body.ThreadDraft)
+				newContent, draftJSON := postservice.ResolveThreadDraftInput(requestedContent, input.Body.ThreadDraft)
 				post.Content = newContent
 
 				// Persist the cleaned content on the post row first, so
@@ -1682,7 +1355,7 @@ func (h *PostHandler) UpdatePost(api huma.API) {
 					return fmt.Errorf("failed to update post content: %w", err)
 				}
 				// Then sync the thread_drafts row (or clear it).
-				if err := upsertThreadDraftTx(txCtx, tx, post.ID, draftJSON); err != nil {
+				if err := postservice.UpsertThreadDraftTx(txCtx, tx, post.ID, draftJSON); err != nil {
 					return err
 				}
 			}
@@ -1720,7 +1393,7 @@ func (h *PostHandler) UpdatePost(api huma.API) {
 					if input.Body.RandomDelayMinutes != nil {
 						post.RandomDelayMinutes = *input.Body.RandomDelayMinutes
 					}
-					jobRunAt := applyRandomDelay(post.ScheduledAt, post.RandomDelayMinutes)
+					jobRunAt := postservice.ApplyRandomDelay(post.ScheduledAt, post.RandomDelayMinutes)
 					post.ActualRunAt = jobRunAt
 					if _, err := tx.NewUpdate().Model(&post).Column("content", "status", "scheduled_at", "random_delay_minutes", "actual_run_at").Where("id = ?", post.ID).Exec(txCtx); err != nil {
 						return fmt.Errorf("failed to update post: %w", err)
@@ -1747,7 +1420,7 @@ func (h *PostHandler) UpdatePost(api huma.API) {
 				// only the random delay can change here.
 				if input.Body.RandomDelayMinutes != nil && post.Status == statusScheduled {
 					post.RandomDelayMinutes = *input.Body.RandomDelayMinutes
-					jobRunAt := applyRandomDelay(post.ScheduledAt, post.RandomDelayMinutes)
+					jobRunAt := postservice.ApplyRandomDelay(post.ScheduledAt, post.RandomDelayMinutes)
 					post.ActualRunAt = jobRunAt
 					if _, err := tx.NewUpdate().Model(&post).Column("random_delay_minutes", "actual_run_at").Where("id = ?", post.ID).Exec(txCtx); err != nil {
 						return fmt.Errorf("failed to update random delay: %w", err)
@@ -1768,7 +1441,7 @@ func (h *PostHandler) UpdatePost(api huma.API) {
 				}
 			}
 
-			descendantIDs, err := getThreadPostIDsTx(txCtx, tx, post.ID, false)
+			descendantIDs, err := postservice.GetThreadPostIDsTx(txCtx, tx, post.ID, false)
 			if err != nil {
 				return err
 			}
@@ -1804,7 +1477,7 @@ func (h *PostHandler) UpdatePost(api huma.API) {
 					}
 				}
 
-				descendantIDs, err := getThreadPostIDsTx(txCtx, tx, post.ID, false)
+				descendantIDs, err := postservice.GetThreadPostIDsTx(txCtx, tx, post.ID, false)
 				if err != nil {
 					return err
 				}
@@ -1974,14 +1647,14 @@ func (h *PostHandler) DeletePost(api huma.API) {
 		}
 
 		err = h.db.RunInTx(ctx, &sql.TxOptions{}, func(txCtx context.Context, tx bun.Tx) error {
-			allIDs, err := getThreadPostIDsTx(txCtx, tx, post.ID, true)
+			allIDs, err := postservice.GetThreadPostIDsTx(txCtx, tx, post.ID, true)
 			if err != nil {
 				return err
 			}
 			if _, err := tx.NewDelete().Model(&models.Job{}).Where(publishPostJobPostIDWhere(h.db), jobTypePublishPost, post.ID).Exec(txCtx); err != nil {
 				return fmt.Errorf("failed to delete jobs: %w", err)
 			}
-			return deletePostsCascadeTx(txCtx, tx, allIDs)
+			return postservice.DeletePostsCascadeTx(txCtx, tx, allIDs)
 		})
 		if err != nil {
 			return nil, huma.Error500InternalServerError(err.Error())

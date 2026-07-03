@@ -15,6 +15,7 @@ import (
 	"github.com/labstack/echo/v4"
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/openpost/backend/internal/models"
+	postservice "github.com/openpost/backend/internal/services/posts"
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/bun"
 	"github.com/uptrace/bun/dialect/sqlitedialect"
@@ -25,7 +26,7 @@ func TestApplyRandomDelayStaysWithinBounds(t *testing.T) {
 	const maxDelay = 15
 
 	for i := 0; i < 200; i++ {
-		actual := applyRandomDelay(scheduledAt, maxDelay)
+		actual := postservice.ApplyRandomDelay(scheduledAt, maxDelay)
 		diff := actual.Sub(scheduledAt)
 		if diff < -15*time.Minute || diff > 15*time.Minute {
 			t.Fatalf("random delay out of bounds: got %v", diff)
@@ -36,7 +37,7 @@ func TestApplyRandomDelayStaysWithinBounds(t *testing.T) {
 func TestApplyRandomDelayWithZeroDelayReturnsScheduledTime(t *testing.T) {
 	scheduledAt := time.Date(2026, time.May, 1, 12, 0, 0, 0, time.UTC)
 
-	actual := applyRandomDelay(scheduledAt, 0)
+	actual := postservice.ApplyRandomDelay(scheduledAt, 0)
 	if !actual.Equal(scheduledAt) {
 		t.Fatalf("expected unchanged time, got %s want %s", actual, scheduledAt)
 	}

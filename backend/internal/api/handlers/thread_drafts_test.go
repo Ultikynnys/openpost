@@ -8,6 +8,7 @@ import (
 
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/openpost/backend/internal/models"
+	postservice "github.com/openpost/backend/internal/services/posts"
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/bun"
 	"github.com/uptrace/bun/dialect/sqlitedialect"
@@ -35,7 +36,7 @@ func newTestDB(t *testing.T) *bun.DB {
 	return db
 }
 
-const sampleThreadBlob = threadDraftPrefix + `{"p":[{"k":"a","c":"first","m":[]},{"k":"b","c":"second","m":[]}],"v":{}}`
+const sampleThreadBlob = postservice.ThreadDraftPrefix + `{"p":[{"k":"a","c":"first","m":[]},{"k":"b","c":"second","m":[]}],"v":{}}`
 
 func TestResolveThreadDraftInput(t *testing.T) {
 	t.Parallel()
@@ -60,9 +61,9 @@ func TestResolveThreadDraftInput(t *testing.T) {
 			wantDraftNonNil:  true,
 		},
 		{
-			// An empty explicit field is not a valid blob (isThreadDraft
-			// rejects it) so resolveThreadDraftInput returns nil; the
-			// downstream upsertThreadDraftTx is what actually deletes the
+			// An empty explicit field is not a valid blob (IsThreadDraft
+			// rejects it) so ResolveThreadDraftInput returns nil; the
+			// downstream UpsertThreadDraftTx is what actually deletes the
 			// row — see TestUpsertThreadDraftTxClearsWithEmptyString.
 			name:             "explicit field empty string is not treated as a blob",
 			content:          "kept",
@@ -100,7 +101,7 @@ func TestResolveThreadDraftInput(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			gotContent, gotDraft := resolveThreadDraftInput(tc.content, tc.threadDraftField)
+			gotContent, gotDraft := postservice.ResolveThreadDraftInput(tc.content, tc.threadDraftField)
 			require.Equal(t, tc.wantContent, gotContent)
 			if tc.wantDraftNonNil {
 				require.NotNil(t, gotDraft, "expected draft to be set")
@@ -119,10 +120,10 @@ func TestUpsertThreadDraftTxWrites(t *testing.T) {
 
 	draft := sampleThreadBlob
 	require.NoError(t, db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
-		return upsertThreadDraftTx(ctx, tx, "post-1", &draft)
+		return postservice.UpsertThreadDraftTx(ctx, tx, "post-1", &draft)
 	}))
 
-	loaded, err := loadThreadDraft(ctx, db, "post-1")
+	loaded, err := postservice.NewService(db).LoadThreadDraft(ctx, "post-1")
 	require.NoError(t, err)
 	require.NotNil(t, loaded)
 	require.Equal(t, sampleThreadBlob, *loaded)
@@ -135,16 +136,16 @@ func TestUpsertThreadDraftTxReplacesExistingRow(t *testing.T) {
 	ctx := context.Background()
 
 	original := sampleThreadBlob
-	updated := threadDraftPrefix + `{"p":[{"k":"x","c":"different","m":[]}],"v":{}}`
+	updated := postservice.ThreadDraftPrefix + `{"p":[{"k":"x","c":"different","m":[]}],"v":{}}`
 
 	require.NoError(t, db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
-		return upsertThreadDraftTx(ctx, tx, "post-1", &original)
+		return postservice.UpsertThreadDraftTx(ctx, tx, "post-1", &original)
 	}))
 	require.NoError(t, db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
-		return upsertThreadDraftTx(ctx, tx, "post-1", &updated)
+		return postservice.UpsertThreadDraftTx(ctx, tx, "post-1", &updated)
 	}))
 
-	loaded, err := loadThreadDraft(ctx, db, "post-1")
+	loaded, err := postservice.NewService(db).LoadThreadDraft(ctx, "post-1")
 	require.NoError(t, err)
 	require.NotNil(t, loaded)
 	require.Equal(t, updated, *loaded, "second upsert should replace the first")
@@ -158,14 +159,14 @@ func TestUpsertThreadDraftTxClearsWithNil(t *testing.T) {
 
 	draft := sampleThreadBlob
 	require.NoError(t, db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
-		return upsertThreadDraftTx(ctx, tx, "post-1", &draft)
+		return postservice.UpsertThreadDraftTx(ctx, tx, "post-1", &draft)
 	}))
 
 	require.NoError(t, db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
-		return upsertThreadDraftTx(ctx, tx, "post-1", nil)
+		return postservice.UpsertThreadDraftTx(ctx, tx, "post-1", nil)
 	}))
 
-	loaded, err := loadThreadDraft(ctx, db, "post-1")
+	loaded, err := postservice.NewService(db).LoadThreadDraft(ctx, "post-1")
 	require.NoError(t, err)
 	require.Nil(t, loaded, "row should be deleted when upsert is called with nil")
 }
@@ -178,15 +179,15 @@ func TestUpsertThreadDraftTxClearsWithEmptyString(t *testing.T) {
 
 	draft := sampleThreadBlob
 	require.NoError(t, db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
-		return upsertThreadDraftTx(ctx, tx, "post-1", &draft)
+		return postservice.UpsertThreadDraftTx(ctx, tx, "post-1", &draft)
 	}))
 
 	empty := ""
 	require.NoError(t, db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
-		return upsertThreadDraftTx(ctx, tx, "post-1", &empty)
+		return postservice.UpsertThreadDraftTx(ctx, tx, "post-1", &empty)
 	}))
 
-	loaded, err := loadThreadDraft(ctx, db, "post-1")
+	loaded, err := postservice.NewService(db).LoadThreadDraft(ctx, "post-1")
 	require.NoError(t, err)
 	require.Nil(t, loaded, "row should be deleted when upsert is called with an empty string")
 }
@@ -197,7 +198,7 @@ func TestLoadThreadDraftReturnsNilWhenAbsent(t *testing.T) {
 	db := newTestDB(t)
 	ctx := context.Background()
 
-	loaded, err := loadThreadDraft(ctx, db, "no-such-post")
+	loaded, err := postservice.NewService(db).LoadThreadDraft(ctx, "no-such-post")
 	require.NoError(t, err)
 	require.Nil(t, loaded)
 }
@@ -205,14 +206,14 @@ func TestLoadThreadDraftReturnsNilWhenAbsent(t *testing.T) {
 func TestIsThreadDraftDetectsLegacyBlob(t *testing.T) {
 	t.Parallel()
 
-	require.True(t, isThreadDraft(sampleThreadBlob))
+	require.True(t, postservice.IsThreadDraft(sampleThreadBlob))
 	// A content value that is *just* the prefix is not a valid blob
-	// (no JSON after the marker), so isThreadDraft is intentionally
+	// (no JSON after the marker), so IsThreadDraft is intentionally
 	// strict here.
-	require.False(t, isThreadDraft(threadDraftPrefix))
-	require.False(t, isThreadDraft(""))
-	require.False(t, isThreadDraft("just a regular post"))
-	require.False(t, isThreadDraft("__openpost_")) // not the right prefix
+	require.False(t, postservice.IsThreadDraft(postservice.ThreadDraftPrefix))
+	require.False(t, postservice.IsThreadDraft(""))
+	require.False(t, postservice.IsThreadDraft("just a regular post"))
+	require.False(t, postservice.IsThreadDraft("__openpost_")) // not the right prefix
 }
 
 func ptrString(s string) *string { return &s }

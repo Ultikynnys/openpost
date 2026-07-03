@@ -4,6 +4,19 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- Moved shared post scheduling, media validation, thread-draft, and thread cascade helpers out of the post API handler for reuse by MCP and tests.
+- Made the account provider catalog UI consume the generated API type instead of maintaining a fallback provider list in the page.
+- Extracted composer platform character-limit helpers into a tested compose module.
+- Removed the in-app provider-app admin panel and sidebar shortcut so provider credentials stay operator-managed through deployment configuration.
+- Removed the redundant schedule label above the sidebar calendar.
+
+### Fixed
+
+- Blocked social account connection attempts before provider redirects when the workspace has no remaining social-account entitlement.
+- Corrected the frontend test command in the contributor guide.
+
 ## [1.0.28] - 2026-07-03
 
 ### Changed

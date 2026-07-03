@@ -21,6 +21,7 @@ import (
 	"github.com/openpost/backend/internal/services/apitokens"
 	"github.com/openpost/backend/internal/services/entitlements"
 	"github.com/openpost/backend/internal/services/mediastore"
+	postservice "github.com/openpost/backend/internal/services/posts"
 	"github.com/openpost/backend/internal/services/usage"
 	"github.com/uptrace/bun"
 )
@@ -2352,7 +2353,7 @@ func (h *MCPHandler) validateScheduleDraftInput(ctx context.Context, userID stri
 	validationMediaIDs := mediaIDs
 	if input.MediaIDs == nil {
 		var err error
-		validationMediaIDs, err = postMediaIDs(ctx, h.db, post.ID)
+		validationMediaIDs, err = postservice.NewService(h.db).MediaIDs(ctx, post.ID)
 		if err != nil {
 			return input, nil, nil, nil, time.Time{}, time.Time{}, &mcpError{Code: -32603, Message: err.Error()}
 		}
@@ -2364,11 +2365,11 @@ func (h *MCPHandler) validateScheduleDraftInput(ctx context.Context, userID stri
 		return input, nil, nil, nil, time.Time{}, time.Time{}, rpcErr
 	}
 	post.RandomDelayMinutes = randomDelayMinutes
-	return input, post, accountIDs, mediaIDs, scheduledAt, applyRandomDelay(scheduledAt, randomDelayMinutes), nil
+	return input, post, accountIDs, mediaIDs, scheduledAt, postservice.ApplyRandomDelay(scheduledAt, randomDelayMinutes), nil
 }
 
 func validateMCPScheduledProviderMedia(ctx context.Context, db *bun.DB, workspaceID string, accountIDs []string, mediaIDs []string) *mcpError {
-	if err := validateScheduledProviderMedia(ctx, db, workspaceID, accountIDs, mediaIDs); err != nil {
+	if err := postservice.NewService(db).ValidateScheduledProviderMedia(ctx, workspaceID, accountIDs, mediaIDs); err != nil {
 		return &mcpError{Code: -32602, Message: err.Error()}
 	}
 	return nil

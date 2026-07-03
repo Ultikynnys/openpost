@@ -37,7 +37,7 @@ The frontend runs on `http://localhost:5173`, the backend on `http://localhost:8
 cd backend && go test ./...
 
 # Frontend tests
-cd frontend && bun test
+pnpm --filter @openpost/web test
 ```
 
 ### Linting

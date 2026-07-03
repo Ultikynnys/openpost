@@ -50,6 +50,7 @@
 		hasAnyContent,
 		type VariantPost
 	} from './compose/draft-utils';
+	import { minimumAccountCharacterLimit, uniquePlatformLimits } from './compose/platform-limits';
 
 	// --------------------------------------------------------------------------
 	// Types
@@ -140,14 +141,6 @@
 	// --------------------------------------------------------------------------
 	// Constants & derived values
 	// --------------------------------------------------------------------------
-	const PLATFORM_CHAR_LIMITS: Record<string, number> = {
-		x: 280,
-		mastodon: 500,
-		bluesky: 300,
-		linkedin: 3000,
-		threads: 500
-	};
-
 	// Generate time slots dynamically from workspace settings
 	const allTimeSlots = $derived.by(() => {
 		const start = workspaceCtx.settings.slot_start_hour;
@@ -230,29 +223,11 @@
 	});
 
 	const editorPlatformLimits = $derived.by(() => {
-		const seen = new Set<string>();
-		return editorTargetAccounts
-			.map((a) => {
-				const key = getPlatformKey(a.platform);
-				return {
-					platform: getPlatformName(a.platform),
-					key,
-					limit: PLATFORM_CHAR_LIMITS[key] ?? 280
-				};
-			})
-			.filter((item) => {
-				if (seen.has(item.key)) return false;
-				seen.add(item.key);
-				return true;
-			});
+		return uniquePlatformLimits(editorTargetAccounts);
 	});
 
 	const editorMaxChars = $derived.by(() => {
-		if (editorTargetAccounts.length === 0) return 280;
-		const limits = editorTargetAccounts.map(
-			(a) => PLATFORM_CHAR_LIMITS[getPlatformKey(a.platform)] ?? 280
-		);
-		return Math.min(...limits);
+		return minimumAccountCharacterLimit(editorTargetAccounts);
 	});
 	const previewGroups = $derived.by<PreviewGroup[]>(() => {
 		const groups: PreviewGroup[] = [];
