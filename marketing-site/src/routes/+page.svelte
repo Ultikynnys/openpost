@@ -109,7 +109,7 @@
     {
       id: "starter",
       name: "Starter",
-      price: "$6",
+      monthlyPriceEur: 6,
       description: "Open-web posting for small projects and founders.",
       limits: [
         "1 workspace",
@@ -121,7 +121,7 @@
     {
       id: "creator",
       name: "Creator",
-      price: "$12",
+      monthlyPriceEur: 12,
       description:
         "Agentic scheduling across mainstream platforms with more accounts and media.",
       limits: [
@@ -135,7 +135,7 @@
     {
       id: "pro",
       name: "Pro",
-      price: "$24",
+      monthlyPriceEur: 24,
       description:
         "Higher limits, more workspaces, team workflows, and deeper operations visibility.",
       limits: [
@@ -148,7 +148,7 @@
     {
       id: "team",
       name: "Team",
-      price: "$49",
+      monthlyPriceEur: 49,
       description:
         "Seat-based collaboration for small teams and multi-brand operators.",
       limits: [
@@ -161,7 +161,7 @@
     {
       id: "agency",
       name: "Agency",
-      price: "$99",
+      monthlyPriceEur: 99,
       description:
         "Agency workspace management with higher account and media limits.",
       limits: [
@@ -172,6 +172,21 @@
       ],
     },
   ];
+
+  const formatMonthlyPrice = (amount: number, locale: string) =>
+    new Intl.NumberFormat(locale, {
+      style: "currency",
+      currency: "EUR",
+      maximumFractionDigits: 0,
+    }).format(amount);
+</script>
+
+<script lang="ts">
+  let priceLocale = $state("en-IE");
+
+  $effect(() => {
+    priceLocale = navigator.languages?.[0] ?? navigator.language ?? "en-IE";
+  });
 </script>
 
 <svelte:head>
@@ -375,7 +390,7 @@
       {#each plans as plan (plan.id)}
         <article class:featured={plan.featured}>
           <span>{plan.name}</span>
-          <strong>{plan.price}</strong>
+          <strong>{formatMonthlyPrice(plan.monthlyPriceEur, priceLocale)}</strong>
           <p>{plan.description}</p>
           <ul>
             {#each plan.limits as limit (limit)}

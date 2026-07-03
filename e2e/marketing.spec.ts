@@ -41,6 +41,11 @@ test("marketing page presents the cloud product and product preview", async ({
   await expect(
     page.getByRole("link", { name: "Start Agency" }),
   ).toHaveAttribute("href", "https://app.openpost.social/register?plan=agency");
+  await expect(page.getByText("€6", { exact: true })).toBeVisible();
+  await expect(page.getByText("€12", { exact: true })).toBeVisible();
+  await expect(page.getByText("€24", { exact: true })).toBeVisible();
+  await expect(page.getByText("€49", { exact: true })).toBeVisible();
+  await expect(page.getByText("€99", { exact: true })).toBeVisible();
   await expect(page.getByLabel("OpenPost product preview")).toBeVisible();
   await expect(page.getByText("Current product surface.")).toBeVisible();
   await expect(

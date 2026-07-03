@@ -159,14 +159,14 @@ export const billingPlans = [
 	{
 		id: 'starter',
 		name: 'Starter',
-		price: '$6',
+		monthlyPriceEur: 6,
 		description: 'Small projects that need managed posting without extra workspace overhead.',
 		limits: ['1 workspace', '3 social accounts', '100 scheduled posts/month', '1 GB media']
 	},
 	{
 		id: 'creator',
 		name: 'Creator',
-		price: '$12',
+		monthlyPriceEur: 12,
 		description: 'Mainstream platform scheduling for active creators and operator-led brands.',
 		limits: ['3 workspaces', '6 social accounts', '500 scheduled posts/month', '5 GB media'],
 		featured: true
@@ -174,14 +174,14 @@ export const billingPlans = [
 	{
 		id: 'pro',
 		name: 'Pro',
-		price: '$24',
+		monthlyPriceEur: 24,
 		description: 'Higher limits for teams, heavier media use, and larger publishing operations.',
 		limits: ['10 workspaces', '15 social accounts', '2,500 scheduled posts/month', '25 GB media']
 	},
 	{
 		id: 'team',
 		name: 'Team',
-		price: '$49',
+		monthlyPriceEur: 49,
 		description: 'Seat-based collaboration for small teams and multi-brand operators.',
 		limits: [
 			'10 workspaces',
@@ -193,7 +193,7 @@ export const billingPlans = [
 	{
 		id: 'agency',
 		name: 'Agency',
-		price: '$99',
+		monthlyPriceEur: 99,
 		description: 'Agency workspace management with higher account and media limits.',
 		limits: [
 			'50 workspaces',

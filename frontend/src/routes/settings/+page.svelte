@@ -1060,6 +1060,14 @@
 		return new Intl.NumberFormat(getLocaleTag()).format(value);
 	}
 
+	function formatPlanPrice(amount: number): string {
+		return new Intl.NumberFormat(getLocaleTag(), {
+			style: 'currency',
+			currency: 'EUR',
+			maximumFractionDigits: 0
+		}).format(amount);
+	}
+
 	function formatBytes(value: number): string {
 		if (value >= 1_000_000_000) {
 			return `${(value / 1_000_000_000).toFixed(value % 1_000_000_000 === 0 ? 0 : 1)} GB`;
@@ -1611,7 +1619,7 @@
 								<p class="text-sm text-muted-foreground">{plan.description}</p>
 							</div>
 							<div class="text-right">
-								<div class="text-xl font-semibold">{plan.price}</div>
+								<div class="text-xl font-semibold">{formatPlanPrice(plan.monthlyPriceEur)}</div>
 								<div class="text-xs text-muted-foreground">/mo</div>
 							</div>
 						</div>
