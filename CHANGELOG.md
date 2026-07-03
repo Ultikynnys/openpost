@@ -4,8 +4,11 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [1.0.24] - 2026-07-03
+
 ### Changed
 - Aligned OpenPost Cloud plan links, environment examples, docs, and landing-page pricing with the full Starter/Creator/Pro/Team/Agency billing catalog.
+- Switched OpenPost Cloud public and in-app pricing from dollar-denominated display to Euro source prices with locale-aware formatting.
 
 ### Fixed
 - Fixed the pre-push lint hook's tag-push detection and no-devenv fallback directory handling.
