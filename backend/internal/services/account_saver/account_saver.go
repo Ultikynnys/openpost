@@ -81,7 +81,7 @@ func (s *AccountSaver) SaveAccountFromInput(ctx context.Context, input SaveAccou
 	}
 	input.AccountID = accountIDFromToken(input.AccountID, input.Token)
 
-	if err := s.checkSocialAccountQuota(ctx, input.WorkspaceID); err != nil {
+	if err := s.CheckSocialAccountQuota(ctx, input.WorkspaceID); err != nil {
 		return nil, err
 	}
 
@@ -179,7 +179,7 @@ func tokenExpiresAt(token *platform.TokenResult) time.Time {
 	return time.Now().UTC().Add(time.Duration(token.ExpiresIn) * time.Second)
 }
 
-func (s *AccountSaver) checkSocialAccountQuota(ctx context.Context, workspaceID string) error {
+func (s *AccountSaver) CheckSocialAccountQuota(ctx context.Context, workspaceID string) error {
 	current, err := s.db.NewSelect().
 		Model((*models.SocialAccount)(nil)).
 		Where("workspace_id = ?", workspaceID).

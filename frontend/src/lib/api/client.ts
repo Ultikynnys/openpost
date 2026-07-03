@@ -8,6 +8,7 @@ export type User = components['schemas']['UserProfile'];
 export type Workspace = components['schemas']['Item'];
 export type Post = components['schemas']['PostResponse'];
 export type SocialAccount = components['schemas']['AccountResponse'];
+export type ProviderInfo = components['schemas']['ProviderInfo'];
 export type ScheduleOverview = components['schemas']['ScheduleOverviewOutputBody'];
 export type AuthResponse = components['schemas']['AuthOutputBody'];
 

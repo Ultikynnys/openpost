@@ -16,6 +16,7 @@ import (
 	"github.com/openpost/backend/internal/models"
 	"github.com/openpost/backend/internal/platform"
 	"github.com/openpost/backend/internal/services/crypto"
+	"github.com/openpost/backend/internal/services/entitlements"
 	"github.com/stretchr/testify/require"
 )
 
@@ -176,6 +177,45 @@ func TestOAuthCallbackCreatesAndCompletesAccountSelection(t *testing.T) {
 
 	selectionAfterComplete := oauthSelectionRequest(t, e, http.MethodGet, "/api/v1/accounts/selections/"+connectionID, nil, true)
 	require.Equal(t, http.StatusNotFound, selectionAfterComplete.Code)
+}
+
+func TestGetAuthURLRejectsMissingSocialAccountEntitlement(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	db := createHandlerTestDB(t,
+		(*models.WorkspaceMember)(nil),
+		(*models.AuthChallenge)(nil),
+		(*models.OAuthAccountSelection)(nil),
+		(*models.SocialAccount)(nil),
+	)
+	_, err := db.NewInsert().Model(&models.WorkspaceMember{
+		WorkspaceID: "ws-1",
+		UserID:      "user-1",
+		Role:        models.WorkspaceRoleAdmin,
+	}).Exec(ctx)
+	require.NoError(t, err)
+
+	e := echo.New()
+	api := humaecho.NewWithGroup(e, e.Group("/api/v1"), huma.DefaultConfig("Test", "1.0.0"))
+	handler := NewOAuthHandler(
+		db,
+		crypto.NewTokenEncryptor("0123456789abcdef0123456789abcdef"),
+		map[string]platform.Adapter{"selectable": &selectionTestAdapter{}},
+		testAuthenticator{},
+		false,
+		"https://app.openpost.test",
+	)
+	handler.SetEntitlement(entitlements.NewStaticService(entitlements.PlanSnapshot{
+		Limits: map[entitlements.LimitKey]int64{
+			entitlements.LimitSocialAccounts: 0,
+		},
+	}))
+	handler.GetAuthURL(api)
+
+	resp := oauthSelectionRequest(t, e, http.MethodGet, "/api/v1/accounts/selectable/auth-url?workspace_id=ws-1", nil, true)
+	require.Equal(t, http.StatusForbidden, resp.Code, resp.Body.String())
+	require.Contains(t, resp.Body.String(), "Social account limit reached")
 }
 
 func oauthSelectionRequest(t *testing.T, e *echo.Echo, method, path string, body any, authenticated bool) *httptest.ResponseRecorder {

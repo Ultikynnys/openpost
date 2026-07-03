@@ -25,6 +25,7 @@ func TestGetAuthURLRegistersDynamicMastodonInstance(t *testing.T) {
 		(*models.WorkspaceMember)(nil),
 		(*models.MastodonInstance)(nil),
 		(*models.AuthChallenge)(nil),
+		(*models.SocialAccount)(nil),
 	)
 	_, err := db.NewInsert().Model(&models.WorkspaceMember{
 		WorkspaceID: "ws-1",

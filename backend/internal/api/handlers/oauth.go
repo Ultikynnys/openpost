@@ -483,6 +483,16 @@ func (h *OAuthHandler) ListMastodonServers(api huma.API) {
 	})
 }
 
+func (h *OAuthHandler) ensureCanStartAccountConnection(ctx context.Context, workspaceID, userID string) error {
+	if err := h.checkWorkspaceAccess(ctx, workspaceID, userID); err != nil {
+		return err
+	}
+	if err := h.accountSaver.CheckSocialAccountQuota(ctx, workspaceID); err != nil {
+		return huma.Error403Forbidden(accountConnectionErrorMessage(err))
+	}
+	return nil
+}
+
 func (h *OAuthHandler) GetAuthURL(api huma.API) {
 	huma.Register(api, huma.Operation{
 		OperationID: "get-auth-url",
@@ -491,7 +501,7 @@ func (h *OAuthHandler) GetAuthURL(api huma.API) {
 		Summary:     "Get OAuth authorization URL for a platform",
 		Tags:        []string{tagAccounts},
 		Middlewares: huma.Middlewares{middleware.AuthMiddleware(api, h.auth)},
-		Errors:      []int{400},
+		Errors:      []int{400, 403},
 	}, func(ctx context.Context, input *GetAuthURLInput) (*GetAuthURLOutput, error) {
 		if input.Platform == "bluesky" {
 			return nil, huma.Error400BadRequest("bluesky uses app passwords, not OAuth redirect")
@@ -501,7 +511,7 @@ func (h *OAuthHandler) GetAuthURL(api huma.API) {
 		}
 
 		userID := middleware.GetUserID(ctx)
-		if err := h.checkWorkspaceAccess(ctx, input.WorkspaceID, userID); err != nil {
+		if err := h.ensureCanStartAccountConnection(ctx, input.WorkspaceID, userID); err != nil {
 			return nil, err
 		}
 
@@ -844,7 +854,7 @@ func (h *OAuthHandler) ExchangeCode(api huma.API) {
 		Errors:      []int{400},
 	}, func(ctx context.Context, input *ExchangeCodeInput) (*struct{}, error) {
 		userID := middleware.GetUserID(ctx)
-		if err := h.checkWorkspaceAccess(ctx, input.Body.WorkspaceID, userID); err != nil {
+		if err := h.ensureCanStartAccountConnection(ctx, input.Body.WorkspaceID, userID); err != nil {
 			return nil, err
 		}
 
@@ -893,10 +903,10 @@ func (h *OAuthHandler) BlueskyLogin(api huma.API) {
 		Summary:     "Connect Bluesky account using app password",
 		Tags:        []string{tagAccounts},
 		Middlewares: huma.Middlewares{middleware.AuthMiddleware(api, h.auth)},
-		Errors:      []int{400},
+		Errors:      []int{400, 403},
 	}, func(ctx context.Context, input *BlueskyLoginInput) (*struct{}, error) {
 		userID := middleware.GetUserID(ctx)
-		if err := h.checkWorkspaceAccess(ctx, input.Body.WorkspaceID, userID); err != nil {
+		if err := h.ensureCanStartAccountConnection(ctx, input.Body.WorkspaceID, userID); err != nil {
 			return nil, err
 		}
 

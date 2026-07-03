@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { auth } from '$lib/stores/auth';
-	import { client, type Workspace, type SocialAccount } from '$lib/api/client';
+	import { client, type Workspace, type SocialAccount, type ProviderInfo } from '$lib/api/client';
 	import { Button } from '$lib/components/ui/button';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import { Input } from '$lib/components/ui/input';
@@ -21,6 +21,7 @@
 	import LoaderIcon from 'lucide-svelte/icons/loader-2';
 	import SettingsIcon from 'lucide-svelte/icons/settings';
 	import UsersIcon from 'lucide-svelte/icons/users';
+	import XIcon from 'lucide-svelte/icons/x';
 	import { Skeleton } from '$lib/components/ui/skeleton';
 
 	interface SetAccount {
@@ -37,18 +38,6 @@
 		is_default: boolean;
 		created_at: string;
 		accounts: SetAccount[];
-	}
-
-	interface ProviderInfo {
-		platform: string;
-		display_name: string;
-		auth_mode: string;
-		configured: boolean;
-		status?: string;
-		description?: string;
-		capabilities?: string[];
-		name?: string;
-		instance_url?: string;
 	}
 
 	let workspaces = $state<Workspace[] | null>(null);
@@ -70,81 +59,9 @@
 		workspaces?.find((workspace) => workspace.id === selectedWorkspaceId)?.name ||
 			'Select workspace'
 	);
-
-	const fallbackProviderEntries: ProviderInfo[] = [
-		{
-			platform: 'bluesky',
-			display_name: 'Bluesky',
-			auth_mode: 'app_password',
-			configured: true,
-			status: 'available',
-			description: 'Handle and app-password connection.'
-		},
-		{
-			platform: 'x',
-			display_name: 'X (Twitter)',
-			auth_mode: 'oauth',
-			configured: false,
-			status: 'needs_configuration',
-			description: 'Requires an X provider app.'
-		},
-		{
-			platform: 'mastodon',
-			display_name: 'Mastodon',
-			auth_mode: 'oauth_oob',
-			configured: true,
-			status: 'available',
-			description: 'Enter your instance domain and connect your profile.'
-		},
-		{
-			platform: 'threads',
-			display_name: 'Threads',
-			auth_mode: 'oauth',
-			configured: false,
-			status: 'needs_configuration',
-			description: 'Requires a Meta provider app.'
-		},
-		{
-			platform: 'linkedin',
-			display_name: 'LinkedIn',
-			auth_mode: 'oauth',
-			configured: false,
-			status: 'needs_configuration',
-			description: 'Requires a LinkedIn provider app.'
-		},
-		{
-			platform: 'instagram',
-			display_name: 'Instagram',
-			auth_mode: 'oauth',
-			configured: false,
-			status: 'needs_configuration',
-			description: 'Requires a Meta provider app.'
-		},
-		{
-			platform: 'facebook',
-			display_name: 'Facebook',
-			auth_mode: 'oauth',
-			configured: false,
-			status: 'needs_configuration',
-			description: 'Requires a Meta provider app.'
-		},
-		{
-			platform: 'youtube',
-			display_name: 'YouTube',
-			auth_mode: 'oauth',
-			configured: false,
-			status: 'needs_configuration',
-			description: 'Requires a Google OAuth provider app.'
-		},
-		{
-			platform: 'tiktok',
-			display_name: 'TikTok',
-			auth_mode: 'oauth',
-			configured: false,
-			status: 'needs_configuration',
-			description: 'Requires a TikTok provider app.'
-		}
-	];
+	let toastMessage = $state('');
+	let toastActionHref = $state('');
+	let toastActionLabel = $state('');
 
 	let blueskyModalOpen = $state(false);
 	let blueskyHandle = $state('');
@@ -170,6 +87,37 @@
 	let editAccountLoading = $state(false);
 	let editAccountError = $state('');
 	const accountSlugPattern = '[a-z0-9][a-z0-9-]{0,62}';
+
+	function clearToast() {
+		toastMessage = '';
+		toastActionHref = '';
+		toastActionLabel = '';
+	}
+
+	function showToast(message: string, action?: { href: string; label: string }) {
+		error = '';
+		toastMessage = message;
+		toastActionHref = action?.href ?? '';
+		toastActionLabel = action?.label ?? '';
+	}
+
+	function connectErrorMessage(value: unknown, fallback: string): string {
+		if (value && typeof value === 'object') {
+			const maybeError = value as { detail?: string; message?: string };
+			return maybeError.detail || maybeError.message || fallback;
+		}
+		return fallback;
+	}
+
+	function showConnectError(value: unknown, fallback = 'Could not start account connection') {
+		const message = connectErrorMessage(value, fallback);
+		const lower = message.toLowerCase();
+		const needsBilling = lower.includes('subscription') || lower.includes('social account limit');
+		showToast(
+			message,
+			needsBilling ? { href: '/settings?tab=billing#billing', label: 'Open billing' } : undefined
+		);
+	}
 
 	function resetCreateSetForm() {
 		newSetName = '';
@@ -240,11 +188,12 @@
 	async function loadProviders() {
 		providersLoading = true;
 		try {
-			const { data } = await (client as any).GET('/accounts/providers');
-			providerEntries = (data ?? []) as ProviderInfo[];
+			const { data, error: err } = await client.GET('/accounts/providers');
+			if (err) throw new Error(err.detail ?? 'Failed to load account providers');
+			providerEntries = data ?? [];
 		} catch (e) {
 			console.error('Failed to load account providers:', e);
-			providerEntries = fallbackProviderEntries;
+			providerEntries = [];
 		} finally {
 			providersLoading = false;
 		}
@@ -421,7 +370,7 @@
 
 	async function connectTwitter() {
 		if (!selectedWorkspaceId) {
-			alert('Please create a workspace first');
+			showToast('Create a workspace before connecting social accounts.');
 			return;
 		}
 		try {
@@ -431,13 +380,13 @@
 			if (err) throw new Error((err as any).detail || 'Failed to get X auth URL');
 			if (data?.url) window.location.href = data.url;
 		} catch (e) {
-			error = (e as Error).message;
+			showConnectError(e, 'Failed to get X auth URL');
 		}
 	}
 
 	async function connectMastodon(options: { serverName?: string; instanceURL?: string }) {
 		if (!selectedWorkspaceId) {
-			alert('Please create a workspace first');
+			showToast('Create a workspace before connecting social accounts.');
 			return;
 		}
 
@@ -464,14 +413,14 @@
 			if (err) throw new Error((err as any).detail || 'Failed to get Mastodon auth URL');
 			if (data?.url) window.location.href = data.url;
 		} catch (e) {
-			error = (e as Error).message;
+			showConnectError(e, 'Failed to get Mastodon auth URL');
 		}
 	}
 
 	async function connectCustomMastodon() {
 		const instanceURL = customMastodonInstance.trim();
 		if (!instanceURL) {
-			error = 'Enter a Mastodon instance URL';
+			showToast('Enter a Mastodon instance URL.');
 			return;
 		}
 		customMastodonLoading = true;
@@ -484,9 +433,10 @@
 
 	async function connectBluesky() {
 		if (!selectedWorkspaceId) {
-			alert('Please create a workspace first');
+			showToast('Create a workspace before connecting social accounts.');
 			return;
 		}
+		clearToast();
 		blueskyHandle = '';
 		blueskyAppPassword = '';
 		blueskyError = '';
@@ -516,6 +466,7 @@
 			await loadSets();
 		} catch (e) {
 			blueskyError = (e as Error).message;
+			showConnectError(e, 'Login failed');
 		} finally {
 			blueskyLoading = false;
 		}
@@ -523,7 +474,7 @@
 
 	async function connectLinkedIn() {
 		if (!selectedWorkspaceId) {
-			alert('Please create a workspace first');
+			showToast('Create a workspace before connecting social accounts.');
 			return;
 		}
 
@@ -536,15 +487,16 @@
 					query: { workspace_id: selectedWorkspaceId }
 				}
 			});
+			if (err) throw new Error((err as any).detail || 'Failed to get LinkedIn auth URL');
 			if (data?.url) window.location.href = data.url;
 		} catch (e) {
-			error = (e as Error).message;
+			showConnectError(e, 'Failed to get LinkedIn auth URL');
 		}
 	}
 
 	async function connectThreads() {
 		if (!selectedWorkspaceId) {
-			alert('Please create a workspace first');
+			showToast('Create a workspace before connecting social accounts.');
 			return;
 		}
 
@@ -557,93 +509,98 @@
 					query: { workspace_id: selectedWorkspaceId }
 				}
 			});
+			if (err) throw new Error((err as any).detail || 'Failed to get Threads auth URL');
 			if (data?.url) window.location.href = data.url;
 		} catch (e) {
-			error = (e as Error).message;
+			showConnectError(e, 'Failed to get Threads auth URL');
 		}
 	}
 
 	async function connectTikTok() {
 		if (!selectedWorkspaceId) {
-			alert('Please create a workspace first');
+			showToast('Create a workspace before connecting social accounts.');
 			return;
 		}
 
 		try {
 			localStorage.setItem('oauth_workspace_id', selectedWorkspaceId);
 
-			const { data } = await client.GET('/accounts/{platform}/auth-url', {
+			const { data, error: err } = await client.GET('/accounts/{platform}/auth-url', {
 				params: {
 					path: { platform: 'tiktok' },
 					query: { workspace_id: selectedWorkspaceId }
 				}
 			});
+			if (err) throw new Error((err as any).detail || 'Failed to get TikTok auth URL');
 			if (data?.url) window.location.href = data.url;
 		} catch (e) {
-			error = (e as Error).message;
+			showConnectError(e, 'Failed to get TikTok auth URL');
 		}
 	}
 
 	async function connectFacebook() {
 		if (!selectedWorkspaceId) {
-			alert('Please create a workspace first');
+			showToast('Create a workspace before connecting social accounts.');
 			return;
 		}
 
 		try {
 			localStorage.setItem('oauth_workspace_id', selectedWorkspaceId);
 
-			const { data } = await client.GET('/accounts/{platform}/auth-url', {
+			const { data, error: err } = await client.GET('/accounts/{platform}/auth-url', {
 				params: {
 					path: { platform: 'facebook' },
 					query: { workspace_id: selectedWorkspaceId }
 				}
 			});
+			if (err) throw new Error((err as any).detail || 'Failed to get Facebook auth URL');
 			if (data?.url) window.location.href = data.url;
 		} catch (e) {
-			error = (e as Error).message;
+			showConnectError(e, 'Failed to get Facebook auth URL');
 		}
 	}
 
 	async function connectInstagram() {
 		if (!selectedWorkspaceId) {
-			alert('Please create a workspace first');
+			showToast('Create a workspace before connecting social accounts.');
 			return;
 		}
 
 		try {
 			localStorage.setItem('oauth_workspace_id', selectedWorkspaceId);
 
-			const { data } = await client.GET('/accounts/{platform}/auth-url', {
+			const { data, error: err } = await client.GET('/accounts/{platform}/auth-url', {
 				params: {
 					path: { platform: 'instagram' },
 					query: { workspace_id: selectedWorkspaceId }
 				}
 			});
+			if (err) throw new Error((err as any).detail || 'Failed to get Instagram auth URL');
 			if (data?.url) window.location.href = data.url;
 		} catch (e) {
-			error = (e as Error).message;
+			showConnectError(e, 'Failed to get Instagram auth URL');
 		}
 	}
 
 	async function connectYouTube() {
 		if (!selectedWorkspaceId) {
-			alert('Please create a workspace first');
+			showToast('Create a workspace before connecting social accounts.');
 			return;
 		}
 
 		try {
 			localStorage.setItem('oauth_workspace_id', selectedWorkspaceId);
 
-			const { data } = await client.GET('/accounts/{platform}/auth-url', {
+			const { data, error: err } = await client.GET('/accounts/{platform}/auth-url', {
 				params: {
 					path: { platform: 'youtube' },
 					query: { workspace_id: selectedWorkspaceId }
 				}
 			});
+			if (err) throw new Error((err as any).detail || 'Failed to get YouTube auth URL');
 			if (data?.url) window.location.href = data.url;
 		} catch (e) {
-			error = (e as Error).message;
+			showConnectError(e, 'Failed to get YouTube auth URL');
 		}
 	}
 
@@ -756,6 +713,44 @@
 		}
 	}
 
+	async function canOpenMastodonCode(provider: ProviderInfo): Promise<boolean> {
+		if (!selectedWorkspaceId) {
+			showToast('Create a workspace before connecting social accounts.');
+			return false;
+		}
+
+		const query: { workspace_id: string; server_name?: string; instance_url?: string } = {
+			workspace_id: selectedWorkspaceId
+		};
+		if (isCustomMastodonProvider(provider)) {
+			const instanceURL = customMastodonInstance.trim();
+			if (!instanceURL) {
+				showToast('Enter a Mastodon instance URL.');
+				return false;
+			}
+			query.instance_url = instanceURL;
+		} else {
+			query.server_name = provider.name || provider.instance_url || '';
+		}
+
+		try {
+			const { error: err } = await client.GET('/accounts/{platform}/auth-url', {
+				params: { path: { platform: 'mastodon' }, query }
+			});
+			if (err) throw new Error((err as any).detail || 'Could not start Mastodon connection');
+			return true;
+		} catch (e) {
+			showConnectError(e, 'Could not start Mastodon connection');
+			return false;
+		}
+	}
+
+	async function openMastodonCode(provider: ProviderInfo) {
+		if (!(await canOpenMastodonCode(provider))) return;
+		rememberMastodonProvider(provider);
+		goto(resolve('/accounts/mastodon/callback'));
+	}
+
 	function connectProvider(provider: ProviderInfo) {
 		if (!providerCanConnect(provider)) return;
 		switch (provider.platform) {
@@ -823,6 +818,21 @@
 <svelte:head>
 	<title>Connected Accounts - OpenPost</title>
 </svelte:head>
+
+{#if toastMessage}
+	<div
+		class="pointer-events-auto fixed right-4 bottom-4 z-50 mb-4 flex max-w-md items-center gap-3 rounded-lg border bg-background px-4 py-3 shadow-lg"
+	>
+		<span class="text-sm">{toastMessage}</span>
+		{#if toastActionHref && toastActionLabel}
+			<Button href={toastActionHref} variant="outline" size="sm">{toastActionLabel}</Button>
+		{/if}
+		<button onclick={clearToast} class="text-muted-foreground hover:text-foreground">
+			<span class="sr-only">Close</span>
+			<XIcon class="size-4" />
+		</button>
+	</div>
+{/if}
 
 {#if loading}
 	<div class="mx-auto w-full max-w-6xl px-4 py-6 lg:px-8">
@@ -1125,11 +1135,10 @@
 								{#if provider.platform === 'mastodon' && provider.configured && !isCustomMastodonProvider(provider)}
 									<div class="flex gap-1.5">
 										<Button
-											href="/accounts/mastodon/callback"
 											variant="outline"
 											size="sm"
 											class="text-xs"
-											onclick={() => rememberMastodonProvider(provider)}>Code</Button
+											onclick={() => openMastodonCode(provider)}>Code</Button
 										>
 										<Button onclick={() => connectProvider(provider)} size="sm">Connect</Button>
 									</div>
@@ -1172,11 +1181,10 @@
 										/>
 									</div>
 									<Button
-										href="/accounts/mastodon/callback"
 										variant="outline"
 										size="sm"
 										class="self-end"
-										onclick={() => rememberMastodonProvider(provider)}>Code</Button
+										onclick={() => openMastodonCode(provider)}>Code</Button
 									>
 									<Button type="submit" size="sm" class="self-end" disabled={customMastodonLoading}>
 										{customMastodonLoading ? 'Connecting...' : 'Connect'}
