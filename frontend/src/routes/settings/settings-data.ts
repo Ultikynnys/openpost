@@ -77,58 +77,6 @@ export const cleanupDaysOptions = [
 	{ value: 365, label: '1 year' }
 ];
 
-export const providerAppOptions = [
-	{
-		value: 'mastodon',
-		label: 'Mastodon',
-		description:
-			'Manual fallback for locked-down Mastodon instances that cannot use automatic app registration.',
-		guideHref: 'https://docs.openpost.social/providers/mastodon'
-	},
-	{
-		value: 'x',
-		label: 'X / Twitter',
-		description: 'Optional override for X account connections and publishing.',
-		guideHref: 'https://docs.openpost.social/providers/x'
-	},
-	{
-		value: 'linkedin',
-		label: 'LinkedIn',
-		description: 'Optional override for LinkedIn company and member posting.',
-		guideHref: 'https://docs.openpost.social/providers/linkedin'
-	},
-	{
-		value: 'threads',
-		label: 'Threads',
-		description: 'Optional Meta app override for Threads publishing.',
-		guideHref: 'https://docs.openpost.social/providers/threads'
-	},
-	{
-		value: 'facebook',
-		label: 'Facebook Pages',
-		description: 'Optional Meta app override for Facebook Page publishing.',
-		guideHref: 'https://docs.openpost.social/providers/facebook'
-	},
-	{
-		value: 'instagram',
-		label: 'Instagram Business',
-		description: 'Optional Meta app override for Instagram media publishing.',
-		guideHref: 'https://docs.openpost.social/providers/instagram'
-	},
-	{
-		value: 'youtube',
-		label: 'YouTube',
-		description: 'Optional Google OAuth override for YouTube channel uploads.',
-		guideHref: 'https://docs.openpost.social/providers/youtube'
-	},
-	{
-		value: 'tiktok',
-		label: 'TikTok',
-		description: 'Optional TikTok developer app override for video publishing.',
-		guideHref: 'https://docs.openpost.social/providers/tiktok'
-	}
-];
-
 export const inviteRoleOptions = [
 	{ value: 'editor', label: 'Editor', description: 'Can create and manage workspace content.' },
 	{
@@ -320,19 +268,6 @@ export interface WorkspaceTeam {
 	current_seats: number;
 }
 
-export type ProviderApp = components['schemas']['ProviderAppResponse'];
-export type SaveProviderAppInput = components['schemas']['SaveProviderAppInputBody'];
-
-export interface ProviderAppForm {
-	provider: string;
-	name: string;
-	client_id: string;
-	client_secret: string;
-	redirect_uri: string;
-	instance_url: string;
-	is_active: boolean;
-}
-
 export interface PostingSchedule {
 	id: string;
 	workspace_id: string;
@@ -354,18 +289,6 @@ export interface ScheduleRow {
 	local_minute: number;
 	label: string;
 	days: Record<number, PostingSchedule | undefined>;
-}
-
-export function emptyProviderAppForm(): ProviderAppForm {
-	return {
-		provider: 'x',
-		name: '',
-		client_id: '',
-		client_secret: '',
-		redirect_uri: '',
-		instance_url: '',
-		is_active: true
-	};
 }
 
 export function getTimezoneLabel(value: string): string {

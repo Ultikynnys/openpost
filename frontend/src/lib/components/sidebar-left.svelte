@@ -52,7 +52,6 @@
 		workspaceCtx.currentWorkspace?.organization_name || 'Personal workspace'
 	);
 	const currentPath = $derived(page.url.pathname);
-	const userIsInstanceAdmin = $derived(Boolean(authState.user?.is_admin));
 	const userDisplayName = $derived(
 		authState.user?.display_name || authState.user?.email?.split('@')[0] || m.common_untitled_user()
 	);
@@ -309,10 +308,6 @@
 	<Sidebar.Content>
 		<!-- Calendar Section -->
 		<Sidebar.Group class="px-0 pt-2">
-			<Sidebar.GroupLabel
-				class="px-4 text-xs font-semibold tracking-wider text-sidebar-foreground/50 uppercase"
-				>{m.sidebar_schedule()}</Sidebar.GroupLabel
-			>
 			<Sidebar.GroupContent>
 				<CalendarUi.Calendar
 					type="single"
@@ -528,26 +523,6 @@
 					</DropdownMenu.Content>
 				</DropdownMenu.Root>
 			</Sidebar.MenuItem>
-
-			{#if userIsInstanceAdmin}
-				<Sidebar.MenuItem>
-					<Sidebar.MenuButton
-						size="lg"
-						class={navButtonClass('/settings') + ' data-[state=open]:bg-sidebar-accent'}
-						onclick={() => goto('/settings?tab=admin')}
-					>
-						<div
-							class="flex size-8 shrink-0 items-center justify-center rounded-lg bg-sidebar-accent text-sidebar-foreground"
-						>
-							<ServerIcon class="size-4" />
-						</div>
-						<div class="grid flex-1 text-start text-sm leading-tight">
-							<span class="truncate font-medium text-sidebar-foreground">Instance admin</span>
-							<span class="truncate text-xs text-sidebar-foreground/70">Server configuration</span>
-						</div>
-					</Sidebar.MenuButton>
-				</Sidebar.MenuItem>
-			{/if}
 
 			<!-- User Menu -->
 			<Sidebar.MenuItem>
