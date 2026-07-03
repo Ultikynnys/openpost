@@ -3,7 +3,6 @@
 	import { workspaceCtx } from '$lib/stores/workspace.svelte';
 	import { Button } from '$lib/components/ui/button';
 	import * as Select from '$lib/components/ui/select';
-	import * as Tabs from '$lib/components/ui/tabs';
 	import { Checkbox } from '$lib/components/ui/checkbox';
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
@@ -193,6 +192,26 @@
 	const currentBillingPlan = $derived(
 		billingPlans.find((plan) => plan.id === billingStatus?.plan_id) ?? null
 	);
+	const activeSettingsTitle = $derived.by(() => {
+		if (activeSettingsTab === 'account') return 'Account settings';
+		if (activeSettingsTab === 'organization') {
+			return `${workspaceCtx.currentWorkspace?.organization_name || 'Organization'} settings`;
+		}
+		if (activeSettingsTab === 'admin') return 'Instance admin';
+		return `${workspaceCtx.currentWorkspace?.name || 'Workspace'} - workspace settings`;
+	});
+	const activeSettingsDescription = $derived.by(() => {
+		if (activeSettingsTab === 'account') {
+			return 'Your profile, login security, sessions, API tokens, and developer activity.';
+		}
+		if (activeSettingsTab === 'organization') {
+			return 'Team access, billing, seats, and limits for the organization that owns this workspace.';
+		}
+		if (activeSettingsTab === 'admin') {
+			return 'Server-level provider credentials and deployment settings for this OpenPost instance.';
+		}
+		return 'Settings for the currently selected workspace, including timezone, cleanup, and posting schedule.';
+	});
 	const requestedBillingPlan = $derived.by(() => {
 		const planID = hostedPlanFromSearchParams(page.url.searchParams);
 		return billingPlans.some((plan) => plan.id === planID) ? planID : '';
@@ -219,17 +238,6 @@
 		if (value === 'security' || value === 'tokens' || value === 'profile') return 'account';
 		if (value === 'social-accounts') return 'workspace';
 		return value && isSettingsTab(value) ? value : 'workspace';
-	}
-
-	function setSettingsTab(value: string) {
-		if (!isSettingsTab(value) || activeSettingsTab === value) return;
-		const next = new URL(page.url);
-		next.searchParams.set('tab', value);
-		goto(`${next.pathname}${next.search}`, {
-			replaceState: true,
-			noScroll: true,
-			keepFocus: true
-		});
 	}
 
 	async function saveProfile(event: SubmitEvent) {
@@ -1196,28 +1204,13 @@
 {/if}
 
 <PageContainer
-	title="Settings"
-	description="Manage account, workspace, and organization settings from one place."
+	title={activeSettingsTitle}
+	description={activeSettingsDescription}
 	icon={SettingsIcon}
 	loading={!workspaceCtx.currentWorkspace}
 	loadingMessage="Loading workspace..."
 >
 	<div class="space-y-8">
-		<Tabs.Root value={activeSettingsTab} onValueChange={setSettingsTab} class="gap-6">
-			<Tabs.List
-				variant="line"
-				aria-label="Settings areas"
-				data-testid="settings-tabs"
-				class="flex w-full justify-start overflow-x-auto rounded-none border-b pb-1"
-			>
-				{#each settingsTabs as tab (tab.id)}
-					<Tabs.Trigger value={tab.id}>
-						{tab.label}
-					</Tabs.Trigger>
-				{/each}
-			</Tabs.List>
-		</Tabs.Root>
-
 		<section
 			id="profile"
 			class:hidden={activeSettingsTab !== 'account'}
@@ -1327,10 +1320,12 @@
 			class:hidden={activeSettingsTab !== 'workspace'}
 			class="scroll-mt-24 space-y-4"
 		>
-			<h2 class="mb-4 text-lg font-semibold">Workspace</h2>
-			<div class="flex items-center gap-4">
-				<span class="text-sm font-medium">Current Workspace</span>
-				<span class="text-sm text-muted-foreground">{workspaceCtx.currentWorkspace?.name}</span>
+			<h2 class="mb-4 text-lg font-semibold">General</h2>
+			<div class="flex flex-col gap-1 rounded-lg border bg-muted/20 p-4">
+				<span class="text-sm font-medium">{workspaceCtx.currentWorkspace?.name}</span>
+				<span class="text-sm text-muted-foreground">
+					{workspaceCtx.currentWorkspace?.organization_name || 'Personal workspace'}
+				</span>
 			</div>
 			<div class="rounded-lg border bg-muted/20 p-4">
 				<div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -1342,6 +1337,19 @@
 						</p>
 					</div>
 					<Button variant="outline" onclick={() => goto('/accounts')}>Manage Social Accounts</Button
+					>
+				</div>
+			</div>
+			<div class="rounded-lg border bg-muted/20 p-4">
+				<div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+					<div>
+						<p class="text-sm font-medium">Organization settings sit above this workspace</p>
+						<p class="text-sm text-muted-foreground">
+							Use organization settings for team access, billing, seats, and plan limits.
+						</p>
+					</div>
+					<Button variant="outline" onclick={() => goto('/settings?tab=organization')}
+						>Organization Settings</Button
 					>
 				</div>
 			</div>
@@ -1666,9 +1674,9 @@
 							Provider Apps
 						</h2>
 						<p class="mt-2 text-sm text-muted-foreground">
-							Mastodon apps let users connect any instance you support. Other providers can use
-							environment defaults, or you can store your own OAuth keys here for branded apps,
-							separate callback ownership, or provider review credentials.
+							Normal Mastodon connections auto-register during the user connect flow. Store provider
+							apps here only as an operator fallback for locked-down Mastodon instances or branded
+							OAuth apps for providers that require review credentials.
 						</p>
 					</div>
 					<Button variant="outline" onclick={loadProviderApps} disabled={providerAppsLoading}>
@@ -1701,11 +1709,13 @@
 				<div class="mb-4 rounded-lg border border-primary/20 bg-primary/5 p-4 text-sm">
 					<div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
 						<div>
-							<p class="font-medium">Most installs only need this for Mastodon.</p>
+							<p class="font-medium">Most hosted users never need provider credentials.</p>
 							<p class="mt-1 text-muted-foreground">
-								Add one Mastodon provider app per instance you want to offer. For X, Meta, LinkedIn,
-								YouTube, and TikTok, leave this empty unless you want to override the server-level
-								credentials.
+								Mastodon asks for an instance domain on the Accounts page and OpenPost handles app
+								registration server-side. Add a Mastodon row here only when an instance blocks open
+								app registration or needs a pre-approved branded app. For X, Meta, LinkedIn,
+								YouTube, and TikTok, leave this empty unless you are replacing the server-level
+								credentials for this deployment.
 							</p>
 						</div>
 						<a
@@ -1723,7 +1733,7 @@
 				<form onsubmit={saveProviderApp} class="mb-6 rounded-lg border bg-muted/20 p-4">
 					<div class="mb-4 flex flex-col gap-1">
 						<h3 class="text-sm font-semibold">
-							{editingProviderAppID ? 'Edit provider app' : 'Add provider app'}
+							{editingProviderAppID ? 'Edit fallback provider app' : 'Add fallback provider app'}
 						</h3>
 						<p class="text-sm text-muted-foreground">
 							{selectedProviderAppOption.description} Secrets are write-only. Leave the secret blank while

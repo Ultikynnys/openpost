@@ -92,9 +92,9 @@
 			platform: 'mastodon',
 			display_name: 'Mastodon',
 			auth_mode: 'oauth_oob',
-			configured: false,
-			status: 'needs_configuration',
-			description: 'Configure Mastodon instances first.'
+			configured: true,
+			status: 'available',
+			description: 'Enter your instance domain and connect your profile.'
 		},
 		{
 			platform: 'threads',

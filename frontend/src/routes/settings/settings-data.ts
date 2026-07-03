@@ -81,7 +81,8 @@ export const providerAppOptions = [
 	{
 		value: 'mastodon',
 		label: 'Mastodon',
-		description: 'Primary use case: add app credentials for any Mastodon instance you support.',
+		description:
+			'Manual fallback for locked-down Mastodon instances that cannot use automatic app registration.',
 		guideHref: 'https://docs.openpost.social/providers/mastodon'
 	},
 	{

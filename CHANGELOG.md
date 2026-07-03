@@ -4,34 +4,53 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [1.0.26] - 2026-07-03
+
+### Changed
+
+- Moved Accounts, Media, Prompts, and Activity into the primary sidebar as workspace content and narrowed the avatar menu to account/session actions.
+- Reworked settings entry points so Account, Workspace, Organization, and Instance Admin render as scoped destinations instead of sibling tabs.
+- Clarified Mastodon provider app copy so normal users connect by entering an instance domain while manual provider credentials remain an instance-admin fallback.
+
+### Fixed
+
+- Loaded Uppy core, dashboard, webcam, and image editor styles globally so the profile picture picker renders with the expected uploader styling.
+- Matched the theme toggle icon color to the rest of the avatar menu icons.
+
 ## [1.0.25] - 2026-07-03
 
 ### Fixed
+
 - Made Postgres migration normalization use `ADD COLUMN IF NOT EXISTS` so fresh cloud databases created from models can still record column-add migrations cleanly.
 
 ## [1.0.24] - 2026-07-03
 
 ### Changed
+
 - Aligned OpenPost Cloud plan links, environment examples, docs, and landing-page pricing with the full Starter/Creator/Pro/Team/Agency billing catalog.
 - Switched OpenPost Cloud public and in-app pricing from dollar-denominated display to Euro source prices with locale-aware formatting.
 
 ### Fixed
+
 - Fixed the pre-push lint hook's tag-push detection and no-devenv fallback directory handling.
 
 ## [1.0.23] - 2026-07-01
 
 ### Fixed
+
 - Preserved safe same-origin login redirects after authentication so settings deep links survive the authenticated route guard.
 - Made the workspace-switcher e2e test match the footer switcher behavior for alphabetically selected workspaces.
 
 ## [1.0.22] - 2026-07-01
 
 ### Added
+
 - Added organization-backed workspace ownership, team listing APIs, organization-scoped billing routes, and team/agency Polar plan configuration for hosted accounts.
 - Added authenticated profile updates and avatar upload/removal endpoints backed by existing media storage.
 - Added an Account settings profile UI with Uppy-powered avatar upload/camera capture.
 
 ### Changed
+
 - Removed the user-facing Publications surface from the web app, CLI, public API, MCP tools, and docs so drafts/posts plus per-platform renditions remain the canonical workflow.
 - Split Settings into Workspace, Account, Organization, and Admin tabs so user-owned and workspace-owned preferences are clearer.
 - Clarified user, self-hosting, and developer docs around Settings ownership, provider app management, and organization billing.
@@ -39,26 +58,31 @@ All notable changes to this project are documented in this file.
 - Made billing subscription snapshots organization-scoped while preserving legacy workspace billing metadata for compatibility.
 
 ### Fixed
+
 - Replaced raw browser User-Agent strings in active sessions with readable browser/device labels.
 
 ## [1.0.21] - 2026-07-01
 
 ### Fixed
+
 - Installed Playwright Chromium in local, CI, and release frontend test gates before browser-backed Vitest and E2E checks run.
 
 ## [1.0.20] - 2026-07-01
 
 ### Fixed
+
 - Fixed backend lint configuration drift between local macOS and Linux release runners by excluding noisy `goconst` findings.
 
 ## [1.0.19] - 2026-07-01
 
 ### Fixed
+
 - Fixed release preflight backend lint failures in MCP and billing error responses.
 
 ## [1.0.18] - 2026-07-01
 
 ### Added
+
 - Added `OPENPOST_POLAR_API_BASE_URL` and strict cloud-mode Polar billing config validation for hosted checkout, portal, and webhook readiness.
 - Added a production-readiness implementation plan covering OpenPost Cloud, Postgres/S3 drivers, Polar billing, provider readiness, the publication model, MCP/ChatGPT app work, marketing/SEO, and verification.
 - Rebuilt `marketing-site/` as a SvelteKit landing page for OpenPost Cloud with an agentic scheduler position, demo slot, pricing direction, platform grid, FAQ, and lower-page open-core trust section.
@@ -160,6 +184,7 @@ All notable changes to this project are documented in this file.
 - Added `--with-mcp` support to the release installer so desktop MCP clients can install `openpost` and `openpost-mcp` together.
 
 ### Changed
+
 - Migrated from openpost.rgo.pt to app.openpost.social (app), docs.openpost.social (docs), and openpost.social (landing page).
 - Enabled registrations on hosted instance.
 - Updated all doc links from op.rgo.pt to docs.openpost.social.
@@ -172,6 +197,7 @@ All notable changes to this project are documented in this file.
 - Split settings-page static data and DTO types into a route-local module, reducing the Svelte page script and removing a mutable `Map` derived value from the posting-schedule grid.
 
 ### Fixed
+
 - Made background-job workspace scoping, publish-job cancellation, MCP scheduling cleanup, stale processing-job recovery, and schedule overview date aggregation use database-portable expressions for Postgres-backed cloud deployments.
 - Rejected MCP `schedule_post` and `schedule_draft` requests with provider/media combinations that cannot publish, including inherited draft media.
 - Rejected scheduled posts and threads with provider/media combinations that cannot publish, while still allowing incomplete drafts to autosave.
@@ -190,38 +216,45 @@ All notable changes to this project are documented in this file.
 ## [1.0.16] - 2026-06-23
 
 ### Fixed
+
 - Build release frontend assets once on Ubuntu and reuse them for server binary packaging, avoiding the macOS runner's post-build Node/libuv abort.
 
 ## [1.0.15] - 2026-06-23
 
 ### Fixed
+
 - Run frontend unit tests from the devenv pre-push lint chain and trigger the Vitest pre-commit hook for frontend dependency/config changes.
 - Pin `estree-walker` at the frontend root to the CommonJS-compatible version required by Rollup plugin utilities during the SvelteKit production build.
 
 ## [1.0.14] - 2026-06-23
 
 ### Fixed
+
 - Pin `svelte-toolbelt` at the frontend root so `bits-ui` resolves the export required by the production build in CI.
 
 ## [1.0.13] - 2026-06-23
 
 ### Fixed
+
 - Track the frontend Bun lockfile so CI and local hooks use the same formatter/build dependency graph.
 
 ## [1.0.12] - 2026-06-23
 
 ### Fixed
+
 - Added the frontend production build to devenv-managed pre-commit and pre-push checks so Vite compiler failures are caught before release tags are pushed.
 - Avoided optional-parameter syntax in the composer account loader to keep the Vite/PWA release build parser path happy.
 
 ## [1.0.11] - 2026-06-23
 
 ### Fixed
+
 - Kept LinkedIn account icons clickable in the composer while moving the thread-reply warning to publish-time validation.
 
 ## [1.0.10] - 2026-06-17
 
 ### Added
+
 - Scaffold for a new `cli/` Go module (`github.com/openpost/cli`) — a standalone HTTP client for a running OpenPost instance. Includes the config layer (XDG config dir, profile precedence, flag > env > file), the OS keyring token store with an explicit --insecure-storage fallback, a typed API client, a JSON/table output printer, an account-picker that resolves `--accounts x,x:@main,mastodon:server.example` to social_account IDs, a schedule parser that handles RFC3339 / absolute layouts / natural-language ("tomorrow 2pm", "in 3 hours", "next monday 9am") / `now` / `draft`, and Cobra-based `root` and `completion` commands. The CLI does not embed the server, does not open SQLite, and does not import `backend/internal/...`.
 - First-class API tokens for the CLI and other long-lived automation clients. `api_tokens` table stores sha256-hashed opaque tokens with the format `op_cli_<8-hex-prefix>_<base64url-secret>`; the JWT web path is unchanged. New `Authenticator` interface and `CompositeService` (JWT → API token fallback) wrap the existing `*auth.Service`. Huma handlers now accept the interface; the Echo `JWTMiddleware` is preserved. `GET /api/v1/api-tokens`, `POST /api/v1/api-tokens`, and `DELETE /api/v1/api-tokens/{id}` let users manage tokens from web/CLI; the raw token is returned exactly once on create.
 - `cli_auth_sessions` table for the device-flow authorization flow that will land in the next phase (RFC 8628-style). Both device code and user code are stored as sha256 hashes; only the plain user_code ever leaves the server. Migration 008 and 009 are idempotent and auto-applied on startup, matching the 007 pattern.
@@ -240,6 +273,7 @@ All notable changes to this project are documented in this file.
 - Pre-commit hooks for the `cli/` Go module: `cli-gofmt`, `cli-golangci-lint`, and `cli-go-test` mirror the existing `backend/` hooks via the same `devenv`-generated `pre-commit-config.json` and run only for changes under `cli/`. The CLI's gofmt and golangci-lint were not previously gated at commit time; they are now.
 
 ### Changed
+
 - Moved thread draft state out of `posts.content` (where it lived as a `__openpost_thread__:` JSON blob) into a dedicated `thread_drafts` table. The composer now sends the encoded draft as a typed `thread_draft` field on the create/update POST/PATCH and reads it back from the same field on get. The blob-in-content path is preserved as a fallback for data that was saved before the migration. Migration 007 is idempotent and runs automatically on startup.
 - Replaced the `WHERE payload LIKE '%<uuid>%'` job-cancellation query in `posts.go` with a `type = 'publish_post' AND json_extract(payload, '$.post_id') = ?` match, so cancelling one post's jobs can no longer accidentally cancel other jobs (e.g. `media_cleanup`, `refresh_token`) whose payload happened to contain the post ID as a substring. Added a regression test in `posts_cancellation_test.go`.
 - Made OAuth callback redirects absolute: the `Location` header on error and success paths now uses the configured `OPENPOST_APP_URL` as the base, so the redirect works correctly behind subpath reverse proxies and non-root mounts.
@@ -247,10 +281,12 @@ All notable changes to this project are documented in this file.
 - The Go binary now panics loudly at startup with a clear message if the embedded `index.html` is missing or empty. Previously a build that skipped the frontend step would silently serve a blank HTML page with HTTP 200.
 
 ### Removed
+
 - Deleted the dead `frontend/messages/es.json` stub. Spanish was listed as a supported language in the docs and the ROADMAP, but the locale wasn't registered in Paraglide and the file only contained a single placeholder key. Both `frontend/README.md` and `ROADMAP.md` now reflect that Spanish is not yet shipped.
 - Dropped `openpost account connect <platform>` from the CLI. Account connection is web-UI-only: provider credentials live on the server, the OAuth/Bluesky-app-password dance is server-side, and the CLI's only account-management surface is `list` and `disconnect`. The `account` cobra group has a `Long:` description pointing at `<instance>/accounts`, and `account list` against an empty workspace prints the URL to the web UI so the path stays discoverable. Unit tests cover the URL-construction and empty-state helpers.
 
 ### Fixed
+
 - Fixed `GET /api/v1/posts` ordering so the Bun query builder treats `COALESCE(scheduled_at, created_at) DESC` as a SQL expression instead of parsing `created_at) DESC` as an invalid sort direction. This removes the `unsupported sort direction sort_dir="CREATED_AT) DESC"` backend log and preserves newest-first dashboard/post list ordering.
 - CLI list/single-resource endpoints (`ListAccounts`, `ListMedia`, `ListPosts`, `ListJobs`, `GetWorkspaceSettings`, `CreatePost`, `GetPost`, `CreateAPIToken`) used to decode Huma responses into a `struct{ Body T }` envelope. Huma v2 flattens the `Body` field on the wire, so the decode failed with `cannot unmarshal array into Go value of type struct { Body … }` and the CLI silently lost media data on `media list` (decoding `null` into a nil slice, then rendering "no media uploaded"). All endpoints now decode the flat wire format directly. 8 new `httptest`-backed regression tests in `cli/internal/api/client_test.go` lock the format for the next refactor.
 - Legacy Echo media routes (`/api/v1/media/upload`, `/api/v1/media/batch-upload`, `/api/v1/media/metadata`) only accepted JWT web sessions because they wired `middleware.JWTMiddleware(h.auth)`. CLI users got a 401 (`invalid or expired token`) on every upload. New `middleware.BearerMiddleware(Authenticator)` is the Echo-shaped counterpart of `AuthMiddleware` and accepts both JWT and `op_cli_…` tokens via the unified `CompositeService`. The three legacy routes now use it. The bare `"Bearer"` literal was lifted to a `bearerPrefix` const to satisfy `goconst` across all three middleware implementations. 4 new `httptest` tests in `backend/internal/api/middleware/auth_test.go` cover success, missing header, malformed header, and rejected-token paths.
@@ -258,26 +294,31 @@ All notable changes to this project are documented in this file.
 - Fixed `POST /api/v1/sets` so the response includes the initial accounts supplied during creation, matching list/get/update responses and making CLI set summaries accurate.
 
 ### Changed
+
 - Expanded the README launch messaging around the Typefully-like workflow, target users, support snapshot, and current limitations.
 - Filled in the thin operator docs with a more complete quickstart, single-binary install guide, backup and restore process, provider support matrix, and stronger security guidance.
 
 ## [1.0.9] - 2026-05-16
 
 ### Fixed
+
 - Corrected Bluesky video service auth to use the user's PDS DID from the access JWT audience instead of assuming `bsky.social`.
 - Corrected LinkedIn video status polling to percent-encode video URNs as Rest.li path variables.
 
 ## [1.0.8] - 2026-05-16
 
 ### Changed
+
 - Media library deletion now allows media that is unused or only attached to already published posts, while still blocking media needed by draft, scheduled, publishing, or failed posts.
 
 ### Added
+
 - Added a media library download action for saved images and videos.
 
 ## [1.0.7] - 2026-05-16
 
 ### Fixed
+
 - Corrected Bluesky video service auth to use the documented GET query endpoint, parse wrapped video job responses, and poll video jobs with the service token.
 - Prevented LinkedIn video posts from sending image-only media overrides and waited for finalized videos to become available before creating the post.
 - Allowed dropdown sub-menus to overflow the quick-settings menu surface so the language picker is not clipped in production builds.
@@ -285,9 +326,11 @@ All notable changes to this project are documented in this file.
 ## [1.0.6] - 2026-05-14
 
 ### Changed
+
 - Clarified the README and docs to reflect the actual provider-by-provider video implementation state instead of treating video support as universally absent.
 
 ### Fixed
+
 - Corrected the launch TODO and public docs after auditing the current X, Mastodon, Bluesky, LinkedIn, and Threads video code paths.
 - Reduced repeated backend string literals called out by `golangci-lint` `goconst` checks so local Go linting passes again.
 - Added a real Bluesky video embed path, MIME-aware Threads media publishing, and LinkedIn video upload finalization with required file sizes.
@@ -296,37 +339,44 @@ All notable changes to this project are documented in this file.
 ## [1.0.5] - 2026-05-10
 
 ### Changed
+
 - Refactored composer preview rendering so desktop and mobile previews share the same derived Svelte state model.
 - Extended account-specific post variants to track media attachments independently from the synced post media.
 
 ### Fixed
+
 - Fixed stale composer preview and textarea sizing when switching between synced and account-specific social media variants.
 - Prevented media that is only attached to account-specific variants from being deleted as unused media.
 
 ## [1.0.4] - 2026-05-09
 
 ### Added
+
 - Documentation page explaining why to self-host OpenPost, plus clearer provider/platform limitations coverage.
 - Capacitor app asset generation and refreshed Android launcher/splash assets derived from the project brand icon.
 - PWA manifest configuration for the frontend build.
 
 ### Changed
+
 - Refreshed launch messaging across the README and docs site around the self-hosted Buffer/Hootsuite positioning, target users, and current product limitations.
 - Android release builds now use the consolidated `build:capacitor` flow so frontend build, Capacitor sync, and mobile asset generation stay in one path.
 - Asset sync now prepares the frontend logo source used by Capacitor asset generation.
 
 ### Fixed
+
 - Stopped tracking the repository root `TODO.md` while ignoring the local file, so personal launch notes can remain in the working directory without showing up in git.
 - Corrected Bluesky token expiry handling by deriving expiry times from the JWT on login and refresh, which keeps automatic refresh jobs scheduled correctly instead of relying on a hardcoded login window or stale timestamps.
 
 ## [1.0.3] - 2026-05-04
 
 ### Fixed
+
 - Restored authenticated media rendering in the frontend by allowing media image requests to authorize with the current JWT and updating UI image URLs to include that access token.
 
 ## [1.0.2] - 2026-05-04
 
 ### Fixed
+
 - Restored Mastodon OAuth validation and callback state handling so missing `server_name` requests fail cleanly and browser redirects can complete without requiring the callback query to repeat the server selection.
 - Corrected workspace-scoped job listing to apply visibility filtering before `limit`, so non-admin users get full pages of jobs from accessible workspaces.
 - Signed Threads media URLs now target the app media endpoint by media ID instead of the underlying file basename.
@@ -334,11 +384,13 @@ All notable changes to this project are documented in this file.
 ## [1.0.1] - 2026-05-03
 
 ### Fixed
+
 - Docker release builds now copy the repo `scripts/` directory so the frontend asset-sync step works in GitHub Actions and container releases complete successfully.
 
 ## [1.0.0] - 2026-05-03
 
 ### Added
+
 - Account-level MFA with QR-based TOTP enrollment, passkey registration, and step-up login verification, plus settings UI for managing both methods.
 - VitePress documentation site scaffold under `docs-site/`, including landing page, sidebar/navigation config, OpenPost-themed styling, and first-pass operator/contributor docs.
 - Shared asset sync pipeline that copies canonical repo assets into frontend and docs public directories.
@@ -349,6 +401,7 @@ All notable changes to this project are documented in this file.
 - Workspace setting for `draft_gap_minutes`, used by suggested queue times when a day's configured schedule slots are already occupied.
 
 ### Changed
+
 - Settings now include account-security controls, while login can require a second factor when TOTP or passkeys are enabled.
 - Optimized GitHub Actions CI by priming a shared Nix store cache before lint/test jobs, caching Go/lint/Bun dependencies, skipping unaffected backend/frontend jobs, and moving Go race tests off pull request runs.
 - README reduced to a shorter front door that points detailed setup and operations content at the docs site.
@@ -362,6 +415,7 @@ All notable changes to this project are documented in this file.
 - Weekly posting schedules now preserve the configured workspace-local time across DST changes instead of drifting by the current UTC offset.
 
 ### Fixed
+
 - Mastodon accounts now persist their configured `instance_url` as the canonical provider key, avoiding publish/token-refresh mismatches after OAuth connection.
 - The default Mastodon callback URI now matches the documented backend callback endpoint on `localhost:8080`.
 - Mastodon server listings now avoid duplicate entries when adapters are registered with both UI labels and canonical instance-url keys.
@@ -371,11 +425,13 @@ All notable changes to this project are documented in this file.
 Changes since `v0.4.3`.
 
 ### Added
+
 - X OAuth request store handler for temporary request-state persistence.
 - Frontend OpenAPI snapshot and generated API TypeScript declarations tracked in-repo for CI consistency.
 - Placeholder file in embedded web public directory to keep `go:embed` stable in clean checkouts.
 
 ### Changed
+
 - X OAuth handler and platform integration flow refinements.
 - Backend model and database updates supporting the latest auth/request-state behavior.
 - Frontend pre-commit/devenv validation flow now runs deterministic generation/check steps for i18n and OpenAPI types.
@@ -387,6 +443,7 @@ Changes since `v0.4.3`.
 Changes since `v0.4.2`.
 
 ### Added
+
 - Prompt management backend API (`/prompts`, `/prompts/random`, `/prompts/categories`, create/delete custom prompts).
 - Built-in prompt catalog seeding and prompt category support.
 - Posting schedule backend API (`/posting-schedules` list/create/update/delete).
@@ -395,6 +452,7 @@ Changes since `v0.4.2`.
 - Settings UI support for posting schedule slot management.
 
 ### Changed
+
 - Post handler logic expanded for improved post management and scheduling workflows.
 - Media handler behavior updated for media lifecycle and cleanup flow alignment.
 - Authentication middleware updated for request auth handling refinements.
@@ -404,11 +462,13 @@ Changes since `v0.4.2`.
 - Favicon assets refreshed.
 
 ### Project And Docs
+
 - Frontend page layout refactor and onboarding/UI refinements.
 - Added AI agent skill definitions and repo agent guideline updates.
 - Added/expanded roadmap and planning documentation updates.
 
 ### Commit Summary Since v0.4.2
+
 - `681e3ab` refactor(frontend): unify page layouts with PageContainer and EmptyState components
 - `bde9cc1` docs(agents): add conventional commits and branches requirement
 - `a6f60ee` feat(frontend): add onboarding page and UI refinements

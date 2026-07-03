@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { client, type ScheduleOverview, type Post, type Workspace } from '$lib/api/client';
+	import { page } from '$app/state';
 	import * as Sidebar from '$lib/components/ui/sidebar';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
 	import * as Avatar from '$lib/components/ui/avatar';
@@ -50,6 +51,8 @@
 	const currentWorkspaceOrganizationName = $derived(
 		workspaceCtx.currentWorkspace?.organization_name || 'Personal workspace'
 	);
+	const currentPath = $derived(page.url.pathname);
+	const userIsInstanceAdmin = $derived(Boolean(authState.user?.is_admin));
 	const userDisplayName = $derived(
 		authState.user?.display_name || authState.user?.email?.split('@')[0] || m.common_untitled_user()
 	);
@@ -222,6 +225,12 @@
 		goto('/connect');
 	}
 
+	function navButtonClass(path: string) {
+		return currentPath === path || currentPath.startsWith(`${path}/`)
+			? 'bg-sidebar-accent text-sidebar-accent-foreground'
+			: 'text-sidebar-foreground/80';
+	}
+
 	async function switchWorkspace(workspace: Workspace) {
 		if (workspace.id === workspaceCtx.currentWorkspace?.id) return;
 		await workspaceCtx.setWorkspace(workspace);
@@ -343,6 +352,49 @@
 				</Sidebar.GroupContent>
 			</Sidebar.Group>
 		{/if}
+
+		<Sidebar.Separator />
+
+		<Sidebar.Group>
+			<Sidebar.GroupLabel
+				class="px-4 text-xs font-semibold tracking-wider text-sidebar-foreground/50 uppercase"
+				>Workspace</Sidebar.GroupLabel
+			>
+			<Sidebar.GroupContent>
+				<Sidebar.Menu>
+					<Sidebar.MenuItem>
+						<Sidebar.MenuButton
+							class={navButtonClass('/accounts')}
+							onclick={() => goto('/accounts')}
+						>
+							<UsersIcon class="size-3.5" />
+							<span>{m.sidebar_accounts()}</span>
+						</Sidebar.MenuButton>
+					</Sidebar.MenuItem>
+					<Sidebar.MenuItem>
+						<Sidebar.MenuButton class={navButtonClass('/media')} onclick={() => goto('/media')}>
+							<ImageIcon class="size-3.5" />
+							<span>{m.sidebar_media()}</span>
+						</Sidebar.MenuButton>
+					</Sidebar.MenuItem>
+					<Sidebar.MenuItem>
+						<Sidebar.MenuButton class={navButtonClass('/prompts')} onclick={() => goto('/prompts')}>
+							<LightbulbIcon class="size-3.5" />
+							<span>{m.sidebar_prompts()}</span>
+						</Sidebar.MenuButton>
+					</Sidebar.MenuItem>
+					<Sidebar.MenuItem>
+						<Sidebar.MenuButton
+							class={navButtonClass('/activity')}
+							onclick={() => goto('/activity')}
+						>
+							<ScrollTextIcon class="size-3.5" />
+							<span>{m.sidebar_activity()}</span>
+						</Sidebar.MenuButton>
+					</Sidebar.MenuItem>
+				</Sidebar.Menu>
+			</Sidebar.GroupContent>
+		</Sidebar.Group>
 
 		<Sidebar.Separator />
 
@@ -469,9 +521,33 @@
 							<SettingsIcon class="mr-2 size-4 text-muted-foreground" />
 							<span>Workspace settings</span>
 						</DropdownMenu.Item>
+						<DropdownMenu.Item onclick={() => goto('/settings?tab=organization')}>
+							<UsersIcon class="mr-2 size-4 text-muted-foreground" />
+							<span>Organization settings</span>
+						</DropdownMenu.Item>
 					</DropdownMenu.Content>
 				</DropdownMenu.Root>
 			</Sidebar.MenuItem>
+
+			{#if userIsInstanceAdmin}
+				<Sidebar.MenuItem>
+					<Sidebar.MenuButton
+						size="lg"
+						class={navButtonClass('/settings') + ' data-[state=open]:bg-sidebar-accent'}
+						onclick={() => goto('/settings?tab=admin')}
+					>
+						<div
+							class="flex size-8 shrink-0 items-center justify-center rounded-lg bg-sidebar-accent text-sidebar-foreground"
+						>
+							<ServerIcon class="size-4" />
+						</div>
+						<div class="grid flex-1 text-start text-sm leading-tight">
+							<span class="truncate font-medium text-sidebar-foreground">Instance admin</span>
+							<span class="truncate text-xs text-sidebar-foreground/70">Server configuration</span>
+						</div>
+					</Sidebar.MenuButton>
+				</Sidebar.MenuItem>
+			{/if}
 
 			<!-- User Menu -->
 			<Sidebar.MenuItem>
@@ -535,26 +611,6 @@
 								<SettingsIcon class="mr-2 size-4 text-muted-foreground" />
 								<span>Account settings</span>
 							</DropdownMenu.Item>
-							<DropdownMenu.Item onclick={() => goto('/accounts')}>
-								<UsersIcon class="mr-2 size-4 text-muted-foreground" />
-								<span>{m.sidebar_accounts()}</span>
-							</DropdownMenu.Item>
-							<DropdownMenu.Item onclick={() => goto('/media')}>
-								<ImageIcon class="mr-2 size-4 text-muted-foreground" />
-								<span>{m.sidebar_media()}</span>
-							</DropdownMenu.Item>
-							<DropdownMenu.Item onclick={() => goto('/prompts')}>
-								<LightbulbIcon class="mr-2 size-4 text-muted-foreground" />
-								<span>{m.sidebar_prompts()}</span>
-							</DropdownMenu.Item>
-							<DropdownMenu.Item onclick={() => goto('/settings?tab=workspace')}>
-								<SettingsIcon class="mr-2 size-4 text-muted-foreground" />
-								<span>{m.sidebar_settings()}</span>
-							</DropdownMenu.Item>
-							<DropdownMenu.Item onclick={() => goto('/activity')}>
-								<ScrollTextIcon class="mr-2 size-4 text-muted-foreground" />
-								<span>{m.sidebar_activity()}</span>
-							</DropdownMenu.Item>
 						</DropdownMenu.Group>
 
 						<DropdownMenu.Separator />
@@ -563,10 +619,10 @@
 							<LanguageSwitcher variant="menu" />
 							<DropdownMenu.Item onclick={toggleMode}>
 								<SunIcon
-									class="mr-2 size-4 scale-100 rotate-0 transition-all dark:scale-0 dark:-rotate-90"
+									class="mr-2 size-4 scale-100 rotate-0 text-muted-foreground transition-all dark:scale-0 dark:-rotate-90"
 								/>
 								<MoonIcon
-									class="absolute mr-2 size-4 scale-0 rotate-90 transition-all dark:scale-100 dark:rotate-0"
+									class="absolute mr-2 size-4 scale-0 rotate-90 text-muted-foreground transition-all dark:scale-100 dark:rotate-0"
 								/>
 								<span>{m.sidebar_toggle_theme()}</span>
 							</DropdownMenu.Item>
@@ -576,14 +632,14 @@
 
 						{#if IS_CAPACITOR}
 							<DropdownMenu.Item onclick={handleSwitchServer}>
-								<ServerIcon class="mr-2 text-muted-foreground" />
+								<ServerIcon class="mr-2 size-4 text-muted-foreground" />
 								<span>{m.sidebar_change_server()}</span>
 							</DropdownMenu.Item>
 							<DropdownMenu.Separator />
 						{/if}
 
 						<DropdownMenu.Item onclick={handleLogout}>
-							<LogOutIcon class="mr-2 text-muted-foreground" />
+							<LogOutIcon class="mr-2 size-4 text-muted-foreground" />
 							<span>{m.sidebar_log_out()}</span>
 						</DropdownMenu.Item>
 					</DropdownMenu.Content>
