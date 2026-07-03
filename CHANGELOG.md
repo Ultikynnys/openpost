@@ -4,6 +4,8 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [1.0.29] - 2026-07-03
+
 ### Changed
 
 - Moved shared post scheduling, media validation, thread-draft, and thread cascade helpers out of the post API handler for reuse by MCP and tests.
