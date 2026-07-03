@@ -4,6 +4,8 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [1.0.27] - 2026-07-03
+
 ### Changed
 
 - Replaced the marketing site with a minimal static SvelteKit index that reuses the main app theme and shared UI components.
