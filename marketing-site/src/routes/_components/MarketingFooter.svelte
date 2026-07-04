@@ -7,7 +7,7 @@
 		{
 			title: 'Product',
 			links: [
-				{ label: 'Pricing', href: '/pricing' },
+				{ label: 'Pricing', href: '/#pricing' },
 				{ label: 'Platforms', href: '/platforms' },
 				{ label: 'Compare', href: '/compare' },
 				{ label: 'Free tools', href: '/tools' },
@@ -50,8 +50,8 @@
 				<span class="text-sm font-semibold">OpenPost</span>
 			</a>
 			<p class="mt-4 max-w-sm text-sm leading-6 text-muted-foreground">
-				Hosted social publishing for creators, small teams, and technical operators who want a
-				focused scheduler with source-open trust.
+				Social publishing for creators, small teams, and technical operators who want a focused
+				scheduler with source-open trust.
 			</p>
 			<a
 				href={githubUrl}
@@ -87,6 +87,6 @@
 		</div>
 	</div>
 	<div class="border-t px-4 py-5 text-center text-xs text-muted-foreground">
-		Copyright 2026 OpenPost. Open source, hosted when you want it managed.
+		Copyright 2026 OpenPost. Source open, ready to use, lightweight to self-host.
 	</div>
 </footer>

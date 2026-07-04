@@ -16,7 +16,7 @@
 
 <svelte:head>
 	<title>Schedule {platform.name} posts - OpenPost</title>
-	<meta name="description" content={`Schedule ${platform.name} posts with OpenPost Cloud.`} />
+	<meta name="description" content={`Schedule ${platform.name} posts with OpenPost.`} />
 	<link rel="canonical" href={`${siteUrl}/platforms/${platform.slug}`} />
 </svelte:head>
 

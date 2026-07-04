@@ -16,9 +16,9 @@
 <PageHero
 	eyebrow="Free tools"
 	title="Small tools pulled from the same publishing logic."
-	description="Use these as lightweight utilities before you need the full OpenPost Cloud workspace."
-	secondaryHref="/pricing"
-	secondaryLabel="See Cloud plans"
+	description="Use these lightweight utilities before you need the full OpenPost workspace."
+	secondaryHref="/#pricing"
+	secondaryLabel="See plans"
 />
 
 <section class="section-pad">

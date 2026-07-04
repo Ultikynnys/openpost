@@ -50,7 +50,11 @@
 		hasAnyContent,
 		type VariantPost
 	} from './compose/draft-utils';
-	import { minimumAccountCharacterLimit, uniquePlatformLimits } from './compose/platform-limits';
+	import {
+		X_PREMIUM_CHAR_LIMIT,
+		minimumAccountCharacterLimit,
+		uniquePlatformLimits
+	} from './compose/platform-limits';
 
 	// --------------------------------------------------------------------------
 	// Types
@@ -113,6 +117,7 @@
 
 	let showPreview = $state(true);
 	let showMobilePreview = $state(false);
+	let xPremiumLimitsEnabled = $state(false);
 
 	let selectedDate = $state<CalendarDate | undefined>(undefined);
 	let selectedTime = $state<string | null>(null);
@@ -222,12 +227,24 @@
 		return selectedAccounts.filter((account) => !variants.has(account.id));
 	});
 
+	const editorHasXAccount = $derived.by(() => {
+		return editorTargetAccounts.some((account) => getPlatformKey(account.platform) === 'x');
+	});
+
+	const editorLimitAccounts = $derived.by(() => {
+		return editorTargetAccounts.map((account) => ({
+			...account,
+			limit_profile:
+				xPremiumLimitsEnabled && getPlatformKey(account.platform) === 'x' ? 'x-premium' : 'standard'
+		}));
+	});
+
 	const editorPlatformLimits = $derived.by(() => {
-		return uniquePlatformLimits(editorTargetAccounts);
+		return uniquePlatformLimits(editorLimitAccounts);
 	});
 
 	const editorMaxChars = $derived.by(() => {
-		return minimumAccountCharacterLimit(editorTargetAccounts);
+		return minimumAccountCharacterLimit(editorLimitAccounts);
 	});
 	const previewGroups = $derived.by<PreviewGroup[]>(() => {
 		const groups: PreviewGroup[] = [];
@@ -1878,6 +1895,26 @@
 						{:else}
 							<p class="text-sm text-muted-foreground">{m.compose_no_prompts()}</p>
 						{/if}
+					</div>
+				{/if}
+
+				{#if editorHasXAccount}
+					<div class="mb-4 rounded-md border bg-muted/25 p-3">
+						<label class="flex items-start gap-3 text-sm">
+							<input
+								type="checkbox"
+								bind:checked={xPremiumLimitsEnabled}
+								class="mt-0.5 size-4 rounded border"
+							/>
+							<span>
+								<span class="font-medium">Use X Premium longer-post limit</span>
+								<span class="mt-1 block text-xs leading-5 text-muted-foreground">
+									Raises selected X targets to {X_PREMIUM_CHAR_LIMIT.toLocaleString()} characters. Longer
+									X posts require X Premium and may still be rejected if the connected account or API
+									path does not support them.
+								</span>
+							</span>
+						</label>
 					</div>
 				{/if}
 

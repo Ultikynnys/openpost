@@ -5,15 +5,15 @@
 
 <svelte:head>
 	<title>Changelog - OpenPost</title>
-	<meta name="description" content="Recent OpenPost Cloud and product updates." />
+	<meta name="description" content="Recent OpenPost product updates." />
 	<link rel="canonical" href={`${siteUrl}/changelog`} />
 </svelte:head>
 
 <PageHero
 	eyebrow="Changelog"
 	title="Recent product movement."
-	description="A compact public history for hosted billing, provider work, automation, and the publishing workflow."
-	secondaryHref="/pricing"
+	description="A compact public history for billing, provider work, automation, and the publishing workflow."
+	secondaryHref="/#pricing"
 	secondaryLabel="See plans"
 />
 

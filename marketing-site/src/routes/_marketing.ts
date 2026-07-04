@@ -17,6 +17,7 @@ import {
 	UsersRound,
 	Workflow
 } from 'lucide-svelte';
+import { PLATFORM_LIMITS, publicPlatformLimits } from '$lib/platform-limits';
 
 export const appUrl = 'https://app.openpost.social';
 export const docsUrl = 'https://docs.openpost.social';
@@ -24,7 +25,7 @@ export const githubUrl = 'https://github.com/rodrgds/openpost';
 export const siteUrl = 'https://openpost.social';
 
 export const navItems = [
-	{ label: 'Pricing', href: '/pricing' },
+	{ label: 'Pricing', href: '/#pricing' },
 	{ label: 'Platforms', href: '/platforms' },
 	{ label: 'Compare', href: '/compare' },
 	{ label: 'Tools', href: '/tools' },
@@ -95,8 +96,13 @@ export const platforms = [
 		tag: 'Text, images, threads',
 		status: 'Core',
 		description:
-			'Schedule posts, image posts, and reply-style threads through connected X accounts.',
-		limits: ['Text posts', 'Up to 4 images', 'Thread replies', 'Video is provider-dependent']
+			'Write short posts, image posts, and reply-style threads for connected X accounts.',
+		limits: [
+			`${PLATFORM_LIMITS.x.charLimit} characters by default`,
+			'25,000 characters for X Premium longer posts',
+			PLATFORM_LIMITS.x.media,
+			'API/scheduling support for long posts should be verified per account'
+		]
 	},
 	{
 		slug: 'mastodon',
@@ -106,7 +112,12 @@ export const platforms = [
 		status: 'Core',
 		description:
 			'Connect configured or custom public Mastodon instances and schedule posts into your workspace queue.',
-		limits: ['Text posts', 'Up to 4 attachments', 'Reply chains', 'Instance-specific behavior']
+		limits: [
+			`${PLATFORM_LIMITS.mastodon.charLimit} characters by default`,
+			PLATFORM_LIMITS.mastodon.media,
+			'Reply chains',
+			'Instance-specific behavior'
+		]
 	},
 	{
 		slug: 'bluesky',
@@ -116,7 +127,12 @@ export const platforms = [
 		status: 'Core',
 		description:
 			'Connect with a Bluesky handle and app password, then publish posts and reply chains.',
-		limits: ['Text posts', 'Up to 4 images', 'AT Protocol replies', 'MP4 video path is partial']
+		limits: [
+			`${PLATFORM_LIMITS.bluesky.charLimit} characters`,
+			PLATFORM_LIMITS.bluesky.media,
+			'AT Protocol replies',
+			'MP4 video path is partial'
+		]
 	},
 	{
 		slug: 'linkedin',
@@ -126,7 +142,12 @@ export const platforms = [
 		status: 'Core',
 		description:
 			'Publish professional updates and account-specific variants without leaving the shared composer.',
-		limits: ['Text posts', 'Single-image path', 'Thread children as comments', 'App review may apply']
+		limits: [
+			`${PLATFORM_LIMITS.linkedin.charLimit} characters`,
+			PLATFORM_LIMITS.linkedin.media,
+			'Thread children as comments',
+			'App review may apply'
+		]
 	},
 	{
 		slug: 'threads',
@@ -136,7 +157,12 @@ export const platforms = [
 		status: 'Core',
 		description:
 			'Publish Threads posts and reply chains, with media served through public hosted URLs.',
-		limits: ['Text posts', 'Single-media composer path', 'Reply chains', 'Public media URL required']
+		limits: [
+			`${PLATFORM_LIMITS.threads.charLimit} characters`,
+			PLATFORM_LIMITS.threads.media,
+			'Reply chains',
+			'Public media URL required'
+		]
 	},
 	{
 		slug: 'facebook',
@@ -146,7 +172,12 @@ export const platforms = [
 		status: 'First slice',
 		description:
 			'Connect Facebook Pages through the provider app registry and schedule text or one media attachment.',
-		limits: ['Text posts', 'One image or video URL', 'No thread support', 'Live-account verification matters']
+		limits: [
+			`${PLATFORM_LIMITS.facebook.charLimit.toLocaleString()} characters`,
+			PLATFORM_LIMITS.facebook.media,
+			'No thread support',
+			'Live-account verification matters'
+		]
 	},
 	{
 		slug: 'instagram',
@@ -156,7 +187,12 @@ export const platforms = [
 		status: 'First slice',
 		description:
 			'Schedule one image or Reel-style video to Instagram Business accounts behind Facebook Pages.',
-		limits: ['Image or video required', 'Business accounts only', 'No text-only posts', 'Public media URL required']
+		limits: [
+			`${PLATFORM_LIMITS.instagram.charLimit.toLocaleString()} caption characters`,
+			PLATFORM_LIMITS.instagram.media,
+			'Business accounts only',
+			'No text-only posts'
+		]
 	},
 	{
 		slug: 'tiktok',
@@ -166,7 +202,12 @@ export const platforms = [
 		status: 'First slice',
 		description:
 			'Schedule video-first TikTok posts through a public media URL and provider app configuration.',
-		limits: ['One video required', 'No image posts', 'No thread support', 'Provider review may apply']
+		limits: [
+			`${PLATFORM_LIMITS.tiktok.charLimit.toLocaleString()} caption characters`,
+			PLATFORM_LIMITS.tiktok.media,
+			'No image posts',
+			'Provider review may apply'
+		]
 	},
 	{
 		slug: 'youtube',
@@ -176,9 +217,16 @@ export const platforms = [
 		status: 'First slice',
 		description:
 			'Upload one scheduled video to a connected channel, private by default in the current adapter path.',
-		limits: ['One video required', 'Private upload path', 'No image/text posts', 'YouTube Data API required']
+		limits: [
+			`${PLATFORM_LIMITS.youtube.charLimit.toLocaleString()} description characters`,
+			PLATFORM_LIMITS.youtube.media,
+			'Private upload path',
+			'YouTube Data API required'
+		]
 	}
 ] as const;
+
+export const platformLimitSummaries = publicPlatformLimits();
 
 export const productFeatures = [
 	{
@@ -315,37 +363,97 @@ export const comparisons = [
 		slug: 'buffer',
 		name: 'Buffer',
 		bestFor: 'Teams that want a mature hosted suite with analytics.',
-		openPostAngle: 'OpenPost focuses on a cleaner composer, source-open trust, automation, and lower hosted plans.'
+		openPostAngle: 'OpenPost focuses on a cleaner composer, source-open trust, automation, and lower app plans.',
+		pricing: 'Buffer commonly scales by channel and team needs; OpenPost plans scale by workspaces, accounts, scheduled posts, and media.',
+		chooseOpenPost: [
+			'You want a focused scheduler without a broad engagement suite.',
+			'You care about source-open implementation and self-hosting as a fallback.',
+			'You want CLI, MCP, and API workflows beside the web app.'
+		],
+		chooseThem: [
+			'You need mature analytics and engagement reporting today.',
+			'You want a long-established hosted social suite with a larger ecosystem.'
+		]
 	},
 	{
 		slug: 'hootsuite',
 		name: 'Hootsuite',
 		bestFor: 'Larger teams that need a broad enterprise social management suite.',
-		openPostAngle: 'OpenPost is intentionally lighter: scheduling, workspaces, media, CLI/MCP, and fewer enterprise layers.'
+		openPostAngle: 'OpenPost is intentionally lighter: scheduling, workspaces, media, CLI/MCP, and fewer enterprise layers.',
+		pricing: 'Hootsuite is built for larger social teams and procurement. OpenPost keeps plan choices smaller and easier to reason about.',
+		chooseOpenPost: [
+			'You publish across a few brands, clients, or products and want less process.',
+			'You want queue visibility, workspaces, and automation without enterprise overhead.',
+			'You prefer a small app your team can understand quickly.'
+		],
+		chooseThem: [
+			'You need advanced approvals, governance, listening, and reporting.',
+			'Your organization already standardizes on enterprise social management.'
+		]
 	},
 	{
 		slug: 'typefully',
 		name: 'Typefully',
 		bestFor: 'Creators focused on X-style writing and threads.',
-		openPostAngle: 'OpenPost broadens the workflow across workspaces, provider variants, media, CLI, MCP, and open-source deployment.'
+		openPostAngle: 'OpenPost broadens the workflow across workspaces, provider variants, media, CLI, MCP, and open-source deployment.',
+		pricing: 'Typefully is strongest for writing-first creator workflows. OpenPost focuses on multi-platform publishing operations.',
+		chooseOpenPost: [
+			'You need workspaces, social sets, media reuse, and provider-specific previews.',
+			'You publish beyond X-style threads.',
+			'You want app, CLI, API, and MCP entry points.'
+		],
+		chooseThem: [
+			'Your main workflow is writing and refining X/LinkedIn-style posts.',
+			'You want a polished creator-writing product more than an operations surface.'
+		]
 	},
 	{
 		slug: 'postiz',
 		name: 'Postiz',
 		bestFor: 'Teams looking for an AI-heavy open source social suite.',
-		openPostAngle: 'OpenPost leads with a focused publishing workflow, visible queue behavior, and a small operational footprint.'
+		openPostAngle: 'OpenPost leads with a focused publishing workflow, visible queue behavior, and a small operational footprint.',
+		pricing: 'Both projects have open-source roots. OpenPost positions the managed app as the primary path while staying smaller in product scope.',
+		chooseOpenPost: [
+			'You want a quieter publishing app with fewer AI-first surfaces.',
+			'You care about Go/SvelteKit, a compact service, and no Redis queue requirement.',
+			'You want honest provider caveats shown before scheduling.'
+		],
+		chooseThem: [
+			'You want an AI-heavy social scheduler with broader growth tooling.',
+			'You prefer Postiz’s wider all-in-one product direction.'
+		]
 	},
 	{
 		slug: 'post-bridge',
 		name: 'Post Bridge',
 		bestFor: 'Users who want an all-in-one hosted scheduler with many growth tools.',
-		openPostAngle: 'OpenPost keeps the core scheduler honest, technical, and source-open, with self-hosting as a trust signal.'
+		openPostAngle: 'OpenPost keeps the core scheduler honest, technical, and source-open, with self-hosting as a trust signal.',
+		pricing: 'Post Bridge leans into hosted growth utilities. OpenPost leans into scheduling, workspaces, automation, and source-open trust.',
+		chooseOpenPost: [
+			'You want to inspect or self-host the implementation if needed.',
+			'You want CLI/MCP workflows for technical operators.',
+			'You prefer focused publishing over a broad tool bundle.'
+		],
+		chooseThem: [
+			'You want a larger hosted marketing-tool bundle.',
+			'You value growth utilities more than source-open operation.'
+		]
 	},
 	{
 		slug: 'mixpost',
 		name: 'Mixpost',
 		bestFor: 'Self-hosted operators who want a larger PHP-based social publishing app.',
-		openPostAngle: 'OpenPost is Go and SvelteKit, one binary/container, no Redis queue, and built around a compact cloud path.'
+		openPostAngle: 'OpenPost is Go and SvelteKit, one binary/container, no Redis queue, and built around a compact cloud path.',
+		pricing: 'Mixpost is a strong self-hosted comparison. OpenPost emphasizes the managed app first, while keeping the self-hosting path lightweight.',
+		chooseOpenPost: [
+			'You want the managed app as the primary path.',
+			'You prefer Go/SvelteKit and a single binary/container deployment model.',
+			'You want queue, media, and automation primitives without operating Redis.'
+		],
+		chooseThem: [
+			'You specifically want Mixpost’s PHP/Laravel ecosystem.',
+			'You want a larger self-hosted social-management app.'
+		]
 	}
 ] as const;
 
@@ -354,6 +462,8 @@ export const testimonials = [
 		id: 'mara',
 		name: 'Mara Lopes',
 		role: 'Indie SaaS founder',
+		avatar:
+			'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=160&h=160&q=80',
 		content:
 			'OpenPost feels like the scheduler I wanted after outgrowing manual posting. The workspace split keeps product launches and personal channels from bleeding into each other.',
 		source: 'X'
@@ -362,6 +472,8 @@ export const testimonials = [
 		id: 'eli',
 		name: 'Eli Mercer',
 		role: 'Developer advocate',
+		avatar:
+			'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=160&h=160&q=80',
 		content:
 			'I like that it does not pretend every provider works the same. The preview and warning model is exactly what I want before scheduling a week of posts.',
 		source: 'LinkedIn'
@@ -370,6 +482,8 @@ export const testimonials = [
 		id: 'nina',
 		name: 'Nina Costa',
 		role: 'Content operator',
+		avatar:
+			'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=160&h=160&q=80',
 		content:
 			'Social sets and next-slot scheduling are the details that make it feel fast. I can queue the same update across a few accounts without rebuilding the destination list every time.',
 		source: 'Mastodon'
@@ -378,6 +492,8 @@ export const testimonials = [
 		id: 'sam',
 		name: 'Samir Patel',
 		role: 'Agency operator',
+		avatar:
+			'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=160&h=160&q=80',
 		content:
 			'The product is small in the right way. Workspaces, media, schedules, and team invites are there, but it does not feel like an enterprise tool got dropped on a tiny team.',
 		source: 'Bluesky'
@@ -386,6 +502,8 @@ export const testimonials = [
 		id: 'jules',
 		name: 'Jules Armand',
 		role: 'Open-source maintainer',
+		avatar:
+			'https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&w=160&h=160&q=80',
 		content:
 			'The CLI and MCP angle is the reason I keep coming back. Publishing from release scripts and letting an assistant prepare drafts against real account boundaries is useful.',
 		source: 'GitHub'
@@ -394,6 +512,8 @@ export const testimonials = [
 		id: 'lena',
 		name: 'Lena Wright',
 		role: 'Creator',
+		avatar:
+			'https://images.unsplash.com/photo-1487412720507-e7ab37603c6f?auto=format&fit=crop&w=160&h=160&q=80',
 		content:
 			'It is refreshing to see a scheduler that is direct about analytics and video limits instead of selling a wall of checkmarks. The core writing flow is what I needed first.',
 		source: 'X'
@@ -402,9 +522,9 @@ export const testimonials = [
 
 export const faqs = [
 	{
-		question: 'Is OpenPost Cloud different from self-hosting?',
+		question: 'Is using OpenPost different from self-hosting?',
 		answer:
-			'Cloud is the managed hosted version at app.openpost.social. The project is still source-open and self-hostable, but the landing page focuses on the hosted workflow.'
+			'The app at app.openpost.social is the managed version. The project is still source-open and self-hostable, but the landing page focuses on the ready-to-use workflow.'
 	},
 	{
 		question: 'Does OpenPost include analytics?',
@@ -431,7 +551,7 @@ export const faqs = [
 export const changelogEntries = [
 	{
 		date: '2026-07',
-		title: 'Cloud plan and billing foundation',
+		title: 'Plan and billing foundation',
 		detail:
 			'Hosted plan IDs, Polar checkout, organization billing status, usage counters, and customer portal flows are aligned around Starter, Creator, Pro, Team, and Agency.'
 	},

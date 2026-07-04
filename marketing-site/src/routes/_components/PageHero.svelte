@@ -14,7 +14,7 @@
 		eyebrow,
 		title,
 		description,
-		secondaryHref = '/pricing',
+		secondaryHref = '/#pricing',
 		secondaryLabel = 'See pricing'
 	}: Props = $props();
 </script>

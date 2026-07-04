@@ -1,8 +1,6 @@
 <script lang="ts">
 	import {
 		ArrowRight,
-		CalendarClock,
-		CheckCircle2,
 		ChevronRight,
 		Command,
 		Database,
@@ -11,14 +9,16 @@
 	import { Badge } from '$lib/components/ui/badge';
 	import { Button } from '$lib/components/ui/button';
 	import PlatformIcon from '$lib/components/platform-icon.svelte';
+	import FaqSection from './_components/FaqSection.svelte';
+	import PricingComparison from './_components/PricingComparison.svelte';
 	import TestimonialWall from './_components/TestimonialWall.svelte';
+	import VideoDemo from './_components/VideoDemo.svelte';
 	import {
 		appUrl,
 		docsUrl,
 		faqs,
 		githubUrl,
 		platforms,
-		plans,
 		productFeatures,
 		securityItems,
 		siteUrl,
@@ -35,26 +35,26 @@
 </script>
 
 <svelte:head>
-	<title>OpenPost - Hosted social publishing for creators and small teams</title>
+	<title>OpenPost - Social publishing for creators and small teams</title>
 	<meta
 		name="description"
-		content="OpenPost Cloud is a focused social publishing workspace for drafting, previewing, scheduling, and automating posts across modern platforms."
+		content="OpenPost is a focused social publishing workspace for drafting, previewing, scheduling, and automating posts across modern platforms."
 	/>
 	<link rel="canonical" href={siteUrl} />
 	<meta name="robots" content="index, follow" />
 	<meta property="og:type" content="website" />
 	<meta property="og:url" content={siteUrl} />
-	<meta property="og:title" content="OpenPost - Hosted social publishing" />
+	<meta property="og:title" content="OpenPost - Social publishing workspace" />
 	<meta
 		property="og:description"
 		content="Draft once, adapt per platform, schedule with confidence, and keep the queue visible."
 	/>
 	<meta property="og:image" content={`${siteUrl}/assets/brand/og-image.svg`} />
 	<meta name="twitter:card" content="summary_large_image" />
-	<meta name="twitter:title" content="OpenPost - Hosted social publishing" />
+	<meta name="twitter:title" content="OpenPost - Social publishing workspace" />
 	<meta
 		name="twitter:description"
-		content="Open source social publishing, hosted for creators and small teams."
+		content="Source-open social publishing for creators and small teams."
 	/>
 </svelte:head>
 
@@ -64,16 +64,16 @@
 		<div class="grid items-center gap-12 lg:grid-cols-[0.88fr_1.12fr]">
 			<div>
 				<Badge class="border-primary/25 bg-primary/10 text-primary">
-					Source-open publishing, hosted when you want it managed
+					Source-open publishing, ready to use
 				</Badge>
 				<h1
-					class="mt-6 max-w-4xl text-5xl leading-[0.98] font-semibold tracking-tight text-balance sm:text-6xl xl:text-7xl"
+					class="mt-6 max-w-3xl text-4xl leading-[1.02] font-semibold tracking-tight text-balance sm:text-5xl xl:text-6xl"
 				>
 					The open social publishing workspace without the enterprise bloat.
 				</h1>
 				<p class="mt-6 max-w-2xl text-lg leading-8 text-pretty text-muted-foreground sm:text-xl">
-					OpenPost Cloud gives creators, indie teams, and small agencies one focused place to
-					draft, adapt, preview, schedule, and automate social posts across modern platforms.
+					OpenPost gives creators, indie teams, and small agencies one focused place to draft,
+					adapt, preview, schedule, and automate social posts across modern platforms.
 				</p>
 				<div class="mt-8 flex flex-wrap gap-3">
 					<Button href={appUrl} size="lg">
@@ -116,23 +116,11 @@
 						fetchpriority="high"
 					/>
 				</div>
-				<div
-					class="absolute right-4 bottom-4 hidden max-w-xs rounded-lg border bg-background/95 p-4 shadow-xl backdrop-blur md:block"
-				>
-					<p class="font-mono text-xs text-primary">next-slot ready</p>
-					<p class="mt-2 text-sm leading-6 text-muted-foreground">
-						Queue the approved post into the next workspace slot, with provider warnings checked
-						before it lands.
-					</p>
-				</div>
 			</div>
 		</div>
 
 		<div class="mt-12 border-y py-5">
-			<div class="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-				<p class="text-sm font-medium text-muted-foreground">
-					Connect the platforms your audience already uses.
-				</p>
+			<div class="flex flex-col gap-5 lg:flex-row lg:items-center">
 				<div class="flex flex-wrap gap-2">
 					{#each platforms as platform (platform.slug)}
 						<a
@@ -148,6 +136,8 @@
 		</div>
 	</div>
 </section>
+
+<VideoDemo />
 
 <section class="section-pad">
 	<div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
@@ -187,9 +177,9 @@
 							{feature.title}
 						</h3>
 						<p class="mt-4 text-base leading-7 text-muted-foreground">{feature.description}</p>
-						<div class="mt-6 inline-flex items-center gap-2 rounded-full border px-3 py-2 text-sm">
+						<div class="mt-6 inline-flex items-center gap-2 rounded-full border px-3 py-2 text-sm text-muted-foreground">
 							<Icon class="size-4 text-primary" />
-							<span>Implemented in the app today</span>
+							<span>{feature.eyebrow} workflow</span>
 						</div>
 					</div>
 					<figure class="overflow-hidden rounded-lg border bg-background">
@@ -249,60 +239,7 @@
 	</div>
 </section>
 
-<section class="section-pad">
-	<div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-		<div class="flex flex-col justify-between gap-6 lg:flex-row lg:items-end">
-			<div class="max-w-3xl">
-				<p class="eyebrow">Hosted plans</p>
-				<h2 class="mt-4 text-3xl leading-tight font-semibold text-balance sm:text-5xl">
-					Pricing that matches focused publishing, not enterprise procurement.
-				</h2>
-				<p class="mt-5 text-lg leading-8 text-muted-foreground">
-					Every plan includes the same core composer, scheduling workflow, media library, CLI,
-					MCP, and source-open trust. Limits scale with workspace size.
-				</p>
-			</div>
-			<Button href="/pricing" variant="outline">
-				Full pricing
-				<ArrowRight data-icon="inline-end" />
-			</Button>
-		</div>
-
-		<div class="mt-10 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-			{#each plans as plan (plan.id)}
-				<article
-					class="rounded-lg border bg-card p-5 {plan.featured
-						? 'border-primary/50 shadow-[0_18px_50px_oklch(0.12_0.03_45/0.32)]'
-						: ''}"
-				>
-					<div class="flex items-start justify-between gap-4">
-						<div>
-							<h3 class="font-semibold">{plan.name}</h3>
-							<p class="mt-1 text-sm text-muted-foreground">{plan.description}</p>
-						</div>
-						{#if plan.featured}
-							<span class="rounded-full bg-primary px-2 py-1 text-xs text-primary-foreground">
-								Popular
-							</span>
-						{/if}
-					</div>
-					<p class="mt-5 text-3xl font-semibold">{plan.price}<span class="text-sm text-muted-foreground">/mo</span></p>
-					<ul class="mt-5 grid gap-2 text-sm text-muted-foreground">
-						{#each plan.limits as limit (limit)}
-							<li class="flex gap-2">
-								<CheckCircle2 class="mt-0.5 size-4 shrink-0 text-primary" />
-								<span>{limit}</span>
-							</li>
-						{/each}
-					</ul>
-					<Button href={`${appUrl}/register?plan=${plan.id}`} class="mt-6 w-full" variant={plan.featured ? 'default' : 'outline'}>
-						Choose {plan.name}
-					</Button>
-				</article>
-			{/each}
-		</div>
-	</div>
-</section>
+<PricingComparison />
 
 <TestimonialWall {testimonials} />
 
@@ -350,25 +287,7 @@
 	</div>
 </section>
 
-<section class="section-pad">
-	<div class="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8">
-		<p class="eyebrow">FAQ</p>
-		<h2 class="mt-4 text-3xl font-semibold text-balance sm:text-5xl">
-			The honest answers belong on the page.
-		</h2>
-		<div class="mt-10 divide-y rounded-xl border bg-card">
-			{#each faqs as item (item.question)}
-				<details class="group p-5">
-					<summary class="flex cursor-pointer list-none items-center justify-between gap-4 font-semibold">
-						<span>{item.question}</span>
-						<CalendarClock class="size-4 text-muted-foreground transition group-open:rotate-45" />
-					</summary>
-					<p class="mt-4 max-w-3xl text-sm leading-7 text-muted-foreground">{item.answer}</p>
-				</details>
-			{/each}
-		</div>
-	</div>
-</section>
+<FaqSection items={faqs} />
 
 <section class="section-pad border-t">
 	<div class="mx-auto max-w-5xl px-4 text-center sm:px-6 lg:px-8">
@@ -377,15 +296,15 @@
 			Queue the next post without adopting a social media suite.
 		</h2>
 		<p class="mx-auto mt-5 max-w-2xl text-lg leading-8 text-muted-foreground">
-			Open the hosted app, create the first workspace, connect the platforms that matter, and
-			keep publishing visible.
+			Open the app, create the first workspace, connect the platforms that matter, and keep
+			publishing visible.
 		</p>
 		<div class="mt-8 flex justify-center gap-3">
 			<Button href={appUrl} size="lg">
 				Open app
 				<ArrowRight data-icon="inline-end" />
 			</Button>
-			<Button href="/pricing" variant="outline" size="lg">See plans</Button>
+			<Button href="/#pricing" variant="outline" size="lg">See plans</Button>
 		</div>
 	</div>
 </section>
