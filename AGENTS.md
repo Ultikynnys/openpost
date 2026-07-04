@@ -2,6 +2,8 @@
 
 This document serves as a guideline for autonomous AI agents (like Copilot, Cursor, Codeium, or CLI agents) and human developers contributing to **OpenPost**. It outlines the core tech stack, architectural rules, and specific instructions for AI behavior.
 
+Treat this as a living file: add concise repo learnings when they would save future agents time, and trim entries that become stale or too obvious.
+
 ## 1. Core Architecture & Tech Stack
 
 **Frontend:**
@@ -9,18 +11,19 @@ This document serves as a guideline for autonomous AI agents (like Copilot, Curs
 - **Styling:** TailwindCSS.
 - **i18n:** Paraglide.
 - **Testing:** Vitest.
-- **Package Manager:** Bun (`bun.com`).
+- **Package Manager:** pnpm.
 
 **Backend:**
 - **Language:** Go (1.25+).
 - **Framework:** Echo (`github.com/labstack/echo/v4`). Huma for OpenAPI spec generation.
-- **Database:** SQLite (configured with PRAGMA WAL, busy_timeout).
+- **Database:** SQLite by default; Postgres is supported and required for hosted cloud mode.
 - **ORM:** Bun (`github.com/uptrace/bun`).
-- **Background Jobs:** Custom SQLite-backed polling worker using the `jobs` table (no external Redis dependency).
+- **Background Jobs:** Custom database-backed polling worker using the `jobs` table (no external Redis dependency).
 - **Media Storage:** Local filesystem via `BlobStorage` interface (configurable via `OPENPOST_MEDIA_PATH`).
 
 **Deployment:**
 - **Strategy:** Single Go binary. SvelteKit's static output is embedded directly into the Go executable using `go:embed`.
+- **Hosted app:** `app.openpost.social` runs from the Docker image published by the GitHub `Build and Release` workflow and is pinned in `~/.config/home/hosts/rgo-vps/default.nix`.
 
 ## 2. Platform Adapter Architecture
 
@@ -51,6 +54,7 @@ When an AI agent is invoked to assist with this repository, it MUST adhere to th
 - **Always use Conventional Branches** (e.g., `feature/add-login`, `fix/header-alignment`, `hotfix/emergency-patch`)
 - **Always update the Changelog** for any major features, bug fixes, or breaking changes. Use the `## [Unreleased]` section to document changes since the last release.
 - **Pre-push lint gate is mandatory.** The repo installs a `pre-push` git hook (via `devenv` on shell entry, see `devenv.nix:enterShell` and `scripts/pre-push-lint.sh`) that runs the same `devenv shell -- lint` suite the CI release workflow runs. It blocks the push if lint fails, so a tag push that would produce a broken release never gets to GitHub. The pre-commit hooks only fire on staged files matching each hook's `files` regex, so they miss commits that only touch `go.mod`, the changelog, the docs, or the docker/Dockerfile. **Run `devenv shell -- lint` before any push, especially before tagging a release.** Bypass with `OPENPOST_SKIP_PRE_PUSH_LINT=1 git push ...` only for tag pushes that the release workflow has already CI-gated.
+- **Production release flow:** release tags must pass GitHub `Build and Release` before deployment. If a tag fails, do not retag it; fix forward with the next semver patch tag, wait for the image, then update the VPS Nix image pin and run `nh os switch` on `rgo-vps`.
 - **Go Backend:** Use Echo for HTTP handlers and Huma for OpenAPI endpoints. Follow the dependency injection pattern in `main.go`. Maintain separation of concerns: Handlers -> Services -> Database.
 - **Platform Adapters:** Implement `PlatformAdapter` interface. Never put platform logic outside the `internal/platform/` package. Use shared HTTP helpers from `http.go`.
 - **SvelteKit Frontend:** Always use standard Svelte 5 runes (`$state`, `$derived`, `$effect`, `$props`, `$bindable`). Use `+page.svelte`/`+page.ts` structures. Use the openapi-fetch typed client against `/api/v1` routes.
@@ -80,6 +84,7 @@ When an AI agent is invoked to assist with this repository, it MUST adhere to th
 - **"Create a background job"**: Do not use `goroutine` blindly for tasks that must survive server restarts. Insert a row into the `models.Job` table so the `BackgroundWorker` can pick it up.
 - **"Handle media uploads"**: Use the `BlobStorage` interface for file storage. The publisher fetches media from disk via `os.ReadFile()` and passes to `adapter.UploadMedia()`. For Threads, media must be served at a publicly accessible URL.
 - **"Implement threading"**: Use `Post.ParentPostID` and `Post.ThreadSequence`. The publisher detects thread chains and publishes sequentially. Each adapter's `Publish` method handles `ReplyToID` platform-specifically.
+- **"Provider app admin UI"**: The in-app Instance Admin provider-app page was removed. Hosted/operator credentials should be configured through environment/Nix secrets or `OPENPOST_PROVIDER_APPS`; backend admin provider-app APIs still exist for operator tooling.
 
 ## 5. Media & Threading Per Platform
 
