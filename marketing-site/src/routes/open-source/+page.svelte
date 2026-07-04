@@ -16,15 +16,15 @@
 	<title>Open source and self-hosting - OpenPost</title>
 	<meta
 		name="description"
-		content="OpenPost is source open and lightweight to self-host, while OpenPost Cloud provides the managed hosted version."
+		content="OpenPost is source open, lightweight to self-host, and available as a managed app."
 	/>
 	<link rel="canonical" href={`${siteUrl}/open-source`} />
 </svelte:head>
 
 <PageHero
 	eyebrow="Open source"
-	title="Hosted first, but never locked away."
-	description="OpenPost Cloud is the managed product. The source-open project remains practical to inspect, run, and extend."
+	title="Ready to use, but never locked away."
+	description="OpenPost is source open and remains practical to inspect, run, and extend."
 	secondaryHref={docsUrl}
 	secondaryLabel="Read docs"
 />
@@ -43,9 +43,10 @@
 		<div class="mt-10 rounded-xl border bg-muted/25 p-6">
 			<h2 class="text-2xl font-semibold">Use self-hosting as the trust signal.</h2>
 			<p class="mt-3 max-w-3xl text-sm leading-7 text-muted-foreground">
-				OpenPost can run with SQLite and local media storage, while hosted cloud mode uses
-				Postgres, S3-compatible media storage, and Polar billing. The landing page should focus on
-				Cloud, but this page gives technical buyers confidence that the product is inspectable.
+				OpenPost can run with SQLite and local media storage, while the managed app uses
+				Postgres, S3-compatible media storage, and Polar billing. This page gives technical
+				buyers confidence that the product is inspectable without making self-hosting the main
+				story.
 			</p>
 			<div class="mt-6 flex flex-wrap gap-3">
 				<Button href={githubUrl} target="_blank" rel="noreferrer">View source</Button>

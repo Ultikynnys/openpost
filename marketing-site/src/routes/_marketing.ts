@@ -539,7 +539,7 @@ export const faqs = [
 	{
 		question: 'Can I bring my own provider app credentials?',
 		answer:
-			'Yes. Hosted operators can configure provider apps, and self-hosted users can use environment configuration or the provider app registry depending on the provider.'
+			'Yes. Operators can configure provider apps, and self-hosted users can use environment configuration or the provider app registry depending on the provider.'
 	},
 	{
 		question: 'What happens if a post fails?',
@@ -553,7 +553,7 @@ export const changelogEntries = [
 		date: '2026-07',
 		title: 'Plan and billing foundation',
 		detail:
-			'Hosted plan IDs, Polar checkout, organization billing status, usage counters, and customer portal flows are aligned around Starter, Creator, Pro, Team, and Agency.'
+			'Plan IDs, Polar checkout, organization billing status, usage counters, and customer portal flows are aligned around Starter, Creator, Pro, Team, and Agency.'
 	},
 	{
 		date: '2026-07',

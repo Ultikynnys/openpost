@@ -12,7 +12,7 @@
 <PageHero
 	eyebrow="Legal"
 	title="Privacy summary."
-	description="A practical placeholder for the hosted privacy policy while the legal text is finalized."
+	description="A practical placeholder for the privacy policy while the legal text is finalized."
 	secondaryHref="/security"
 	secondaryLabel="Security details"
 />
@@ -20,8 +20,8 @@
 <section class="section-pad">
 	<div class="prose prose-invert mx-auto max-w-3xl px-4 sm:px-6 lg:px-8">
 		<p>
-			OpenPost Cloud stores the account, workspace, media, scheduling, billing, and automation data
-			needed to provide the hosted publishing service.
+			OpenPost stores the account, workspace, media, scheduling, billing, and automation data
+			needed to provide the publishing service.
 		</p>
 		<p>
 			Provider tokens are encrypted at rest. Users can manage sessions, passkeys, TOTP, and
