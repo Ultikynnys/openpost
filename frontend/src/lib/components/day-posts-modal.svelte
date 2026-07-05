@@ -14,7 +14,6 @@
 	import { getStatusColor } from '$lib/utils';
 	import PlatformIcon from '$lib/components/platform-icon.svelte';
 	import { goto } from '$app/navigation';
-	import { resolve } from '$app/paths';
 	import { m } from '$lib/paraglide/messages';
 	import { getLocaleTag } from '$lib/i18n';
 
@@ -84,12 +83,12 @@
 
 	function handleNewPost() {
 		ui.closeDayPosts();
-		goto(resolve('/'));
+		goto('/');
 	}
 
 	function handleEdit(postId: string) {
 		ui.closeDayPosts();
-		goto(resolve(`/posts/${postId}`));
+		goto(`/posts/${postId}`);
 	}
 
 	async function handleDelete(postId: string) {

@@ -2,7 +2,6 @@
 	import { onMount } from 'svelte';
 	import { client, type ScheduleOverview, type Post, type Workspace } from '$lib/api/client';
 	import { page } from '$app/state';
-	import { resolve } from '$app/paths';
 	import * as Sidebar from '$lib/components/ui/sidebar';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
 	import * as Avatar from '$lib/components/ui/avatar';
@@ -346,7 +345,7 @@
 				<Sidebar.Menu>
 					<Sidebar.MenuItem>
 						<Sidebar.MenuButton
-							onclick={() => goto(resolve('/calendar'))}
+							onclick={() => goto('/calendar')}
 							class={`text-sidebar-foreground/80 ${workspaceMenuItemClass('/calendar')}`}
 						>
 							<CalendarDaysIcon class="size-3.5" />
@@ -484,28 +483,28 @@
 						<DropdownMenu.Label>Current workspace</DropdownMenu.Label>
 						<DropdownMenu.Group>
 							<DropdownMenu.Item
-								onclick={() => goto(resolve('/accounts'))}
+								onclick={() => goto('/accounts')}
 								class={`gap-2 ${workspaceMenuItemClass('/accounts')}`}
 							>
 								<UsersIcon class="size-4 text-muted-foreground" />
 								<span>{m.sidebar_accounts()}</span>
 							</DropdownMenu.Item>
 							<DropdownMenu.Item
-								onclick={() => goto(resolve('/media'))}
+								onclick={() => goto('/media')}
 								class={`gap-2 ${workspaceMenuItemClass('/media')}`}
 							>
 								<ImageIcon class="size-4 text-muted-foreground" />
 								<span>{m.sidebar_media()}</span>
 							</DropdownMenu.Item>
 							<DropdownMenu.Item
-								onclick={() => goto(resolve('/prompts'))}
+								onclick={() => goto('/prompts')}
 								class={`gap-2 ${workspaceMenuItemClass('/prompts')}`}
 							>
 								<LightbulbIcon class="size-4 text-muted-foreground" />
 								<span>{m.sidebar_prompts()}</span>
 							</DropdownMenu.Item>
 							<DropdownMenu.Item
-								onclick={() => goto(resolve('/activity'))}
+								onclick={() => goto('/activity')}
 								class={`gap-2 ${workspaceMenuItemClass('/activity')}`}
 							>
 								<ScrollTextIcon class="size-4 text-muted-foreground" />
