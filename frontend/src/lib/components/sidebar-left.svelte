@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { client, type ScheduleOverview, type Post, type Workspace } from '$lib/api/client';
 	import { page } from '$app/state';
+	import { resolve } from '$app/paths';
 	import * as Sidebar from '$lib/components/ui/sidebar';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
 	import * as Avatar from '$lib/components/ui/avatar';
@@ -48,8 +49,10 @@
 	let drafts = $state<Post[]>([]);
 	let loadingDrafts = $state(false);
 	const currentWorkspaceName = $derived(workspaceCtx.currentWorkspace?.name ?? 'Select workspace');
+	const currentWorkspaceAvatarURL = $derived(workspaceAvatarURL(workspaceCtx.currentWorkspace));
+	const currentWorkspaceInitials = $derived(workspaceInitials(workspaceCtx.currentWorkspace));
 	const currentWorkspaceOrganizationName = $derived(
-		workspaceCtx.currentWorkspace?.organization_name || 'Personal workspace'
+		workspaceSubtitle(workspaceCtx.currentWorkspace)
 	);
 	const currentPath = $derived(page.url.pathname);
 	const userDisplayName = $derived(
@@ -224,10 +227,27 @@
 		goto('/connect');
 	}
 
-	function navButtonClass(path: string) {
-		return currentPath === path || currentPath.startsWith(`${path}/`)
-			? 'bg-sidebar-accent text-sidebar-accent-foreground'
-			: 'text-sidebar-foreground/80';
+	function workspaceMenuItemClass(path: string) {
+		return currentPath === path || currentPath.startsWith(`${path}/`) ? 'bg-muted' : '';
+	}
+
+	function workspaceAvatarURL(workspace: Workspace | null | undefined) {
+		return (
+			(workspace as (Workspace & { avatar_url?: string }) | null | undefined)?.avatar_url ?? ''
+		).trim();
+	}
+
+	function workspaceSubtitle(workspace: Workspace | null | undefined) {
+		if (!workspace) return 'Choose a workspace';
+		const orgName = (workspace.organization_name ?? '').trim();
+		if (orgName && orgName !== workspace.name) return orgName;
+		return 'Current workspace';
+	}
+
+	function workspaceInitials(workspace: Workspace | null | undefined) {
+		const source = workspace?.name || 'Workspace';
+		const parts = source.split(/[\s._-]+/).filter(Boolean);
+		return ((parts[0]?.[0] ?? 'W') + (parts[1]?.[0] ?? '')).toUpperCase();
 	}
 
 	async function switchWorkspace(workspace: Workspace) {
@@ -350,49 +370,6 @@
 
 		<Sidebar.Separator />
 
-		<Sidebar.Group>
-			<Sidebar.GroupLabel
-				class="px-4 text-xs font-semibold tracking-wider text-sidebar-foreground/50 uppercase"
-				>Workspace</Sidebar.GroupLabel
-			>
-			<Sidebar.GroupContent>
-				<Sidebar.Menu>
-					<Sidebar.MenuItem>
-						<Sidebar.MenuButton
-							class={navButtonClass('/accounts')}
-							onclick={() => goto('/accounts')}
-						>
-							<UsersIcon class="size-3.5" />
-							<span>{m.sidebar_accounts()}</span>
-						</Sidebar.MenuButton>
-					</Sidebar.MenuItem>
-					<Sidebar.MenuItem>
-						<Sidebar.MenuButton class={navButtonClass('/media')} onclick={() => goto('/media')}>
-							<ImageIcon class="size-3.5" />
-							<span>{m.sidebar_media()}</span>
-						</Sidebar.MenuButton>
-					</Sidebar.MenuItem>
-					<Sidebar.MenuItem>
-						<Sidebar.MenuButton class={navButtonClass('/prompts')} onclick={() => goto('/prompts')}>
-							<LightbulbIcon class="size-3.5" />
-							<span>{m.sidebar_prompts()}</span>
-						</Sidebar.MenuButton>
-					</Sidebar.MenuItem>
-					<Sidebar.MenuItem>
-						<Sidebar.MenuButton
-							class={navButtonClass('/activity')}
-							onclick={() => goto('/activity')}
-						>
-							<ScrollTextIcon class="size-3.5" />
-							<span>{m.sidebar_activity()}</span>
-						</Sidebar.MenuButton>
-					</Sidebar.MenuItem>
-				</Sidebar.Menu>
-			</Sidebar.GroupContent>
-		</Sidebar.Group>
-
-		<Sidebar.Separator />
-
 		<!-- Drafts Section -->
 		<Sidebar.Group class="flex-1 overflow-hidden">
 			<Sidebar.GroupLabel
@@ -461,11 +438,14 @@
 								size="lg"
 								class="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
 							>
-								<div
-									class="flex size-8 shrink-0 items-center justify-center rounded-lg bg-sidebar-accent text-sidebar-foreground"
-								>
-									<UsersIcon class="size-4" />
-								</div>
+								<Avatar.Root class="size-8 rounded-lg">
+									{#if currentWorkspaceAvatarURL}
+										<Avatar.Image src={currentWorkspaceAvatarURL} alt={currentWorkspaceName} />
+									{/if}
+									<Avatar.Fallback class="rounded-lg bg-sidebar-accent text-sidebar-foreground">
+										{currentWorkspaceInitials}
+									</Avatar.Fallback>
+								</Avatar.Root>
 								<div class="grid flex-1 text-start text-sm leading-tight">
 									<span class="truncate font-medium text-sidebar-foreground">
 										{currentWorkspaceName}
@@ -484,25 +464,64 @@
 						align="start"
 						sideOffset={4}
 					>
-						<DropdownMenu.Label>Switch workspace</DropdownMenu.Label>
+						<DropdownMenu.Label>Current workspace</DropdownMenu.Label>
+						<DropdownMenu.Group>
+							<DropdownMenu.Item
+								onclick={() => goto(resolve('/accounts'))}
+								class={`gap-2 ${workspaceMenuItemClass('/accounts')}`}
+							>
+								<UsersIcon class="size-4 text-muted-foreground" />
+								<span>{m.sidebar_accounts()}</span>
+							</DropdownMenu.Item>
+							<DropdownMenu.Item
+								onclick={() => goto(resolve('/media'))}
+								class={`gap-2 ${workspaceMenuItemClass('/media')}`}
+							>
+								<ImageIcon class="size-4 text-muted-foreground" />
+								<span>{m.sidebar_media()}</span>
+							</DropdownMenu.Item>
+							<DropdownMenu.Item
+								onclick={() => goto(resolve('/prompts'))}
+								class={`gap-2 ${workspaceMenuItemClass('/prompts')}`}
+							>
+								<LightbulbIcon class="size-4 text-muted-foreground" />
+								<span>{m.sidebar_prompts()}</span>
+							</DropdownMenu.Item>
+							<DropdownMenu.Item
+								onclick={() => goto(resolve('/activity'))}
+								class={`gap-2 ${workspaceMenuItemClass('/activity')}`}
+							>
+								<ScrollTextIcon class="size-4 text-muted-foreground" />
+								<span>{m.sidebar_activity()}</span>
+							</DropdownMenu.Item>
+						</DropdownMenu.Group>
 						<DropdownMenu.Separator />
+						<DropdownMenu.Label>Switch workspace</DropdownMenu.Label>
 						<DropdownMenu.Group>
 							{#each workspaceCtx.workspaces as workspace (workspace.id)}
+								{@const avatarURL = workspaceAvatarURL(workspace)}
 								<DropdownMenu.Item
 									onclick={() => switchWorkspace(workspace)}
 									class="items-start gap-3 py-2"
 								>
-									<CircleDotIcon
-										class={`mt-0.5 size-4 ${
-											workspace.id === workspaceCtx.currentWorkspace?.id
-												? 'text-primary'
-												: 'text-muted-foreground'
-										}`}
-									/>
+									<Avatar.Root class="mt-0.5 size-8 rounded-md">
+										{#if avatarURL}
+											<Avatar.Image src={avatarURL} alt={workspace.name} />
+										{/if}
+										<Avatar.Fallback
+											class={`rounded-md text-xs ${
+												workspace.id === workspaceCtx.currentWorkspace?.id
+													? 'bg-primary text-primary-foreground'
+													: 'bg-muted text-muted-foreground'
+											}`}
+										>
+											{workspaceInitials(workspace)}
+										</Avatar.Fallback>
+									</Avatar.Root>
 									<span class="min-w-0">
 										<span class="block truncate text-sm font-medium">{workspace.name}</span>
 										<span class="block truncate text-xs text-muted-foreground">
-											{workspace.organization_name || 'Personal workspace'}
+											{workspaceSubtitle(workspace)}
 										</span>
 									</span>
 								</DropdownMenu.Item>

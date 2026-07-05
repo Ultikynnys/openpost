@@ -2,6 +2,7 @@ import { browser } from '$app/environment';
 import { client, type Workspace } from '$lib/api/client';
 
 interface WorkspaceSettings {
+	avatar_url: string;
 	timezone: string;
 	week_start: number;
 	media_cleanup_days: number;
@@ -17,6 +18,7 @@ class WorkspaceContext {
 	currentWorkspace = $state<Workspace | null>(null);
 	workspaces = $state<Workspace[]>([]);
 	settings = $state<WorkspaceSettings>({
+		avatar_url: '',
 		timezone: 'UTC',
 		week_start: 1,
 		media_cleanup_days: 0,
@@ -86,6 +88,7 @@ class WorkspaceContext {
 			});
 			if (!error && data) {
 				this.settings = {
+					avatar_url: data.avatar_url || '',
 					timezone: data.timezone || 'UTC',
 					week_start: data.week_start ?? 1,
 					media_cleanup_days: data.media_cleanup_days ?? 0,
@@ -95,6 +98,15 @@ class WorkspaceContext {
 					slot_end_hour: data.slot_end_hour ?? 23,
 					slot_interval_minutes: data.slot_interval_minutes ?? 15
 				};
+				if (this.currentWorkspace) {
+					this.currentWorkspace = {
+						...this.currentWorkspace,
+						avatar_url: data.avatar_url || ''
+					} as Workspace;
+					if (browser) {
+						localStorage.setItem(STORAGE_KEY, JSON.stringify(this.currentWorkspace));
+					}
+				}
 			}
 		} catch (e) {
 			console.error('Failed to load workspace settings:', e);
@@ -112,6 +124,18 @@ class WorkspaceContext {
 			if (error) throw new Error(error.detail || 'Failed to save settings');
 
 			if (updates.timezone !== undefined) this.settings.timezone = updates.timezone;
+			if (updates.avatar_url !== undefined) {
+				this.settings.avatar_url = updates.avatar_url;
+				if (this.currentWorkspace) {
+					this.currentWorkspace = {
+						...this.currentWorkspace,
+						avatar_url: updates.avatar_url
+					} as Workspace;
+					if (browser) {
+						localStorage.setItem(STORAGE_KEY, JSON.stringify(this.currentWorkspace));
+					}
+				}
+			}
 			if (updates.week_start !== undefined) this.settings.week_start = updates.week_start;
 			if (updates.media_cleanup_days !== undefined)
 				this.settings.media_cleanup_days = updates.media_cleanup_days;

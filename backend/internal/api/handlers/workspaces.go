@@ -61,6 +61,7 @@ type ListWorkspacesOutput struct {
 		OrganizationID     string `json:"organization_id"`
 		OrganizationName   string `json:"organization_name"`
 		WorkspaceName      string `json:"name"`
+		AvatarURL          string `json:"avatar_url"`
 		WorkspaceCreatedAt string `json:"created_at"`
 	}
 }
@@ -736,11 +737,12 @@ func (h *WorkspaceHandler) ListWorkspaces(api huma.API) {
 			OrganizationID   string    `bun:"organization_id"`
 			OrganizationName string    `bun:"organization_name"`
 			Name             string    `bun:"name"`
+			AvatarURL        string    `bun:"avatar_url"`
 			CreatedAt        time.Time `bun:"created_at"`
 		}
 		query := h.db.NewSelect().
 			TableExpr("workspaces AS w").
-			ColumnExpr("w.id, w.organization_id, w.name, w.created_at").
+			ColumnExpr("w.id, w.organization_id, w.name, w.avatar_url, w.created_at").
 			ColumnExpr("COALESCE(o.name, '') AS organization_name").
 			Join("JOIN workspace_members AS wm ON wm.workspace_id = w.id").
 			Join("LEFT JOIN organizations AS o ON o.id = w.organization_id").
@@ -758,6 +760,7 @@ func (h *WorkspaceHandler) ListWorkspaces(api huma.API) {
 			OrganizationID     string `json:"organization_id"`
 			OrganizationName   string `json:"organization_name"`
 			WorkspaceName      string `json:"name"`
+			AvatarURL          string `json:"avatar_url"`
 			WorkspaceCreatedAt string `json:"created_at"`
 		}{}}
 		for _, ws := range rows {
@@ -766,12 +769,14 @@ func (h *WorkspaceHandler) ListWorkspaces(api huma.API) {
 				OrganizationID     string `json:"organization_id"`
 				OrganizationName   string `json:"organization_name"`
 				WorkspaceName      string `json:"name"`
+				AvatarURL          string `json:"avatar_url"`
 				WorkspaceCreatedAt string `json:"created_at"`
 			}{
 				WorkspaceID:        ws.ID,
 				OrganizationID:     ws.OrganizationID,
 				OrganizationName:   ws.OrganizationName,
 				WorkspaceName:      ws.Name,
+				AvatarURL:          ws.AvatarURL,
 				WorkspaceCreatedAt: ws.CreatedAt.Format(time.RFC3339),
 			})
 		}
@@ -861,6 +866,7 @@ type GetWorkspaceSettingsInput struct {
 
 type GetWorkspaceSettingsOutput struct {
 	Body struct {
+		AvatarURL           string `json:"avatar_url"`
 		Timezone            string `json:"timezone"`
 		WeekStart           int    `json:"week_start"`
 		MediaCleanupDays    int    `json:"media_cleanup_days"`
@@ -875,6 +881,7 @@ type GetWorkspaceSettingsOutput struct {
 type UpdateWorkspaceSettingsInput struct {
 	PathID string `path:"id" doc:"Workspace ID"`
 	Body   struct {
+		AvatarURL           *string `json:"avatar_url,omitempty"`
 		Timezone            *string `json:"timezone,omitempty"`
 		WeekStart           *int    `json:"week_start,omitempty"`
 		MediaCleanupDays    *int    `json:"media_cleanup_days,omitempty"`
@@ -888,6 +895,7 @@ type UpdateWorkspaceSettingsInput struct {
 
 type UpdateWorkspaceSettingsOutput struct {
 	Body struct {
+		AvatarURL           string `json:"avatar_url"`
 		Timezone            string `json:"timezone"`
 		WeekStart           int    `json:"week_start"`
 		MediaCleanupDays    int    `json:"media_cleanup_days"`
@@ -935,6 +943,7 @@ func (h *WorkspaceHandler) GetWorkspaceSettings(api huma.API) {
 		}
 
 		return &GetWorkspaceSettingsOutput{Body: struct {
+			AvatarURL           string `json:"avatar_url"`
 			Timezone            string `json:"timezone"`
 			WeekStart           int    `json:"week_start"`
 			MediaCleanupDays    int    `json:"media_cleanup_days"`
@@ -944,6 +953,7 @@ func (h *WorkspaceHandler) GetWorkspaceSettings(api huma.API) {
 			SlotEndHour         int    `json:"slot_end_hour"`
 			SlotIntervalMinutes int    `json:"slot_interval_minutes"`
 		}{
+			AvatarURL:           workspace.AvatarURL,
 			Timezone:            workspace.Timezone,
 			WeekStart:           workspace.WeekStart,
 			MediaCleanupDays:    workspace.MediaCleanupDays,
@@ -995,6 +1005,13 @@ func (h *WorkspaceHandler) UpdateWorkspaceSettings(api huma.API) {
 		if input.Body.Timezone != nil {
 			workspace.Timezone = *input.Body.Timezone
 		}
+		if input.Body.AvatarURL != nil {
+			avatarURL := strings.TrimSpace(*input.Body.AvatarURL)
+			if len(avatarURL) > 1000 {
+				return nil, huma.Error400BadRequest("avatar_url must be at most 1000 characters")
+			}
+			workspace.AvatarURL = avatarURL
+		}
 		if input.Body.WeekStart != nil {
 			if *input.Body.WeekStart < 0 || *input.Body.WeekStart > 1 {
 				return nil, huma.Error400BadRequest("week_start must be 0 (Sunday) or 1 (Monday)")
@@ -1039,7 +1056,7 @@ func (h *WorkspaceHandler) UpdateWorkspaceSettings(api huma.API) {
 		}
 
 		_, err = h.db.NewUpdate().Model(&workspace).
-			Column("timezone", "week_start", "media_cleanup_days", "random_delay_minutes", "draft_gap_minutes", "slot_start_hour", "slot_end_hour", "slot_interval_minutes").
+			Column("avatar_url", "timezone", "week_start", "media_cleanup_days", "random_delay_minutes", "draft_gap_minutes", "slot_start_hour", "slot_end_hour", "slot_interval_minutes").
 			Where("id = ?", input.PathID).
 			Exec(ctx)
 		if err != nil {
@@ -1051,6 +1068,7 @@ func (h *WorkspaceHandler) UpdateWorkspaceSettings(api huma.API) {
 		}
 
 		return &UpdateWorkspaceSettingsOutput{Body: struct {
+			AvatarURL           string `json:"avatar_url"`
 			Timezone            string `json:"timezone"`
 			WeekStart           int    `json:"week_start"`
 			MediaCleanupDays    int    `json:"media_cleanup_days"`
@@ -1060,6 +1078,7 @@ func (h *WorkspaceHandler) UpdateWorkspaceSettings(api huma.API) {
 			SlotEndHour         int    `json:"slot_end_hour"`
 			SlotIntervalMinutes int    `json:"slot_interval_minutes"`
 		}{
+			AvatarURL:           workspace.AvatarURL,
 			Timezone:            workspace.Timezone,
 			WeekStart:           workspace.WeekStart,
 			MediaCleanupDays:    workspace.MediaCleanupDays,

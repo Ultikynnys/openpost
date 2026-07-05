@@ -166,6 +166,12 @@
 	const currentBillingPlan = $derived(
 		billingPlans.find((plan) => plan.id === billingStatus?.plan_id) ?? null
 	);
+	const hasActiveBillingPlan = $derived(
+		Boolean(
+			billingStatus?.plan_id &&
+			['active', 'trialing'].includes((billingStatus.status ?? '').toLowerCase())
+		)
+	);
 	const activeSettingsTitle = $derived.by(() => {
 		if (activeSettingsTab === 'account') return 'Account settings';
 		if (activeSettingsTab === 'organization') {
@@ -666,6 +672,7 @@
 		saving = true;
 		try {
 			await workspaceCtx.saveSettings({
+				avatar_url: workspaceCtx.settings.avatar_url,
 				timezone: workspaceCtx.settings.timezone,
 				week_start: workspaceCtx.settings.week_start,
 				media_cleanup_days: workspaceCtx.settings.media_cleanup_days,
@@ -1167,11 +1174,40 @@
 			class="scroll-mt-24 space-y-4"
 		>
 			<h2 class="mb-4 text-lg font-semibold">General</h2>
-			<div class="flex flex-col gap-1 rounded-lg border bg-muted/20 p-4">
-				<span class="text-sm font-medium">{workspaceCtx.currentWorkspace?.name}</span>
-				<span class="text-sm text-muted-foreground">
-					{workspaceCtx.currentWorkspace?.organization_name || 'Personal workspace'}
-				</span>
+			<div class="rounded-lg border bg-muted/20 p-4">
+				<div class="flex flex-col gap-4 sm:flex-row sm:items-center">
+					<div
+						class="flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-muted text-lg font-semibold text-muted-foreground"
+					>
+						{#if workspaceCtx.settings.avatar_url}
+							<img
+								src={workspaceCtx.settings.avatar_url}
+								alt={workspaceCtx.currentWorkspace?.name || 'Workspace'}
+								class="h-full w-full object-cover"
+							/>
+						{:else}
+							{(workspaceCtx.currentWorkspace?.name?.[0] ?? 'W').toUpperCase()}
+						{/if}
+					</div>
+					<div class="min-w-0 flex-1 space-y-3">
+						<div class="flex flex-col gap-1">
+							<span class="text-sm font-medium">{workspaceCtx.currentWorkspace?.name}</span>
+							<span class="text-sm text-muted-foreground">
+								{workspaceCtx.currentWorkspace?.organization_name || 'Personal workspace'}
+							</span>
+						</div>
+						<div class="space-y-2">
+							<Label for="workspace-avatar-url">Workspace image URL</Label>
+							<Input
+								id="workspace-avatar-url"
+								type="url"
+								bind:value={workspaceCtx.settings.avatar_url}
+								placeholder="https://example.com/app-icon.png"
+								maxlength={1000}
+							/>
+						</div>
+					</div>
+				</div>
 			</div>
 			<div class="rounded-lg border bg-muted/20 p-4">
 				<div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -1420,6 +1456,10 @@
 									· cancels after this period
 								{/if}
 							</p>
+						{:else if hasActiveBillingPlan}
+							<p class="mt-2 text-sm text-muted-foreground">
+								This organization has an active hosted plan.
+							</p>
 						{:else}
 							<p class="mt-2 text-sm text-muted-foreground">
 								Start checkout to activate hosted billing for this organization.
@@ -1486,12 +1526,18 @@
 							class="w-full"
 							variant={plan.featured ? 'default' : 'outline'}
 							onclick={() => startCheckout(plan.id)}
-							disabled={Boolean(billingBusyPlan)}
+							disabled={Boolean(billingBusyPlan) || hasActiveBillingPlan}
 						>
 							{#if billingBusyPlan === plan.id}
 								<LoaderIcon class="mr-2 h-4 w-4 animate-spin" />
 							{/if}
-							Start Checkout
+							{#if hasActiveBillingPlan && billingStatus?.plan_id === plan.id}
+								Current Plan
+							{:else if hasActiveBillingPlan}
+								Unavailable While Active
+							{:else}
+								Start Checkout
+							{/if}
 						</Button>
 					</article>
 				{/each}

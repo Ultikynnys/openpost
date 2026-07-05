@@ -4,6 +4,15 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- Added workspace image URLs and moved workspace-scoped navigation into the workspace switcher menu.
+
+### Fixed
+
+- Rendered a success page for completed OAuth account callbacks before returning users to Accounts.
+- Stopped showing checkout CTAs for other plans when an organization already has an active hosted plan.
+
 ## [1.0.30] - 2026-07-03
 
 ### Fixed

@@ -818,15 +818,56 @@ func (h *OAuthHandler) saveAccountAndRedirect(ctx context.Context, userID, platf
 		return h.redirectWithError(accountConnectionErrorMessage(err))
 	}
 
-	successPath := h.frontendURL + "/accounts/callback?status=success&platform=" + url.QueryEscape(platformName)
-	log.Printf("[Callback] Account saved successfully: ID=%s, redirecting to %s", account.ID, successPath)
+	accountsURL := h.frontendURL + "/accounts"
+	log.Printf("[Callback] Account saved successfully: ID=%s, redirecting to %s", account.ID, accountsURL)
+
+	return h.accountConnectionSuccessPage(platformName, accountsURL), nil
+}
+
+func (h *OAuthHandler) accountConnectionSuccessPage(platformName, redirectURL string) *huma.StreamResponse {
+	platformLabel := strings.TrimSpace(platformName)
+	if platformLabel == "" {
+		platformLabel = "account"
+	}
 
 	return &huma.StreamResponse{
 		Body: func(ctx huma.Context) {
-			ctx.SetStatus(http.StatusTemporaryRedirect)
-			ctx.SetHeader("Location", successPath)
+			ctx.SetStatus(http.StatusOK)
+			ctx.SetHeader("Content-Type", "text/html; charset=utf-8")
+			_, _ = fmt.Fprintf(ctx.BodyWriter(), `<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<meta http-equiv="refresh" content="5; url=%s">
+	<title>Account connected - OpenPost</title>
+	<style>
+		:root { color-scheme: light dark; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+		body { min-height: 100vh; margin: 0; display: grid; place-items: center; background: Canvas; color: CanvasText; }
+		main { width: min(92vw, 28rem); text-align: center; padding: 2rem; border: 1px solid color-mix(in srgb, CanvasText 14%%, transparent); border-radius: .75rem; }
+		.mark { width: 4rem; height: 4rem; margin: 0 auto 1rem; display: grid; place-items: center; border-radius: 999px; background: color-mix(in srgb, #10b981 16%%, transparent); color: #059669; font-size: 2rem; }
+		h1 { margin: 0; font-size: 1.5rem; }
+		p { color: color-mix(in srgb, CanvasText 68%%, transparent); line-height: 1.5; }
+		a { display: inline-flex; align-items: center; justify-content: center; min-height: 2.5rem; padding: 0 .9rem; border-radius: .5rem; background: CanvasText; color: Canvas; text-decoration: none; font-weight: 600; }
+	</style>
+</head>
+<body>
+	<main>
+		<div class="mark">✓</div>
+		<h1>Account connected</h1>
+		<p>Your %s connection was saved. You will be sent back to Accounts in 5 seconds.</p>
+		<a href="%s">Go to Accounts</a>
+	</main>
+	<script>setTimeout(function () { window.location.assign(%q); }, 5000);</script>
+</body>
+</html>`,
+				html.EscapeString(redirectURL),
+				html.EscapeString(platformLabel),
+				html.EscapeString(redirectURL),
+				redirectURL,
+			)
 		},
-	}, nil
+	}
 }
 
 func accountConnectionErrorMessage(err error) string {
