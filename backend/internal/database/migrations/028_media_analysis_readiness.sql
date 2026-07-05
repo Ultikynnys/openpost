@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS media_attachments (
   thumbnails TEXT,
   file_hash TEXT UNIQUE,
   alt_text TEXT,
-  is_favorite BOOLEAN DEFAULT 0,
+  is_favorite BOOLEAN DEFAULT false,
   created_at TIMESTAMP NOT NULL DEFAULT current_timestamp
 );
 

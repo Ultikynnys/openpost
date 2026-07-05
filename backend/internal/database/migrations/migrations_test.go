@@ -130,6 +130,8 @@ func TestNormalizeMigrationSQLMakesStatementsPostgresSafe(t *testing.T) {
 	raw := `
 ALTER TABLE users ADD COLUMN totp_secret_encrypted BLOB;
 ALTER TABLE users ADD COLUMN totp_enabled_at DATETIME;
+ALTER TABLE media_attachments ADD COLUMN public_url_ready BOOLEAN NOT NULL DEFAULT 0;
+ALTER TABLE media_attachments ADD COLUMN public_url_public BOOLEAN DEFAULT 1;
 DELETE FROM social_accounts WHERE is_active = 0;
 CREATE UNIQUE INDEX social_accounts_active_idx ON social_accounts (workspace_id) WHERE is_active = 1 AND slug != '';
 `
@@ -138,12 +140,16 @@ CREATE UNIQUE INDEX social_accounts_active_idx ON social_accounts (workspace_id)
 
 	require.Contains(t, got, "ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_secret_encrypted BYTEA")
 	require.Contains(t, got, "ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_enabled_at TIMESTAMPTZ")
+	require.Contains(t, got, "ALTER TABLE media_attachments ADD COLUMN IF NOT EXISTS public_url_ready BOOLEAN NOT NULL DEFAULT FALSE")
+	require.Contains(t, got, "ALTER TABLE media_attachments ADD COLUMN IF NOT EXISTS public_url_public BOOLEAN DEFAULT TRUE")
 	require.Contains(t, got, "totp_secret_encrypted BYTEA")
 	require.Contains(t, got, "totp_enabled_at TIMESTAMPTZ")
 	require.Contains(t, got, "is_active = FALSE")
 	require.Contains(t, got, "is_active = TRUE AND slug != ''")
 	require.NotContains(t, got, " BLOB")
 	require.NotContains(t, got, " DATETIME")
+	require.NotContains(t, got, "BOOLEAN NOT NULL DEFAULT 0")
+	require.NotContains(t, got, "BOOLEAN DEFAULT 1")
 	require.NotContains(t, got, "is_active = 0")
 	require.NotContains(t, got, "is_active = 1")
 }

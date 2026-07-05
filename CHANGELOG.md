@@ -21,6 +21,7 @@ All notable changes to this project are documented in this file.
 
 ### Fixed
 
+- Fixed Postgres migration normalization for numeric boolean defaults so hosted databases can apply the format-first schema migrations.
 - Reworked existing-post editing so posts open in the full composer with explicit save/cancel controls instead of prompt-based rescheduling.
 - Rendered a success page for completed OAuth account callbacks before returning users to Accounts.
 - Stopped showing checkout CTAs for other plans when an organization already has an active hosted plan.

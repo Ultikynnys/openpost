@@ -92,6 +92,8 @@ func RunMigrations(db *bun.DB) error {
 var (
 	postgresBlobTypeExpr         = regexp.MustCompile(`(?i)\bBLOB\b`)
 	postgresDateTimeTypeExpr     = regexp.MustCompile(`(?i)\bDATETIME\b`)
+	postgresBooleanDefaultFalse  = regexp.MustCompile(`(?i)\bBOOLEAN\b(\s+NOT\s+NULL)?\s+DEFAULT\s+0\b`)
+	postgresBooleanDefaultTrue   = regexp.MustCompile(`(?i)\bBOOLEAN\b(\s+NOT\s+NULL)?\s+DEFAULT\s+1\b`)
 	postgresBooleanIsActiveFalse = regexp.MustCompile(`\bis_active\s*=\s*0\b`)
 	postgresBooleanIsActiveTrue  = regexp.MustCompile(`\bis_active\s*=\s*1\b`)
 	postgresAddColumnExpr        = regexp.MustCompile(`(?i)\bADD\s+COLUMN\s+`)
@@ -104,6 +106,8 @@ func normalizeMigrationSQL(name dialect.Name, raw string) string {
 
 	out := postgresBlobTypeExpr.ReplaceAllString(raw, "BYTEA")
 	out = postgresDateTimeTypeExpr.ReplaceAllString(out, "TIMESTAMPTZ")
+	out = postgresBooleanDefaultFalse.ReplaceAllString(out, "BOOLEAN${1} DEFAULT FALSE")
+	out = postgresBooleanDefaultTrue.ReplaceAllString(out, "BOOLEAN${1} DEFAULT TRUE")
 	out = postgresBooleanIsActiveFalse.ReplaceAllString(out, "is_active = FALSE")
 	out = postgresBooleanIsActiveTrue.ReplaceAllString(out, "is_active = TRUE")
 	out = postgresAddColumnIfNotExists(out)

@@ -71,7 +71,7 @@ CREATE TABLE IF NOT EXISTS media_attachments (
   thumbnails TEXT,
   file_hash TEXT UNIQUE,
   alt_text TEXT,
-  is_favorite BOOLEAN DEFAULT 0,
+  is_favorite BOOLEAN DEFAULT false,
   created_at TIMESTAMP NOT NULL DEFAULT current_timestamp
 );
 
@@ -82,7 +82,7 @@ ALTER TABLE media_attachments ADD COLUMN dominant_type TEXT NOT NULL DEFAULT '';
 ALTER TABLE media_attachments ADD COLUMN analysis_status TEXT NOT NULL DEFAULT 'ready';
 ALTER TABLE media_attachments ADD COLUMN analysis_error TEXT NOT NULL DEFAULT '';
 ALTER TABLE media_attachments ADD COLUMN thumbnail_object_key TEXT NOT NULL DEFAULT '';
-ALTER TABLE media_attachments ADD COLUMN public_url_ready BOOLEAN NOT NULL DEFAULT 0;
+ALTER TABLE media_attachments ADD COLUMN public_url_ready BOOLEAN NOT NULL DEFAULT false;
 ALTER TABLE media_attachments ADD COLUMN public_url_checked_at TIMESTAMP;
 ALTER TABLE media_attachments ADD COLUMN public_url_status INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE media_attachments ADD COLUMN public_url_error TEXT NOT NULL DEFAULT '';
