@@ -54,6 +54,7 @@
 
 	let needsOnboarding = $state(false);
 	let onboardingChecked = $state(false);
+	let onboardingCheckedPath = $state('');
 	let onboardingCheckInFlightForPath = $state('');
 
 	function authenticatedPublicTarget() {
@@ -92,6 +93,7 @@
 
 			if (needsOnboarding) {
 				if (!isOnboardingPage && currentPath !== '/invite') {
+					if (onboardingCheckedPath !== currentPath) return;
 					goto(onboardingPathForPlan($page.url.searchParams.get('plan')));
 				}
 			} else if (currentPath === '/login' || currentPath === '/register') {
@@ -126,16 +128,22 @@
 		if (path !== currentPath) return;
 		needsOnboarding = nextNeedsOnboarding;
 		onboardingChecked = true;
+		onboardingCheckedPath = path;
 	}
 
 	$effect(() => {
 		if (authState.isLoading || !authState.isAuthenticated) {
 			onboardingChecked = false;
+			onboardingCheckedPath = '';
 			onboardingCheckInFlightForPath = '';
 			return;
 		}
 
-		if (!onboardingChecked && onboardingCheckInFlightForPath !== currentPath) {
+		if (
+			(!onboardingChecked || onboardingCheckedPath !== currentPath) &&
+			onboardingCheckInFlightForPath !== currentPath
+		) {
+			onboardingChecked = false;
 			checkOnboarding(currentPath);
 		}
 	});

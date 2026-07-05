@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { createWorkspace, registerUser } from "./helpers";
 
-test("composer renders account-specific provider previews", async ({
+test("composer renders account-specific renditions", async ({
   page,
   request,
 }) => {
@@ -23,10 +23,10 @@ test("composer renders account-specific provider previews", async ({
       contentType: "application/json",
       json: [
         {
-          id: "instagram-main",
-          slug: "instagram-main",
-          platform: "instagram",
-          account_id: "ig-main",
+          id: "bluesky-main",
+          slug: "bluesky-main",
+          platform: "bluesky",
+          account_id: "bsky-main",
           account_username: "openpost_main",
           account_avatar_url: "https://cdn.example/main.jpg",
           instance_url: "",
@@ -34,10 +34,10 @@ test("composer renders account-specific provider previews", async ({
           thread_replies_supported: false,
         },
         {
-          id: "instagram-studio",
-          slug: "instagram-studio",
-          platform: "instagram",
-          account_id: "ig-studio",
+          id: "bluesky-studio",
+          slug: "bluesky-studio",
+          platform: "bluesky",
+          account_id: "bsky-studio",
           account_username: "openpost_studio",
           account_avatar_url: "https://cdn.example/studio.jpg",
           instance_url: "",
@@ -47,35 +47,42 @@ test("composer renders account-specific provider previews", async ({
       ],
     });
   });
-  await page.route("**/api/v1/posts", async (route) => {
-    if (route.request().method() === "POST") {
-      await route.fulfill({
-        contentType: "application/json",
-        json: {
-          id: "draft-preview",
-          workspace_id: workspaceBody.id,
-          content: "Launch update",
-          status: "draft",
-          scheduled_at: "",
-          media: [],
-          destinations: [],
-        },
-      });
-      return;
-    }
-    await route.continue();
+  await page.route("**/api/v1/provider-readiness?**", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        providers: [
+          {
+            provider: "bluesky",
+            configured_app_state: "ready",
+            connected_accounts: 2,
+            blocking_issues: [],
+            next_actions: [],
+          },
+        ],
+      },
+    });
   });
 
   await page.goto("/");
-  await page.locator("textarea").first().fill("Launch update");
+  await expect(
+    page.getByRole("heading", { name: "Destinations" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: /openpost_main\s+Bluesky/ }).click();
+  await page.getByRole("button", { name: /openpost_studio\s+Bluesky/ }).click();
+  await page.getByLabel("Source text").fill("Launch update");
 
   await expect(page.locator('[data-testid="instagram-preview"]')).toHaveCount(
-    2,
+    0,
   );
   await expect(
-    page.locator('[data-testid="instagram-preview"]').nth(0),
-  ).toContainText("@openpost_main");
+    page.getByRole("button", { name: /openpost_main\s+Bluesky post/ }),
+  ).toBeVisible();
   await expect(
-    page.locator('[data-testid="instagram-preview"]').nth(1),
-  ).toContainText("@openpost_studio");
+    page.getByRole("button", { name: /openpost_studio\s+Bluesky post/ }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: /openpost_studio\s+Bluesky post/ })
+    .click();
+  await expect(page.locator("#rendition-body")).toHaveValue("Launch update");
 });
