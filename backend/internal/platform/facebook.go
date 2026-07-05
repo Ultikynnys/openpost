@@ -249,38 +249,58 @@ func (f *FacebookAdapter) UploadMedia(_ context.Context, _ string, _ string, _ s
 
 func (f *FacebookAdapter) Publish(ctx context.Context, accessToken, pageID string, req *PublishRequest) (string, error) {
 	if req.ReplyToID != "" {
-		return "", fmt.Errorf("facebook thread replies are not supported yet")
+		return f.publishCommentReply(ctx, accessToken, req.ReplyToID, req.Content)
+	}
+	if settingString(req.Settings, "post_type") == "story" || req.Profile == "story" {
+		return f.publishStory(ctx, accessToken, pageID, req)
 	}
 	switch len(req.PlatformMediaIDs) {
 	case 0:
-		return f.publishFeedPost(ctx, accessToken, pageID, req.Content)
-	case 1:
-		if len(req.Media) != 1 {
+		return f.publishFeedPost(ctx, accessToken, pageID, req)
+	default:
+		if len(req.Media) != len(req.PlatformMediaIDs) {
 			return "", fmt.Errorf("facebook media publishing requires media metadata")
 		}
-		mediaURL := req.PlatformMediaIDs[0]
-		if !strings.HasPrefix(mediaURL, "https://") {
-			return "", fmt.Errorf("facebook requires a publicly-accessible HTTPS media URL. Set OPENPOST_MEDIA_URL to your public media base URL")
+		if len(req.PlatformMediaIDs) == 1 && isVideoMime(req.Media[0].MimeType) {
+			return f.publishVideo(ctx, accessToken, pageID, req.Content, req.PlatformMediaIDs[0])
 		}
-		if isVideoMime(req.Media[0].MimeType) {
-			return f.publishVideo(ctx, accessToken, pageID, req.Content, mediaURL)
+		for _, mediaURL := range req.PlatformMediaIDs {
+			if !strings.HasPrefix(mediaURL, "https://") {
+				return "", fmt.Errorf("facebook requires a publicly-accessible HTTPS media URL. Set OPENPOST_MEDIA_URL to your public media base URL")
+			}
 		}
-		return f.publishPhoto(ctx, accessToken, pageID, req.Content, mediaURL)
-	default:
-		return "", fmt.Errorf("facebook initial adapter supports at most one media attachment")
+		if len(req.PlatformMediaIDs) == 1 {
+			return f.publishPhoto(ctx, accessToken, pageID, req.Content, req.PlatformMediaIDs[0])
+		}
+		return f.publishMultiPhoto(ctx, accessToken, pageID, req.Content, req.PlatformMediaIDs)
 	}
 }
 
-func (f *FacebookAdapter) publishFeedPost(ctx context.Context, accessToken, pageID, message string) (string, error) {
+func (f *FacebookAdapter) publishFeedPost(ctx context.Context, accessToken, pageID string, req *PublishRequest) (string, error) {
 	values := map[string]string{
-		"message":             strings.TrimSpace(message),
+		"message":             strings.TrimSpace(req.Content),
 		oauthParamAccessToken: accessToken,
+	}
+	if linkURL := settingString(req.Settings, "url"); linkURL != "" {
+		values["link"] = linkURL
+	}
+	if preset := settingString(req.Settings, "text_format_preset_id"); preset != "" {
+		values["text_format_preset_id"] = preset
 	}
 	respBody, err := DoFormURLEncoded(ctx, http.MethodPost, f.graphURL(pageID+"/feed"), values, nil)
 	if err != nil {
 		return "", fmt.Errorf("facebook feed publish: %w", err)
 	}
-	return facebookPublishedID("facebook feed publish", respBody)
+	id, err := facebookPublishedID("facebook feed publish", respBody)
+	if err != nil {
+		return "", err
+	}
+	if firstComment := settingString(req.Settings, "first_comment"); firstComment != "" {
+		if _, err := f.publishCommentReply(ctx, accessToken, id, firstComment); err != nil {
+			return "", err
+		}
+	}
+	return id, nil
 }
 
 func (f *FacebookAdapter) publishPhoto(ctx context.Context, accessToken, pageID, caption, mediaURL string) (string, error) {
@@ -310,6 +330,143 @@ func (f *FacebookAdapter) publishVideo(ctx context.Context, accessToken, pageID,
 	return facebookPublishedID("facebook video publish", respBody)
 }
 
+func (f *FacebookAdapter) publishMultiPhoto(ctx context.Context, accessToken, pageID, message string, mediaURLs []string) (string, error) {
+	attached := make([]string, 0, len(mediaURLs))
+	for _, mediaURL := range mediaURLs {
+		values := map[string]string{
+			"url":                 mediaURL,
+			"published":           "false",
+			oauthParamAccessToken: accessToken,
+		}
+		respBody, err := DoFormURLEncoded(ctx, http.MethodPost, f.graphURL(pageID+"/photos"), values, nil)
+		if err != nil {
+			return "", fmt.Errorf("facebook unpublished photo: %w", err)
+		}
+		photoID, err := facebookPublishedID("facebook unpublished photo", respBody)
+		if err != nil {
+			return "", err
+		}
+		attached = append(attached, fmt.Sprintf(`{"media_fbid":"%s"}`, photoID))
+	}
+	values := map[string]string{
+		"message":             strings.TrimSpace(message),
+		oauthParamAccessToken: accessToken,
+	}
+	for index, item := range attached {
+		values[fmt.Sprintf("attached_media[%d]", index)] = item
+	}
+	respBody, err := DoFormURLEncoded(ctx, http.MethodPost, f.graphURL(pageID+"/feed"), values, nil)
+	if err != nil {
+		return "", fmt.Errorf("facebook multi-photo publish: %w", err)
+	}
+	return facebookPublishedID("facebook multi-photo publish", respBody)
+}
+
+func (f *FacebookAdapter) publishStory(ctx context.Context, accessToken, pageID string, req *PublishRequest) (string, error) {
+	if len(req.PlatformMediaIDs) != 1 || len(req.Media) != 1 {
+		return "", fmt.Errorf("facebook stories require exactly one media item per rendition")
+	}
+	mediaURL := req.PlatformMediaIDs[0]
+	if !strings.HasPrefix(mediaURL, "https://") {
+		return "", fmt.Errorf("facebook stories require a publicly-accessible HTTPS media URL")
+	}
+	endpoint := pageID + "/photo_stories"
+	values := map[string]string{"url": mediaURL, oauthParamAccessToken: accessToken}
+	if isVideoMime(req.Media[0].MimeType) {
+		endpoint = pageID + "/video_stories"
+		values = map[string]string{"file_url": mediaURL, oauthParamAccessToken: accessToken}
+	}
+	respBody, err := DoFormURLEncoded(ctx, http.MethodPost, f.graphURL(endpoint), values, nil)
+	if err != nil {
+		return "", fmt.Errorf("facebook story publish: %w", err)
+	}
+	return facebookPublishedID("facebook story publish", respBody)
+}
+
+func (f *FacebookAdapter) publishCommentReply(ctx context.Context, accessToken, objectID, message string) (string, error) {
+	values := map[string]string{
+		"message":             strings.TrimSpace(message),
+		oauthParamAccessToken: accessToken,
+	}
+	respBody, err := DoFormURLEncoded(ctx, http.MethodPost, f.graphURL(objectID+"/comments"), values, nil)
+	if err != nil {
+		return "", fmt.Errorf("facebook comment reply: %w", err)
+	}
+	return facebookPublishedID("facebook comment reply", respBody)
+}
+
+func (f *FacebookAdapter) ListComments(ctx context.Context, accessToken, _ string, externalID string) ([]Comment, error) {
+	fields := "id,from,message,created_time,is_hidden,can_hide,can_comment"
+	endpoint := f.graphURL(externalID+"/comments") + "?fields=" + url.QueryEscape(fields) + "&access_token=" + url.QueryEscape(accessToken)
+	respBody, err := DoRequest(ctx, http.MethodGet, endpoint, nil, nil)
+	if err != nil {
+		return nil, fmt.Errorf("facebook comments: %w", err)
+	}
+
+	var result struct {
+		Data []struct {
+			ID          string `json:"id"`
+			Message     string `json:"message"`
+			CreatedTime string `json:"created_time"`
+			IsHidden    bool   `json:"is_hidden"`
+			CanHide     bool   `json:"can_hide"`
+			CanComment  bool   `json:"can_comment"`
+			From        struct {
+				ID   string `json:"id"`
+				Name string `json:"name"`
+			} `json:"from"`
+		} `json:"data"`
+		Error struct {
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(respBody, &result); err != nil {
+		return nil, fmt.Errorf("decoding facebook comments: %w", err)
+	}
+	if result.Error.Message != "" {
+		return nil, fmt.Errorf("facebook comments: %s", result.Error.Message)
+	}
+
+	comments := make([]Comment, 0, len(result.Data))
+	for _, item := range result.Data {
+		comments = append(comments, Comment{
+			ID:         item.ID,
+			AuthorID:   item.From.ID,
+			AuthorName: item.From.Name,
+			Text:       item.Message,
+			CreatedAt:  item.CreatedTime,
+			Hidden:     item.IsHidden,
+			CanReply:   item.CanComment,
+			CanHide:    item.CanHide,
+			CanDelete:  true,
+		})
+	}
+	return comments, nil
+}
+
+func (f *FacebookAdapter) ReplyToComment(ctx context.Context, accessToken, _ string, commentID, message string) (string, error) {
+	return f.publishCommentReply(ctx, accessToken, commentID, message)
+}
+
+func (f *FacebookAdapter) HideComment(ctx context.Context, accessToken, _ string, commentID string) error {
+	_, err := DoFormURLEncoded(ctx, http.MethodPost, f.graphURL(commentID), map[string]string{
+		"is_hidden":           "true",
+		oauthParamAccessToken: accessToken,
+	}, nil)
+	if err != nil {
+		return fmt.Errorf("facebook hide comment: %w", err)
+	}
+	return nil
+}
+
+func (f *FacebookAdapter) DeleteComment(ctx context.Context, accessToken, _ string, commentID string) error {
+	endpoint := f.graphURL(commentID) + "?access_token=" + url.QueryEscape(accessToken)
+	if _, err := DoRequest(ctx, http.MethodDelete, endpoint, nil, nil); err != nil {
+		return fmt.Errorf("facebook delete comment: %w", err)
+	}
+	return nil
+}
+
 func facebookPublishedID(label string, respBody []byte) (string, error) {
 	var publishResp struct {
 		ID     string `json:"id"`
@@ -332,13 +489,13 @@ func facebookPublishedID(label string, respBody []byte) (string, error) {
 }
 
 func validateFacebookMedia(media []MediaItem) []MediaValidationIssue {
-	if len(media) <= 1 {
+	if len(media) <= 10 {
 		return nil
 	}
 	return []MediaValidationIssue{{
 		Provider: providerFacebook,
 		Severity: severityError,
-		Message:  "Facebook publishing currently supports at most one media attachment.",
+		Message:  "Facebook publishing supports up to 10 media attachments for photo posts.",
 	}}
 }
 

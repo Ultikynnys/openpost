@@ -1,23 +1,29 @@
 package platform
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 )
 
 const (
-	tiktokAuthURL          = "https://www.tiktok.com/v2/auth/authorize/"
-	tiktokTokenURL         = "https://open.tiktokapis.com/v2/oauth/token/"
-	tiktokUserInfoURL      = "https://open.tiktokapis.com/v2/user/info/?fields=open_id,union_id,avatar_url,display_name,username"
-	tiktokCreatorInfoURL   = "https://open.tiktokapis.com/v2/post/publish/creator_info/query/"
-	tiktokVideoInitURL     = "https://open.tiktokapis.com/v2/post/publish/video/init/"
-	tiktokPublishStatusURL = "https://open.tiktokapis.com/v2/post/publish/status/fetch/"
-	tiktokTitleMaxRunes    = 2000
+	tiktokAuthURL           = "https://www.tiktok.com/v2/auth/authorize/"
+	tiktokTokenURL          = "https://open.tiktokapis.com/v2/oauth/token/"
+	tiktokUserInfoURL       = "https://open.tiktokapis.com/v2/user/info/?fields=open_id,union_id,avatar_url,display_name,username"
+	tiktokCreatorInfoURL    = "https://open.tiktokapis.com/v2/post/publish/creator_info/query/"
+	tiktokVideoInitURL      = "https://open.tiktokapis.com/v2/post/publish/video/init/"
+	tiktokVideoInboxInitURL = "https://open.tiktokapis.com/v2/post/publish/inbox/video/init/"
+	tiktokContentInitURL    = "https://open.tiktokapis.com/v2/post/publish/content/init/"
+	tiktokPublishStatusURL  = "https://open.tiktokapis.com/v2/post/publish/status/fetch/"
+	tiktokTitleMaxRunes     = 2000
+	tiktokMaxChunkSize      = 64 * 1024 * 1024
 )
 
 type TikTokAdapter struct {
@@ -160,38 +166,68 @@ func (t *TikTokAdapter) GetProfile(ctx context.Context, accessToken string) (*Us
 }
 
 func (t *TikTokAdapter) UploadMedia(_ context.Context, _ string, _ string, _ string, _ io.Reader) (string, error) {
-	return "", fmt.Errorf("tiktok requires publicly accessible HTTPS media URLs for the initial adapter")
+	return "", fmt.Errorf("tiktok direct post requires publicly accessible HTTPS media URLs")
+}
+
+func (t *TikTokAdapter) UploadMediaWithMetadata(ctx context.Context, accessToken, _ string, req UploadMediaRequest) (string, error) {
+	if !isTikTokUploadMode(req.Settings) {
+		return "", fmt.Errorf("tiktok file upload is available for Upload/Inbox mode only")
+	}
+	if !isVideoMime(req.MimeType) {
+		return "", fmt.Errorf("tiktok file upload supports video attachments only")
+	}
+	data, err := io.ReadAll(req.Reader)
+	if err != nil {
+		return "", fmt.Errorf("reading tiktok upload media: %w", err)
+	}
+	if len(data) == 0 {
+		return "", fmt.Errorf("tiktok file upload requires non-empty media")
+	}
+	return t.uploadVideoFileToInbox(ctx, accessToken, req.MimeType, data)
 }
 
 func (t *TikTokAdapter) Publish(ctx context.Context, accessToken, _ string, req *PublishRequest) (string, error) {
-	if len(req.PlatformMediaIDs) != 1 {
-		return "", fmt.Errorf("tiktok video publishing requires exactly one media URL")
+	if len(req.PlatformMediaIDs) == 0 || len(req.PlatformMediaIDs) != len(req.Media) {
+		return "", fmt.Errorf("tiktok publishing requires media URLs and metadata")
+	}
+	if err := validateTikTokPublicMediaURLs(req.PlatformMediaIDs); err != nil {
+		return "", err
+	}
+	if req.Profile == "carousel" || allTikTokMediaImages(req.Media) {
+		return t.publishPhotoPost(ctx, accessToken, req)
 	}
 	if len(req.Media) != 1 || !isVideoMime(req.Media[0].MimeType) {
-		return "", fmt.Errorf("tiktok initial adapter supports one video attachment")
+		return "", fmt.Errorf("tiktok video publishing requires exactly one video attachment")
 	}
-	mediaURL := req.PlatformMediaIDs[0]
-	if !strings.HasPrefix(mediaURL, "https://") {
-		return "", fmt.Errorf("tiktok requires a publicly-accessible HTTPS media URL. Set OPENPOST_MEDIA_URL to your public media base URL")
+	if isTikTokUploadMode(req.Settings) {
+		return t.publishInboxVideoFromURL(ctx, accessToken, req.PlatformMediaIDs[0])
 	}
+	return t.publishDirectVideoFromURL(ctx, accessToken, req)
+}
 
-	privacyLevel, err := t.defaultPrivacyLevel(ctx, accessToken)
+func (t *TikTokAdapter) publishDirectVideoFromURL(ctx context.Context, accessToken string, req *PublishRequest) (string, error) {
+	privacyLevel, err := t.privacyLevel(ctx, accessToken, req.Settings)
 	if err != nil {
 		return "", err
 	}
 
 	payload := map[string]any{
 		"post_info": map[string]any{
-			"title":           tiktokTitle(req.Content),
-			"privacy_level":   privacyLevel,
-			"disable_duet":    false,
-			"disable_comment": false,
-			"disable_stitch":  false,
+			"title":                tiktokTitle(req.Content),
+			"privacy_level":        privacyLevel,
+			"disable_duet":         !settingBool(req.Settings, "duet"),
+			"disable_comment":      !settingBool(req.Settings, "comment"),
+			"disable_stitch":       !settingBool(req.Settings, "stitch"),
+			"auto_add_music":       settingBool(req.Settings, "auto_add_music"),
+			"brand_content_toggle": settingBool(req.Settings, "brand_content_toggle"),
+			"brand_organic_toggle": settingBool(req.Settings, "brand_organic_toggle"),
+			"is_aigc":              settingBool(req.Settings, "is_aigc"),
 		},
 		"source_info": map[string]any{
 			"source":    "PULL_FROM_URL",
-			"video_url": mediaURL,
+			"video_url": req.PlatformMediaIDs[0],
 		},
+		"post_mode": "DIRECT_POST",
 	}
 
 	respBody, err := DoJSON(ctx, "POST", tiktokVideoInitURL, payload, map[string]string{
@@ -220,7 +256,158 @@ func (t *TikTokAdapter) Publish(ctx context.Context, accessToken, _ string, req 
 	return t.waitForPublishID(ctx, accessToken, initResp.Data.PublishID)
 }
 
-func (t *TikTokAdapter) defaultPrivacyLevel(ctx context.Context, accessToken string) (string, error) {
+func validateTikTokPublicMediaURLs(mediaURLs []string) error {
+	for _, mediaURL := range mediaURLs {
+		if !strings.HasPrefix(mediaURL, "https://") {
+			return fmt.Errorf("tiktok requires a publicly-accessible HTTPS media URL. Set OPENPOST_MEDIA_URL to your public media base URL")
+		}
+	}
+	return nil
+}
+
+func (t *TikTokAdapter) publishInboxVideoFromURL(ctx context.Context, accessToken, mediaURL string) (string, error) {
+	payload := map[string]any{
+		"source_info": map[string]any{
+			"source":    "PULL_FROM_URL",
+			"video_url": mediaURL,
+		},
+	}
+	return t.initInboxVideo(ctx, accessToken, payload)
+}
+
+func (t *TikTokAdapter) uploadVideoFileToInbox(ctx context.Context, accessToken, mimeType string, data []byte) (string, error) {
+	videoSize := int64(len(data))
+	chunkSize := videoSize
+	if chunkSize > tiktokMaxChunkSize {
+		chunkSize = tiktokMaxChunkSize
+	}
+	totalChunks := (videoSize + chunkSize - 1) / chunkSize
+	payload := map[string]any{
+		"source_info": map[string]any{
+			"source":            "FILE_UPLOAD",
+			"video_size":        videoSize,
+			"chunk_size":        chunkSize,
+			"total_chunk_count": totalChunks,
+		},
+	}
+
+	publishID, uploadURL, err := t.initInboxVideoUpload(ctx, accessToken, payload)
+	if err != nil {
+		return "", err
+	}
+	if uploadURL == "" {
+		return "", fmt.Errorf("tiktok inbox video init: missing upload_url")
+	}
+	for start := int64(0); start < videoSize; start += chunkSize {
+		end := start + chunkSize
+		if end > videoSize {
+			end = videoSize
+		}
+		chunk := data[start:end]
+		headers := map[string]string{
+			headerContentType: mimeType,
+			"Content-Length":  strconv.FormatInt(int64(len(chunk)), 10),
+			"Content-Range":   fmt.Sprintf("bytes %d-%d/%d", start, end-1, videoSize),
+		}
+		if _, err := DoRequest(ctx, http.MethodPut, uploadURL, bytes.NewReader(chunk), headers); err != nil {
+			return "", fmt.Errorf("tiktok video chunk upload: %w", err)
+		}
+	}
+	return t.waitForPublishID(ctx, accessToken, publishID)
+}
+
+func (t *TikTokAdapter) initInboxVideo(ctx context.Context, accessToken string, payload map[string]any) (string, error) {
+	publishID, _, err := t.initInboxVideoUpload(ctx, accessToken, payload)
+	if err != nil {
+		return "", err
+	}
+	return t.waitForPublishID(ctx, accessToken, publishID)
+}
+
+func (t *TikTokAdapter) initInboxVideoUpload(ctx context.Context, accessToken string, payload map[string]any) (string, string, error) {
+	respBody, err := DoJSON(ctx, http.MethodPost, tiktokVideoInboxInitURL, payload, map[string]string{
+		headerAuthorization: bearerPrefix + accessToken,
+	})
+	if err != nil {
+		return "", "", fmt.Errorf("tiktok inbox video init: %w", err)
+	}
+	var initResp struct {
+		Data struct {
+			PublishID string `json:"publish_id"`
+			UploadURL string `json:"upload_url"`
+		} `json:"data"`
+		Error tiktokAPIError `json:"error"`
+	}
+	if err := json.Unmarshal(respBody, &initResp); err != nil {
+		return "", "", fmt.Errorf("decoding tiktok inbox video init: %w", err)
+	}
+	if err := initResp.Error.err("tiktok inbox video init"); err != nil {
+		return "", "", err
+	}
+	if initResp.Data.PublishID == "" {
+		return "", "", fmt.Errorf("tiktok inbox video init: missing publish_id")
+	}
+	return initResp.Data.PublishID, initResp.Data.UploadURL, nil
+}
+
+func (t *TikTokAdapter) publishPhotoPost(ctx context.Context, accessToken string, req *PublishRequest) (string, error) {
+	if len(req.PlatformMediaIDs) < 1 || len(req.PlatformMediaIDs) > 35 {
+		return "", fmt.Errorf("tiktok photo posts require 1-35 images")
+	}
+	if !allTikTokMediaImages(req.Media) {
+		return "", fmt.Errorf("tiktok photo posts support images only")
+	}
+	privacyLevel, err := t.privacyLevel(ctx, accessToken, req.Settings)
+	if err != nil {
+		return "", err
+	}
+	payload := map[string]any{
+		"post_info": map[string]any{
+			"title":                tiktokTitle(req.Content),
+			"description":          strings.TrimSpace(req.Content),
+			"privacy_level":        privacyLevel,
+			"disable_comment":      !settingBool(req.Settings, "comment"),
+			"auto_add_music":       settingBool(req.Settings, "auto_add_music"),
+			"brand_content_toggle": settingBool(req.Settings, "brand_content_toggle"),
+			"brand_organic_toggle": settingBool(req.Settings, "brand_organic_toggle"),
+			"is_aigc":              settingBool(req.Settings, "is_aigc"),
+		},
+		"source_info": map[string]any{
+			"source":     "PULL_FROM_URL",
+			"photo_urls": req.PlatformMediaIDs,
+		},
+		"post_mode":  "DIRECT_POST",
+		"media_type": "PHOTO",
+	}
+	if strings.EqualFold(settingString(req.Settings, "content_posting_method"), "UPLOAD") {
+		payload["post_mode"] = "MEDIA_UPLOAD"
+	}
+	respBody, err := DoJSON(ctx, "POST", tiktokContentInitURL, payload, map[string]string{
+		headerAuthorization: bearerPrefix + accessToken,
+	})
+	if err != nil {
+		return "", fmt.Errorf("tiktok photo init: %w", err)
+	}
+	var initResp struct {
+		Data struct {
+			PublishID string `json:"publish_id"`
+		} `json:"data"`
+		Error tiktokAPIError `json:"error"`
+	}
+	if err := json.Unmarshal(respBody, &initResp); err != nil {
+		return "", fmt.Errorf("decoding tiktok photo init: %w", err)
+	}
+	if err := initResp.Error.err("tiktok photo init"); err != nil {
+		return "", err
+	}
+	if initResp.Data.PublishID == "" {
+		return "", fmt.Errorf("tiktok photo init: missing publish_id")
+	}
+	return t.waitForPublishID(ctx, accessToken, initResp.Data.PublishID)
+}
+
+func (t *TikTokAdapter) privacyLevel(ctx context.Context, accessToken string, settings map[string]interface{}) (string, error) {
+	requested := settingString(settings, "privacy_level")
 	respBody, err := DoJSON(ctx, "POST", tiktokCreatorInfoURL, map[string]any{}, map[string]string{
 		headerAuthorization: bearerPrefix + accessToken,
 	})
@@ -241,6 +428,14 @@ func (t *TikTokAdapter) defaultPrivacyLevel(ctx context.Context, accessToken str
 		return "", err
 	}
 
+	if requested != "" {
+		for _, option := range creatorResp.Data.PrivacyLevelOptions {
+			if option == requested {
+				return requested, nil
+			}
+		}
+		return "", fmt.Errorf("tiktok creator info: privacy level %s is not available for this creator", requested)
+	}
 	for _, option := range creatorResp.Data.PrivacyLevelOptions {
 		if option == "PUBLIC_TO_EVERYONE" {
 			return option, nil
@@ -255,6 +450,18 @@ func (t *TikTokAdapter) defaultPrivacyLevel(ctx context.Context, accessToken str
 		return creatorResp.Data.PrivacyLevelOptions[0], nil
 	}
 	return "", fmt.Errorf("tiktok creator info: no privacy level options returned")
+}
+
+func allTikTokMediaImages(media []MediaItem) bool {
+	if len(media) == 0 {
+		return false
+	}
+	for _, item := range media {
+		if !strings.HasPrefix(strings.ToLower(item.MimeType), "image/") {
+			return false
+		}
+	}
+	return true
 }
 
 func (t *TikTokAdapter) waitForPublishID(ctx context.Context, accessToken, publishID string) (string, error) {
@@ -310,22 +517,32 @@ func (t *TikTokAdapter) waitForPublishID(ctx context.Context, accessToken, publi
 }
 
 func validateTikTokMedia(media []MediaItem) []MediaValidationIssue {
-	if len(media) != 1 {
+	if len(media) == 0 {
 		return []MediaValidationIssue{{
 			Provider: providerTikTok,
 			Severity: severityError,
-			Message:  "TikTok publishing currently requires exactly one video attachment.",
+			Message:  "TikTok publishing requires media.",
 		}}
+	}
+	if len(media) == 1 && isVideoMime(media[0].MimeType) {
+		return nil
+	}
+	if allTikTokMediaImages(media) {
+		return nil
 	}
 	if !isVideoMime(media[0].MimeType) {
 		return []MediaValidationIssue{{
 			Provider: providerTikTok,
 			MediaID:  media[0].ID,
 			Severity: severityError,
-			Message:  "TikTok publishing currently supports video attachments only.",
+			Message:  "TikTok publishing supports one video or an image photo post.",
 		}}
 	}
-	return nil
+	return []MediaValidationIssue{{
+		Provider: providerTikTok,
+		Severity: severityError,
+		Message:  "TikTok video publishing requires exactly one video attachment.",
+	}}
 }
 
 func tiktokScopes() []string {
@@ -362,6 +579,11 @@ func tiktokTitle(content string) string {
 		return "#OpenPost"
 	}
 	return truncateRunes(title, tiktokTitleMaxRunes)
+}
+
+func isTikTokUploadMode(settings map[string]interface{}) bool {
+	mode := strings.ToUpper(strings.TrimSpace(settingString(settings, "content_posting_method")))
+	return mode == "UPLOAD" || mode == "MEDIA_UPLOAD"
 }
 
 func truncateRunes(value string, max int) string {

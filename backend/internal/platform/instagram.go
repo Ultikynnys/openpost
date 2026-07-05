@@ -169,17 +169,24 @@ func (i *InstagramAdapter) UploadMedia(_ context.Context, _ string, _ string, _ 
 
 func (i *InstagramAdapter) Publish(ctx context.Context, accessToken, instagramUserID string, req *PublishRequest) (string, error) {
 	if req.ReplyToID != "" {
-		return "", fmt.Errorf("instagram thread replies are not supported")
+		return i.publishCommentReply(ctx, accessToken, req.ReplyToID, req.Content)
 	}
-	if len(req.PlatformMediaIDs) != 1 || len(req.Media) != 1 {
-		return "", fmt.Errorf("instagram publishing requires exactly one media attachment")
+	if len(req.PlatformMediaIDs) == 0 || len(req.PlatformMediaIDs) != len(req.Media) {
+		return "", fmt.Errorf("instagram publishing requires media attachment metadata")
 	}
-	mediaURL := req.PlatformMediaIDs[0]
-	if !strings.HasPrefix(mediaURL, "https://") {
-		return "", fmt.Errorf("instagram requires a publicly-accessible HTTPS media URL. Set OPENPOST_MEDIA_URL to your public media base URL")
+	for _, mediaURL := range req.PlatformMediaIDs {
+		if !strings.HasPrefix(mediaURL, "https://") {
+			return "", fmt.Errorf("instagram requires a publicly-accessible HTTPS media URL. Set OPENPOST_MEDIA_URL to your public media base URL")
+		}
+	}
+	if settingString(req.Settings, "post_type") == "story" || req.Profile == "story" {
+		return i.publishStories(ctx, accessToken, instagramUserID, req)
+	}
+	if len(req.PlatformMediaIDs) > 1 {
+		return i.publishCarousel(ctx, accessToken, instagramUserID, req)
 	}
 
-	containerID, err := i.createMediaContainer(ctx, accessToken, instagramUserID, req.Content, mediaURL, isVideoMime(req.Media[0].MimeType))
+	containerID, err := i.createMediaContainer(ctx, accessToken, instagramUserID, req.Content, req.PlatformMediaIDs[0], isVideoMime(req.Media[0].MimeType), false, req)
 	if err != nil {
 		return "", err
 	}
@@ -189,16 +196,40 @@ func (i *InstagramAdapter) Publish(ctx context.Context, accessToken, instagramUs
 	return i.publishMediaContainer(ctx, accessToken, instagramUserID, containerID)
 }
 
-func (i *InstagramAdapter) createMediaContainer(ctx context.Context, accessToken, instagramUserID, caption, mediaURL string, video bool) (string, error) {
+//nolint:gocyclo
+func (i *InstagramAdapter) createMediaContainer(ctx context.Context, accessToken, instagramUserID, caption, mediaURL string, video bool, carouselItem bool, req *PublishRequest) (string, error) {
 	values := map[string]string{
 		"caption":             strings.TrimSpace(caption),
 		oauthParamAccessToken: accessToken,
 	}
 	if video {
 		values["video_url"] = mediaURL
-		values["media_type"] = "REELS"
+		if settingString(req.Settings, "post_type") == "story" || req.Profile == "story" {
+			values["media_type"] = "STORIES"
+		} else if settingBool(req.Settings, "is_reel") || req.Profile == "short_video" {
+			values["media_type"] = "REELS"
+		}
 	} else {
 		values["image_url"] = mediaURL
+		if settingString(req.Settings, "post_type") == "story" || req.Profile == "story" {
+			values["media_type"] = "STORIES"
+		}
+	}
+	if carouselItem {
+		values["is_carousel_item"] = "true"
+		delete(values, "caption")
+	}
+	if collaborators := settingString(req.Settings, "collaborators"); collaborators != "" && !carouselItem {
+		values["collaborators"] = collaborators
+	}
+	if settingBool(req.Settings, "is_trial_reel") && !carouselItem {
+		values["is_trial_reel"] = "true"
+	}
+	if graduation := settingString(req.Settings, "graduation_strategy"); graduation != "" && !carouselItem {
+		values["graduation_strategy"] = graduation
+	}
+	if thumb := settingString(req.Settings, "thumbnail_timestamp_ms"); thumb != "" && video && !carouselItem {
+		values["thumb_offset"] = thumb
 	}
 
 	respBody, err := DoFormURLEncoded(ctx, http.MethodPost, i.graphURL(instagramUserID+"/media"), values, nil)
@@ -206,6 +237,138 @@ func (i *InstagramAdapter) createMediaContainer(ctx context.Context, accessToken
 		return "", fmt.Errorf("instagram media container: %w", err)
 	}
 	return instagramIDFromResponse("instagram media container", respBody)
+}
+
+func (i *InstagramAdapter) publishCarousel(ctx context.Context, accessToken, instagramUserID string, req *PublishRequest) (string, error) {
+	if len(req.PlatformMediaIDs) < 2 || len(req.PlatformMediaIDs) > 10 {
+		return "", fmt.Errorf("instagram carousel requires 2-10 media items")
+	}
+	childIDs := make([]string, 0, len(req.PlatformMediaIDs))
+	for index, mediaURL := range req.PlatformMediaIDs {
+		childID, err := i.createMediaContainer(ctx, accessToken, instagramUserID, "", mediaURL, isVideoMime(req.Media[index].MimeType), true, req)
+		if err != nil {
+			return "", err
+		}
+		if err := i.waitForContainer(ctx, accessToken, childID); err != nil {
+			return "", err
+		}
+		childIDs = append(childIDs, childID)
+	}
+	values := map[string]string{
+		"media_type":          "CAROUSEL",
+		"children":            strings.Join(childIDs, ","),
+		"caption":             strings.TrimSpace(req.Content),
+		oauthParamAccessToken: accessToken,
+	}
+	respBody, err := DoFormURLEncoded(ctx, http.MethodPost, i.graphURL(instagramUserID+"/media"), values, nil)
+	if err != nil {
+		return "", fmt.Errorf("instagram carousel container: %w", err)
+	}
+	containerID, err := instagramIDFromResponse("instagram carousel container", respBody)
+	if err != nil {
+		return "", err
+	}
+	if err := i.waitForContainer(ctx, accessToken, containerID); err != nil {
+		return "", err
+	}
+	return i.publishMediaContainer(ctx, accessToken, instagramUserID, containerID)
+}
+
+func (i *InstagramAdapter) publishStories(ctx context.Context, accessToken, instagramUserID string, req *PublishRequest) (string, error) {
+	ids := make([]string, 0, len(req.PlatformMediaIDs))
+	for index, mediaURL := range req.PlatformMediaIDs {
+		containerID, err := i.createMediaContainer(ctx, accessToken, instagramUserID, "", mediaURL, isVideoMime(req.Media[index].MimeType), false, req)
+		if err != nil {
+			return "", err
+		}
+		if err := i.waitForContainer(ctx, accessToken, containerID); err != nil {
+			return "", err
+		}
+		publishedID, err := i.publishMediaContainer(ctx, accessToken, instagramUserID, containerID)
+		if err != nil {
+			return "", err
+		}
+		ids = append(ids, publishedID)
+	}
+	return strings.Join(ids, ","), nil
+}
+
+func (i *InstagramAdapter) publishCommentReply(ctx context.Context, accessToken, commentID, message string) (string, error) {
+	values := map[string]string{
+		"message":             strings.TrimSpace(message),
+		oauthParamAccessToken: accessToken,
+	}
+	respBody, err := DoFormURLEncoded(ctx, http.MethodPost, i.graphURL(commentID+"/replies"), values, nil)
+	if err != nil {
+		return "", fmt.Errorf("instagram comment reply: %w", err)
+	}
+	return instagramIDFromResponse("instagram comment reply", respBody)
+}
+
+func (i *InstagramAdapter) ListComments(ctx context.Context, accessToken, _ string, externalID string) ([]Comment, error) {
+	fields := "id,text,timestamp,username,hidden"
+	endpoint := i.graphURL(externalID+"/comments") + "?fields=" + url.QueryEscape(fields) + "&access_token=" + url.QueryEscape(accessToken)
+	respBody, err := DoRequest(ctx, http.MethodGet, endpoint, nil, nil)
+	if err != nil {
+		return nil, fmt.Errorf("instagram comments: %w", err)
+	}
+
+	var result struct {
+		Data []struct {
+			ID        string `json:"id"`
+			Text      string `json:"text"`
+			Timestamp string `json:"timestamp"`
+			Username  string `json:"username"`
+			Hidden    bool   `json:"hidden"`
+		} `json:"data"`
+		Error struct {
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(respBody, &result); err != nil {
+		return nil, fmt.Errorf("decoding instagram comments: %w", err)
+	}
+	if result.Error.Message != "" {
+		return nil, fmt.Errorf("instagram comments: %s", result.Error.Message)
+	}
+
+	comments := make([]Comment, 0, len(result.Data))
+	for _, item := range result.Data {
+		comments = append(comments, Comment{
+			ID:         item.ID,
+			AuthorName: item.Username,
+			Text:       item.Text,
+			CreatedAt:  item.Timestamp,
+			Hidden:     item.Hidden,
+			CanReply:   true,
+			CanHide:    true,
+			CanDelete:  true,
+		})
+	}
+	return comments, nil
+}
+
+func (i *InstagramAdapter) ReplyToComment(ctx context.Context, accessToken, _ string, commentID, message string) (string, error) {
+	return i.publishCommentReply(ctx, accessToken, commentID, message)
+}
+
+func (i *InstagramAdapter) HideComment(ctx context.Context, accessToken, _ string, commentID string) error {
+	_, err := DoFormURLEncoded(ctx, http.MethodPost, i.graphURL(commentID), map[string]string{
+		"hide":                "true",
+		oauthParamAccessToken: accessToken,
+	}, nil)
+	if err != nil {
+		return fmt.Errorf("instagram hide comment: %w", err)
+	}
+	return nil
+}
+
+func (i *InstagramAdapter) DeleteComment(ctx context.Context, accessToken, _ string, commentID string) error {
+	endpoint := i.graphURL(commentID) + "?access_token=" + url.QueryEscape(accessToken)
+	if _, err := DoRequest(ctx, http.MethodDelete, endpoint, nil, nil); err != nil {
+		return fmt.Errorf("instagram delete comment: %w", err)
+	}
+	return nil
 }
 
 func (i *InstagramAdapter) waitForContainer(ctx context.Context, accessToken, containerID string) error {
@@ -276,20 +439,22 @@ func instagramIDFromResponse(label string, respBody []byte) (string, error) {
 }
 
 func validateInstagramMedia(media []MediaItem) []MediaValidationIssue {
-	if len(media) != 1 {
+	if len(media) < 1 || len(media) > 10 {
 		return []MediaValidationIssue{{
 			Provider: providerInstagram,
 			Severity: severityError,
-			Message:  "Instagram publishing currently requires exactly one image or video attachment.",
+			Message:  "Instagram publishing requires 1-10 image or video attachments.",
 		}}
 	}
-	if !isVideoMime(media[0].MimeType) && !strings.HasPrefix(strings.ToLower(media[0].MimeType), "image/") {
-		return []MediaValidationIssue{{
-			Provider: providerInstagram,
-			MediaID:  media[0].ID,
-			Severity: severityError,
-			Message:  "Instagram publishing supports image or video attachments only.",
-		}}
+	for _, item := range media {
+		if !isVideoMime(item.MimeType) && !strings.HasPrefix(strings.ToLower(item.MimeType), "image/") {
+			return []MediaValidationIssue{{
+				Provider: providerInstagram,
+				MediaID:  item.ID,
+				Severity: severityError,
+				Message:  "Instagram publishing supports image or video attachments only.",
+			}}
+		}
 	}
 	return nil
 }

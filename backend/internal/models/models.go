@@ -17,11 +17,35 @@ const (
 
 // Publication status values stored in the `publications.status` column.
 const (
-	PublicationStatusDraft     = "draft"
-	PublicationStatusReady     = "ready"
-	PublicationStatusScheduled = "scheduled"
-	PublicationStatusPublished = "published"
-	PublicationStatusFailed    = "failed"
+	PublicationStatusDraft      = "draft"
+	PublicationStatusReady      = "ready"
+	PublicationStatusScheduled  = "scheduled"
+	PublicationStatusPublishing = "publishing"
+	PublicationStatusPublished  = "published"
+	PublicationStatusFailed     = "failed"
+)
+
+// Content profile values stored in publications.content_profile and
+// renditions.profile.
+const (
+	ContentProfileShortText  = "short_text"
+	ContentProfileThread     = "thread"
+	ContentProfileLinkShare  = "link_share"
+	ContentProfileImagePost  = "image_post"
+	ContentProfileCarousel   = "carousel"
+	ContentProfileStory      = "story"
+	ContentProfileShortVideo = "short_video"
+	ContentProfileLongVideo  = "long_video"
+)
+
+// Rendition status values stored in renditions.status.
+const (
+	RenditionStatusDraft      = "draft"
+	RenditionStatusReady      = "ready"
+	RenditionStatusScheduled  = "scheduled"
+	RenditionStatusPublishing = "publishing"
+	RenditionStatusPublished  = "published"
+	RenditionStatusFailed     = "failed"
 )
 
 // Workspace role values stored in the `workspace_members.role` column.
@@ -329,6 +353,7 @@ type SocialAccount struct {
 	AccessTokenEnc  []byte    `bun:"access_token_encrypted,notnull" json:"-"`
 	RefreshTokenEnc []byte    `bun:"refresh_token_encrypted" json:"-"`
 	TokenExpiresAt  time.Time `json:"token_expires_at"`
+	GrantedScopes   string    `bun:"granted_scopes,notnull,default:''" json:"granted_scopes,omitempty"`
 
 	IsActive     bool      `bun:",default:true" json:"is_active"`
 	ErrorMessage string    `json:"error_message"`
@@ -373,14 +398,65 @@ type Publication struct {
 	WorkspaceID     string    `bun:",notnull" json:"workspace_id"`
 	CreatedByID     string    `bun:"created_by,notnull" json:"created_by"`
 	Title           string    `bun:",notnull" json:"title"`
-	SourceContent   string    `bun:"source_content,notnull" json:"source_content"`
+	ContentProfile  string    `bun:"content_profile,notnull,default:'short_text'" json:"content_profile"`
+	SourceText      string    `bun:"source_text,notnull,default:''" json:"source_text"`
+	SourceContent   string    `bun:"source_content,notnull" json:"source_content"` // legacy mirror until old post flows are removed
 	SourceURL       string    `bun:"source_url" json:"source_url"`
 	Goal            string    `json:"goal"`
 	Audience        string    `json:"audience"`
 	Status          string    `bun:",notnull,default:'draft'" json:"status"`
-	ReleasePlanJSON string    `bun:"release_plan_json,notnull,default:'{}'" json:"release_plan_json"`
+	ScheduledAt     time.Time `bun:"scheduled_at,nullzero" json:"scheduled_at"`
+	ActualRunAt     time.Time `bun:"actual_run_at,nullzero" json:"actual_run_at"`
+	MetadataJSON    string    `bun:"metadata_json,notnull,default:'{}'" json:"metadata_json"`
+	ReleasePlanJSON string    `bun:"release_plan_json,notnull,default:'{}'" json:"release_plan_json"` // legacy mirror until old post flows are removed
 	CreatedAt       time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"created_at"`
 	UpdatedAt       time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"updated_at"`
+}
+
+type Rendition struct {
+	bun.BaseModel `bun:"table:renditions"`
+
+	ID              string    `bun:",pk" json:"id"`
+	PublicationID   string    `bun:"publication_id,notnull" json:"publication_id"`
+	SocialAccountID string    `bun:"social_account_id,notnull" json:"social_account_id"`
+	Platform        string    `bun:",notnull" json:"platform"`
+	Profile         string    `bun:",notnull" json:"profile"`
+	Body            string    `bun:",notnull,default:''" json:"body"`
+	Title           string    `bun:",notnull,default:''" json:"title"`
+	Description     string    `bun:",notnull,default:''" json:"description"`
+	SettingsJSON    string    `bun:"settings_json,notnull,default:'{}'" json:"settings_json"`
+	Status          string    `bun:",notnull,default:'draft'" json:"status"`
+	ExternalID      string    `bun:"external_id" json:"external_id"`
+	ExternalURL     string    `bun:"external_url" json:"external_url"`
+	ErrorMessage    string    `bun:"error_message" json:"error_message"`
+	CreatedAt       time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"created_at"`
+	UpdatedAt       time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"updated_at"`
+}
+
+type RenditionMedia struct {
+	bun.BaseModel `bun:"table:rendition_media"`
+
+	RenditionID          string `bun:"rendition_id,pk" json:"rendition_id"`
+	MediaID              string `bun:"media_id,pk" json:"media_id"`
+	Role                 string `bun:",notnull,default:'attachment'" json:"role"`
+	DisplayOrder         int    `bun:"display_order,notnull,default:0" json:"display_order"`
+	AltText              string `bun:"alt_text" json:"alt_text"`
+	ThumbnailTimestampMS int    `bun:"thumbnail_timestamp_ms,notnull,default:0" json:"thumbnail_timestamp_ms"`
+}
+
+type PublicationLifecycleEvent struct {
+	bun.BaseModel `bun:"table:publication_lifecycle_events"`
+
+	ID             string    `bun:",pk" json:"id"`
+	WorkspaceID    string    `bun:"workspace_id,notnull" json:"workspace_id"`
+	PublicationID  string    `bun:"publication_id,notnull" json:"publication_id"`
+	RenditionID    string    `bun:"rendition_id,notnull,default:''" json:"rendition_id"`
+	Type           string    `bun:"type,notnull" json:"type"`
+	Status         string    `bun:"status,notnull,default:'info'" json:"status"`
+	Message        string    `bun:"message,notnull,default:''" json:"message"`
+	MetadataJSON   string    `bun:"metadata_json,notnull,default:'{}'" json:"metadata_json"`
+	IdempotencyKey string    `bun:"idempotency_key,notnull,default:''" json:"idempotency_key"`
+	CreatedAt      time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"created_at"`
 }
 
 type Post struct {
@@ -417,21 +493,32 @@ type PostDestination struct {
 type MediaAttachment struct {
 	bun.BaseModel `bun:"table:media_attachments"`
 
-	ID               string    `bun:",pk" json:"id"`
-	WorkspaceID      string    `bun:",notnull" json:"workspace_id"`
-	FilePath         string    `bun:",notnull" json:"file_path"`
-	StorageType      string    `bun:",default:'local'" json:"storage_type"` // 'local', 's3'
-	MimeType         string    `json:"mime_type"`
-	ProcessingStatus string    `bun:",default:'ready'" json:"processing_status"` // 'processing', 'ready', 'failed'
-	Size             int64     `json:"size"`
-	OriginalFilename string    `json:"original_filename"`
-	Width            int       `json:"width"`
-	Height           int       `json:"height"`
-	ThumbnailsJSON   string    `bun:"thumbnails" json:"thumbnails"` // JSON: {"sm": "sm_xxx.jpg", "md": "md_xxx.jpg"}
-	FileHash         string    `bun:",unique" json:"-"`             // SHA-256 for deduplication
-	AltText          string    `json:"alt_text"`
-	IsFavorite       bool      `bun:",default:false" json:"is_favorite"`
-	CreatedAt        time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"created_at"`
+	ID                 string    `bun:",pk" json:"id"`
+	WorkspaceID        string    `bun:",notnull" json:"workspace_id"`
+	FilePath           string    `bun:",notnull" json:"file_path"`
+	StorageType        string    `bun:",default:'local'" json:"storage_type"` // 'local', 's3'
+	MimeType           string    `json:"mime_type"`
+	ProcessingStatus   string    `bun:",default:'ready'" json:"processing_status"` // 'processing', 'ready', 'failed'
+	Size               int64     `json:"size"`
+	OriginalFilename   string    `json:"original_filename"`
+	Width              int       `json:"width"`
+	Height             int       `json:"height"`
+	DurationMS         int64     `bun:"duration_ms,notnull,default:0" json:"duration_ms"`
+	FrameRate          float64   `bun:"frame_rate,notnull,default:0" json:"frame_rate"`
+	AspectRatio        string    `bun:"aspect_ratio,notnull,default:''" json:"aspect_ratio"`
+	DominantType       string    `bun:"dominant_type,notnull,default:''" json:"dominant_type"`
+	AnalysisStatus     string    `bun:"analysis_status,notnull,default:'ready'" json:"analysis_status"`
+	AnalysisError      string    `bun:"analysis_error,notnull,default:''" json:"analysis_error"`
+	ThumbnailObjectKey string    `bun:"thumbnail_object_key,notnull,default:''" json:"thumbnail_object_key"`
+	PublicURLReady     bool      `bun:"public_url_ready,notnull,default:false" json:"public_url_ready"`
+	PublicURLCheckedAt time.Time `bun:"public_url_checked_at,nullzero" json:"public_url_checked_at"`
+	PublicURLStatus    int       `bun:"public_url_status,notnull,default:0" json:"public_url_status"`
+	PublicURLError     string    `bun:"public_url_error,notnull,default:''" json:"public_url_error"`
+	ThumbnailsJSON     string    `bun:"thumbnails" json:"thumbnails"` // JSON: {"sm": "sm_xxx.jpg", "md": "md_xxx.jpg"}
+	FileHash           string    `bun:",unique" json:"-"`             // SHA-256 for deduplication
+	AltText            string    `json:"alt_text"`
+	IsFavorite         bool      `bun:",default:false" json:"is_favorite"`
+	CreatedAt          time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"created_at"`
 }
 
 type PostMedia struct {
@@ -446,6 +533,7 @@ type ProviderMediaState struct {
 	bun.BaseModel `bun:"table:provider_media_states"`
 
 	PostID          string    `bun:",pk" json:"post_id"`
+	RenditionID     string    `bun:"rendition_id,notnull,default:''" json:"rendition_id"`
 	SocialAccountID string    `bun:",pk" json:"social_account_id"`
 	MediaID         string    `bun:",pk" json:"media_id"`
 	Platform        string    `bun:",notnull" json:"platform"`

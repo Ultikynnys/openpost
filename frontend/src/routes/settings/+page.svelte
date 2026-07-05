@@ -36,6 +36,9 @@
 	import LogOutIcon from 'lucide-svelte/icons/log-out';
 	import CameraIcon from 'lucide-svelte/icons/camera';
 	import UserIcon from 'lucide-svelte/icons/user';
+	import AlertCircleIcon from 'lucide-svelte/icons/alert-circle';
+	import RefreshCwIcon from 'lucide-svelte/icons/refresh-cw';
+	import CheckCircle2Icon from 'lucide-svelte/icons/check-circle-2';
 	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
 	import { client } from '$lib/api/client';
 	import { getLocaleTag } from '$lib/i18n';
@@ -60,6 +63,24 @@
 		type WorkspaceInvitation,
 		type WorkspaceTeam
 	} from './settings-data';
+
+	type ProviderReadinessItem = {
+		provider: string;
+		configured_app_state: string;
+		connected_accounts: number;
+		required_scopes?: string[];
+		app_review_warnings?: string[];
+		blocking_issues?: string[];
+		next_actions?: string[];
+		supported_profiles?: string[];
+		public_media_health: {
+			status: string;
+			checked_count: number;
+			failing_count: number;
+			last_failure?: string;
+			last_status_code?: number;
+		};
+	};
 
 	const groupedTimezones = $derived.by(() => {
 		const groups: Record<string, typeof timezones> = {};
@@ -114,6 +135,9 @@
 	let inviteEmail = $state('');
 	let inviteRole = $state('editor');
 	let createdInviteURL = $state('');
+	let providerReadiness = $state.raw<ProviderReadinessItem[]>([]);
+	let providerReadinessLoading = $state(false);
+	let providerReadinessError = $state('');
 
 	const authState = $derived($auth);
 	const currentOrganizationID = $derived(workspaceCtx.currentWorkspace?.organization_id ?? '');
@@ -203,6 +227,12 @@
 				limit
 			}));
 	});
+	const providerReadinessIssues = $derived(
+		providerReadiness.reduce(
+			(count, provider) => count + (provider.blocking_issues?.length ?? 0),
+			0
+		)
+	);
 
 	function isSettingsTab(value: string) {
 		return settingsTabs.some((tab) => tab.id === value);
@@ -344,6 +374,25 @@
 			teamError = (e as Error).message;
 		} finally {
 			teamLoading = false;
+		}
+	}
+
+	async function loadProviderReadiness() {
+		const workspaceID = workspaceCtx.currentWorkspace?.id;
+		if (!workspaceID) return;
+		providerReadinessLoading = true;
+		providerReadinessError = '';
+		try {
+			const { data, error: err } = await (client as any).GET('/provider-readiness', {
+				params: { query: { workspace_id: workspaceID } }
+			});
+			if (err || !data) throw new Error(err?.detail || 'Failed to load provider readiness');
+			providerReadiness = data.providers ?? [];
+		} catch (e) {
+			providerReadiness = [];
+			providerReadinessError = (e as Error).message;
+		} finally {
+			providerReadinessLoading = false;
 		}
 	}
 
@@ -985,6 +1034,31 @@
 		return new Date(value).toLocaleString();
 	}
 
+	function readinessProviderLabel(provider: string): string {
+		const labels: Record<string, string> = {
+			facebook: 'Facebook Pages',
+			instagram: 'Instagram',
+			youtube: 'YouTube',
+			tiktok: 'TikTok',
+			x: 'X',
+			bluesky: 'Bluesky',
+			mastodon: 'Mastodon',
+			threads: 'Threads',
+			linkedin: 'LinkedIn'
+		};
+		return labels[provider] ?? provider;
+	}
+
+	function readinessStateLabel(state: string): string {
+		if (state === 'built_in') return 'Built in';
+		if (state === 'configured') return 'Configured';
+		return 'Needs app keys';
+	}
+
+	function readinessIsBlocked(provider: ProviderReadinessItem): boolean {
+		return (provider.blocking_issues?.length ?? 0) > 0;
+	}
+
 	let lastProfileUserID = $state('');
 	$effect(() => {
 		const user = authState.user;
@@ -999,6 +1073,7 @@
 			loadBillingStatus();
 			loadWorkspaceTeam();
 			loadSchedules();
+			loadProviderReadiness();
 		}
 	});
 
@@ -1220,6 +1295,87 @@
 					</div>
 					<Button variant="outline" onclick={() => goto('/accounts')}>Manage Social Accounts</Button
 					>
+				</div>
+			</div>
+			<div class="rounded-lg border p-4">
+				<div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+					<div>
+						<h2 class="flex items-center gap-2 text-base font-semibold">
+							<ActivityIcon class="h-4 w-4 text-muted-foreground" />
+							Provider readiness
+						</h2>
+						<p class="mt-1 text-sm text-muted-foreground">
+							Configuration, account, app-review, and public media checks for publishing.
+						</p>
+					</div>
+					<div class="flex items-center gap-2">
+						{#if providerReadinessIssues > 0}
+							<span class="text-sm text-destructive">{providerReadinessIssues} blockers</span>
+						{/if}
+						<Button
+							type="button"
+							variant="outline"
+							size="sm"
+							disabled={providerReadinessLoading}
+							onclick={loadProviderReadiness}
+						>
+							{#if providerReadinessLoading}
+								<LoaderIcon class="mr-2 h-4 w-4 animate-spin" />
+							{:else}
+								<RefreshCwIcon class="mr-2 h-4 w-4" />
+							{/if}
+							Refresh
+						</Button>
+					</div>
+				</div>
+				{#if providerReadinessError}
+					<div
+						class="mb-3 rounded-md border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive"
+					>
+						{providerReadinessError}
+					</div>
+				{/if}
+				<div class="grid gap-2 lg:grid-cols-2">
+					{#each providerReadiness as provider (provider.provider)}
+						<div class="rounded-md border bg-muted/20 p-3">
+							<div class="flex items-start justify-between gap-3">
+								<div class="min-w-0">
+									<p class="truncate text-sm font-medium">
+										{readinessProviderLabel(provider.provider)}
+									</p>
+									<p class="text-xs text-muted-foreground">
+										{readinessStateLabel(provider.configured_app_state)} · {provider.connected_accounts}
+										account{provider.connected_accounts === 1 ? '' : 's'} ·
+										{provider.public_media_health.status} media
+									</p>
+								</div>
+								{#if readinessIsBlocked(provider)}
+									<AlertCircleIcon class="h-4 w-4 shrink-0 text-destructive" />
+								{:else}
+									<CheckCircle2Icon class="h-4 w-4 shrink-0 text-emerald-600" />
+								{/if}
+							</div>
+							{#if provider.blocking_issues?.length}
+								<div class="mt-2 flex flex-wrap gap-1">
+									{#each provider.blocking_issues as issue (issue)}
+										<span
+											class="rounded-sm border border-destructive/30 bg-destructive/10 px-1.5 py-0.5 text-xs text-destructive"
+										>
+											{issue.replaceAll('_', ' ')}
+										</span>
+									{/each}
+								</div>
+							{/if}
+							{#if provider.app_review_warnings?.length}
+								<p class="mt-2 text-xs text-amber-700 dark:text-amber-300">
+									{provider.app_review_warnings[0]}
+								</p>
+							{/if}
+							{#if provider.next_actions?.length}
+								<p class="mt-2 text-xs text-muted-foreground">{provider.next_actions[0]}</p>
+							{/if}
+						</div>
+					{/each}
 				</div>
 			</div>
 			<div class="rounded-lg border bg-muted/20 p-4">

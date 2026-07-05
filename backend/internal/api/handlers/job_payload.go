@@ -16,3 +16,7 @@ func aliasedJobPayloadTextExpr(db *bun.DB, alias string, key string) string {
 func publishPostJobPostIDWhere(db *bun.DB) string {
 	return "type = ? AND " + jobPayloadTextExpr(db, postIDKey) + " = ?"
 }
+
+func publishPublicationJobPublicationIDWhere(db *bun.DB) string {
+	return "type = ? AND " + jobPayloadTextExpr(db, "publication_id") + " = ?"
+}

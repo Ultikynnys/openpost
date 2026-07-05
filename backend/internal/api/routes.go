@@ -94,6 +94,10 @@ func RegisterHumaRoutes(api huma.API, deps RouteDeps) {
 	handlers.NewCLIAuthHandler(deps.CLIAuthService, deps.Authenticator, deps.PublicURL).RegisterRoutes(api)
 	handlers.NewMCPActivityHandler(deps.DB, deps.Authenticator).RegisterRoutes(api)
 	handlers.NewProviderAppHandler(providerapps.NewService(deps.DB, deps.TokenEncryptor), deps.DB, deps.Authenticator).RegisterRoutes(api)
+	handlers.NewCapabilityHandler().RegisterRoutes(api)
+	handlers.NewProviderReadinessHandler(deps.DB, deps.Authenticator).RegisterRoutes(api)
+	handlers.NewPublicationHandler(deps.DB, deps.Authenticator, deps.Entitlement).RegisterRoutes(api)
+	handlers.NewCommentHandler(deps.DB, deps.Authenticator, deps.Providers, deps.TokenEncryptor).RegisterRoutes(api)
 
 	mcpOAuthHandler := deps.MCPOAuthHandler
 	if mcpOAuthHandler == nil {

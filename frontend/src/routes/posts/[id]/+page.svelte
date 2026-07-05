@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import { page } from '$app/stores';
 	import { client } from '$lib/api/client';
 	import ComposeSimple from '$lib/components/compose-simple.svelte';
@@ -28,8 +28,10 @@
 		workspace_id: string;
 		created_by: string;
 		content: string;
+		thread_draft?: string | null;
 		status: string;
 		scheduled_at: string;
+		random_delay_minutes?: number;
 		created_at: string;
 		media: PostMedia[];
 		destinations: PostDestination[];
@@ -40,10 +42,12 @@
 	let error = $state('');
 	let deleting = $state(false);
 	let showDeleteConfirm = $state(false);
+	let requestedPostId = $state('');
 
 	const postId = $derived($page.params.id);
 
 	async function loadPost(id: string) {
+		hasLoaded = false;
 		error = '';
 		try {
 			const { data, error: err } = await (client as any).GET('/posts/{id}', {
@@ -59,12 +63,9 @@
 		}
 	}
 
-	onMount(() => {
-		if (postId) loadPost(postId);
-	});
-
 	$effect(() => {
-		if (postId) {
+		if (postId && postId !== requestedPostId) {
+			requestedPostId = postId;
 			loadPost(postId);
 		}
 	});
@@ -78,7 +79,7 @@
 			});
 			if (err) throw new Error((err as any)?.detail || 'Failed to delete post');
 			ui.triggerRefresh();
-			goto('/');
+			goto(resolve('/'));
 		} catch (e) {
 			error = (e as Error).message;
 			deleting = false;
@@ -88,11 +89,11 @@
 
 	async function handleSuccess() {
 		ui.triggerRefresh();
-		goto('/');
+		goto(resolve('/'));
 	}
 
 	function handleCancel() {
-		goto('/');
+		goto(resolve('/'));
 	}
 </script>
 
@@ -109,16 +110,12 @@
 	<div class="mx-auto w-full max-w-6xl px-4 py-6 lg:px-8">
 		<div class="rounded-lg border border-destructive/20 bg-destructive/10 p-6 text-center">
 			<p class="mb-3 text-destructive">{error}</p>
-			<Button variant="outline" onclick={() => goto('/')}>Back</Button>
+			<Button variant="outline" onclick={() => goto(resolve('/'))}>Back</Button>
 		</div>
 	</div>
 {:else if post}
 	<div class="flex flex-1 flex-col overflow-hidden">
-		<!-- Edit header with delete -->
-		<div class="flex flex-wrap items-center justify-between gap-2 border-b px-3 py-2 md:px-4">
-			<span class="text-xs text-muted-foreground">
-				Editing {post.status} post
-			</span>
+		<div class="flex flex-wrap items-center justify-end gap-2 border-b px-3 py-2 md:px-4">
 			{#if post.status === 'draft' || post.status === 'scheduled'}
 				{#if showDeleteConfirm}
 					<div class="flex items-center gap-2">

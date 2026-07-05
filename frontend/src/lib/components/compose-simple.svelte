@@ -66,6 +66,7 @@
 		thread_draft?: string | null;
 		status: string;
 		scheduled_at: string;
+		random_delay_minutes?: number;
 		media: Array<{ media_id: string; mime_type?: string; alt_text?: string }>;
 		destinations: Array<{ social_account_id: string; platform: string }>;
 	}
@@ -179,6 +180,11 @@
 	const hasContent = $derived(hasAnyContent(posts));
 	const totalChars = $derived(posts.reduce((sum, p) => sum + p.content.length, 0));
 	const isThread = $derived(posts.length > 1);
+	const hasUnsavedChanges = $derived(isEditMode && getSaveSnapshot() !== lastSavedSnapshot);
+	const selectedWorkspaceName = $derived(
+		workspaces.find((workspace) => workspace.id === selectedWorkspaceId)?.name ??
+			m.compose_workspace()
+	);
 
 	const selectedAccounts = $derived(accounts.filter((a) => selectedAccountIds.includes(a.id)));
 	const syncedLinkedInThreadAccounts = $derived.by(() => {
@@ -369,7 +375,10 @@
 		return JSON.stringify({
 			draft: getDraftSnapshot(posts),
 			selectedAccounts: selectedAccountsSnapshot,
-			variants: variantEntries
+			variants: variantEntries,
+			scheduledDate: selectedDate?.toString() ?? null,
+			selectedTime,
+			selectedWorkspaceId
 		});
 	}
 
@@ -459,6 +468,13 @@
 		);
 	}
 
+	function clearAutoSaveTimer() {
+		if (autoSaveTimer) {
+			clearTimeout(autoSaveTimer);
+			autoSaveTimer = null;
+		}
+	}
+
 	function isVideoMedia(mediaId: string): boolean {
 		return mediaMimeTypes.get(mediaId)?.startsWith('video/') ?? false;
 	}
@@ -494,6 +510,7 @@
 	// Initialization
 	// --------------------------------------------------------------------------
 	async function initializeFromPost(post: InitialPost | undefined) {
+		clearAutoSaveTimer();
 		if (!post) {
 			draftId = null;
 			lastInitializedPostId = null;
@@ -581,9 +598,8 @@
 			selectedDate = new CalendarDate(date.getFullYear(), date.getMonth() + 1, date.getDate());
 			selectedTime = `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
 		} else {
-			const tomorrow = today(getLocalTimeZone()).add({ days: 1 });
-			selectedDate = new CalendarDate(tomorrow.year, tomorrow.month, tomorrow.day);
-			selectedTime = '10:00';
+			selectedDate = undefined;
+			selectedTime = null;
 		}
 
 		await loadAccounts(selectedWorkspaceId, selectedAccountIds);
@@ -812,6 +828,7 @@
 	// Draft saving
 	// --------------------------------------------------------------------------
 	function scheduleAutoSave() {
+		if (isEditMode) return;
 		if (autoSaveTimer) clearTimeout(autoSaveTimer);
 		autoSaveTimer = setTimeout(() => {
 			if (!hasContent) return;
@@ -880,6 +897,120 @@
 			error = (e as Error).message || 'Failed to save draft';
 		} finally {
 			isSaving = false;
+		}
+	}
+
+	async function saveEditedPost() {
+		if (!draftId || !initialPost) return;
+		error = '';
+		success = '';
+
+		if (!selectedWorkspaceId) {
+			error = m.compose_please_select_workspace();
+			return;
+		}
+		if (!hasContent) {
+			error = m.compose_please_enter_content();
+			return;
+		}
+		if (selectedAccountIds.length === 0) {
+			error = m.compose_select_account();
+			return;
+		}
+		if ((selectedDate && !selectedTime) || (!selectedDate && selectedTime)) {
+			error = m.compose_select_date_time();
+			return;
+		}
+		const scheduledAt = getScheduledAt();
+		const isThreadDraft_ = isThread;
+		const threadDraft = isThreadDraft_ ? encodeThreadDraft(posts, getVariantPayloadForSave()) : '';
+		const draftContent = posts[0]?.content ?? '';
+		const mediaIds = isThreadDraft_
+			? posts.flatMap((post) => post.mediaIds)
+			: (posts[0]?.mediaIds ?? []);
+		const randomDelay = scheduledAt
+			? (initialPost.random_delay_minutes ?? workspaceCtx.settings.random_delay_minutes)
+			: 0;
+
+		isSaving = true;
+		try {
+			if (isThreadDraft_ && scheduledAt) {
+				await scheduleEditedThread(scheduledAt, randomDelay);
+				lastSavedSnapshot = getSaveSnapshot();
+				success = m.compose_changes_saved();
+				ui.triggerRefresh();
+				if (onSuccess) {
+					setTimeout(() => onSuccess(), 500);
+				}
+				return;
+			}
+
+			const { error: patchErr } = await (client as any).PATCH('/posts/{id}', {
+				params: { path: { id: draftId } },
+				body: {
+					content: draftContent,
+					scheduled_at: isThreadDraft_ ? '' : (scheduledAt ?? ''),
+					social_account_ids: selectedAccountIds,
+					media_ids: mediaIds,
+					random_delay_minutes: randomDelay,
+					thread_draft: threadDraft
+				}
+			});
+			if (patchErr) throw new Error((patchErr as any).detail || 'Failed to save changes');
+
+			if (!isThreadDraft_) {
+				await persistVariants(draftId);
+			}
+
+			lastSavedSnapshot = getSaveSnapshot();
+			success = m.compose_changes_saved();
+			ui.triggerRefresh();
+
+			if (onSuccess) {
+				setTimeout(() => onSuccess(), 500);
+			}
+		} catch (e) {
+			error = (e as Error).message || 'Failed to save changes';
+		} finally {
+			isSaving = false;
+		}
+	}
+
+	async function scheduleEditedThread(scheduledAt: string, randomDelay: number) {
+		if (!draftId) return;
+		const validPosts = posts.filter(
+			(post) => post.content.trim().length > 0 || post.mediaIds.length > 0
+		);
+		if (validPosts.length < 2) {
+			throw new Error(m.compose_thread_minimum());
+		}
+		if (syncedLinkedInThreadAccounts.length > 0) {
+			activeVariantAccountId = syncedLinkedInThreadAccounts[0].id;
+			throw new Error(m.compose_linkedin_thread_replies_unsupported());
+		}
+
+		const { data, error: createErr } = await client.POST('/posts/thread' as any, {
+			body: {
+				workspace_id: selectedWorkspaceId,
+				social_account_ids: selectedAccountIds,
+				scheduled_at: scheduledAt,
+				random_delay_minutes: randomDelay,
+				posts: validPosts.map((post) => ({
+					content: post.content,
+					media_ids: post.mediaIds
+				}))
+			}
+		});
+		if (createErr) throw new Error((createErr as any).detail || 'Failed to schedule thread');
+		if (data?.post_ids && variants.size > 0) {
+			await persistThreadVariants(data.post_ids, validPosts);
+		}
+
+		const { error: deleteErr } = await (client as any).DELETE('/posts/{id}', {
+			params: { path: { id: draftId } }
+		});
+		if (deleteErr) {
+			console.error('Scheduled thread but failed to delete original draft:', deleteErr);
 		}
 	}
 
@@ -1441,12 +1572,24 @@
 		<div class="flex flex-wrap items-center gap-2">
 			{#if isEditMode && onCancel}
 				<Button variant="ghost" size="sm" class="text-xs" onclick={onCancel}
-					>{m.common_back()}</Button
+					>{m.common_cancel()}</Button
 				>
+			{/if}
+			{#if isEditMode}
+				<div class="flex items-center gap-2 rounded-md border bg-muted/30 px-2 py-1">
+					<span class="text-xs font-medium"
+						>{m.compose_editing_post({ status: initialPost?.status ?? '' })}</span
+					>
+					<span class="text-xs text-muted-foreground">
+						{hasUnsavedChanges ? m.compose_unsaved_changes() : m.compose_saved_state()}
+					</span>
+				</div>
 			{/if}
 
 			<!-- Workspace selector -->
-			{#if workspaces.length > 1}
+			{#if isEditMode}
+				<span class="text-xs text-muted-foreground">{selectedWorkspaceName}</span>
+			{:else if workspaces.length > 1}
 				<DropdownMenu.Root>
 					<DropdownMenu.Trigger>
 						{#snippet child({ props })}
@@ -1736,7 +1879,7 @@
 							size="sm"
 							class="h-8 gap-1 text-xs"
 							onclick={suggestNextSlot}
-							disabled={suggestingSlot || isSubmitting}
+							disabled={suggestingSlot || isSubmitting || isSaving}
 						>
 							{#if suggestingSlot}<span
 									class="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-current"
@@ -1757,7 +1900,7 @@
 							variant="outline"
 							size="sm"
 							class="gap-1.5 text-xs"
-							disabled={isSubmitting || !hasContent}
+							disabled={isSubmitting || isSaving || !hasContent}
 						>
 							<ClockIcon class="h-3.5 w-3.5" />
 							<span class="hidden sm:inline">{formatScheduledDisplay()}</span>
@@ -1784,6 +1927,10 @@
 										variant={selectedTime === time ? 'default' : 'outline'}
 										size="sm"
 										onclick={() => {
+											if (!selectedDate) {
+												const date = today(getLocalTimeZone());
+												selectedDate = new CalendarDate(date.year, date.month, date.day);
+											}
 											selectedTime = time;
 											showSchedulePopover = false;
 										}}
@@ -1794,35 +1941,63 @@
 								{/each}
 							</div>
 						</div>
+						{#if selectedDate || selectedTime}
+							<div class="mt-3 border-t pt-3">
+								<Button
+									variant="ghost"
+									size="sm"
+									class="w-full text-xs"
+									onclick={() => {
+										selectedDate = undefined;
+										selectedTime = null;
+										showSchedulePopover = false;
+									}}
+								>
+									{m.compose_clear_schedule()}
+								</Button>
+							</div>
+						{/if}
 					</div>
 				</Popover.Content>
 			</Popover.Root>
 
-			<!-- Schedule button -->
-			<Button
-				size="sm"
-				class="gap-1.5"
-				onclick={() => publish(false)}
-				disabled={isSubmitting || !hasContent || selectedAccountIds.length === 0}
-			>
-				{#if isSubmitting}<LoaderIcon class="h-3.5 w-3.5 animate-spin" />{:else}<SendIcon
-						class="h-3.5 w-3.5"
-					/>{/if}
-				<span class="hidden sm:inline">{m.compose_schedule()}</span>
-			</Button>
+			{#if isEditMode}
+				<Button
+					size="sm"
+					class="gap-1.5"
+					onclick={saveEditedPost}
+					disabled={isSaving || isSubmitting || !hasContent || selectedAccountIds.length === 0}
+				>
+					{#if isSaving}<LoaderIcon class="h-3.5 w-3.5 animate-spin" />{/if}
+					<span>{isSaving ? m.compose_saving_changes() : m.compose_save_changes()}</span>
+				</Button>
+			{:else}
+				<!-- Schedule button -->
+				<Button
+					size="sm"
+					class="gap-1.5"
+					onclick={() => publish(false)}
+					disabled={isSubmitting || !hasContent || selectedAccountIds.length === 0}
+				>
+					{#if isSubmitting}<LoaderIcon class="h-3.5 w-3.5 animate-spin" />{:else}<SendIcon
+							class="h-3.5 w-3.5"
+						/>{/if}
+					<span class="hidden sm:inline">{m.compose_schedule()}</span>
+				</Button>
 
-			<!-- Publish now -->
-			<Button
-				size="sm"
-				variant="secondary"
-				onclick={() => publish(true)}
-				disabled={isSubmitting || !hasContent || selectedAccountIds.length === 0}
-				class="gap-1.5"
-			>
-				{#if isSubmitting}<LoaderIcon class="h-3.5 w-3.5 animate-spin" />{/if}
-				<span class="hidden sm:inline">{m.compose_publish_now()}</span>
-				<span class="sm:hidden">{m.compose_publish_now()}</span>
-			</Button>
+				<!-- Publish now -->
+				<Button
+					size="sm"
+					variant="secondary"
+					onclick={() => publish(true)}
+					disabled={isSubmitting || !hasContent || selectedAccountIds.length === 0}
+					class="gap-1.5"
+				>
+					{#if isSubmitting}<LoaderIcon class="h-3.5 w-3.5 animate-spin" />{/if}
+					<span class="hidden sm:inline">{m.compose_publish_now()}</span>
+					<span class="sm:hidden">{m.compose_publish_now()}</span>
+				</Button>
+			{/if}
 		</div>
 	</div>
 

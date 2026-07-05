@@ -2,8 +2,11 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { client, type Post } from '$lib/api/client';
+	import type { components } from '$lib/api/types';
+	import { workspaceCtx } from '$lib/stores/workspace.svelte';
 	import { Button } from '$lib/components/ui/button';
 	import { Tabs, TabsList, TabsTrigger, TabsContent } from '$lib/components/ui/tabs';
+	import CommentInbox from '$lib/components/comment-inbox.svelte';
 	import PageContainer from '$lib/components/page-container.svelte';
 	import EmptyState from '$lib/components/empty-state.svelte';
 	import PlatformIcon from '$lib/components/platform-icon.svelte';
@@ -18,8 +21,12 @@
 	import PencilIcon from 'lucide-svelte/icons/pencil';
 	import PackageIcon from 'lucide-svelte/icons/package';
 	import ScrollTextIcon from 'lucide-svelte/icons/scroll-text';
+	import MessageCircleIcon from 'lucide-svelte/icons/message-circle';
 	import { m } from '$lib/paraglide/messages';
 	import { getLocaleTag } from '$lib/i18n';
+
+	type PublicationResponse = components['schemas']['PublicationResponse'];
+	type RenditionResponse = components['schemas']['RenditionResponse'];
 
 	type JobLog = {
 		id: string;
@@ -33,9 +40,15 @@
 		locked_at?: string;
 	};
 
+	type PublishedRendition = RenditionResponse & {
+		publicationTitle: string;
+		publicationSourceText: string;
+	};
+
 	const jobsPageSize = 50;
 
 	let posts = $state<Post[]>([]);
+	let publications = $state<PublicationResponse[]>([]);
 	let scheduledPosts = $state<Post[]>([]);
 	let drafts = $state<Post[]>([]);
 	let jobs = $state<JobLog[]>([]);
@@ -46,6 +59,7 @@
 	let loading = $state(true);
 	let error = $state('');
 	let activeTab = $state('schedule');
+	let selectedRenditionId = $state('');
 
 	onMount(() => {
 		loadData();
@@ -55,7 +69,13 @@
 		loading = true;
 		error = '';
 		try {
-			await Promise.all([loadPosts(), loadScheduled(), loadDrafts(), loadJobs()]);
+			await Promise.all([
+				loadPosts(),
+				loadPublications(),
+				loadScheduled(),
+				loadDrafts(),
+				loadJobs()
+			]);
 		} catch (e) {
 			error = (e as Error).message || m.activity_failed_load();
 		} finally {
@@ -71,6 +91,27 @@
 		posts = data.sort(
 			(a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
 		);
+	}
+
+	async function loadPublications() {
+		if (!workspaceCtx.currentWorkspace) {
+			await workspaceCtx.initialize();
+		}
+		const workspaceId = workspaceCtx.currentWorkspace?.id;
+		if (!workspaceId) {
+			publications = [];
+			selectedRenditionId = '';
+			return;
+		}
+
+		const { data, error: err } = await (client as any).GET('/publications', {
+			params: { query: { workspace_id: workspaceId, status: 'published', limit: 100 } }
+		});
+		if (err || !data) throw new Error(readProblem(err, 'Failed to load publications'));
+		publications = data;
+		if (!publishedRenditions.some((rendition) => rendition.id === selectedRenditionId)) {
+			selectedRenditionId = publishedRenditions[0]?.id ?? '';
+		}
 	}
 
 	async function loadScheduled() {
@@ -106,6 +147,14 @@
 		jobsTotal = readIntHeader(response.headers.get('X-Total-Count'), jobs.length);
 		jobsNextOffset = readIntHeader(response.headers.get('X-Next-Offset'), jobs.length);
 		jobsHasMore = response.headers.get('X-Has-More') === 'true';
+	}
+
+	function readProblem(value: unknown, fallback: string): string {
+		if (value && typeof value === 'object' && 'detail' in value) {
+			const detail = (value as { detail?: unknown }).detail;
+			if (typeof detail === 'string' && detail.length > 0) return detail;
+		}
+		return fallback;
 	}
 
 	async function loadMoreJobs() {
@@ -270,6 +319,22 @@
 			color: 'text-blue-600'
 		}
 	]);
+
+	const publishedRenditions = $derived(
+		publications.flatMap((publication) =>
+			(publication.renditions ?? [])
+				.filter((rendition) => rendition.status === 'published' && rendition.external_id)
+				.map((rendition) => ({
+					...rendition,
+					publicationTitle: publication.title,
+					publicationSourceText: publication.source_text
+				}))
+		)
+	);
+
+	const selectedRendition = $derived(
+		publishedRenditions.find((rendition) => rendition.id === selectedRenditionId)
+	);
 </script>
 
 <svelte:head>
@@ -318,6 +383,7 @@
 	<Tabs bind:value={activeTab}>
 		<TabsList variant="line" class="mb-6">
 			<TabsTrigger value="schedule">{m.activity_tab_scheduled()}</TabsTrigger>
+			<TabsTrigger value="comments">Comments</TabsTrigger>
 			<TabsTrigger value="drafts">{m.activity_tab_drafts()}</TabsTrigger>
 			<TabsTrigger value="jobs">{m.activity_tab_jobs()}</TabsTrigger>
 		</TabsList>
@@ -391,6 +457,59 @@
 							</Button>
 						</div>
 					{/each}
+				</div>
+			{/if}
+		</TabsContent>
+
+		<!-- COMMENTS -->
+		<TabsContent value="comments">
+			{#if publishedRenditions.length === 0}
+				<EmptyState
+					icon={MessageCircleIcon}
+					title="No published conversations"
+					description="Published renditions with provider IDs will appear here."
+					variant="muted"
+				/>
+			{:else}
+				<div class="grid gap-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.2fr)]">
+					<div class="space-y-2">
+						{#each publishedRenditions as rendition (rendition.id)}
+							<button
+								type="button"
+								class="w-full rounded-lg border bg-card p-3 text-left transition-colors hover:bg-accent/40 {selectedRenditionId ===
+								rendition.id
+									? 'border-primary/40 bg-primary/5'
+									: ''}"
+								onclick={() => (selectedRenditionId = rendition.id)}
+							>
+								<div class="flex items-center justify-between gap-3">
+									<div class="min-w-0">
+										<div class="flex items-center gap-2">
+											<PlatformIcon platform={rendition.platform} class="h-4 w-4" />
+											<span class="truncate text-sm font-medium">{rendition.publicationTitle}</span>
+										</div>
+										<p class="mt-1 line-clamp-2 text-xs text-muted-foreground">
+											{truncate(rendition.body || rendition.publicationSourceText, 110)}
+										</p>
+									</div>
+									<span
+										class="shrink-0 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] text-emerald-700 ring-1 ring-emerald-600/20"
+									>
+										Published
+									</span>
+								</div>
+							</button>
+						{/each}
+					</div>
+
+					{#if selectedRendition}
+						{#key selectedRendition.id}
+							<CommentInbox
+								renditionId={selectedRendition.id}
+								platform={selectedRendition.platform}
+							/>
+						{/key}
+					{/if}
 				</div>
 			{/if}
 		</TabsContent>

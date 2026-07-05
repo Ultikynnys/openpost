@@ -43,6 +43,53 @@ func TestReadyRejectsUnexpectedStatus(t *testing.T) {
 	}
 }
 
+func TestListPublicationEvents_WireFormat(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/publications/pub_1/events" {
+			t.Fatalf("path = %s, want /api/v1/publications/pub_1/events", r.URL.Path)
+		}
+		if r.URL.Query().Get("limit") != "25" {
+			t.Fatalf("limit query = %q, want 25", r.URL.Query().Get("limit"))
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`[
+			{"id":"evt_1","publication_id":"pub_1","rendition_id":"rend_1","type":"published","status":"succeeded","message":"rendition published","metadata":{"platform":"x"},"created_at":"2026-07-04T21:00:00Z"}
+		]`))
+	}))
+	defer srv.Close()
+
+	c := New(srv.URL, "op_cli_test")
+	got, err := c.ListPublicationEvents(context.Background(), "pub_1", 25)
+	if err != nil {
+		t.Fatalf("ListPublicationEvents returned error: %v", err)
+	}
+	if len(got) != 1 || got[0].Type != "published" || got[0].Metadata["platform"] != "x" {
+		t.Fatalf("events wrong: %+v", got)
+	}
+}
+
+func TestListRenditionComments_WireFormat(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/renditions/rend_1/comments" {
+			t.Fatalf("path = %s, want /api/v1/renditions/rend_1/comments", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"comments":[
+			{"id":"comment_1","rendition_id":"rend_1","provider_comment_id":"provider_1","author_name":"Rita","text":"Nice launch","hidden":false,"can_reply":true,"can_hide":false,"can_delete":false}
+		]}`))
+	}))
+	defer srv.Close()
+
+	c := New(srv.URL, "op_cli_test")
+	got, err := c.ListRenditionComments(context.Background(), "rend_1")
+	if err != nil {
+		t.Fatalf("ListRenditionComments returned error: %v", err)
+	}
+	if len(got) != 1 || got[0].Text != "Nice launch" || got[0].CanHide {
+		t.Fatalf("comments wrong: %+v", got)
+	}
+}
+
 // TestListAccounts_WireFormat verifies that ListAccounts decodes a raw
 // JSON array from the server. The server's Huma output type is
 // ListAccountsOutput { Body []AccountResponse } and Huma flattens the

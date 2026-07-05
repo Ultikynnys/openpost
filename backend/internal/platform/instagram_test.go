@@ -85,6 +85,105 @@ func TestInstagramExchangeAndSelectBusinessAccount(t *testing.T) {
 	}
 }
 
+func TestInstagramListCommentsMapsGraphResponse(t *testing.T) {
+	t.Setenv("META_GRAPH_API_VERSION", "v25.0")
+	originalClient := httpClient
+	defer func() { httpClient = originalClient }()
+
+	httpClient = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		if req.Method != http.MethodGet || req.URL.Path != "/v25.0/ig-media-1/comments" {
+			t.Fatalf("unexpected request %s %s", req.Method, req.URL.String())
+		}
+		if req.URL.Query().Get(oauthParamAccessToken) != "ig-token" {
+			t.Fatalf("unexpected access token %q", req.URL.Query().Get(oauthParamAccessToken))
+		}
+		fields := req.URL.Query().Get("fields")
+		for _, field := range []string{"id", "text", "timestamp", "username", "hidden"} {
+			if !strings.Contains(fields, field) {
+				t.Fatalf("expected fields to include %s, got %q", field, fields)
+			}
+		}
+		return jsonResponse(req, `{"data":[{"id":"ig-comment-1","text":"Nice launch","timestamp":"2026-07-04T10:00:00+0000","username":"rita","hidden":false}]}`), nil
+	})}
+
+	comments, err := NewInstagramAdapter("", "", "").ListComments(context.Background(), "ig-token", "ig-1", "ig-media-1")
+	if err != nil {
+		t.Fatalf("ListComments returned error: %v", err)
+	}
+	if len(comments) != 1 {
+		t.Fatalf("expected one comment, got %#v", comments)
+	}
+	comment := comments[0]
+	if comment.ID != "ig-comment-1" || comment.AuthorName != "rita" || comment.Text != "Nice launch" || comment.Hidden || !comment.CanReply || !comment.CanHide || !comment.CanDelete {
+		t.Fatalf("unexpected comment mapping: %#v", comment)
+	}
+}
+
+func TestInstagramCommentActions(t *testing.T) {
+	t.Setenv("META_GRAPH_API_VERSION", "v25.0")
+	originalClient := httpClient
+	defer func() { httpClient = originalClient }()
+
+	calls := []string{}
+	httpClient = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		calls = append(calls, req.Method+" "+req.URL.Path)
+		switch {
+		case req.Method == http.MethodPost && req.URL.Path == "/v25.0/ig-comment-1/replies":
+			body, err := io.ReadAll(req.Body)
+			if err != nil {
+				t.Fatalf("reading reply body: %v", err)
+			}
+			form, err := url.ParseQuery(string(body))
+			if err != nil {
+				t.Fatalf("parsing reply body: %v", err)
+			}
+			if form.Get("message") != "Thanks" || form.Get(oauthParamAccessToken) != "ig-token" {
+				t.Fatalf("unexpected reply form %#v", form)
+			}
+			return jsonResponse(req, `{"id":"ig-reply-1"}`), nil
+		case req.Method == http.MethodPost && req.URL.Path == "/v25.0/ig-comment-1":
+			body, err := io.ReadAll(req.Body)
+			if err != nil {
+				t.Fatalf("reading hide body: %v", err)
+			}
+			form, err := url.ParseQuery(string(body))
+			if err != nil {
+				t.Fatalf("parsing hide body: %v", err)
+			}
+			if form.Get("hide") != "true" || form.Get(oauthParamAccessToken) != "ig-token" {
+				t.Fatalf("unexpected hide form %#v", form)
+			}
+			return jsonResponse(req, `{"success":true}`), nil
+		case req.Method == http.MethodDelete && req.URL.Path == "/v25.0/ig-comment-1":
+			if req.URL.Query().Get(oauthParamAccessToken) != "ig-token" {
+				t.Fatalf("unexpected delete token %q", req.URL.Query().Get(oauthParamAccessToken))
+			}
+			return jsonResponse(req, `{"success":true}`), nil
+		default:
+			t.Fatalf("unexpected request %s %s", req.Method, req.URL.String())
+			return nil, nil
+		}
+	})}
+
+	adapter := NewInstagramAdapter("", "", "")
+	replyID, err := adapter.ReplyToComment(context.Background(), "ig-token", "ig-1", "ig-comment-1", " Thanks ")
+	if err != nil {
+		t.Fatalf("ReplyToComment returned error: %v", err)
+	}
+	if replyID != "ig-reply-1" {
+		t.Fatalf("expected reply ID, got %q", replyID)
+	}
+	if err := adapter.HideComment(context.Background(), "ig-token", "ig-1", "ig-comment-1"); err != nil {
+		t.Fatalf("HideComment returned error: %v", err)
+	}
+	if err := adapter.DeleteComment(context.Background(), "ig-token", "ig-1", "ig-comment-1"); err != nil {
+		t.Fatalf("DeleteComment returned error: %v", err)
+	}
+	if strings.Join(calls, ",") != "POST /v25.0/ig-comment-1/replies,POST /v25.0/ig-comment-1,DELETE /v25.0/ig-comment-1" {
+		t.Fatalf("unexpected call order %#v", calls)
+	}
+}
+
 func TestInstagramPublishImageFromPublicURL(t *testing.T) {
 	t.Setenv("META_GRAPH_API_VERSION", "v25.0")
 	originalClient := httpClient

@@ -6,10 +6,22 @@ All notable changes to this project are documented in this file.
 
 ### Changed
 
+- Added the format-first publication/rendition publishing model, capability registry, composer, CLI/MCP publication commands, and profile-aware Facebook, Instagram, YouTube, and TikTok publishing paths.
+- Added media analysis/public URL validation metadata and provider-readiness diagnostics for format-first publishing.
+- Switched YouTube publishing to resumable uploads with retry/resume handling, thumbnail upload, playlist insertion, and post-upload processing-status checks.
+- Added X quote-post, poll, reply-setting, paid-partnership, and AI-disclosure publishing settings with validation for mutually exclusive attachment modes.
+- Added Mastodon visibility, content-warning, sensitive-media, language, poll, and native scheduling settings with poll/media conflict validation.
+- Added Bluesky video capability metadata plus rich-text facets, external link cards, quote posts, quote-with-media embeds, and self-label settings.
+- Added LinkedIn document/PDF carousel capability metadata and document upload/publishing support via the LinkedIn Documents API.
+- Added TikTok Upload/Inbox video support with `FILE_UPLOAD` initialization and chunk transfer while keeping Direct Post on verified public media URLs.
+- Added rendition comment inbox/moderation API routes with opaque OpenPost comment IDs, Facebook/Instagram/LinkedIn/Threads comment adapters, and explicit unsupported-provider responses.
+- Added MCP provider-readiness, publication-validation, media-analysis metadata, publication lifecycle, and rendition comment workflows for automation clients.
 - Added workspace image URLs and moved workspace-scoped navigation into the workspace switcher menu.
+- Added a fullscreen month calendar with workspace/platform filtering, account badges, publication sets, and drag-and-drop rescheduling.
 
 ### Fixed
 
+- Reworked existing-post editing so posts open in the full composer with explicit save/cancel controls instead of prompt-based rescheduling.
 - Rendered a success page for completed OAuth account callbacks before returning users to Accounts.
 - Stopped showing checkout CTAs for other plans when an organization already has an active hosted plan.
 

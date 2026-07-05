@@ -197,6 +197,7 @@ func main() {
 	mcpHandler.SetMediaStorage(storage)
 	mcpHandler.SetPublicURL(cfg.PublicURL)
 	mcpHandler.SetProviderCatalog(providers, mastodonAppService != nil)
+	mcpHandler.SetTokenEncryptor(tokenEncryptor)
 	mcpHandler.RegisterRoutes(e)
 	mcpOAuthHandler := handlers.NewMCPOAuthHandler(mcpOAuthService, authenticator, cfg.PublicURL)
 	mcpOAuthHandler.RegisterEchoRoutes(e)

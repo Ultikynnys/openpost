@@ -98,6 +98,105 @@ func TestFacebookExchangeAndSelectPage(t *testing.T) {
 	}
 }
 
+func TestFacebookListCommentsMapsGraphResponse(t *testing.T) {
+	t.Setenv("META_GRAPH_API_VERSION", "v25.0")
+	originalClient := httpClient
+	defer func() { httpClient = originalClient }()
+
+	httpClient = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		if req.Method != http.MethodGet || req.URL.Path != "/v25.0/page-post-1/comments" {
+			t.Fatalf("unexpected request %s %s", req.Method, req.URL.String())
+		}
+		if req.URL.Query().Get(oauthParamAccessToken) != "page-token" {
+			t.Fatalf("unexpected access token %q", req.URL.Query().Get(oauthParamAccessToken))
+		}
+		fields := req.URL.Query().Get("fields")
+		for _, field := range []string{"id", "from", "message", "created_time", "is_hidden", "can_hide", "can_comment"} {
+			if !strings.Contains(fields, field) {
+				t.Fatalf("expected fields to include %s, got %q", field, fields)
+			}
+		}
+		return jsonResponse(req, `{"data":[{"id":"comment-1","message":"Looks good","created_time":"2026-07-04T10:00:00+0000","is_hidden":true,"can_hide":true,"can_comment":true,"from":{"id":"user-1","name":"Rita"}}]}`), nil
+	})}
+
+	comments, err := NewFacebookAdapter("", "", "").ListComments(context.Background(), "page-token", "page-1", "page-post-1")
+	if err != nil {
+		t.Fatalf("ListComments returned error: %v", err)
+	}
+	if len(comments) != 1 {
+		t.Fatalf("expected one comment, got %#v", comments)
+	}
+	comment := comments[0]
+	if comment.ID != "comment-1" || comment.AuthorID != "user-1" || comment.AuthorName != "Rita" || comment.Text != "Looks good" || !comment.Hidden || !comment.CanReply || !comment.CanHide || !comment.CanDelete {
+		t.Fatalf("unexpected comment mapping: %#v", comment)
+	}
+}
+
+func TestFacebookCommentActions(t *testing.T) {
+	t.Setenv("META_GRAPH_API_VERSION", "v25.0")
+	originalClient := httpClient
+	defer func() { httpClient = originalClient }()
+
+	calls := []string{}
+	httpClient = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		calls = append(calls, req.Method+" "+req.URL.Path)
+		switch {
+		case req.Method == http.MethodPost && req.URL.Path == "/v25.0/comment-1/comments":
+			body, err := io.ReadAll(req.Body)
+			if err != nil {
+				t.Fatalf("reading reply body: %v", err)
+			}
+			form, err := url.ParseQuery(string(body))
+			if err != nil {
+				t.Fatalf("parsing reply body: %v", err)
+			}
+			if form.Get("message") != "Thanks" || form.Get(oauthParamAccessToken) != "page-token" {
+				t.Fatalf("unexpected reply form %#v", form)
+			}
+			return jsonResponse(req, `{"id":"reply-1"}`), nil
+		case req.Method == http.MethodPost && req.URL.Path == "/v25.0/comment-1":
+			body, err := io.ReadAll(req.Body)
+			if err != nil {
+				t.Fatalf("reading hide body: %v", err)
+			}
+			form, err := url.ParseQuery(string(body))
+			if err != nil {
+				t.Fatalf("parsing hide body: %v", err)
+			}
+			if form.Get("is_hidden") != "true" || form.Get(oauthParamAccessToken) != "page-token" {
+				t.Fatalf("unexpected hide form %#v", form)
+			}
+			return jsonResponse(req, `{"success":true}`), nil
+		case req.Method == http.MethodDelete && req.URL.Path == "/v25.0/comment-1":
+			if req.URL.Query().Get(oauthParamAccessToken) != "page-token" {
+				t.Fatalf("unexpected delete token %q", req.URL.Query().Get(oauthParamAccessToken))
+			}
+			return jsonResponse(req, `{"success":true}`), nil
+		default:
+			t.Fatalf("unexpected request %s %s", req.Method, req.URL.String())
+			return nil, nil
+		}
+	})}
+
+	adapter := NewFacebookAdapter("", "", "")
+	replyID, err := adapter.ReplyToComment(context.Background(), "page-token", "page-1", "comment-1", " Thanks ")
+	if err != nil {
+		t.Fatalf("ReplyToComment returned error: %v", err)
+	}
+	if replyID != "reply-1" {
+		t.Fatalf("expected reply ID, got %q", replyID)
+	}
+	if err := adapter.HideComment(context.Background(), "page-token", "page-1", "comment-1"); err != nil {
+		t.Fatalf("HideComment returned error: %v", err)
+	}
+	if err := adapter.DeleteComment(context.Background(), "page-token", "page-1", "comment-1"); err != nil {
+		t.Fatalf("DeleteComment returned error: %v", err)
+	}
+	if strings.Join(calls, ",") != "POST /v25.0/comment-1/comments,POST /v25.0/comment-1,DELETE /v25.0/comment-1" {
+		t.Fatalf("unexpected call order %#v", calls)
+	}
+}
+
 func TestFacebookPublishPhotoFromPublicURL(t *testing.T) {
 	t.Setenv("META_GRAPH_API_VERSION", "v25.0")
 	originalClient := httpClient

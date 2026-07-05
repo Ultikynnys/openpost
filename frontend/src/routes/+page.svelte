@@ -1,5 +1,5 @@
 <script lang="ts">
-	import ComposeSimple from '$lib/components/compose-simple.svelte';
+	import ComposeFormat from '$lib/components/compose-format.svelte';
 </script>
 
 <svelte:head>
@@ -7,5 +7,5 @@
 </svelte:head>
 
 <div class="flex flex-1 flex-col overflow-hidden">
-	<ComposeSimple />
+	<ComposeFormat />
 </div>

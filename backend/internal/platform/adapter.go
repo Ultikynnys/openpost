@@ -2,6 +2,7 @@ package platform
 
 import (
 	"context"
+	"errors"
 	"io"
 	"strings"
 	"sync"
@@ -9,7 +10,12 @@ import (
 
 // PublishRequest contains everything needed to publish a single post.
 type PublishRequest struct {
-	Content          string   // Post text content
+	Content          string // Post text content
+	Profile          string // OpenPost content profile, e.g. short_text, carousel, story, short_video
+	Title            string // Provider-specific title for video/link surfaces
+	Description      string // Provider-specific description for video/link surfaces
+	SettingsJSON     string // Raw provider settings JSON
+	Settings         map[string]interface{}
 	PlatformMediaIDs []string // Platform-specific media IDs from UploadMedia
 	MediaAltTexts    []string // Alt text for each media item (parallel to PlatformMediaIDs)
 	Media            []MediaItem
@@ -24,11 +30,17 @@ type MediaItem struct {
 }
 
 type UploadMediaRequest struct {
-	MimeType    string
-	Filename    string
-	Title       string
-	Description string
-	Reader      io.Reader
+	MimeType          string
+	Filename          string
+	Size              int64
+	Title             string
+	Description       string
+	Settings          map[string]interface{}
+	Reader            io.Reader
+	ThumbnailMimeType string
+	ThumbnailFilename string
+	ThumbnailSize     int64
+	ThumbnailReader   io.Reader
 }
 
 type MediaValidationIssue struct {
@@ -42,6 +54,8 @@ type MediaValidator func([]MediaItem) []MediaValidationIssue
 
 var MediaValidators = map[string]MediaValidator{}
 var registerMediaValidatorsOnce sync.Once
+
+var ErrUnsupportedCommentAction = errors.New("comment action unsupported")
 
 func RegisterAllMediaValidators() {
 	registerMediaValidatorsOnce.Do(func() {
@@ -157,6 +171,26 @@ type Adapter interface {
 	// For Bluesky this is JSON {"uri":"...","cid":"..."} for threading support.
 	// For LinkedIn this is the activity URN for the first post, or comment ID for replies.
 	Publish(ctx context.Context, accessToken, accountID string, req *PublishRequest) (string, error)
+}
+
+type Comment struct {
+	ID              string `json:"id"`
+	AuthorID        string `json:"author_id,omitempty"`
+	AuthorName      string `json:"author_name,omitempty"`
+	AuthorAvatarURL string `json:"author_avatar_url,omitempty"`
+	Text            string `json:"text"`
+	CreatedAt       string `json:"created_at,omitempty"`
+	Hidden          bool   `json:"hidden"`
+	CanReply        bool   `json:"can_reply"`
+	CanHide         bool   `json:"can_hide"`
+	CanDelete       bool   `json:"can_delete"`
+}
+
+type CommentAdapter interface {
+	ListComments(ctx context.Context, accessToken, accountID, externalID string) ([]Comment, error)
+	ReplyToComment(ctx context.Context, accessToken, accountID, commentID, message string) (string, error)
+	HideComment(ctx context.Context, accessToken, accountID, commentID string) error
+	DeleteComment(ctx context.Context, accessToken, accountID, commentID string) error
 }
 
 // MetadataMediaUploader is an optional extension for providers whose media

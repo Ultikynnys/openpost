@@ -7,6 +7,7 @@ import (
 	"io"
 	"mime"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -206,18 +207,10 @@ func (m *MastodonAdapter) Publish(ctx context.Context, accessToken, _ string, re
 		}
 	}
 
-	formValues := url.Values{}
-	formValues.Set("status", req.Content)
-	formValues.Set("visibility", "public")
-
-	for _, mediaID := range req.PlatformMediaIDs {
-		formValues.Add("media_ids[]", mediaID)
+	formValues, err := buildMastodonStatusForm(req)
+	if err != nil {
+		return "", err
 	}
-
-	if req.ReplyToID != "" {
-		formValues.Set("in_reply_to_id", req.ReplyToID)
-	}
-
 	respBody, err := DoFormURLEncodedValues(ctx, "POST", m.instanceURL+"/api/v1/statuses", formValues, map[string]string{
 		headerAuthorization: bearerPrefix + accessToken,
 	})
@@ -233,4 +226,84 @@ func (m *MastodonAdapter) Publish(ctx context.Context, accessToken, _ string, re
 	}
 
 	return statusResp.ID, nil
+}
+
+func buildMastodonStatusForm(req *PublishRequest) (url.Values, error) {
+	formValues := url.Values{}
+	formValues.Set("status", req.Content)
+
+	visibility := firstNonEmptyString(settingString(req.Settings, "visibility"), "public")
+	if !validMastodonVisibility(visibility) {
+		return nil, fmt.Errorf("mastodon visibility %q is not supported", visibility)
+	}
+	formValues.Set("visibility", visibility)
+
+	if spoilerText := settingString(req.Settings, "spoiler_text"); spoilerText != "" {
+		formValues.Set("spoiler_text", spoilerText)
+	}
+	if settingBool(req.Settings, "sensitive") {
+		formValues.Set("sensitive", "true")
+	}
+	if language := settingString(req.Settings, "language"); language != "" {
+		formValues.Set("language", language)
+	}
+	if scheduledAt := firstNonEmptyString(settingString(req.Settings, "native_scheduled_at"), settingString(req.Settings, "scheduled_at")); scheduledAt != "" {
+		formValues.Set("scheduled_at", scheduledAt)
+	}
+
+	pollOptions := mastodonPollOptions(req.Settings)
+	if len(pollOptions) > 0 {
+		if len(req.PlatformMediaIDs) > 0 {
+			return nil, fmt.Errorf("mastodon polls cannot be combined with media attachments")
+		}
+		for _, option := range pollOptions {
+			formValues.Add("poll[options][]", option)
+		}
+		expiresIn := settingInt(req.Settings, "poll_expires_in_seconds")
+		if expiresIn <= 0 {
+			expiresIn = 86400
+		}
+		formValues.Set("poll[expires_in]", strconv.Itoa(expiresIn))
+		if settingBool(req.Settings, "poll_multiple") {
+			formValues.Set("poll[multiple]", "true")
+		}
+		if settingBool(req.Settings, "poll_hide_totals") {
+			formValues.Set("poll[hide_totals]", "true")
+		}
+	}
+
+	for _, mediaID := range req.PlatformMediaIDs {
+		formValues.Add("media_ids[]", mediaID)
+	}
+
+	if req.ReplyToID != "" {
+		formValues.Set("in_reply_to_id", req.ReplyToID)
+	}
+	return formValues, nil
+}
+
+func validMastodonVisibility(value string) bool {
+	switch value {
+	case "public", "unlisted", "private", "direct":
+		return true
+	default:
+		return false
+	}
+}
+
+func mastodonPollOptions(settings map[string]interface{}) []string {
+	raw := settingString(settings, "poll_options")
+	if raw == "" {
+		return nil
+	}
+	parts := strings.FieldsFunc(raw, func(r rune) bool {
+		return r == '\n' || r == ','
+	})
+	options := []string{}
+	for _, part := range parts {
+		if option := strings.TrimSpace(part); option != "" {
+			options = append(options, option)
+		}
+	}
+	return options
 }

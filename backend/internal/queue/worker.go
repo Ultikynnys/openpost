@@ -16,14 +16,15 @@ import (
 )
 
 const (
-	jobTypePublishPost    = "publish_post"
-	jobStatusPending      = "pending"
-	jobTypeMediaCleanup   = "media_cleanup"
-	jobTypeRefreshToken   = "refresh_token"
-	jobStatusProcessing   = "processing"
-	jobStatusFailed       = "failed"
-	jobStatusCompleted    = "completed"
-	staleProcessingJobAge = 15 * time.Minute
+	jobTypePublishPost        = "publish_post"
+	jobTypePublishPublication = "publish_publication"
+	jobStatusPending          = "pending"
+	jobTypeMediaCleanup       = "media_cleanup"
+	jobTypeRefreshToken       = "refresh_token"
+	jobStatusProcessing       = "processing"
+	jobStatusFailed           = "failed"
+	jobStatusCompleted        = "completed"
+	staleProcessingJobAge     = 15 * time.Minute
 )
 
 // BackgroundWorker polls the configured database for pending jobs.
@@ -170,6 +171,8 @@ func (w *BackgroundWorker) executeJob(ctx context.Context, job *models.Job) erro
 	switch job.Type {
 	case jobTypePublishPost:
 		return w.publisher.HandlePublishJob(ctx, job.Payload)
+	case jobTypePublishPublication:
+		return w.publisher.HandlePublishPublicationJob(ctx, job.Payload)
 	case jobTypeRefreshToken:
 		return w.handleRefreshTokenJob(ctx, job.Payload)
 	case jobTypeMediaCleanup:
@@ -214,6 +217,7 @@ func (w *BackgroundWorker) handleMediaCleanup(ctx context.Context, payload strin
 		Where("is_favorite = ?", false).
 		Where("created_at < ?", cutoff).
 		Where("id NOT IN (SELECT media_id FROM post_media)").
+		Where("id NOT IN (SELECT media_id FROM rendition_media)").
 		Scan(ctx)
 	if err != nil {
 		return err

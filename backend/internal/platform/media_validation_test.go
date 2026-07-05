@@ -28,6 +28,7 @@ func TestValidateMediaThreadsUsesMimeTypeForVideo(t *testing.T) {
 }
 
 func TestValidateMediaLinkedInWarnsForMultipleAttachments(t *testing.T) {
+	RegisterAllMediaValidators()
 	issues := ValidateMedia(providerLinkedIn, []MediaItem{
 		{ID: "first", MimeType: "image/png"},
 		{ID: "second", MimeType: "image/png"},
@@ -41,15 +42,28 @@ func TestValidateMediaLinkedInWarnsForMultipleAttachments(t *testing.T) {
 	}
 }
 
-func TestValidateMediaTikTokRequiresOneVideo(t *testing.T) {
+func TestValidateMediaLinkedInAcceptsDocument(t *testing.T) {
+	RegisterAllMediaValidators()
+	issues := ValidateMedia(providerLinkedIn, []MediaItem{{ID: "deck", MimeType: "application/pdf"}})
+	if len(issues) != 0 {
+		t.Fatalf("expected no issues for one PDF document, got %#v", issues)
+	}
+}
+
+func TestValidateMediaTikTokAcceptsVideoOrPhotoPost(t *testing.T) {
 	RegisterAllMediaValidators()
 
 	issues := ValidateMedia(providerTikTok, []MediaItem{{ID: "image", MimeType: "image/png"}})
-	if len(issues) != 1 {
-		t.Fatalf("expected one image issue, got %d", len(issues))
+	if len(issues) != 0 {
+		t.Fatalf("expected no issues for one image, got %#v", issues)
 	}
-	if issues[0].Severity != severityError {
-		t.Fatalf("expected error severity, got %q", issues[0].Severity)
+
+	issues = ValidateMedia(providerTikTok, []MediaItem{
+		{ID: "first", MimeType: "image/png"},
+		{ID: "second", MimeType: "image/jpeg"},
+	})
+	if len(issues) != 0 {
+		t.Fatalf("expected no issues for photo post, got %#v", issues)
 	}
 
 	issues = ValidateMedia(providerTikTok, []MediaItem{{ID: "video", MimeType: "video/mp4"}})
@@ -58,18 +72,15 @@ func TestValidateMediaTikTokRequiresOneVideo(t *testing.T) {
 	}
 }
 
-func TestValidateMediaFacebookRejectsMultipleAttachments(t *testing.T) {
+func TestValidateMediaFacebookAcceptsMultiPhotoAttachments(t *testing.T) {
 	RegisterAllMediaValidators()
 
 	issues := ValidateMedia(providerFacebook, []MediaItem{
 		{ID: "first", MimeType: "image/png"},
 		{ID: "second", MimeType: "image/png"},
 	})
-	if len(issues) != 1 {
-		t.Fatalf("expected one issue, got %d", len(issues))
-	}
-	if issues[0].Severity != severityError {
-		t.Fatalf("expected error severity, got %q", issues[0].Severity)
+	if len(issues) != 0 {
+		t.Fatalf("expected no issues for multiple attachments, got %#v", issues)
 	}
 
 	issues = ValidateMedia(providerFacebook, []MediaItem{{ID: "image", MimeType: "image/png"}})

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -400,17 +401,10 @@ func (b *BlueskyAdapter) pollVideoJob(ctx context.Context, serviceToken, jobID s
 }
 
 func (b *BlueskyAdapter) Publish(ctx context.Context, accessToken, accountID string, req *PublishRequest) (string, error) {
-	record := map[string]interface{}{
-		bskyRecordTypeField: "app.bsky.feed.post",
-		jsonFieldText:       req.Content,
-		"createdAt":         time.Now().UTC().Format(time.RFC3339Nano),
-	}
-
-	if err := b.attachMediaToRecord(record, req); err != nil {
+	record, err := b.buildPostRecord(accountID, req, time.Now().UTC())
+	if err != nil {
 		return "", err
 	}
-
-	attachReplyToRecord(record, req.ReplyToID)
 
 	payload := map[string]interface{}{
 		"repo":       accountID,
@@ -439,6 +433,183 @@ func (b *BlueskyAdapter) Publish(ctx context.Context, accessToken, accountID str
 		"_root": getParentRoot(req.ReplyToID),
 	})
 	return string(externalID), nil
+}
+
+func (b *BlueskyAdapter) buildPostRecord(_ string, req *PublishRequest, createdAt time.Time) (map[string]interface{}, error) {
+	record := map[string]interface{}{
+		bskyRecordTypeField: "app.bsky.feed.post",
+		jsonFieldText:       req.Content,
+		"createdAt":         createdAt.UTC().Format(time.RFC3339Nano),
+	}
+
+	if facets := buildBlueskyFacets(req.Content, req.Settings); len(facets) > 0 {
+		record["facets"] = facets
+	}
+	if labels := buildBlueskySelfLabels(req.Settings); len(labels) > 0 {
+		record["labels"] = map[string]interface{}{
+			bskyRecordTypeField: "com.atproto.label.defs#selfLabels",
+			"values":            labels,
+		}
+	}
+	if err := b.attachMediaToRecord(record, req); err != nil {
+		return nil, err
+	}
+	if err := attachBlueskySettingsEmbed(record, req.Settings); err != nil {
+		return nil, err
+	}
+
+	attachReplyToRecord(record, req.ReplyToID)
+	return record, nil
+}
+
+var (
+	blueskyURLPattern     = regexp.MustCompile(`https?://[-A-Za-z0-9@:%._+~#=]{1,256}\.[A-Za-z0-9()]{1,6}\b[-A-Za-z0-9()@:%_+.~#?&/=]*`)
+	blueskyMentionPattern = regexp.MustCompile(`@([A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?`)
+	blueskyTagPattern     = regexp.MustCompile(`#[A-Za-z0-9_]+`)
+)
+
+func buildBlueskyFacets(text string, settings map[string]interface{}) []map[string]interface{} {
+	facets := []map[string]interface{}{}
+	for _, match := range blueskyURLPattern.FindAllStringIndex(text, -1) {
+		start, end := match[0], match[1]
+		uri := text[start:end]
+		facets = append(facets, blueskyFacet(start, end, map[string]string{
+			bskyRecordTypeField: "app.bsky.richtext.facet#link",
+			"uri":               uri,
+		}))
+	}
+
+	for _, match := range blueskyTagPattern.FindAllStringIndex(text, -1) {
+		start, end := match[0], match[1]
+		facets = append(facets, blueskyFacet(start, end, map[string]string{
+			bskyRecordTypeField: "app.bsky.richtext.facet#tag",
+			"tag":               text[start+1 : end],
+		}))
+	}
+
+	mentionDIDs := blueskyMentionDIDs(settings)
+	for _, match := range blueskyMentionPattern.FindAllStringIndex(text, -1) {
+		start, end := match[0], match[1]
+		handle := strings.ToLower(strings.TrimPrefix(text[start:end], "@"))
+		did := mentionDIDs[handle]
+		if did == "" {
+			continue
+		}
+		facets = append(facets, blueskyFacet(start, end, map[string]string{
+			bskyRecordTypeField: "app.bsky.richtext.facet#mention",
+			"did":               did,
+		}))
+	}
+
+	return facets
+}
+
+func blueskyFacet(byteStart, byteEnd int, feature map[string]string) map[string]interface{} {
+	return map[string]interface{}{
+		"index": map[string]int{
+			"byteStart": byteStart,
+			"byteEnd":   byteEnd,
+		},
+		"features": []map[string]string{feature},
+	}
+}
+
+func blueskyMentionDIDs(settings map[string]interface{}) map[string]string {
+	raw := settingString(settings, "mention_dids")
+	if raw == "" {
+		return nil
+	}
+	out := map[string]string{}
+	var parsed map[string]string
+	if err := json.Unmarshal([]byte(raw), &parsed); err == nil {
+		for handle, did := range parsed {
+			out[strings.ToLower(strings.TrimPrefix(strings.TrimSpace(handle), "@"))] = strings.TrimSpace(did)
+		}
+		return out
+	}
+	for _, line := range strings.FieldsFunc(raw, func(r rune) bool { return r == ',' || r == '\n' }) {
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		handle := strings.ToLower(strings.TrimPrefix(strings.TrimSpace(parts[0]), "@"))
+		did := strings.TrimSpace(parts[1])
+		if handle != "" && did != "" {
+			out[handle] = did
+		}
+	}
+	return out
+}
+
+func buildBlueskySelfLabels(settings map[string]interface{}) []map[string]string {
+	raw := settingString(settings, "self_labels")
+	if raw == "" {
+		return nil
+	}
+	allowed := map[string]bool{
+		"!no-unauthenticated": true,
+		"porn":                true,
+		"sexual":              true,
+		"nudity":              true,
+		"graphic-media":       true,
+		"bot":                 true,
+	}
+	labels := []map[string]string{}
+	for _, label := range strings.FieldsFunc(raw, func(r rune) bool { return r == ',' || r == '\n' }) {
+		label = strings.ToLower(strings.TrimSpace(label))
+		if allowed[label] {
+			labels = append(labels, map[string]string{"val": label})
+		}
+	}
+	return labels
+}
+
+func attachBlueskySettingsEmbed(record map[string]interface{}, settings map[string]interface{}) error {
+	externalURL := firstNonEmptyString(settingString(settings, "link_url"), settingString(settings, "url"))
+	quoteURI := settingString(settings, "quote_uri")
+	quoteCID := settingString(settings, "quote_cid")
+	if externalURL != "" && quoteURI != "" {
+		return fmt.Errorf("bluesky posts cannot combine an external link card with a quote post")
+	}
+
+	mediaEmbed, hasMedia := record["embed"].(map[string]interface{})
+	if externalURL != "" {
+		if hasMedia {
+			return fmt.Errorf("bluesky external link cards cannot be combined with media")
+		}
+		record["embed"] = map[string]interface{}{
+			bskyRecordTypeField: "app.bsky.embed.external",
+			"external": map[string]interface{}{
+				"uri":         externalURL,
+				"title":       settingString(settings, "link_title"),
+				"description": settingString(settings, "link_description"),
+			},
+		}
+		return nil
+	}
+	if quoteURI == "" && quoteCID == "" {
+		return nil
+	}
+	if quoteURI == "" || quoteCID == "" {
+		return fmt.Errorf("bluesky quote posts require both quote_uri and quote_cid")
+	}
+	recordEmbed := map[string]interface{}{
+		bskyRecordTypeField: "app.bsky.embed.record",
+		"record": map[string]interface{}{
+			"uri": quoteURI,
+			"cid": quoteCID,
+		},
+	}
+	if hasMedia {
+		record["embed"] = map[string]interface{}{
+			bskyRecordTypeField: "app.bsky.embed.recordWithMedia",
+			"record":            recordEmbed,
+			"media":             mediaEmbed,
+		}
+		return nil
+	}
+	record["embed"] = recordEmbed
+	return nil
 }
 
 func (b *BlueskyAdapter) attachMediaToRecord(record map[string]interface{}, req *PublishRequest) error {

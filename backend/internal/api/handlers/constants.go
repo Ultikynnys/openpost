@@ -1,15 +1,18 @@
 package handlers
 
 const (
-	tagAuth             = "Auth"
-	tagAccounts         = "Accounts"
-	tagMedia            = "Media"
-	tagMCP              = "MCP"
-	tagPostingSchedules = "Posting Schedules"
-	tagPosts            = "Posts"
-	tagPrompts          = "Prompts"
-	tagSets             = "Sets"
-	tagWorkspaces       = "Workspaces"
+	tagAuth              = "Auth"
+	tagAccounts          = "Accounts"
+	tagCapabilities      = "Capabilities"
+	tagMedia             = "Media"
+	tagMCP               = "MCP"
+	tagPostingSchedules  = "Posting Schedules"
+	tagPosts             = "Posts"
+	tagProviderReadiness = "Provider Readiness"
+	tagPublications      = "Publications"
+	tagPrompts           = "Prompts"
+	tagSets              = "Sets"
+	tagWorkspaces        = "Workspaces"
 
 	fieldError = "error"
 
@@ -21,6 +24,7 @@ const (
 	postStatusPending           = "pending"
 	postIDKey                   = "post_id"
 	jobTypePublishPost          = "publish_post"
+	jobTypePublishPublication   = "publish_publication"
 	postPathByID                = "/posts/{id}"
 	postPathVariants            = "/posts/{id}/variants"
 	setPathByID                 = "/sets/{id}"

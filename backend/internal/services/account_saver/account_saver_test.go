@@ -208,6 +208,30 @@ func TestSaveAccount_Threads(t *testing.T) {
 	require.Equal(t, tokenResp.AccessToken, decryptedAccess)
 }
 
+func TestSaveAccountPersistsGrantedScopesFromTokenExtra(t *testing.T) {
+	t.Parallel()
+
+	db := createTestDB(t)
+	crypto := crypto.NewTokenEncryptor("test-secret-key-for-testing-only")
+	saver := NewAccountSaver(db, crypto)
+
+	ctx := context.Background()
+	workspaceID := "workspace-scopes"
+	userID := "user-scopes"
+	tokenResp := &platform.TokenResult{
+		AccessToken: "youtube-access-token",
+		Extra: map[string]string{
+			"scope": "https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube",
+		},
+	}
+
+	seedWorkspaceMember(t, db, workspaceID, userID)
+	account, err := saver.SaveAccount(ctx, userID, "youtube", workspaceID, "channel-1", "Channel", "", tokenResp)
+
+	require.NoError(t, err)
+	require.Equal(t, "https://www.googleapis.com/auth/youtube https://www.googleapis.com/auth/youtube.upload", account.GrantedScopes)
+}
+
 func TestSaveAccountGeneratesUniqueSlugs(t *testing.T) {
 	t.Parallel()
 

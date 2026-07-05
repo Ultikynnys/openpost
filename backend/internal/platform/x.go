@@ -473,22 +473,10 @@ func (x *XAdapter) Publish(ctx context.Context, accessToken, _ string, req *Publ
 		}
 	}
 
-	payload := map[string]interface{}{
-		jsonFieldText: req.Content,
+	payload, err := buildXTweetPayload(req)
+	if err != nil {
+		return "", err
 	}
-
-	if len(req.PlatformMediaIDs) > 0 {
-		payload["media"] = map[string]interface{}{
-			"media_ids": req.PlatformMediaIDs,
-		}
-	}
-
-	if req.ReplyToID != "" {
-		payload["reply"] = map[string]interface{}{
-			"in_reply_to_tweet_id": req.ReplyToID,
-		}
-	}
-
 	body, err := jsonMarshal(payload)
 	if err != nil {
 		return "", fmt.Errorf("marshaling X tweet payload: %w", err)
@@ -511,6 +499,91 @@ func (x *XAdapter) Publish(ctx context.Context, accessToken, _ string, req *Publ
 	}
 
 	return result.Data.ID, nil
+}
+
+func buildXTweetPayload(req *PublishRequest) (map[string]interface{}, error) {
+	payload := map[string]interface{}{
+		jsonFieldText: req.Content,
+	}
+
+	attachmentKinds := 0
+	if len(req.PlatformMediaIDs) > 0 {
+		attachmentKinds++
+		payload["media"] = map[string]interface{}{
+			"media_ids": req.PlatformMediaIDs,
+		}
+	}
+	if quoteTweetID := settingString(req.Settings, "quote_tweet_id"); quoteTweetID != "" {
+		attachmentKinds++
+		payload["quote_tweet_id"] = quoteTweetID
+	}
+	if poll := xPollPayload(req.Settings); poll != nil {
+		attachmentKinds++
+		payload["poll"] = poll
+	}
+	if attachmentKinds > 1 {
+		return nil, fmt.Errorf("x post can include only one of media, poll, or quote tweet")
+	}
+
+	if req.ReplyToID != "" {
+		payload["reply"] = map[string]interface{}{
+			"in_reply_to_tweet_id": req.ReplyToID,
+		}
+	}
+	if replySettings := settingString(req.Settings, "reply_settings"); replySettings != "" {
+		if !validXReplySettings(replySettings) {
+			return nil, fmt.Errorf("x reply_settings %q is not supported", replySettings)
+		}
+		payload["reply_settings"] = replySettings
+	}
+	if settingBool(req.Settings, "paid_partnership") {
+		payload["paid_partnership"] = true
+	}
+	if settingBool(req.Settings, "made_with_ai") {
+		payload["made_with_ai"] = true
+	}
+	return payload, nil
+}
+
+func xPollPayload(settings map[string]interface{}) map[string]interface{} {
+	options := xPollOptions(settings)
+	if len(options) == 0 {
+		return nil
+	}
+	duration := settingInt(settings, "poll_duration_minutes")
+	if duration <= 0 {
+		duration = 1440
+	}
+	return map[string]interface{}{
+		"options":          options,
+		"duration_minutes": duration,
+	}
+}
+
+func xPollOptions(settings map[string]interface{}) []string {
+	raw := settingString(settings, "poll_options")
+	if raw == "" {
+		return nil
+	}
+	parts := strings.FieldsFunc(raw, func(r rune) bool {
+		return r == '\n' || r == ','
+	})
+	options := []string{}
+	for _, part := range parts {
+		if option := strings.TrimSpace(part); option != "" {
+			options = append(options, option)
+		}
+	}
+	return options
+}
+
+func validXReplySettings(value string) bool {
+	switch value {
+	case "following", "mentionedUsers", "subscribers", "verified":
+		return true
+	default:
+		return false
+	}
 }
 
 func (x *XAdapter) doSignedRequest(ctx context.Context, combinedAccessToken, method, requestURL string, body io.Reader, headers map[string]string) ([]byte, error) {

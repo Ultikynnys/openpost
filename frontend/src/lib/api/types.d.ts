@@ -551,6 +551,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/capabilities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List provider publishing capabilities */
+        get: operations["list-capabilities"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/cli/auth/approve": {
         parameters: {
             query?: never;
@@ -630,6 +647,57 @@ export interface paths {
         put?: never;
         /** Start CLI device authorization */
         post: operations["start-cli-auth"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/comments/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete a provider comment */
+        delete: operations["delete-comment"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/comments/{id}/hide": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Hide a provider comment */
+        post: operations["hide-comment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/comments/{id}/reply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reply to a provider comment */
+        post: operations["reply-to-comment"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1138,6 +1206,144 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/provider-readiness": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Inspect provider readiness for a workspace */
+        get: operations["get-provider-readiness"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/publications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List publications */
+        get: operations["list-publications"];
+        put?: never;
+        /** Create a publication */
+        post: operations["create-publication"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/publications/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get a publication */
+        get: operations["get-publication"];
+        /** Update a publication */
+        put: operations["update-publication"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/publications/{id}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List publication lifecycle events */
+        get: operations["list-publication-events"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/publications/{id}/publish-now": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Publish a publication now */
+        post: operations["publish-publication-now"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/publications/{id}/renditions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Replace or upsert publication renditions */
+        put: operations["upsert-publication-renditions"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/publications/{id}/schedule": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Schedule a publication */
+        post: operations["schedule-publication"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/publications/{id}/validate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Validate publication renditions */
+        post: operations["validate-publication"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/ready": {
         parameters: {
             query?: never;
@@ -1149,6 +1355,40 @@ export interface paths {
         get: operations["readiness-check"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/renditions/{id}/comments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List comments for a published rendition */
+        get: operations["list-rendition-comments"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/renditions/{id}/reply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Queue an explicit provider reply */
+        post: operations["reply-to-rendition"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1433,6 +1673,16 @@ export interface components {
             /** @description Workspace ID this connection belongs to */
             workspace_id: string;
         };
+        ActionOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ActionOutputBody.json
+             */
+            readonly $schema?: string;
+            job_id?: string;
+            message: string;
+        };
         AddSetAccountsInputBody: {
             /**
              * Format: uri
@@ -1587,6 +1837,81 @@ export interface components {
              */
             readonly $schema?: string;
             ok: boolean;
+        };
+        CapabilitiesOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/CapabilitiesOutputBody.json
+             */
+            readonly $schema?: string;
+            /** @description Provider/profile capability matrix */
+            capabilities: components["schemas"]["Capability"][] | null;
+            /** @description Content profiles supported by OpenPost */
+            profiles: components["schemas"]["Profile"][] | null;
+        };
+        Capability: {
+            caveats?: string[] | null;
+            description_required?: boolean;
+            label: string;
+            media: components["schemas"]["MediaConstraint"];
+            metadata?: {
+                [key: string]: string;
+            };
+            native_scheduling: boolean;
+            openpost_queued: boolean;
+            profile: string;
+            provider: string;
+            requires_app_review: boolean;
+            requires_public_media: boolean;
+            settings?: components["schemas"]["SettingField"][] | null;
+            /** Format: int64 */
+            text_limit?: number;
+            title_required?: boolean;
+            validation_categories?: string[] | null;
+        };
+        CommentActionOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/CommentActionOutputBody.json
+             */
+            readonly $schema?: string;
+            id?: string;
+            message: string;
+        };
+        CommentListResponse: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/CommentListResponse.json
+             */
+            readonly $schema?: string;
+            comments: components["schemas"]["CommentResponse"][] | null;
+        };
+        CommentReplyInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/CommentReplyInputBody.json
+             */
+            readonly $schema?: string;
+            /** @description Reply body */
+            body: string;
+        };
+        CommentResponse: {
+            author_avatar_url?: string;
+            author_id?: string;
+            author_name?: string;
+            can_delete: boolean;
+            can_hide: boolean;
+            can_reply: boolean;
+            created_at?: string;
+            hidden: boolean;
+            id: string;
+            provider_comment_id: string;
+            rendition_id: string;
+            text: string;
         };
         CompleteAccountSelectionInputBody: {
             /**
@@ -1844,6 +2169,43 @@ export interface components {
             text: string;
             /** @description Workspace ID (for workspace prompt) */
             workspace_id?: string;
+        };
+        CreatePublicationInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/CreatePublicationInputBody.json
+             */
+            readonly $schema?: string;
+            /** @description Target audience */
+            audience?: string;
+            /** @description Content profile */
+            content_profile: string;
+            /** @description Publication goal */
+            goal?: string;
+            /** @description Default ordered media */
+            media?: components["schemas"]["PublicationMediaInput"][] | null;
+            /** @description Publication metadata */
+            metadata?: {
+                [key: string]: unknown;
+            };
+            /** @description Explicit platform/account renditions */
+            renditions?: components["schemas"]["RenditionInput"][] | null;
+            /**
+             * Format: date-time
+             * @description Optional schedule time
+             */
+            scheduled_at?: string;
+            /** @description Accounts to create default renditions for */
+            social_account_ids?: string[] | null;
+            /** @description Canonical source text */
+            source_text: string;
+            /** @description Source URL for link shares */
+            source_url?: string;
+            /** @description Internal publication title */
+            title: string;
+            /** @description Workspace ID */
+            workspace_id: string;
         };
         CreateSetInputBody: {
             /**
@@ -2195,6 +2557,7 @@ export interface components {
              * @example https://example.com/schemas/GetWorkspaceSettingsOutputBody.json
              */
             readonly $schema?: string;
+            avatar_url: string;
             /** Format: int64 */
             draft_gap_minutes: number;
             /** Format: int64 */
@@ -2222,6 +2585,7 @@ export interface components {
             status: string;
         };
         Item: {
+            avatar_url: string;
             created_at: string;
             id: string;
             name: string;
@@ -2319,13 +2683,41 @@ export interface components {
             /** @description Server configuration name */
             name: string;
         };
+        MediaConstraint: {
+            allowed_mimes: string[] | null;
+            aspect_ratios?: string[] | null;
+            /** Format: int64 */
+            max_count: number;
+            /** Format: int64 */
+            max_duration_seconds?: number;
+            /** Format: int64 */
+            max_size_bytes?: number;
+            /** Format: int64 */
+            min_count: number;
+            requires_https_fetchable: boolean;
+            requires_public_url: boolean;
+        };
         MediaListItem: {
             /** @description Alt text */
             alt_text: string;
+            /** @description Media analysis error */
+            analysis_error?: string;
+            /** @description Media analysis status */
+            analysis_status: string;
             /** @description Whether media can be deleted */
             can_delete: boolean;
             /** @description Creation time */
             created_at: string;
+            /**
+             * Format: int64
+             * @description Video duration in milliseconds
+             */
+            duration_ms: number;
+            /**
+             * Format: double
+             * @description Video frame rate
+             */
+            frame_rate: number;
             /**
              * Format: int64
              * @description Image height
@@ -2339,8 +2731,19 @@ export interface components {
             mime_type: string;
             /** @description Original filename */
             original_filename: string;
+            /** @description Poster thumbnail URL */
+            poster_thumbnail_url?: string;
             /** @description Processing status */
             processing_status: string;
+            /** @description Public URL verification time */
+            public_url_checked_at?: string;
+            /** @description Public URL verification error */
+            public_url_error?: string;
+            /**
+             * Format: int64
+             * @description Public URL verification HTTP status
+             */
+            public_url_status: number;
             /**
              * Format: int64
              * @description File size in bytes
@@ -2362,6 +2765,38 @@ export interface components {
             width: number;
             /** @description Workspace ID */
             workspace_id: string;
+        };
+        MediaSummary: {
+            alt_text?: string;
+            analysis_error?: string;
+            analysis_status: string;
+            aspect_ratio: string;
+            /** Format: int64 */
+            display_order?: number;
+            dominant_type: string;
+            /** Format: int64 */
+            duration_ms: number;
+            /** Format: double */
+            frame_rate: number;
+            /** Format: int64 */
+            height: number;
+            id: string;
+            mime_type: string;
+            original_filename: string;
+            poster_thumbnail_url?: string;
+            public_url_checked_at?: string;
+            public_url_error?: string;
+            public_url_ready: boolean;
+            /** Format: int64 */
+            public_url_status: number;
+            role?: string;
+            /** Format: int64 */
+            size: number;
+            /** Format: int64 */
+            thumbnail_timestamp_ms?: number;
+            url: string;
+            /** Format: int64 */
+            width: number;
         };
         MediaUploadResult: {
             /**
@@ -2633,6 +3068,11 @@ export interface components {
             /** @description Workspace ID */
             workspace_id: string;
         };
+        Profile: {
+            description: string;
+            key: string;
+            name: string;
+        };
         PromptResponse: {
             /**
              * Format: uri
@@ -2697,6 +3137,106 @@ export interface components {
             /** @description Provider launch status: available, needs_configuration, or planned */
             status?: string;
         };
+        ProviderReadinessItem: {
+            account_types?: string[] | null;
+            app_review_warnings?: string[] | null;
+            blocking_issues?: string[] | null;
+            capability_caveats?: string[] | null;
+            configured_app_state: string;
+            /** Format: int64 */
+            connected_accounts: number;
+            granted_scopes?: string[] | null;
+            next_actions?: string[] | null;
+            provider: string;
+            public_media_health: components["schemas"]["PublicMediaHealth"];
+            quota_caveats?: string[] | null;
+            required_scopes: string[] | null;
+            supported_profiles: string[] | null;
+        };
+        ProviderReadinessOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ProviderReadinessOutputBody.json
+             */
+            readonly $schema?: string;
+            providers: components["schemas"]["ProviderReadinessItem"][] | null;
+        };
+        PublicMediaHealth: {
+            /** Format: int64 */
+            checked_count: number;
+            /** Format: int64 */
+            failing_count: number;
+            last_checked_at?: string;
+            last_failure?: string;
+            /** Format: int64 */
+            last_status_code?: number;
+            status: string;
+        };
+        PublicationLifecycleEventResponse: {
+            created_at: string;
+            id: string;
+            idempotency_key?: string;
+            message: string;
+            metadata: {
+                [key: string]: unknown;
+            };
+            publication_id: string;
+            rendition_id?: string;
+            status: string;
+            type: string;
+            workspace_id: string;
+        };
+        PublicationMediaInput: {
+            /** @description Alt text override */
+            alt_text?: string;
+            /** @description Media attachment ID */
+            media_id: string;
+            /** @description Media role: attachment, cover, thumbnail */
+            role?: string;
+            /**
+             * Format: int64
+             * @description Video thumbnail timestamp
+             */
+            thumbnail_timestamp_ms?: number;
+        };
+        PublicationResponse: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/PublicationResponse.json
+             */
+            readonly $schema?: string;
+            actual_run_at?: string;
+            audience?: string;
+            content_profile: string;
+            created_at: string;
+            created_by: string;
+            goal?: string;
+            id: string;
+            media: components["schemas"]["MediaSummary"][] | null;
+            metadata: {
+                [key: string]: unknown;
+            };
+            renditions: components["schemas"]["RenditionResponse"][] | null;
+            scheduled_at?: string;
+            source_text: string;
+            source_url?: string;
+            status: string;
+            title: string;
+            updated_at: string;
+            workspace_id: string;
+        };
+        PublicationValidationOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/PublicationValidationOutputBody.json
+             */
+            readonly $schema?: string;
+            issues: components["schemas"]["ValidationIssue"][] | null;
+            valid: boolean;
+        };
         "Readiness-checkResponse": {
             /**
              * Format: uri
@@ -2733,6 +3273,67 @@ export interface components {
             readonly $schema?: string;
             /** @description Current password for re-authentication */
             current_password: string;
+        };
+        RenditionInput: {
+            /** @description Platform-specific body */
+            body?: string;
+            /** @description Platform-specific description */
+            description?: string;
+            /** @description Existing rendition ID for upsert */
+            id?: string;
+            /** @description Rendition-specific ordered media */
+            media?: components["schemas"]["PublicationMediaInput"][] | null;
+            /** @description Content profile override */
+            profile?: string;
+            /** @description Provider-specific settings */
+            settings?: {
+                [key: string]: unknown;
+            };
+            /** @description Social account ID */
+            social_account_id: string;
+            /** @description Platform-specific title */
+            title?: string;
+        };
+        RenditionResponse: {
+            body: string;
+            description: string;
+            error_message?: string;
+            external_id?: string;
+            external_url?: string;
+            id: string;
+            media: components["schemas"]["MediaSummary"][] | null;
+            platform: string;
+            profile: string;
+            publication_id: string;
+            settings: {
+                [key: string]: unknown;
+            };
+            social_account_id: string;
+            status: string;
+            title: string;
+        };
+        ReplyInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ReplyInputBody.json
+             */
+            readonly $schema?: string;
+            /** @description Reply body */
+            body: string;
+            /** @description Reply media */
+            media?: components["schemas"]["PublicationMediaInput"][] | null;
+            /** @description External comment or post ID to reply to */
+            parent_id?: string;
+            /**
+             * Format: date-time
+             * @description Optional scheduled reply time
+             */
+            run_at?: string;
+            /** @description Provider-specific reply settings */
+            settings?: {
+                [key: string]: unknown;
+            };
         };
         RevokeAPITokenOutputBody: {
             /**
@@ -2899,6 +3500,14 @@ export interface components {
             name: string;
             /** @description Workspace ID */
             workspace_id: string;
+        };
+        SettingField: {
+            help?: string;
+            key: string;
+            label: string;
+            options?: string[] | null;
+            required: boolean;
+            type: string;
         };
         SetupTOTPInputBody: {
             /**
@@ -3088,6 +3697,35 @@ export interface components {
             /** @description User display name */
             display_name?: string;
         };
+        UpdatePublicationInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/UpdatePublicationInputBody.json
+             */
+            readonly $schema?: string;
+            /** @description Target audience */
+            audience?: string;
+            /** @description Content profile */
+            content_profile?: string;
+            /** @description Publication goal */
+            goal?: string;
+            /** @description Publication metadata */
+            metadata?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Format: date-time
+             * @description Optional schedule time
+             */
+            scheduled_at?: string;
+            /** @description Canonical source text */
+            source_text?: string;
+            /** @description Source URL */
+            source_url?: string;
+            /** @description Internal publication title */
+            title?: string;
+        };
         UpdateSetInputBody: {
             /**
              * Format: uri
@@ -3107,6 +3745,7 @@ export interface components {
              * @example https://example.com/schemas/UpdateWorkspaceSettingsInputBody.json
              */
             readonly $schema?: string;
+            avatar_url?: string;
             /** Format: int64 */
             draft_gap_minutes?: number;
             /** Format: int64 */
@@ -3130,6 +3769,7 @@ export interface components {
              * @example https://example.com/schemas/UpdateWorkspaceSettingsOutputBody.json
              */
             readonly $schema?: string;
+            avatar_url: string;
             /** Format: int64 */
             draft_gap_minutes: number;
             /** Format: int64 */
@@ -3145,6 +3785,16 @@ export interface components {
             timezone: string;
             /** Format: int64 */
             week_start: number;
+        };
+        UpsertRenditionsInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/UpsertRenditionsInputBody.json
+             */
+            readonly $schema?: string;
+            /** @description Renditions to replace or upsert */
+            renditions: components["schemas"]["RenditionInput"][] | null;
         };
         UpsertVariantsInputBody: {
             /**
@@ -3215,6 +3865,15 @@ export interface components {
             last_used_at: string;
             /** @description Recorded user agent */
             user_agent: string;
+        };
+        ValidationIssue: {
+            code: string;
+            field?: string;
+            media_id?: string;
+            message: string;
+            profile?: string;
+            provider?: string;
+            severity: string;
         };
         VariantInput: {
             /** @description Custom content for this platform (empty = use parent content) */
@@ -3379,6 +4038,15 @@ export interface operations {
             };
             /** @description Bad Request */
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -3801,6 +4469,15 @@ export interface operations {
             };
             /** @description Bad Request */
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -5147,6 +5824,35 @@ export interface operations {
             };
         };
     };
+    "list-capabilities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CapabilitiesOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     "approve-cli-auth": {
         parameters: {
             query?: never;
@@ -5455,6 +6161,241 @@ export interface operations {
             };
             /** @description Internal Server Error */
             500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "delete-comment": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Opaque OpenPost comment ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommentActionOutputBody"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Not Implemented */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "hide-comment": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Opaque OpenPost comment ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommentActionOutputBody"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Not Implemented */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "reply-to-comment": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Opaque OpenPost comment ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CommentReplyInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommentActionOutputBody"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Not Implemented */
+            501: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -7640,6 +8581,441 @@ export interface operations {
             };
         };
     };
+    "get-provider-readiness": {
+        parameters: {
+            query: {
+                /** @description Workspace ID */
+                workspace_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderReadinessOutputBody"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "list-publications": {
+        parameters: {
+            query: {
+                /** @description Workspace ID */
+                workspace_id: string;
+                /** @description Optional status filter */
+                status?: string;
+                /** @description Optional content profile filter */
+                content_profile?: string;
+                /** @description Limit, default 50 */
+                limit?: number;
+                /** @description Offset */
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    "X-Has-More"?: boolean;
+                    "X-Limit"?: number;
+                    "X-Next-Offset"?: number;
+                    "X-Offset"?: number;
+                    "X-Total-Count"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicationResponse"][] | null;
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "create-publication": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreatePublicationInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicationResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "get-publication": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Publication ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicationResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "update-publication": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Publication ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdatePublicationInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicationResponse"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "list-publication-events": {
+        parameters: {
+            query?: {
+                /** @description Limit, default 100 */
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                /** @description Publication ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicationLifecycleEventResponse"][] | null;
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "publish-publication-now": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Publication ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActionOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "upsert-publication-renditions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Publication ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpsertRenditionsInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicationResponse"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "schedule-publication": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Publication ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActionOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "validate-publication": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Publication ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicationValidationOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     "readiness-check": {
         parameters: {
             query?: never;
@@ -7669,6 +9045,119 @@ export interface operations {
             };
             /** @description Service Unavailable */
             503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "list-rendition-comments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Rendition ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommentListResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Not Implemented */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "reply-to-rendition": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Rendition ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReplyInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActionOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
                 headers: {
                     [name: string]: unknown;
                 };

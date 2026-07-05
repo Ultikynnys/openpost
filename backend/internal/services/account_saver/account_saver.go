@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -103,6 +104,7 @@ func (s *AccountSaver) SaveAccountFromInput(ctx context.Context, input SaveAccou
 		AccessTokenEnc:   encAccess,
 		RefreshTokenEnc:  encRefresh,
 		TokenExpiresAt:   expiresAt,
+		GrantedScopes:    grantedScopesFromToken(input.Token),
 		IsActive:         true,
 		CreatedAt:        time.Now().UTC(),
 	}
@@ -177,6 +179,43 @@ func tokenExpiresAt(token *platform.TokenResult) time.Time {
 		return time.Time{}
 	}
 	return time.Now().UTC().Add(time.Duration(token.ExpiresIn) * time.Second)
+}
+
+func grantedScopesFromToken(token *platform.TokenResult) string {
+	if token == nil || token.Extra == nil {
+		return ""
+	}
+	raw := strings.TrimSpace(firstNonEmptyTokenExtra(token.Extra, "scope", "scopes"))
+	if raw == "" {
+		return ""
+	}
+	parts := strings.FieldsFunc(raw, func(r rune) bool {
+		return r == ',' || r == ' ' || r == '\n' || r == '\t'
+	})
+	seen := map[string]struct{}{}
+	scopes := make([]string, 0, len(parts))
+	for _, part := range parts {
+		scope := strings.TrimSpace(part)
+		if scope == "" {
+			continue
+		}
+		if _, ok := seen[scope]; ok {
+			continue
+		}
+		seen[scope] = struct{}{}
+		scopes = append(scopes, scope)
+	}
+	sort.Strings(scopes)
+	return strings.Join(scopes, " ")
+}
+
+func firstNonEmptyTokenExtra(extra map[string]string, keys ...string) string {
+	for _, key := range keys {
+		if value := strings.TrimSpace(extra[key]); value != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func (s *AccountSaver) CheckSocialAccountQuota(ctx context.Context, workspaceID string) error {

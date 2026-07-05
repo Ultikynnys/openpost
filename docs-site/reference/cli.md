@@ -47,6 +47,7 @@ openpost [flags]
 | `openpost jobs` | List background jobs |
 | `openpost media` | Upload and list media attachments |
 | `openpost post` | Create, list, view, update, and delete posts |
+| `openpost publication` | Create, list, validate, and publish publications |
 | `openpost set` | Manage workspace social sets |
 | `openpost thread` | Create multi-post threads |
 | `openpost version` | Print the openpost CLI version |
@@ -978,6 +979,230 @@ View a post
 
 ```text
 openpost post view &lt;post-id&gt;
+```
+
+**Inherited Flags**
+
+| Flag | Default | Description |
+| --- | --- | --- |
+| `--instance` | `-` | OpenPost instance URL (default: profile or $OPENPOST_INSTANCE) |
+| `--json` | `false` | emit machine-readable JSON instead of tables/prose |
+| `--no-color` | `false` | disable ANSI colors |
+| `--profile` | `-` | profile name from config (default: $OPENPOST_PROFILE or 'default') |
+| `--quiet` | `false` | suppress non-error output |
+| `--token` | `-` | API token override (default: keyring or $OPENPOST_TOKEN) |
+| `--workspace` | `-` | workspace name or ID (default: profile or $OPENPOST_WORKSPACE) |
+| `--yes` | `false` | skip interactive confirmations |
+
+### `openpost publication`
+
+Create, list, validate, and publish publications
+
+**Usage**
+
+```text
+openpost publication
+```
+
+**Inherited Flags**
+
+| Flag | Default | Description |
+| --- | --- | --- |
+| `--instance` | `-` | OpenPost instance URL (default: profile or $OPENPOST_INSTANCE) |
+| `--json` | `false` | emit machine-readable JSON instead of tables/prose |
+| `--no-color` | `false` | disable ANSI colors |
+| `--profile` | `-` | profile name from config (default: $OPENPOST_PROFILE or 'default') |
+| `--quiet` | `false` | suppress non-error output |
+| `--token` | `-` | API token override (default: keyring or $OPENPOST_TOKEN) |
+| `--workspace` | `-` | workspace name or ID (default: profile or $OPENPOST_WORKSPACE) |
+| `--yes` | `false` | skip interactive confirmations |
+
+**Subcommands**
+
+| Command | Description |
+| --- | --- |
+| `openpost publication comments` | List comments for a published rendition |
+| `openpost publication create` | Create a format-first publication |
+| `openpost publication events` | List publication lifecycle events |
+| `openpost publication list` | List publications |
+| `openpost publication publish-now` | Queue a publication for immediate publishing |
+| `openpost publication validate` | Validate a publication |
+| `openpost publication view` | View a publication |
+
+### `openpost publication comments`
+
+List comments for a published rendition
+
+**Usage**
+
+```text
+openpost publication comments &lt;rendition-id&gt;
+```
+
+**Inherited Flags**
+
+| Flag | Default | Description |
+| --- | --- | --- |
+| `--instance` | `-` | OpenPost instance URL (default: profile or $OPENPOST_INSTANCE) |
+| `--json` | `false` | emit machine-readable JSON instead of tables/prose |
+| `--no-color` | `false` | disable ANSI colors |
+| `--profile` | `-` | profile name from config (default: $OPENPOST_PROFILE or 'default') |
+| `--quiet` | `false` | suppress non-error output |
+| `--token` | `-` | API token override (default: keyring or $OPENPOST_TOKEN) |
+| `--workspace` | `-` | workspace name or ID (default: profile or $OPENPOST_WORKSPACE) |
+| `--yes` | `false` | skip interactive confirmations |
+
+### `openpost publication create`
+
+Create a format-first publication
+
+**Usage**
+
+```text
+openpost publication create [flags]
+```
+
+**Flags**
+
+| Flag | Default | Description |
+| --- | --- | --- |
+| `--accounts` | `-` | comma-separated account IDs/slugs/platforms |
+| `--content` | `-` | source text |
+| `--file` | `-` | read source text from file or '-' for stdin |
+| `--media` | `[]` | media ID/path/URL to attach |
+| `--media-alt` | `[]` | alt text for uploaded media |
+| `--profile` | `short_text` | content profile: short_text, thread, link_share, image_post, carousel, story, short_video, long_video |
+| `--schedule` | `-` | schedule time |
+| `--set` | `-` | social media set name or ID |
+| `--title` | `-` | publication title |
+| `--url` | `-` | source URL for link shares |
+
+**Inherited Flags**
+
+| Flag | Default | Description |
+| --- | --- | --- |
+| `--instance` | `-` | OpenPost instance URL (default: profile or $OPENPOST_INSTANCE) |
+| `--json` | `false` | emit machine-readable JSON instead of tables/prose |
+| `--no-color` | `false` | disable ANSI colors |
+| `--quiet` | `false` | suppress non-error output |
+| `--token` | `-` | API token override (default: keyring or $OPENPOST_TOKEN) |
+| `--workspace` | `-` | workspace name or ID (default: profile or $OPENPOST_WORKSPACE) |
+| `--yes` | `false` | skip interactive confirmations |
+
+### `openpost publication events`
+
+List publication lifecycle events
+
+**Usage**
+
+```text
+openpost publication events &lt;publication-id&gt; [flags]
+```
+
+**Flags**
+
+| Flag | Default | Description |
+| --- | --- | --- |
+| `--limit` | `0` | maximum number of events to return |
+
+**Inherited Flags**
+
+| Flag | Default | Description |
+| --- | --- | --- |
+| `--instance` | `-` | OpenPost instance URL (default: profile or $OPENPOST_INSTANCE) |
+| `--json` | `false` | emit machine-readable JSON instead of tables/prose |
+| `--no-color` | `false` | disable ANSI colors |
+| `--profile` | `-` | profile name from config (default: $OPENPOST_PROFILE or 'default') |
+| `--quiet` | `false` | suppress non-error output |
+| `--token` | `-` | API token override (default: keyring or $OPENPOST_TOKEN) |
+| `--workspace` | `-` | workspace name or ID (default: profile or $OPENPOST_WORKSPACE) |
+| `--yes` | `false` | skip interactive confirmations |
+
+### `openpost publication list`
+
+List publications
+
+**Usage**
+
+```text
+openpost publication list [flags]
+```
+
+**Flags**
+
+| Flag | Default | Description |
+| --- | --- | --- |
+| `--limit` | `0` | maximum number of publications to return |
+| `--offset` | `0` | number of publications to skip |
+| `--profile` | `-` | filter by content profile |
+| `--status` | `-` | filter by status |
+
+**Inherited Flags**
+
+| Flag | Default | Description |
+| --- | --- | --- |
+| `--instance` | `-` | OpenPost instance URL (default: profile or $OPENPOST_INSTANCE) |
+| `--json` | `false` | emit machine-readable JSON instead of tables/prose |
+| `--no-color` | `false` | disable ANSI colors |
+| `--quiet` | `false` | suppress non-error output |
+| `--token` | `-` | API token override (default: keyring or $OPENPOST_TOKEN) |
+| `--workspace` | `-` | workspace name or ID (default: profile or $OPENPOST_WORKSPACE) |
+| `--yes` | `false` | skip interactive confirmations |
+
+### `openpost publication publish-now`
+
+Queue a publication for immediate publishing
+
+**Usage**
+
+```text
+openpost publication publish-now &lt;publication-id&gt;
+```
+
+**Inherited Flags**
+
+| Flag | Default | Description |
+| --- | --- | --- |
+| `--instance` | `-` | OpenPost instance URL (default: profile or $OPENPOST_INSTANCE) |
+| `--json` | `false` | emit machine-readable JSON instead of tables/prose |
+| `--no-color` | `false` | disable ANSI colors |
+| `--profile` | `-` | profile name from config (default: $OPENPOST_PROFILE or 'default') |
+| `--quiet` | `false` | suppress non-error output |
+| `--token` | `-` | API token override (default: keyring or $OPENPOST_TOKEN) |
+| `--workspace` | `-` | workspace name or ID (default: profile or $OPENPOST_WORKSPACE) |
+| `--yes` | `false` | skip interactive confirmations |
+
+### `openpost publication validate`
+
+Validate a publication
+
+**Usage**
+
+```text
+openpost publication validate &lt;publication-id&gt;
+```
+
+**Inherited Flags**
+
+| Flag | Default | Description |
+| --- | --- | --- |
+| `--instance` | `-` | OpenPost instance URL (default: profile or $OPENPOST_INSTANCE) |
+| `--json` | `false` | emit machine-readable JSON instead of tables/prose |
+| `--no-color` | `false` | disable ANSI colors |
+| `--profile` | `-` | profile name from config (default: $OPENPOST_PROFILE or 'default') |
+| `--quiet` | `false` | suppress non-error output |
+| `--token` | `-` | API token override (default: keyring or $OPENPOST_TOKEN) |
+| `--workspace` | `-` | workspace name or ID (default: profile or $OPENPOST_WORKSPACE) |
+| `--yes` | `false` | skip interactive confirmations |
+
+### `openpost publication view`
+
+View a publication
+
+**Usage**
+
+```text
+openpost publication view &lt;publication-id&gt;
 ```
 
 **Inherited Flags**

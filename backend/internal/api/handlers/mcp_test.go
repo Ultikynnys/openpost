@@ -16,7 +16,9 @@ import (
 	"github.com/openpost/backend/internal/api/middleware"
 	"github.com/openpost/backend/internal/models"
 	"github.com/openpost/backend/internal/platform"
+	servicecrypto "github.com/openpost/backend/internal/services/crypto"
 	"github.com/openpost/backend/internal/services/entitlements"
+	"github.com/openpost/backend/internal/services/lifecycle"
 	"github.com/openpost/backend/internal/services/mediastore"
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/bun"
@@ -49,6 +51,11 @@ func newMCPTestServerWithEntitlement(t *testing.T, entitlement entitlements.Serv
 		(*models.PostingSchedule)(nil),
 		(*models.MediaAttachment)(nil),
 		(*models.MCPToolCall)(nil),
+		(*models.ProviderApp)(nil),
+		(*models.Publication)(nil),
+		(*models.Rendition)(nil),
+		(*models.RenditionMedia)(nil),
+		(*models.PublicationLifecycleEvent)(nil),
 	)
 	ctx := context.Background()
 	workspaces := []models.Workspace{
@@ -273,29 +280,41 @@ func TestMCPToolsList(t *testing.T) {
 	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &out))
 	result := out["result"].(map[string]any)
 	tools := result["tools"].([]any)
-	require.Len(t, tools, 16)
+	require.Len(t, tools, 22)
 	require.Equal(t, "list_workspaces", tools[0].(map[string]any)["name"])
 	require.Equal(t, "list_provider_catalog", tools[1].(map[string]any)["name"])
 	require.Equal(t, "list_accounts", tools[2].(map[string]any)["name"])
 	require.Equal(t, "list_media", tools[3].(map[string]any)["name"])
-	require.Equal(t, "create_draft", tools[4].(map[string]any)["name"])
-	require.Equal(t, "list_drafts", tools[5].(map[string]any)["name"])
-	require.Equal(t, "update_draft", tools[6].(map[string]any)["name"])
-	require.Equal(t, "set_post_renditions", tools[7].(map[string]any)["name"])
-	require.Equal(t, "schedule_post", tools[8].(map[string]any)["name"])
-	require.Equal(t, "schedule_draft", tools[9].(map[string]any)["name"])
-	require.Equal(t, "get_post_status", tools[10].(map[string]any)["name"])
-	require.Equal(t, "list_scheduled_posts", tools[11].(map[string]any)["name"])
-	require.Equal(t, "cancel_post", tools[12].(map[string]any)["name"])
-	require.Equal(t, "suggest_next_slot", tools[13].(map[string]any)["name"])
-	require.Equal(t, "upload_media_from_url", tools[14].(map[string]any)["name"])
-	require.Equal(t, "render_scheduler_widget", tools[15].(map[string]any)["name"])
+	require.Equal(t, "get_provider_readiness", tools[4].(map[string]any)["name"])
+	require.Equal(t, "create_publication", tools[5].(map[string]any)["name"])
+	require.Equal(t, "list_publications", tools[6].(map[string]any)["name"])
+	require.Equal(t, "validate_publication", tools[7].(map[string]any)["name"])
+	require.Equal(t, "list_publication_events", tools[8].(map[string]any)["name"])
+	require.Equal(t, "list_rendition_comments", tools[9].(map[string]any)["name"])
+	require.Equal(t, "create_draft", tools[10].(map[string]any)["name"])
+	require.Equal(t, "list_drafts", tools[11].(map[string]any)["name"])
+	require.Equal(t, "update_draft", tools[12].(map[string]any)["name"])
+	require.Equal(t, "set_post_renditions", tools[13].(map[string]any)["name"])
+	require.Equal(t, "schedule_post", tools[14].(map[string]any)["name"])
+	require.Equal(t, "schedule_draft", tools[15].(map[string]any)["name"])
+	require.Equal(t, "get_post_status", tools[16].(map[string]any)["name"])
+	require.Equal(t, "list_scheduled_posts", tools[17].(map[string]any)["name"])
+	require.Equal(t, "cancel_post", tools[18].(map[string]any)["name"])
+	require.Equal(t, "suggest_next_slot", tools[19].(map[string]any)["name"])
+	require.Equal(t, "upload_media_from_url", tools[20].(map[string]any)["name"])
+	require.Equal(t, "render_scheduler_widget", tools[21].(map[string]any)["name"])
 
 	requiredOutputKeys := map[string][]any{
 		mcpToolWorkspaces:    {"workspaces"},
 		mcpToolProviders:     {"providers"},
 		mcpToolAccounts:      {"accounts"},
 		mcpToolListMedia:     {"media"},
+		mcpToolReadiness:     {"providers"},
+		mcpToolCreatePub:     {"publication"},
+		mcpToolListPubs:      {"publications"},
+		mcpToolValidatePub:   {"valid", "issues"},
+		mcpToolPubEvents:     {"events"},
+		mcpToolComments:      {"comments"},
 		mcpToolCreateDraft:   {"post"},
 		mcpToolListDrafts:    {"posts"},
 		mcpToolUpdateDraft:   {"post"},
@@ -686,6 +705,250 @@ func TestMCPCallListProviderCatalog(t *testing.T) {
 	require.Contains(t, byPlatform["youtube"]["capabilities"].([]any), "MCP workflows")
 }
 
+func TestMCPCallListPublicationEvents(t *testing.T) {
+	t.Parallel()
+
+	srv := newMCPTestServer(t)
+	ctx := context.Background()
+	_, err := srv.db.NewInsert().Model(&models.Publication{
+		ID:              "publication-events",
+		WorkspaceID:     "ws-1",
+		CreatedByID:     "user-1",
+		Title:           "Launch",
+		ContentProfile:  models.ContentProfileShortText,
+		SourceText:      "Launch",
+		SourceContent:   "Launch",
+		Status:          models.PublicationStatusPublished,
+		MetadataJSON:    "{}",
+		ReleasePlanJSON: "{}",
+		CreatedAt:       time.Date(2026, 7, 1, 10, 0, 0, 0, time.UTC),
+		UpdatedAt:       time.Date(2026, 7, 1, 10, 0, 0, 0, time.UTC),
+	}).Exec(ctx)
+	require.NoError(t, err)
+	_, err = lifecycle.NewService(srv.db).Record(ctx, lifecycle.EventInput{
+		WorkspaceID:   "ws-1",
+		PublicationID: "publication-events",
+		Type:          lifecycle.EventPublished,
+		Status:        lifecycle.StatusSucceeded,
+		Message:       "rendition published",
+		Metadata:      map[string]any{"provider": "x"},
+	})
+	require.NoError(t, err)
+
+	resp := srv.request(t, "web-token", map[string]any{
+		"jsonrpc": "2.0",
+		"id":      "call-publication-events",
+		"method":  "tools/call",
+		"params": map[string]any{
+			"name": "list_publication_events",
+			"arguments": map[string]any{
+				"publication_id": "publication-events",
+			},
+		},
+	})
+
+	require.Equal(t, http.StatusOK, resp.Code)
+	var out map[string]any
+	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &out))
+	result := out["result"].(map[string]any)
+	structured := result["structuredContent"].(map[string]any)
+	events := structured["events"].([]any)
+	require.Len(t, events, 1)
+	event := events[0].(map[string]any)
+	require.Equal(t, "published", event["type"])
+	require.Equal(t, "succeeded", event["status"])
+	require.Equal(t, "rendition published", event["message"])
+	require.Equal(t, "x", event["metadata"].(map[string]any)["provider"])
+}
+
+func TestMCPCallProviderReadiness(t *testing.T) {
+	t.Parallel()
+
+	srv := newMCPTestServer(t)
+	ctx := context.Background()
+	_, err := srv.db.NewUpdate().
+		Model((*models.SocialAccount)(nil)).
+		Set("granted_scopes = ?", "tweet.read tweet.write offline.access").
+		Where("id = ?", "account-1").
+		Exec(ctx)
+	require.NoError(t, err)
+
+	resp := srv.request(t, "web-token", map[string]any{
+		"jsonrpc": "2.0",
+		"id":      "call-provider-readiness",
+		"method":  "tools/call",
+		"params": map[string]any{
+			"name": "get_provider_readiness",
+			"arguments": map[string]any{
+				"workspace_id": "ws-1",
+			},
+		},
+	})
+
+	require.Equal(t, http.StatusOK, resp.Code)
+	var out map[string]any
+	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &out))
+	result := out["result"].(map[string]any)
+	structured := result["structuredContent"].(map[string]any)
+	providers := structured["providers"].([]any)
+	require.Len(t, providers, 9)
+	byProvider := map[string]map[string]any{}
+	for _, provider := range providers {
+		item := provider.(map[string]any)
+		byProvider[item["provider"].(string)] = item
+	}
+	require.Equal(t, float64(1), byProvider["x"]["connected_accounts"])
+	require.Contains(t, byProvider["x"]["granted_scopes"], "tweet.write")
+}
+
+func TestMCPCallValidatePublication(t *testing.T) {
+	t.Parallel()
+
+	srv := newMCPTestServer(t)
+	ctx := context.Background()
+	_, err := srv.db.NewInsert().Model(&models.SocialAccount{
+		ID:             "youtube-account",
+		WorkspaceID:    "ws-1",
+		Platform:       "youtube",
+		AccountID:      "channel-1",
+		Slug:           "youtube-channel",
+		AccessTokenEnc: []byte("token"),
+		GrantedScopes:  "https://www.googleapis.com/auth/youtube",
+		IsActive:       true,
+	}).Exec(ctx)
+	require.NoError(t, err)
+	_, err = srv.db.NewInsert().Model(&models.Publication{
+		ID:              "publication-validate",
+		WorkspaceID:     "ws-1",
+		CreatedByID:     "user-1",
+		Title:           "Launch",
+		ContentProfile:  models.ContentProfileLongVideo,
+		SourceText:      "Launch",
+		SourceContent:   "Launch",
+		Status:          models.PublicationStatusDraft,
+		MetadataJSON:    "{}",
+		ReleasePlanJSON: "{}",
+	}).Exec(ctx)
+	require.NoError(t, err)
+	_, err = srv.db.NewInsert().Model(&models.Rendition{
+		ID:              "rendition-validate",
+		PublicationID:   "publication-validate",
+		SocialAccountID: "youtube-account",
+		Platform:        "youtube",
+		Profile:         models.ContentProfileLongVideo,
+		Body:            "Launch",
+		Title:           "Launch video",
+		SettingsJSON:    `{"privacy":"private"}`,
+		Status:          models.RenditionStatusDraft,
+	}).Exec(ctx)
+	require.NoError(t, err)
+
+	resp := srv.request(t, "web-token", map[string]any{
+		"jsonrpc": "2.0",
+		"id":      "call-validate-publication",
+		"method":  "tools/call",
+		"params": map[string]any{
+			"name": "validate_publication",
+			"arguments": map[string]any{
+				"publication_id": "publication-validate",
+			},
+		},
+	})
+
+	require.Equal(t, http.StatusOK, resp.Code)
+	var out map[string]any
+	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &out))
+	result := out["result"].(map[string]any)
+	structured := result["structuredContent"].(map[string]any)
+	require.Equal(t, false, structured["valid"])
+	issues := structured["issues"].([]any)
+	require.NotEmpty(t, issues)
+	codes := make([]string, 0, len(issues))
+	for _, issue := range issues {
+		codes = append(codes, issue.(map[string]any)["code"].(string))
+	}
+	require.Contains(t, codes, "missing_scope")
+}
+
+func TestMCPCallListRenditionComments(t *testing.T) {
+	t.Parallel()
+
+	srv := newMCPTestServer(t)
+	ctx := context.Background()
+	encryptor := servicecrypto.NewTokenEncryptor("test-comment-key")
+	token, err := encryptor.Encrypt("token")
+	require.NoError(t, err)
+	_, err = srv.db.NewUpdate().
+		Model((*models.SocialAccount)(nil)).
+		Set("access_token_encrypted = ?", token).
+		Where("id = ?", "account-1").
+		Exec(ctx)
+	require.NoError(t, err)
+	_, err = srv.db.NewInsert().Model(&models.Publication{
+		ID:              "publication-comments",
+		WorkspaceID:     "ws-1",
+		CreatedByID:     "user-1",
+		Title:           "Launch",
+		ContentProfile:  models.ContentProfileShortText,
+		SourceText:      "Launch",
+		SourceContent:   "Launch",
+		Status:          models.PublicationStatusPublished,
+		MetadataJSON:    "{}",
+		ReleasePlanJSON: "{}",
+	}).Exec(ctx)
+	require.NoError(t, err)
+	_, err = srv.db.NewInsert().Model(&models.Rendition{
+		ID:              "rendition-comments",
+		PublicationID:   "publication-comments",
+		SocialAccountID: "account-1",
+		Platform:        "x",
+		Profile:         models.ContentProfileShortText,
+		Body:            "Launch",
+		SettingsJSON:    "{}",
+		Status:          models.RenditionStatusPublished,
+		ExternalID:      "external-1",
+	}).Exec(ctx)
+	require.NoError(t, err)
+	srv.handler.SetProviderCatalog(map[string]platform.Adapter{
+		"x": fakeCommentAdapter{comments: []platform.Comment{{
+			ID:         "comment-1",
+			AuthorID:   "author-1",
+			AuthorName: "Reader",
+			Text:       "Great launch",
+			CanReply:   true,
+			CanHide:    true,
+		}}},
+	}, false)
+	srv.handler.SetTokenEncryptor(encryptor)
+
+	resp := srv.request(t, "web-token", map[string]any{
+		"jsonrpc": "2.0",
+		"id":      "call-rendition-comments",
+		"method":  "tools/call",
+		"params": map[string]any{
+			"name": "list_rendition_comments",
+			"arguments": map[string]any{
+				"rendition_id": "rendition-comments",
+			},
+		},
+	})
+
+	require.Equal(t, http.StatusOK, resp.Code)
+	var out map[string]any
+	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &out))
+	result := out["result"].(map[string]any)
+	structured := result["structuredContent"].(map[string]any)
+	comments := structured["comments"].([]any)
+	require.Len(t, comments, 1)
+	comment := comments[0].(map[string]any)
+	require.Equal(t, "rendition-comments", comment["rendition_id"])
+	require.Equal(t, "comment-1", comment["provider_comment_id"])
+	require.Equal(t, "Reader", comment["author_name"])
+	require.Equal(t, "Great launch", comment["text"])
+	require.Equal(t, true, comment["can_reply"])
+	require.NotEmpty(t, comment["id"])
+}
+
 func TestMCPCallRenderSchedulerWidget(t *testing.T) {
 	t.Parallel()
 
@@ -773,9 +1036,19 @@ func TestMCPCallListMedia(t *testing.T) {
 		Size:             2400,
 		Width:            1200,
 		Height:           630,
-		ThumbnailsJSON:   `{"sm":"thumb-sm.png"}`,
-		IsFavorite:       true,
-		CreatedAt:        time.Date(2026, 6, 30, 16, 0, 0, 0, time.UTC),
+		DurationMS:       12000,
+		FrameRate:        29.97,
+		AspectRatio:      "40:21",
+		DominantType:     "video",
+		AnalysisStatus:   "ready",
+		PublicURLReady:   true,
+		PublicURLCheckedAt: time.Date(
+			2026, 6, 30, 16, 5, 0, 0, time.UTC,
+		),
+		PublicURLStatus: 200,
+		ThumbnailsJSON:  `{"sm":"thumb-sm.png"}`,
+		IsFavorite:      true,
+		CreatedAt:       time.Date(2026, 6, 30, 16, 0, 0, 0, time.UTC),
 	})
 	insertMCPTestMedia(t, srv, models.MediaAttachment{
 		ID:               "media-other-workspace",
@@ -827,6 +1100,13 @@ func TestMCPCallListMedia(t *testing.T) {
 	require.Equal(t, "/media/media-new", first["url"])
 	require.Equal(t, "/media/media-new/thumb/sm", first["thumbnail_url"])
 	require.Equal(t, "New launch image", first["alt_text"])
+	require.Equal(t, float64(12000), first["duration_ms"])
+	require.Equal(t, float64(29.97), first["frame_rate"])
+	require.Equal(t, "40:21", first["aspect_ratio"])
+	require.Equal(t, "video", first["dominant_type"])
+	require.Equal(t, "ready", first["analysis_status"])
+	require.Equal(t, true, first["public_url_ready"])
+	require.Equal(t, float64(200), first["public_url_status"])
 	require.Equal(t, true, first["is_favorite"])
 	require.Equal(t, float64(1), first["usage_count"])
 	require.Equal(t, false, first["can_delete"])

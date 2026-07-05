@@ -16,6 +16,7 @@ import (
 
 const defaultLinkedInVersionLagMonths = 1
 const linkedInVideoAvailabilityPolls = 30
+const linkedInDocumentAvailabilityPolls = 30
 
 func linkedInAPIVersion() string {
 	if version := os.Getenv("LINKEDIN_API_VERSION"); version != "" {
@@ -168,6 +169,9 @@ func (l *LinkedInAdapter) UploadMedia(ctx context.Context, accessToken, personID
 	if isVideo {
 		return l.uploadVideo(ctx, accessToken, personID, mimeType, data)
 	}
+	if isLinkedInDocumentMime(mimeType) {
+		return l.uploadDocument(ctx, accessToken, personID, data)
+	}
 	return l.uploadImage(ctx, accessToken, personID, mimeType, data)
 }
 
@@ -206,6 +210,30 @@ func (l *LinkedInAdapter) uploadVideo(ctx context.Context, accessToken, personID
 	}
 
 	return l.completeVideoUpload(ctx, accessToken, apiVersion, respBody, data)
+}
+
+func (l *LinkedInAdapter) uploadDocument(ctx context.Context, accessToken, personID string, data []byte) (string, error) {
+	apiVersion := linkedInAPIVersion()
+
+	registerPayload := map[string]interface{}{
+		"initializeUploadRequest": map[string]interface{}{
+			"owner": "urn:li:person:" + personID,
+		},
+	}
+
+	respBody, err := DoJSON(ctx, "POST", "https://api.linkedin.com/rest/documents?action=initializeUpload", registerPayload, linkedinHeaders(accessToken, apiVersion))
+	if err != nil {
+		return "", fmt.Errorf("linkedin document register: %w", err)
+	}
+
+	documentURN, err := l.completeDocumentUpload(ctx, accessToken, respBody, data)
+	if err != nil {
+		return "", err
+	}
+	if err := l.waitForDocumentAvailable(ctx, accessToken, apiVersion, documentURN); err != nil {
+		return "", err
+	}
+	return documentURN, nil
 }
 
 func (l *LinkedInAdapter) completeImageUpload(ctx context.Context, accessToken string, registerResp []byte, data []byte) (string, error) {
@@ -325,6 +353,33 @@ func (l *LinkedInAdapter) completeVideoUpload(ctx context.Context, accessToken, 
 	return registerResult.Value.Video, nil
 }
 
+func (l *LinkedInAdapter) completeDocumentUpload(ctx context.Context, accessToken string, registerResp []byte, data []byte) (string, error) {
+	var registerResult struct {
+		Value struct {
+			Document  string `json:"document"`
+			UploadURL string `json:"uploadUrl"`
+		} `json:"value"`
+	}
+	if err := json.Unmarshal(registerResp, &registerResult); err != nil {
+		return "", fmt.Errorf("decoding linkedin document register: %w", err)
+	}
+	if registerResult.Value.Document == "" {
+		return "", fmt.Errorf("no document URN in linkedin response")
+	}
+	if registerResult.Value.UploadURL == "" {
+		return "", fmt.Errorf("no document upload URL in linkedin response: %s", string(registerResp))
+	}
+
+	if _, err := DoRequest(ctx, "PUT", registerResult.Value.UploadURL, bytes.NewReader(data), map[string]string{
+		headerAuthorization: bearerPrefix + accessToken,
+		headerContentType:   contentTypeOctet,
+	}); err != nil {
+		return "", fmt.Errorf("linkedin document PUT upload: %w", err)
+	}
+
+	return registerResult.Value.Document, nil
+}
+
 func (l *LinkedInAdapter) Publish(ctx context.Context, accessToken, personID string, req *PublishRequest) (string, error) {
 	apiVersion := linkedInAPIVersion()
 	authorURN := "urn:li:person:" + personID
@@ -353,6 +408,9 @@ func (l *LinkedInAdapter) createPost(ctx context.Context, accessToken, authorURN
 	if len(req.PlatformMediaIDs) > 0 {
 		mediaItem := map[string]interface{}{
 			"id": req.PlatformMediaIDs[0],
+		}
+		if title := linkedInMediaTitle(req); title != "" {
+			mediaItem["title"] = title
 		}
 		if !isLinkedInVideoURN(req.PlatformMediaIDs[0]) && len(req.MediaAltTexts) > 0 && req.MediaAltTexts[0] != "" {
 			mediaItem["altText"] = req.MediaAltTexts[0]
@@ -402,6 +460,139 @@ func (l *LinkedInAdapter) postComment(ctx context.Context, accessToken, actorURN
 	return result.ID, nil
 }
 
+func (l *LinkedInAdapter) ListComments(ctx context.Context, accessToken, _ string, externalID string) ([]Comment, error) {
+	apiVersion := linkedInAPIVersion()
+	endpoint := "https://api.linkedin.com/rest/socialActions/" + url.QueryEscape(externalID) + "/comments"
+	respBody, err := DoRequest(ctx, http.MethodGet, endpoint, nil, linkedinHeaders(accessToken, apiVersion))
+	if err != nil {
+		return nil, fmt.Errorf("linkedin comments: %w", err)
+	}
+
+	var result struct {
+		Elements []struct {
+			ID         string `json:"id"`
+			CommentURN string `json:"commentUrn"`
+			Actor      string `json:"actor"`
+			Created    struct {
+				Time int64 `json:"time"`
+			} `json:"created"`
+			Message struct {
+				Text string `json:"text"`
+			} `json:"message"`
+		} `json:"elements"`
+	}
+	if err := json.Unmarshal(respBody, &result); err != nil {
+		return nil, fmt.Errorf("decoding linkedin comments: %w", err)
+	}
+
+	comments := make([]Comment, 0, len(result.Elements))
+	for _, item := range result.Elements {
+		id := firstNonEmptyString(item.CommentURN, item.ID)
+		comments = append(comments, Comment{
+			ID:        id,
+			AuthorID:  item.Actor,
+			Text:      item.Message.Text,
+			CreatedAt: linkedInTimestamp(item.Created.Time),
+			CanReply:  true,
+			CanDelete: true,
+		})
+	}
+	return comments, nil
+}
+
+func (l *LinkedInAdapter) ReplyToComment(ctx context.Context, accessToken, accountID, commentID, message string) (string, error) {
+	actorURN := linkedInAuthorURN(accountID)
+	objectURN, err := linkedInCommentObjectURN(commentID)
+	if err != nil {
+		return "", err
+	}
+	apiVersion := linkedInAPIVersion()
+	endpoint := "https://api.linkedin.com/rest/socialActions/" + url.QueryEscape(commentID) + "/comments"
+	payload := map[string]interface{}{
+		"actor":         actorURN,
+		"object":        objectURN,
+		"parentComment": commentID,
+		"message": map[string]interface{}{
+			jsonFieldText: strings.TrimSpace(message),
+		},
+	}
+	respBody, err := DoJSON(ctx, http.MethodPost, endpoint, payload, linkedinHeaders(accessToken, apiVersion))
+	if err != nil {
+		return "", fmt.Errorf("posting linkedin comment reply: %w", err)
+	}
+	var result struct {
+		ID         string `json:"id"`
+		CommentURN string `json:"commentUrn"`
+	}
+	if err := json.Unmarshal(respBody, &result); err != nil {
+		return "", fmt.Errorf("decoding linkedin comment reply: %w", err)
+	}
+	return firstNonEmptyString(result.ID, result.CommentURN), nil
+}
+
+func (l *LinkedInAdapter) HideComment(context.Context, string, string, string) error {
+	return fmt.Errorf("linkedin hide comment: %w", ErrUnsupportedCommentAction)
+}
+
+func (l *LinkedInAdapter) DeleteComment(ctx context.Context, accessToken, accountID, commentID string) error {
+	objectURN, shortCommentID, err := linkedInCommentTarget(commentID)
+	if err != nil {
+		return err
+	}
+	endpoint := "https://api.linkedin.com/rest/socialActions/" + url.QueryEscape(objectURN) + "/comments/" + url.PathEscape(shortCommentID)
+	if actorURN := linkedInAuthorURN(accountID); actorURN != "" {
+		endpoint += "?actor=" + url.QueryEscape(actorURN)
+	}
+	if _, err := DoRequest(ctx, http.MethodDelete, endpoint, nil, linkedinHeaders(accessToken, linkedInAPIVersion())); err != nil {
+		return fmt.Errorf("deleting linkedin comment: %w", err)
+	}
+	return nil
+}
+
+func linkedInAuthorURN(accountID string) string {
+	accountID = strings.TrimSpace(accountID)
+	if accountID == "" {
+		return ""
+	}
+	if strings.HasPrefix(accountID, "urn:li:") {
+		return accountID
+	}
+	return "urn:li:person:" + accountID
+}
+
+func linkedInTimestamp(milliseconds int64) string {
+	if milliseconds <= 0 {
+		return ""
+	}
+	return time.UnixMilli(milliseconds).UTC().Format(time.RFC3339)
+}
+
+func linkedInCommentObjectURN(commentURN string) (string, error) {
+	objectURN, _, err := linkedInCommentTarget(commentURN)
+	return objectURN, err
+}
+
+func linkedInCommentTarget(commentURN string) (string, string, error) {
+	commentURN = strings.TrimSpace(commentURN)
+	if commentURN == "" {
+		return "", "", fmt.Errorf("linkedin comment reference is required")
+	}
+	if !strings.HasPrefix(commentURN, "urn:li:comment:(") || !strings.HasSuffix(commentURN, ")") {
+		return "", "", fmt.Errorf("linkedin comment reference must be a comment URN")
+	}
+	inner := strings.TrimSuffix(strings.TrimPrefix(commentURN, "urn:li:comment:("), ")")
+	index := strings.LastIndex(inner, ",")
+	if index < 0 {
+		return "", "", fmt.Errorf("linkedin comment reference is malformed")
+	}
+	objectURN := strings.TrimSpace(inner[:index])
+	commentID := strings.TrimSpace(inner[index+1:])
+	if objectURN == "" || commentID == "" {
+		return "", "", fmt.Errorf("linkedin comment reference is malformed")
+	}
+	return objectURN, commentID, nil
+}
+
 func (l *LinkedInAdapter) waitForVideoAvailable(ctx context.Context, accessToken, apiVersion, videoURN string) error {
 	encodedVideoURN := url.QueryEscape(videoURN)
 	statusURL := "https://api.linkedin.com/rest/videos/" + encodedVideoURN
@@ -448,8 +639,71 @@ func (l *LinkedInAdapter) waitForVideoAvailable(ctx context.Context, accessToken
 	return fmt.Errorf("linkedin video processing timed out")
 }
 
+func (l *LinkedInAdapter) waitForDocumentAvailable(ctx context.Context, accessToken, apiVersion, documentURN string) error {
+	encodedDocumentURN := url.QueryEscape(documentURN)
+	statusURL := "https://api.linkedin.com/rest/documents/" + encodedDocumentURN
+
+	for i := 0; i < linkedInDocumentAvailabilityPolls; i++ {
+		respBody, err := DoRequest(ctx, "GET", statusURL, nil, linkedinHeaders(accessToken, apiVersion))
+		if err != nil {
+			return fmt.Errorf("linkedin document status: %w", err)
+		}
+
+		var result struct {
+			Status string `json:"status"`
+		}
+		if err := json.Unmarshal(respBody, &result); err != nil {
+			return fmt.Errorf("decoding linkedin document status: %w", err)
+		}
+
+		switch result.Status {
+		case "AVAILABLE":
+			return nil
+		case "PROCESSING", "WAITING_UPLOAD":
+		case "PROCESSING_FAILED", platformStatusFailed:
+			return fmt.Errorf("linkedin document processing failed")
+		default:
+			if result.Status == "" {
+				return fmt.Errorf("linkedin document status response missing status")
+			}
+			return fmt.Errorf("linkedin document is not available: %s", result.Status)
+		}
+
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(2 * time.Second):
+		}
+	}
+
+	return fmt.Errorf("linkedin document processing timed out")
+}
+
 func isLinkedInVideoURN(urn string) bool {
 	return strings.HasPrefix(urn, "urn:li:video:")
+}
+
+func isLinkedInDocumentMime(mimeType string) bool {
+	switch strings.ToLower(strings.TrimSpace(mimeType)) {
+	case "application/pdf",
+		"application/msword",
+		"application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+		"application/vnd.ms-powerpoint",
+		"application/vnd.openxmlformats-officedocument.presentationml.presentation":
+		return true
+	default:
+		return false
+	}
+}
+
+func linkedInMediaTitle(req *PublishRequest) string {
+	if strings.TrimSpace(req.Title) != "" {
+		return strings.TrimSpace(req.Title)
+	}
+	if len(req.Media) > 0 && strings.TrimSpace(req.Media[0].OriginalFilename) != "" {
+		return strings.TrimSpace(req.Media[0].OriginalFilename)
+	}
+	return settingString(req.Settings, "title")
 }
 
 func linkedinHeaders(accessToken, apiVersion string) map[string]string {

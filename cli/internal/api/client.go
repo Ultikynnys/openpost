@@ -140,6 +140,29 @@ func (c *Client) DeleteJSON(ctx context.Context, path string, out any) error {
 	return c.do(ctx, http.MethodDelete, path, nil, out, "")
 }
 
+func listEndpointPath(path, workspaceID, status, extraKey, extraValue string, limit, offset int) string {
+	v := url.Values{}
+	if workspaceID != "" {
+		v.Set("workspace_id", workspaceID)
+	}
+	if status != "" {
+		v.Set("status", status)
+	}
+	if extraKey != "" && extraValue != "" {
+		v.Set(extraKey, extraValue)
+	}
+	if limit > 0 {
+		v.Set("limit", strconv.Itoa(limit))
+	}
+	if offset > 0 {
+		v.Set("offset", strconv.Itoa(offset))
+	}
+	if encoded := v.Encode(); encoded != "" {
+		return path + "?" + encoded
+	}
+	return path
+}
+
 // PostForm posts a multipart/form-data request with the given fields
 // and a file under fieldName. out is decoded from the JSON body.
 func (c *Client) PostForm(ctx context.Context, path, fileField, filePath string, fields map[string]string, out any) error {
@@ -610,26 +633,7 @@ type ListPostsInput struct {
 }
 
 func (c *Client) ListPosts(ctx context.Context, in ListPostsInput) ([]Post, error) {
-	v := url.Values{}
-	if in.WorkspaceID != "" {
-		v.Set("workspace_id", in.WorkspaceID)
-	}
-	if in.Status != "" {
-		v.Set("status", in.Status)
-	}
-	if in.Date != "" {
-		v.Set("date", in.Date)
-	}
-	if in.Limit > 0 {
-		v.Set("limit", strconv.Itoa(in.Limit))
-	}
-	if in.Offset > 0 {
-		v.Set("offset", strconv.Itoa(in.Offset))
-	}
-	path := "/api/v1/posts"
-	if encoded := v.Encode(); encoded != "" {
-		path += "?" + encoded
-	}
+	path := listEndpointPath("/api/v1/posts", in.WorkspaceID, in.Status, "date", in.Date, in.Limit, in.Offset)
 	var out []Post
 	if err := c.GetJSON(ctx, path, &out); err != nil {
 		return nil, err
@@ -697,6 +701,197 @@ func (c *Client) CreateThread(ctx context.Context, in CreateThreadInput) (*Creat
 		return nil, err
 	}
 	return &out, nil
+}
+
+// ----- Publications -----
+
+type PublicationMediaInput struct {
+	MediaID string `json:"media_id"`
+	Role    string `json:"role,omitempty"`
+	AltText string `json:"alt_text,omitempty"`
+}
+
+type RenditionInput struct {
+	SocialAccountID string                  `json:"social_account_id"`
+	Profile         string                  `json:"profile,omitempty"`
+	Body            string                  `json:"body,omitempty"`
+	Title           string                  `json:"title,omitempty"`
+	Description     string                  `json:"description,omitempty"`
+	Settings        map[string]interface{}  `json:"settings,omitempty"`
+	Media           []PublicationMediaInput `json:"media,omitempty"`
+}
+
+type CreatePublicationInput struct {
+	WorkspaceID      string                  `json:"workspace_id"`
+	Title            string                  `json:"title"`
+	ContentProfile   string                  `json:"content_profile"`
+	SourceText       string                  `json:"source_text"`
+	SourceURL        string                  `json:"source_url,omitempty"`
+	Goal             string                  `json:"goal,omitempty"`
+	Audience         string                  `json:"audience,omitempty"`
+	ScheduledAt      *time.Time              `json:"scheduled_at,omitempty"`
+	Metadata         map[string]interface{}  `json:"metadata,omitempty"`
+	SocialAccountIDs []string                `json:"social_account_ids,omitempty"`
+	Media            []PublicationMediaInput `json:"media,omitempty"`
+	Renditions       []RenditionInput        `json:"renditions,omitempty"`
+}
+
+type Publication struct {
+	ID             string      `json:"id"`
+	WorkspaceID    string      `json:"workspace_id"`
+	CreatedBy      string      `json:"created_by"`
+	Title          string      `json:"title"`
+	ContentProfile string      `json:"content_profile"`
+	SourceText     string      `json:"source_text"`
+	SourceURL      string      `json:"source_url,omitempty"`
+	Status         string      `json:"status"`
+	ScheduledAt    string      `json:"scheduled_at,omitempty"`
+	ActualRunAt    string      `json:"actual_run_at,omitempty"`
+	CreatedAt      string      `json:"created_at"`
+	Renditions     []Rendition `json:"renditions"`
+}
+
+type Rendition struct {
+	ID              string                 `json:"id"`
+	SocialAccountID string                 `json:"social_account_id"`
+	Platform        string                 `json:"platform"`
+	Profile         string                 `json:"profile"`
+	Body            string                 `json:"body"`
+	Title           string                 `json:"title"`
+	Description     string                 `json:"description"`
+	Settings        map[string]interface{} `json:"settings"`
+	Status          string                 `json:"status"`
+	ExternalID      string                 `json:"external_id,omitempty"`
+	ExternalURL     string                 `json:"external_url,omitempty"`
+	ErrorMessage    string                 `json:"error_message,omitempty"`
+}
+
+type ListPublicationsInput struct {
+	WorkspaceID    string
+	Status         string
+	ContentProfile string
+	Limit          int
+	Offset         int
+}
+
+type ValidationIssue struct {
+	Severity string `json:"severity"`
+	Code     string `json:"code"`
+	Message  string `json:"message"`
+	Provider string `json:"provider,omitempty"`
+	Profile  string `json:"profile,omitempty"`
+	Field    string `json:"field,omitempty"`
+}
+
+type PublicationValidation struct {
+	Valid  bool              `json:"valid"`
+	Issues []ValidationIssue `json:"issues"`
+}
+
+type PublicationActionOutput struct {
+	Message string `json:"message"`
+	JobID   string `json:"job_id,omitempty"`
+}
+
+type PublicationLifecycleEvent struct {
+	ID             string         `json:"id"`
+	WorkspaceID    string         `json:"workspace_id"`
+	PublicationID  string         `json:"publication_id"`
+	RenditionID    string         `json:"rendition_id,omitempty"`
+	Type           string         `json:"type"`
+	Status         string         `json:"status"`
+	Message        string         `json:"message"`
+	Metadata       map[string]any `json:"metadata"`
+	IdempotencyKey string         `json:"idempotency_key,omitempty"`
+	CreatedAt      string         `json:"created_at"`
+}
+
+type Comment struct {
+	ID                string `json:"id"`
+	RenditionID       string `json:"rendition_id"`
+	ProviderCommentID string `json:"provider_comment_id"`
+	AuthorID          string `json:"author_id,omitempty"`
+	AuthorName        string `json:"author_name,omitempty"`
+	AuthorAvatarURL   string `json:"author_avatar_url,omitempty"`
+	Text              string `json:"text"`
+	CreatedAt         string `json:"created_at,omitempty"`
+	Hidden            bool   `json:"hidden"`
+	CanReply          bool   `json:"can_reply"`
+	CanHide           bool   `json:"can_hide"`
+	CanDelete         bool   `json:"can_delete"`
+}
+
+func (c *Client) CreatePublication(ctx context.Context, in CreatePublicationInput) (*Publication, error) {
+	var out Publication
+	if err := c.PostJSON(ctx, "/api/v1/publications", in, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+func (c *Client) ListPublications(ctx context.Context, in ListPublicationsInput) ([]Publication, error) {
+	path := listEndpointPath(
+		"/api/v1/publications",
+		in.WorkspaceID,
+		in.Status,
+		"content_profile",
+		in.ContentProfile,
+		in.Limit,
+		in.Offset,
+	)
+	var out []Publication
+	if err := c.GetJSON(ctx, path, &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *Client) GetPublication(ctx context.Context, id string) (*Publication, error) {
+	var out Publication
+	if err := c.GetJSON(ctx, "/api/v1/publications/"+url.PathEscape(id), &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+func (c *Client) ValidatePublication(ctx context.Context, id string) (*PublicationValidation, error) {
+	var out PublicationValidation
+	if err := c.PostJSON(ctx, "/api/v1/publications/"+url.PathEscape(id)+"/validate", map[string]any{}, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+func (c *Client) PublishPublicationNow(ctx context.Context, id string) (*PublicationActionOutput, error) {
+	var out PublicationActionOutput
+	if err := c.PostJSON(ctx, "/api/v1/publications/"+url.PathEscape(id)+"/publish-now", map[string]any{}, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+func (c *Client) ListPublicationEvents(ctx context.Context, id string, limit int) ([]PublicationLifecycleEvent, error) {
+	path := "/api/v1/publications/" + url.PathEscape(id) + "/events"
+	if limit > 0 {
+		v := url.Values{}
+		v.Set("limit", strconv.Itoa(limit))
+		path += "?" + v.Encode()
+	}
+	var out []PublicationLifecycleEvent
+	if err := c.GetJSON(ctx, path, &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *Client) ListRenditionComments(ctx context.Context, renditionID string) ([]Comment, error) {
+	var out struct {
+		Comments []Comment `json:"comments"`
+	}
+	if err := c.GetJSON(ctx, "/api/v1/renditions/"+url.PathEscape(renditionID)+"/comments", &out); err != nil {
+		return nil, err
+	}
+	return out.Comments, nil
 }
 
 // ----- Auth: CLI device flow + API token management -----

@@ -14,6 +14,7 @@
 	import { getStatusColor } from '$lib/utils';
 	import PlatformIcon from '$lib/components/platform-icon.svelte';
 	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import { m } from '$lib/paraglide/messages';
 	import { getLocaleTag } from '$lib/i18n';
 
@@ -83,7 +84,12 @@
 
 	function handleNewPost() {
 		ui.closeDayPosts();
-		goto('/');
+		goto(resolve('/'));
+	}
+
+	function handleEdit(postId: string) {
+		ui.closeDayPosts();
+		goto(resolve(`/posts/${postId}`));
 	}
 
 	async function handleDelete(postId: string) {
@@ -97,24 +103,6 @@
 			ui.triggerRefresh();
 		} catch (e) {
 			console.error('Failed to delete post:', e);
-		}
-	}
-
-	async function handleReschedule(postId: string) {
-		const newDate = prompt(m.day_posts_reschedule_date());
-		if (!newDate) return;
-		const newTime = prompt(m.day_posts_reschedule_time());
-		if (!newTime) return;
-		try {
-			const scheduledAt = new Date(`${newDate}T${newTime}:00`).toISOString();
-			await (client as any).PATCH('/posts/{id}', {
-				params: { path: { id: postId } },
-				body: { scheduled_at: scheduledAt }
-			});
-			loadPosts(dateStr);
-			ui.triggerRefresh();
-		} catch (e) {
-			console.error('Failed to reschedule post:', e);
 		}
 	}
 </script>
@@ -136,7 +124,7 @@
 			<div class="mt-4 space-y-4">
 				{#if loading}
 					<div class="space-y-4 py-4">
-						{#each [1, 2, 3] as _}
+						{#each [1, 2, 3] as placeholder (placeholder)}
 							<div class="flex items-start gap-3">
 								<Skeleton class="h-8 w-8 shrink-0 rounded-full" />
 								<div class="flex flex-1 flex-col gap-2">
@@ -164,28 +152,32 @@
 								<CardContent class="p-4">
 									<div class="flex items-start justify-between gap-3">
 										<div class="min-w-0 flex-1">
-											<p class="line-clamp-2 text-sm">{post.content}</p>
+											<p class="text-sm leading-6 break-words whitespace-pre-wrap">
+												{post.content}
+											</p>
 										</div>
 										<div class="flex shrink-0 items-center gap-1">
 											<button
 												type="button"
-												class="rounded p-1 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:bg-muted hover:text-foreground"
+												class="rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
 												onclick={(e) => {
 													e.stopPropagation();
-													handleReschedule(post.id);
+													handleEdit(post.id);
 												}}
-												title={m.day_posts_reschedule()}
+												title={m.day_posts_edit_in_composer()}
+												aria-label={m.day_posts_edit_in_composer()}
 											>
 												<PencilIcon class="h-3.5 w-3.5" />
 											</button>
 											<button
 												type="button"
-												class="rounded p-1 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:bg-muted hover:text-destructive"
+												class="rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-destructive sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
 												onclick={(e) => {
 													e.stopPropagation();
 													handleDelete(post.id);
 												}}
 												title={m.common_delete()}
+												aria-label={m.common_delete()}
 											>
 												<TrashIcon class="h-3.5 w-3.5" />
 											</button>

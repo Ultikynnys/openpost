@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"path/filepath"
 	"strings"
@@ -14,6 +15,7 @@ import (
 	"github.com/openpost/backend/internal/models"
 	"github.com/openpost/backend/internal/platform"
 	"github.com/openpost/backend/internal/services/entitlements"
+	"github.com/openpost/backend/internal/services/lifecycle"
 	"github.com/openpost/backend/internal/services/mediasigner"
 	"github.com/openpost/backend/internal/services/mediastore"
 	"github.com/openpost/backend/internal/services/tokenmanager"
@@ -154,6 +156,243 @@ func (s *Service) HandlePublishJob(ctx context.Context, jobPayload string) error
 	}
 
 	return s.publishSinglePost(ctx, post)
+}
+
+func (s *Service) HandlePublishPublicationJob(ctx context.Context, jobPayload string) error {
+	var payload struct {
+		PublicationID string                   `json:"publication_id"`
+		RenditionID   string                   `json:"rendition_id"`
+		Action        string                   `json:"action"`
+		Body          string                   `json:"body"`
+		ParentID      string                   `json:"parent_id"`
+		Settings      map[string]interface{}   `json:"settings"`
+		Media         []map[string]interface{} `json:"media"`
+	}
+	if err := json.Unmarshal([]byte(jobPayload), &payload); err != nil {
+		return err
+	}
+	if payload.Action == "reply" {
+		return s.publishRenditionReply(ctx, payload.RenditionID, payload.Body, payload.ParentID, payload.Settings)
+	}
+	if payload.PublicationID == "" {
+		return fmt.Errorf("publication_id is required")
+	}
+
+	log.Printf("[Publisher] Processing publication %s", payload.PublicationID)
+	publication := new(models.Publication)
+	if err := s.db.NewSelect().Model(publication).Where("id = ?", payload.PublicationID).Scan(ctx); err != nil {
+		return err
+	}
+	if _, err := s.db.NewUpdate().Model(publication).
+		Set("status = ?", models.PublicationStatusPublishing).
+		Set("actual_run_at = ?", time.Now().UTC()).
+		Set("updated_at = ?", time.Now().UTC()).
+		Where("id = ?", publication.ID).
+		Exec(ctx); err != nil {
+		log.Printf("[Publisher] Failed to mark publication %s as publishing: %v", publication.ID, err)
+	}
+
+	var renditions []models.Rendition
+	query := s.db.NewSelect().Model(&renditions).
+		Where("publication_id = ?", publication.ID).
+		Where("status IN (?)", bun.List([]string{
+			models.RenditionStatusDraft,
+			models.RenditionStatusReady,
+			models.RenditionStatusScheduled,
+			models.RenditionStatusFailed,
+		})).
+		Order("created_at ASC")
+	if payload.RenditionID != "" {
+		query = query.Where("id = ?", payload.RenditionID)
+	}
+	if err := query.Scan(ctx); err != nil {
+		return err
+	}
+
+	var firstErr error
+	for i := range renditions {
+		rendition := renditions[i]
+		wasRetry := rendition.Status == models.RenditionStatusFailed
+		if wasRetry {
+			s.recordPublicationLifecycleEvent(ctx, publication.WorkspaceID, publication.ID, rendition.ID, lifecycle.EventRetried, lifecycle.StatusStarted, "retrying failed rendition", map[string]any{
+				"platform": rendition.Platform,
+			})
+		}
+		if _, err := s.db.NewUpdate().Model(&rendition).
+			Set("status = ?", models.RenditionStatusPublishing).
+			Set("error_message = ''").
+			Set("updated_at = ?", time.Now().UTC()).
+			Where("id = ?", rendition.ID).
+			Exec(ctx); err != nil {
+			log.Printf("[Publisher] Failed to mark rendition %s as publishing: %v", rendition.ID, err)
+		}
+		if err := s.publishRendition(ctx, publication, &rendition); err != nil {
+			if firstErr == nil {
+				firstErr = err
+			}
+			log.Printf("[Publisher] Rendition %s failed: %v", rendition.ID, err)
+			if _, dbErr := s.db.NewUpdate().Model(&rendition).
+				Set("status = ?", models.RenditionStatusFailed).
+				Set("error_message = ?", err.Error()).
+				Set("updated_at = ?", time.Now().UTC()).
+				Where("id = ?", rendition.ID).
+				Exec(ctx); dbErr != nil {
+				log.Printf("[Publisher] Failed to mark rendition %s failed: %v", rendition.ID, dbErr)
+			}
+			s.recordPublicationLifecycleEvent(ctx, publication.WorkspaceID, publication.ID, rendition.ID, lifecycle.EventFailed, lifecycle.StatusFailed, "rendition publish failed", map[string]any{
+				"platform": rendition.Platform,
+				"error":    err.Error(),
+				"retry":    wasRetry,
+			})
+			continue
+		}
+	}
+
+	s.finalizePublication(ctx, publication)
+	return firstErr
+}
+
+//nolint:gocyclo
+func (s *Service) publishRendition(ctx context.Context, publication *models.Publication, rendition *models.Rendition) error {
+	account := new(models.SocialAccount)
+	if err := s.db.NewSelect().Model(account).Where("id = ?", rendition.SocialAccountID).Scan(ctx); err != nil {
+		return fmt.Errorf("account not found: %v", err)
+	}
+	provider, providerKey, err := s.providerForAccount(account)
+	if err != nil {
+		return err
+	}
+	token, err := s.tm.GetValidAccessToken(ctx, account.ID)
+	if err != nil {
+		return fmt.Errorf("auth error: %v", err)
+	}
+	mediaAttachments, mediaAltTexts, err := s.loadRenditionMedia(ctx, rendition.ID)
+	if err != nil {
+		return err
+	}
+
+	settings := map[string]interface{}{}
+	_ = json.Unmarshal([]byte(rendition.SettingsJSON), &settings)
+	platformMediaIDs := make([]string, 0, len(mediaAttachments))
+	mediaItems := make([]platform.MediaItem, 0, len(mediaAttachments))
+	for _, media := range mediaAttachments {
+		s.recordPublicationLifecycleEvent(ctx, publication.WorkspaceID, publication.ID, rendition.ID, lifecycle.EventUploadStarted, lifecycle.StatusStarted, "media upload started", map[string]any{
+			"platform": rendition.Platform,
+			"media_id": media.ID,
+		})
+		mediaID, err := s.platformMediaIDForRendition(ctx, rendition, account, provider, token, media)
+		if err != nil {
+			return fmt.Errorf("media upload failed for %s: %w", media.ID, err)
+		}
+		platformMediaIDs = append(platformMediaIDs, mediaID)
+		mediaItems = append(mediaItems, platform.MediaItem{
+			ID:               media.ID,
+			MimeType:         media.MimeType,
+			Size:             media.Size,
+			OriginalFilename: media.OriginalFilename,
+		})
+	}
+
+	req := &platform.PublishRequest{
+		Content:          rendition.Body,
+		Profile:          rendition.Profile,
+		Title:            firstNonEmptyPublisherString(rendition.Title, publication.Title),
+		Description:      rendition.Description,
+		SettingsJSON:     rendition.SettingsJSON,
+		Settings:         settings,
+		PlatformMediaIDs: platformMediaIDs,
+		MediaAltTexts:    mediaAltTexts,
+		Media:            mediaItems,
+	}
+	if err := s.checkMonthlyQuota(ctx, publication.WorkspaceID, entitlements.LimitProviderWriteCallsMonthly); err != nil {
+		return err
+	}
+	s.recordPublicationLifecycleEvent(ctx, publication.WorkspaceID, publication.ID, rendition.ID, lifecycle.EventProviderProcessing, lifecycle.StatusStarted, "provider publish started", map[string]any{
+		"platform":     rendition.Platform,
+		"provider_key": providerKey,
+	})
+	s.recordProviderWriteCall(ctx, publication.WorkspaceID)
+	externalID, err := provider.Publish(ctx, token, account.AccountID, req)
+	if err != nil && isExpiredTokenError(err) {
+		refreshedToken, refreshErr := s.tm.ForceRefreshAccessToken(ctx, account.ID)
+		if refreshErr != nil {
+			return fmt.Errorf("%s token refresh failed after expiry: %w", providerKey, refreshErr)
+		}
+		s.recordPublicationLifecycleEvent(ctx, publication.WorkspaceID, publication.ID, rendition.ID, lifecycle.EventUploadResumed, lifecycle.StatusStarted, "provider publish retried after token refresh", map[string]any{
+			"platform":     rendition.Platform,
+			"provider_key": providerKey,
+		})
+		if quotaErr := s.checkMonthlyQuota(ctx, publication.WorkspaceID, entitlements.LimitProviderWriteCallsMonthly); quotaErr != nil {
+			return quotaErr
+		}
+		s.recordProviderWriteCall(ctx, publication.WorkspaceID)
+		externalID, err = provider.Publish(ctx, refreshedToken, account.AccountID, req)
+	}
+	if err != nil {
+		return err
+	}
+	externalURL := ""
+	if strings.HasPrefix(externalID, "http://") || strings.HasPrefix(externalID, "https://") {
+		externalURL = externalID
+	}
+	if _, err := s.db.NewUpdate().Model(rendition).
+		Set("status = ?", models.RenditionStatusPublished).
+		Set("external_id = ?", externalID).
+		Set("external_url = ?", externalURL).
+		Set("error_message = ''").
+		Set("updated_at = ?", time.Now().UTC()).
+		Where("id = ?", rendition.ID).
+		Exec(ctx); err != nil {
+		return fmt.Errorf("updating rendition status: %w", err)
+	}
+	s.recordPublishedPost(ctx, publication.WorkspaceID)
+	s.recordPublicationLifecycleEvent(ctx, publication.WorkspaceID, publication.ID, rendition.ID, lifecycle.EventPublished, lifecycle.StatusSucceeded, "rendition published", map[string]any{
+		"platform":     rendition.Platform,
+		"external_id":  externalID,
+		"external_url": externalURL,
+	})
+	return nil
+}
+
+func (s *Service) publishRenditionReply(ctx context.Context, renditionID, body, parentID string, settings map[string]interface{}) error {
+	rendition := new(models.Rendition)
+	if err := s.db.NewSelect().Model(rendition).Where("id = ?", renditionID).Scan(ctx); err != nil {
+		return fmt.Errorf("rendition not found: %w", err)
+	}
+	publication := new(models.Publication)
+	if err := s.db.NewSelect().Model(publication).Where("id = ?", rendition.PublicationID).Scan(ctx); err != nil {
+		return fmt.Errorf("publication not found: %w", err)
+	}
+	account := new(models.SocialAccount)
+	if err := s.db.NewSelect().Model(account).Where("id = ?", rendition.SocialAccountID).Scan(ctx); err != nil {
+		return fmt.Errorf("account not found: %w", err)
+	}
+	provider, _, err := s.providerForAccount(account)
+	if err != nil {
+		return err
+	}
+	token, err := s.tm.GetValidAccessToken(ctx, account.ID)
+	if err != nil {
+		return fmt.Errorf("auth error: %w", err)
+	}
+	req := &platform.PublishRequest{
+		Content:      body,
+		Profile:      rendition.Profile,
+		Title:        rendition.Title,
+		Description:  rendition.Description,
+		Settings:     settings,
+		SettingsJSON: mustPublisherJSON(settings),
+		ReplyToID:    firstNonEmptyPublisherString(parentID, rendition.ExternalID),
+	}
+	if req.ReplyToID == "" {
+		return fmt.Errorf("reply requires a parent external id")
+	}
+	if err := s.checkMonthlyQuota(ctx, publication.WorkspaceID, entitlements.LimitProviderWriteCallsMonthly); err != nil {
+		return err
+	}
+	s.recordProviderWriteCall(ctx, publication.WorkspaceID)
+	_, err = provider.Publish(ctx, token, account.AccountID, req)
+	return err
 }
 
 func (s *Service) publishSinglePost(ctx context.Context, post *models.Post) error {
@@ -538,6 +777,24 @@ func (s *Service) recordUsage(ctx context.Context, workspaceID string, metric en
 	}
 }
 
+func (s *Service) recordPublicationLifecycleEvent(ctx context.Context, workspaceID, publicationID, renditionID, eventType, status, message string, metadata map[string]any) {
+	if s == nil || s.db == nil {
+		return
+	}
+	_, err := lifecycle.NewService(s.db).Record(ctx, lifecycle.EventInput{
+		WorkspaceID:   workspaceID,
+		PublicationID: publicationID,
+		RenditionID:   renditionID,
+		Type:          eventType,
+		Status:        status,
+		Message:       message,
+		Metadata:      metadata,
+	})
+	if err != nil {
+		log.Printf("[Publisher] Failed to record lifecycle event %s for publication %s rendition %s: %v", eventType, publicationID, renditionID, err)
+	}
+}
+
 func isExpiredTokenError(err error) bool {
 	if err == nil {
 		return false
@@ -548,12 +805,44 @@ func isExpiredTokenError(err error) bool {
 		(strings.Contains(msg, "expired") && strings.Contains(msg, "token"))
 }
 
+//nolint:dupl
 func (s *Service) platformMediaIDForDestination(ctx context.Context, post *models.Post, dest *models.PostDestination, account *models.SocialAccount, provider platform.Adapter, token string, media models.MediaAttachment, content string) (string, error) {
 	if usesPublicMediaURLProvider(account.Platform) {
 		return s.uploadMediaToPlatform(ctx, account, provider, token, media, content)
 	}
 
-	platformMediaID, err := s.loadReadyProviderMediaState(ctx, post.ID, dest.SocialAccountID, media.ID)
+	return s.cachedPlatformMediaID(ctx, media.ID,
+		func() (string, error) {
+			return s.loadReadyProviderMediaState(ctx, post.ID, dest.SocialAccountID, media.ID)
+		},
+		func() (string, error) {
+			return s.uploadMediaToPlatform(ctx, account, provider, token, media, content)
+		},
+		func(platformMediaID, status, errorMessage string) error {
+			return s.saveProviderMediaState(ctx, post.ID, dest.SocialAccountID, media.ID, account.Platform, platformMediaID, status, errorMessage)
+		})
+}
+
+//nolint:dupl
+func (s *Service) platformMediaIDForRendition(ctx context.Context, rendition *models.Rendition, account *models.SocialAccount, provider platform.Adapter, token string, media models.MediaAttachment) (string, error) {
+	if usesPublicMediaURLProvider(account.Platform) {
+		return s.uploadRenditionMediaToPlatform(ctx, account, provider, token, rendition, media)
+	}
+
+	return s.cachedPlatformMediaID(ctx, media.ID,
+		func() (string, error) {
+			return s.loadReadyProviderMediaStateForRendition(ctx, rendition.ID, rendition.SocialAccountID, media.ID)
+		},
+		func() (string, error) {
+			return s.uploadRenditionMediaToPlatform(ctx, account, provider, token, rendition, media)
+		},
+		func(platformMediaID, status, errorMessage string) error {
+			return s.saveProviderMediaStateForRendition(ctx, rendition.ID, rendition.SocialAccountID, media.ID, account.Platform, platformMediaID, status, errorMessage)
+		})
+}
+
+func (s *Service) cachedPlatformMediaID(_ context.Context, mediaID string, load func() (string, error), upload func() (string, error), save func(string, string, string) error) (string, error) {
+	platformMediaID, err := load()
 	if err != nil {
 		return "", err
 	}
@@ -561,26 +850,61 @@ func (s *Service) platformMediaIDForDestination(ctx context.Context, post *model
 		return platformMediaID, nil
 	}
 
-	platformMediaID, err = s.uploadMediaToPlatform(ctx, account, provider, token, media, content)
+	platformMediaID, err = upload()
 	if err != nil {
-		if saveErr := s.saveProviderMediaState(ctx, post.ID, dest.SocialAccountID, media.ID, account.Platform, "", providerMediaStatusFailed, err.Error()); saveErr != nil {
-			log.Printf("[Publisher] Failed to record provider media upload failure for media %s: %v", media.ID, saveErr)
+		if saveErr := save("", providerMediaStatusFailed, err.Error()); saveErr != nil {
+			log.Printf("[Publisher] Failed to record provider media upload failure for media %s: %v", mediaID, saveErr)
 		}
 		return "", err
 	}
 
-	if saveErr := s.saveProviderMediaState(ctx, post.ID, dest.SocialAccountID, media.ID, account.Platform, platformMediaID, providerMediaStatusReady, ""); saveErr != nil {
-		log.Printf("[Publisher] Failed to record provider media state for media %s: %v", media.ID, saveErr)
+	if saveErr := save(platformMediaID, providerMediaStatusReady, ""); saveErr != nil {
+		log.Printf("[Publisher] Failed to record provider media state for media %s: %v", mediaID, saveErr)
 	}
 	return platformMediaID, nil
 }
 
+func (s *Service) loadReadyProviderMediaStateForRendition(ctx context.Context, renditionID, socialAccountID, mediaID string) (string, error) {
+	return s.loadReadyProviderMediaStateByKey(ctx, "rendition_id", renditionID, socialAccountID, mediaID)
+}
+
+func (s *Service) saveProviderMediaStateForRendition(ctx context.Context, renditionID, socialAccountID, mediaID, platformName, platformMediaID, status, errorMessage string) error {
+	now := time.Now().UTC()
+	state := &models.ProviderMediaState{
+		PostID:          renditionID,
+		RenditionID:     renditionID,
+		SocialAccountID: socialAccountID,
+		MediaID:         mediaID,
+		Platform:        platformName,
+		PlatformMediaID: platformMediaID,
+		Status:          status,
+		ErrorMessage:    errorMessage,
+		CreatedAt:       now,
+		UpdatedAt:       now,
+	}
+	_, err := s.db.NewInsert().
+		Model(state).
+		On("CONFLICT (post_id, social_account_id, media_id) DO UPDATE").
+		Set("rendition_id = EXCLUDED.rendition_id").
+		Set("platform = EXCLUDED.platform").
+		Set("platform_media_id = EXCLUDED.platform_media_id").
+		Set("status = EXCLUDED.status").
+		Set("error_message = EXCLUDED.error_message").
+		Set("updated_at = EXCLUDED.updated_at").
+		Exec(ctx)
+	return err
+}
+
 func (s *Service) loadReadyProviderMediaState(ctx context.Context, postID, socialAccountID, mediaID string) (string, error) {
+	return s.loadReadyProviderMediaStateByKey(ctx, "post_id", postID, socialAccountID, mediaID)
+}
+
+func (s *Service) loadReadyProviderMediaStateByKey(ctx context.Context, keyColumn, keyValue, socialAccountID, mediaID string) (string, error) {
 	var state models.ProviderMediaState
 	if err := s.db.NewSelect().
 		Model(&state).
 		Column("platform_media_id").
-		Where("post_id = ?", postID).
+		Where(keyColumn+" = ?", keyValue).
 		Where("social_account_id = ?", socialAccountID).
 		Where("media_id = ?", mediaID).
 		Where("status = ?", providerMediaStatusReady).
@@ -636,6 +960,7 @@ func (s *Service) uploadMediaToPlatform(ctx context.Context, account *models.Soc
 		return uploader.UploadMediaWithMetadata(ctx, token, account.AccountID, platform.UploadMediaRequest{
 			MimeType:    media.MimeType,
 			Filename:    firstNonEmptyPublisherString(media.OriginalFilename, filepath.Base(media.FilePath)),
+			Size:        media.Size,
 			Title:       firstContentLine(content),
 			Description: strings.TrimSpace(content),
 			Reader:      data,
@@ -645,6 +970,170 @@ func (s *Service) uploadMediaToPlatform(ctx context.Context, account *models.Soc
 	return provider.UploadMedia(ctx, token, account.AccountID, media.MimeType, data)
 }
 
+func (s *Service) uploadRenditionMediaToPlatform(ctx context.Context, account *models.SocialAccount, provider platform.Adapter, token string, rendition *models.Rendition, media models.MediaAttachment) (string, error) {
+	settings := map[string]interface{}{}
+	_ = json.Unmarshal([]byte(rendition.SettingsJSON), &settings)
+
+	if usesPublicMediaURLProvider(account.Platform) && !usesTikTokFileUpload(account.Platform, settings) {
+		return s.getPublicMediaURL(media), nil
+	}
+	if s.storage == nil {
+		return "", fmt.Errorf("media storage is not configured")
+	}
+	data, err := s.storage.Open(filepath.Base(media.FilePath))
+	if err != nil {
+		return "", fmt.Errorf("opening media file %s: %w", media.FilePath, err)
+	}
+	defer data.Close()
+
+	if uploader, ok := provider.(platform.MetadataMediaUploader); ok {
+		thumbnail, thumbnailReader, err := s.openThumbnailFromSettings(ctx, settings)
+		if err != nil {
+			return "", err
+		}
+		if thumbnailReader != nil {
+			defer thumbnailReader.Close()
+		}
+		req := platform.UploadMediaRequest{
+			MimeType:    media.MimeType,
+			Filename:    firstNonEmptyPublisherString(media.OriginalFilename, filepath.Base(media.FilePath)),
+			Size:        media.Size,
+			Title:       firstNonEmptyPublisherString(rendition.Title, firstContentLine(rendition.Body)),
+			Description: strings.TrimSpace(firstNonEmptyPublisherString(rendition.Description, rendition.Body)),
+			Settings:    settings,
+			Reader:      data,
+		}
+		if thumbnail != nil {
+			req.ThumbnailMimeType = thumbnail.MimeType
+			req.ThumbnailFilename = firstNonEmptyPublisherString(thumbnail.OriginalFilename, filepath.Base(thumbnail.FilePath))
+			req.ThumbnailSize = thumbnail.Size
+			req.ThumbnailReader = thumbnailReader
+		}
+		return uploader.UploadMediaWithMetadata(ctx, token, account.AccountID, req)
+	}
+
+	return provider.UploadMedia(ctx, token, account.AccountID, media.MimeType, data)
+}
+
+func (s *Service) openThumbnailFromSettings(ctx context.Context, settings map[string]interface{}) (*models.MediaAttachment, io.ReadCloser, error) {
+	thumbnailID := settingStringPublisher(settings, "thumbnail_media_id")
+	if thumbnailID == "" {
+		return nil, nil, nil
+	}
+	if s.db == nil {
+		return nil, nil, fmt.Errorf("thumbnail media lookup requires a database")
+	}
+	if s.storage == nil {
+		return nil, nil, fmt.Errorf("media storage is not configured")
+	}
+	var thumbnail models.MediaAttachment
+	if err := s.db.NewSelect().Model(&thumbnail).Where("id = ?", thumbnailID).Scan(ctx); err != nil {
+		return nil, nil, fmt.Errorf("loading thumbnail media %s: %w", thumbnailID, err)
+	}
+	if !strings.HasPrefix(strings.ToLower(thumbnail.MimeType), "image/") {
+		return nil, nil, fmt.Errorf("thumbnail media %s must be an image", thumbnailID)
+	}
+	reader, err := s.storage.Open(filepath.Base(thumbnail.FilePath))
+	if err != nil {
+		return nil, nil, fmt.Errorf("opening thumbnail media file %s: %w", thumbnail.FilePath, err)
+	}
+	return &thumbnail, reader, nil
+}
+
+func settingStringPublisher(settings map[string]interface{}, key string) string {
+	if settings == nil {
+		return ""
+	}
+	switch value := settings[key].(type) {
+	case string:
+		return strings.TrimSpace(value)
+	case fmt.Stringer:
+		return strings.TrimSpace(value.String())
+	default:
+		return ""
+	}
+}
+
+func (s *Service) loadRenditionMedia(ctx context.Context, renditionID string) ([]models.MediaAttachment, []string, error) {
+	var rows []struct {
+		AltText string `bun:"alt_text"`
+		models.MediaAttachment
+	}
+	if err := s.db.NewSelect().
+		TableExpr("rendition_media AS rm").
+		ColumnExpr("rm.alt_text").
+		ColumnExpr("ma.*").
+		Join("JOIN media_attachments AS ma ON ma.id = rm.media_id").
+		Where("rm.rendition_id = ?", renditionID).
+		Order("rm.display_order ASC").
+		Scan(ctx, &rows); err != nil {
+		return nil, nil, fmt.Errorf("fetching rendition media: %w", err)
+	}
+	media := make([]models.MediaAttachment, 0, len(rows))
+	altTexts := make([]string, 0, len(rows))
+	for _, row := range rows {
+		item := row.MediaAttachment
+		media = append(media, item)
+		altTexts = append(altTexts, firstNonEmptyPublisherString(row.AltText, item.AltText))
+	}
+	return media, altTexts, nil
+}
+
+func (s *Service) providerForAccount(account *models.SocialAccount) (platform.Adapter, string, error) {
+	providerKey := account.Platform
+	if account.Platform == "mastodon" {
+		providerKey = "mastodon:" + account.InstanceURL
+	}
+	provider, ok := s.providers[providerKey]
+	if !ok {
+		return nil, providerKey, fmt.Errorf("unsupported platform: %s (instance: %s)", account.Platform, account.InstanceURL)
+	}
+	return provider, providerKey, nil
+}
+
+func (s *Service) finalizePublication(ctx context.Context, publication *models.Publication) {
+	var renditions []models.Rendition
+	if err := s.db.NewSelect().Model(&renditions).Where("publication_id = ?", publication.ID).Scan(ctx); err != nil {
+		log.Printf("[Publisher] Failed to load renditions for publication %s: %v", publication.ID, err)
+		return
+	}
+	hasFailed := false
+	allPublished := len(renditions) > 0
+	for _, rendition := range renditions {
+		if rendition.Status == models.RenditionStatusFailed {
+			hasFailed = true
+		}
+		if rendition.Status != models.RenditionStatusPublished {
+			allPublished = false
+		}
+	}
+	status := models.PublicationStatusScheduled
+	switch {
+	case allPublished:
+		status = models.PublicationStatusPublished
+	case hasFailed:
+		status = models.PublicationStatusFailed
+	}
+	if _, err := s.db.NewUpdate().Model(publication).
+		Set("status = ?", status).
+		Set("updated_at = ?", time.Now().UTC()).
+		Where("id = ?", publication.ID).
+		Exec(ctx); err != nil {
+		log.Printf("[Publisher] Failed to finalize publication %s: %v", publication.ID, err)
+	}
+}
+
+func mustPublisherJSON(value interface{}) string {
+	if value == nil {
+		return "{}"
+	}
+	data, err := json.Marshal(value)
+	if err != nil {
+		return "{}"
+	}
+	return string(data)
+}
+
 func usesPublicMediaURLProvider(platformName string) bool {
 	switch platformName {
 	case "threads", "tiktok", "facebook", "instagram":
@@ -652,6 +1141,14 @@ func usesPublicMediaURLProvider(platformName string) bool {
 	default:
 		return false
 	}
+}
+
+func usesTikTokFileUpload(platformName string, settings map[string]interface{}) bool {
+	if platformName != "tiktok" {
+		return false
+	}
+	mode := strings.ToUpper(strings.TrimSpace(settingStringPublisher(settings, "content_posting_method")))
+	return mode == "UPLOAD" || mode == "MEDIA_UPLOAD"
 }
 
 func firstContentLine(content string) string {

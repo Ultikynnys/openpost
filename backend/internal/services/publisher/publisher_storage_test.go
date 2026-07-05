@@ -7,14 +7,16 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/openpost/backend/internal/database"
 	"github.com/openpost/backend/internal/models"
 	"github.com/openpost/backend/internal/platform"
 	"github.com/stretchr/testify/require"
 )
 
 type fakePublisherStorage struct {
-	opened string
+	opened []string
 	body   string
+	bodies map[string]string
 }
 
 func (f *fakePublisherStorage) Driver() string { return "s3" }
@@ -26,8 +28,12 @@ func (f *fakePublisherStorage) GetURL(string) string {
 	return ""
 }
 func (f *fakePublisherStorage) Open(id string) (io.ReadCloser, error) {
-	f.opened = id
-	return io.NopCloser(strings.NewReader(f.body)), nil
+	f.opened = append(f.opened, id)
+	body := f.body
+	if f.bodies != nil {
+		body = f.bodies[id]
+	}
+	return io.NopCloser(strings.NewReader(body)), nil
 }
 
 type fakePublisherAdapter struct {
@@ -77,7 +83,8 @@ func (f *fakePublisherAdapter) Publish(_ context.Context, _, _ string, req *plat
 
 type fakeMetadataPublisherAdapter struct {
 	fakePublisherAdapter
-	uploadReq platform.UploadMediaRequest
+	uploadReq             platform.UploadMediaRequest
+	uploadedThumbnailBody string
 }
 
 func (f *fakeMetadataPublisherAdapter) UploadMediaWithMetadata(_ context.Context, _, _ string, req platform.UploadMediaRequest) (string, error) {
@@ -87,7 +94,15 @@ func (f *fakeMetadataPublisherAdapter) UploadMediaWithMetadata(_ context.Context
 		return "", err
 	}
 	f.uploadedBody = string(body)
+	if req.ThumbnailReader != nil {
+		thumbnailBody, err := io.ReadAll(req.ThumbnailReader)
+		if err != nil {
+			return "", err
+		}
+		f.uploadedThumbnailBody = string(thumbnailBody)
+	}
 	req.Reader = nil
+	req.ThumbnailReader = nil
 	f.uploadReq = req
 	return "metadata-media-id", nil
 }
@@ -111,7 +126,7 @@ func TestUploadMediaToPlatformReadsFromBlobStorage(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Equal(t, "platform-media-id", got)
-	require.Equal(t, "example.png", storage.opened)
+	require.Equal(t, []string{"example.png"}, storage.opened)
 	require.Equal(t, "stored-media", adapter.uploadedBody)
 }
 
@@ -135,6 +150,33 @@ func TestUploadMediaToPlatformUsesPublicURLForTikTok(t *testing.T) {
 	require.Equal(t, "https://media.openpost.test/media/media-1.mp4", got)
 	require.Empty(t, storage.opened)
 	require.Empty(t, adapter.uploadedBody)
+}
+
+func TestUploadRenditionMediaToPlatformUsesTikTokFileUploadForUploadMode(t *testing.T) {
+	storage := &fakePublisherStorage{body: "stored-video"}
+	adapter := &fakeMetadataPublisherAdapter{}
+	service := NewService(nil, nil)
+	service.SetStorage(storage)
+	service.SetPublicMediaURL("https://media.openpost.test/media")
+
+	got, err := service.uploadRenditionMediaToPlatform(
+		context.Background(),
+		&models.SocialAccount{Platform: "tiktok", AccountID: "creator-1"},
+		adapter,
+		"token",
+		&models.Rendition{
+			Title:        "Upload title",
+			Body:         "Upload body",
+			SettingsJSON: `{"content_posting_method":"UPLOAD"}`,
+		},
+		models.MediaAttachment{ID: "media-1", FilePath: "media/example.mp4", MimeType: "video/mp4", Size: 12, OriginalFilename: "example.mp4"},
+	)
+
+	require.NoError(t, err)
+	require.Equal(t, "metadata-media-id", got)
+	require.Equal(t, []string{"example.mp4"}, storage.opened)
+	require.Equal(t, "stored-video", adapter.uploadedBody)
+	require.Equal(t, "UPLOAD", adapter.uploadReq.Settings["content_posting_method"])
 }
 
 func TestUploadMediaToPlatformUsesPublicURLForFacebook(t *testing.T) {
@@ -198,10 +240,58 @@ func TestUploadMediaToPlatformUsesMetadataUploader(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Equal(t, "metadata-media-id", got)
-	require.Equal(t, "example.mp4", storage.opened)
+	require.Equal(t, []string{"example.mp4"}, storage.opened)
 	require.Equal(t, "stored-video", adapter.uploadedBody)
 	require.Equal(t, "video/mp4", adapter.uploadReq.MimeType)
 	require.Equal(t, "example.mp4", adapter.uploadReq.Filename)
 	require.Equal(t, "Launch title", adapter.uploadReq.Title)
 	require.Equal(t, "Launch title\nLonger description", adapter.uploadReq.Description)
+}
+
+func TestUploadRenditionMediaToPlatformAddsThumbnailMedia(t *testing.T) {
+	db, err := database.InitDBWithDriver("sqlite", "file:"+strings.ReplaceAll(t.Name(), "/", "_")+"?mode=memory&cache=private")
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, db.Close()) })
+	require.NoError(t, database.CreateSchema(db))
+
+	_, err = db.NewInsert().Model(&models.MediaAttachment{
+		ID:               "thumb-1",
+		WorkspaceID:      "ws-1",
+		FilePath:         "media/cover.jpg",
+		MimeType:         "image/jpeg",
+		Size:             11,
+		OriginalFilename: "cover.jpg",
+	}).Exec(context.Background())
+	require.NoError(t, err)
+
+	storage := &fakePublisherStorage{bodies: map[string]string{
+		"example.mp4": "stored-video",
+		"cover.jpg":   "cover-bytes",
+	}}
+	adapter := &fakeMetadataPublisherAdapter{}
+	service := NewService(db, nil)
+	service.SetStorage(storage)
+
+	got, err := service.uploadRenditionMediaToPlatform(
+		context.Background(),
+		&models.SocialAccount{Platform: "youtube", AccountID: "channel-1"},
+		adapter,
+		"token",
+		&models.Rendition{
+			Title:        "Launch title",
+			Body:         "Launch body",
+			SettingsJSON: `{"thumbnail_media_id":"thumb-1"}`,
+		},
+		models.MediaAttachment{ID: "media-1", FilePath: "media/example.mp4", MimeType: "video/mp4", Size: 12, OriginalFilename: "example.mp4"},
+	)
+
+	require.NoError(t, err)
+	require.Equal(t, "metadata-media-id", got)
+	require.Equal(t, []string{"example.mp4", "cover.jpg"}, storage.opened)
+	require.Equal(t, "stored-video", adapter.uploadedBody)
+	require.Equal(t, "cover-bytes", adapter.uploadedThumbnailBody)
+	require.Equal(t, "thumb-1", adapter.uploadReq.Settings["thumbnail_media_id"])
+	require.Equal(t, "image/jpeg", adapter.uploadReq.ThumbnailMimeType)
+	require.Equal(t, "cover.jpg", adapter.uploadReq.ThumbnailFilename)
+	require.Equal(t, int64(11), adapter.uploadReq.ThumbnailSize)
 }

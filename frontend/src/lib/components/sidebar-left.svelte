@@ -20,6 +20,7 @@
 	import SettingsIcon from 'lucide-svelte/icons/settings';
 	import TrashIcon from 'lucide-svelte/icons/trash-2';
 	import ScrollTextIcon from 'lucide-svelte/icons/scroll-text';
+	import CalendarDaysIcon from 'lucide-svelte/icons/calendar-days';
 	import { auth } from '$lib/stores/auth';
 	import { goto } from '$app/navigation';
 	import { toggleMode } from 'mode-watcher';
@@ -337,6 +338,22 @@
 					weekStartsOn={workspaceCtx.settings.week_start as 0 | 1 | 2 | 3 | 4 | 5 | 6}
 					class="mx-auto bg-transparent p-2 select-none [--cell-size:--spacing(8)] [&_[role=gridcell]_[role=button][data-today]]:bg-sidebar-primary [&_[role=gridcell]_[role=button][data-today]]:text-sidebar-primary-foreground [&_tr]:justify-center"
 				/>
+			</Sidebar.GroupContent>
+		</Sidebar.Group>
+
+		<Sidebar.Group class="px-2 pb-2">
+			<Sidebar.GroupContent>
+				<Sidebar.Menu>
+					<Sidebar.MenuItem>
+						<Sidebar.MenuButton
+							onclick={() => goto(resolve('/calendar'))}
+							class={`text-sidebar-foreground/80 ${workspaceMenuItemClass('/calendar')}`}
+						>
+							<CalendarDaysIcon class="size-3.5" />
+							<span>{m.sidebar_full_calendar()}</span>
+						</Sidebar.MenuButton>
+					</Sidebar.MenuItem>
+				</Sidebar.Menu>
 			</Sidebar.GroupContent>
 		</Sidebar.Group>
 

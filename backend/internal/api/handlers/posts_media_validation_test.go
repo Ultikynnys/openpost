@@ -117,7 +117,7 @@ func TestCreateScheduledPostRejectsProviderMediaErrors(t *testing.T) {
 	})
 
 	require.Equal(t, http.StatusBadRequest, resp.Code)
-	require.Contains(t, resp.Body.String(), "Instagram publishing currently requires exactly one image or video attachment")
+	require.Contains(t, resp.Body.String(), "Instagram publishing requires 1-10 image or video attachments")
 }
 
 func TestScheduleDraftRejectsProviderMediaErrors(t *testing.T) {
@@ -158,9 +158,9 @@ func TestUpdateScheduledPostRejectsNewDestinationMediaErrors(t *testing.T) {
 	require.NoError(t, json.Unmarshal(createResp.Body.Bytes(), &created))
 
 	resp := srv.request(t, http.MethodPatch, "/api/v1/posts/"+created.ID, map[string]any{
-		"social_account_ids": []string{"facebook-1"},
+		"social_account_ids": []string{"youtube-1"},
 	})
 
 	require.Equal(t, http.StatusBadRequest, resp.Code)
-	require.Contains(t, resp.Body.String(), "Facebook publishing currently supports at most one media attachment")
+	require.Contains(t, resp.Body.String(), "YouTube publishing currently requires exactly one video attachment")
 }

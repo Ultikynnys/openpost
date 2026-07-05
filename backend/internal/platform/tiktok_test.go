@@ -152,6 +152,130 @@ func TestTikTokPublishDirectVideoFromPublicURL(t *testing.T) {
 	}
 }
 
+func TestTikTokPublishUploadInboxVideoFromPublicURLUsesInboxEndpoint(t *testing.T) {
+	originalClient := httpClient
+	defer func() { httpClient = originalClient }()
+
+	var initPayload map[string]any
+	httpClient = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		if req.Header.Get(headerAuthorization) != bearerPrefix+"access" {
+			t.Fatalf("unexpected auth header %q", req.Header.Get(headerAuthorization))
+		}
+		switch req.URL.String() {
+		case tiktokVideoInboxInitURL:
+			body, err := io.ReadAll(req.Body)
+			if err != nil {
+				t.Fatalf("reading inbox init body: %v", err)
+			}
+			if err := json.Unmarshal(body, &initPayload); err != nil {
+				t.Fatalf("decoding inbox init payload: %v", err)
+			}
+			return jsonResponse(req, `{"data":{"publish_id":"publish-inbox-1"},"error":{"code":"ok"}}`), nil
+		case tiktokPublishStatusURL:
+			return jsonResponse(req, `{"data":{"status":"SEND_TO_USER_INBOX"},"error":{"code":"ok"}}`), nil
+		default:
+			t.Fatalf("unexpected request %s %s", req.Method, req.URL.String())
+			return nil, nil
+		}
+	})}
+
+	adapter := NewTikTokAdapter("client-key", "client-secret", "https://app.example/callback")
+	externalID, err := adapter.Publish(context.Background(), "access", "open-1", &PublishRequest{
+		Content:          "Launch video",
+		Settings:         map[string]interface{}{"content_posting_method": "UPLOAD"},
+		PlatformMediaIDs: []string{"https://media.example/video.mp4"},
+		Media:            []MediaItem{{ID: "media-1", MimeType: "video/mp4"}},
+	})
+	if err != nil {
+		t.Fatalf("Publish returned error: %v", err)
+	}
+	if externalID != "publish-inbox-1" {
+		t.Fatalf("expected publish id, got %q", externalID)
+	}
+	sourceInfo, ok := initPayload["source_info"].(map[string]any)
+	if !ok {
+		t.Fatalf("missing source_info payload: %#v", initPayload)
+	}
+	if sourceInfo["source"] != "PULL_FROM_URL" || sourceInfo["video_url"] != "https://media.example/video.mp4" {
+		t.Fatalf("unexpected source_info: %#v", sourceInfo)
+	}
+	if _, ok := initPayload["post_info"]; ok {
+		t.Fatalf("upload inbox payload should not include direct-post post_info: %#v", initPayload)
+	}
+}
+
+func TestTikTokUploadMediaWithMetadataUploadsVideoFileToInbox(t *testing.T) {
+	originalClient := httpClient
+	defer func() { httpClient = originalClient }()
+
+	var initPayload map[string]any
+	var uploadBody string
+	httpClient = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		switch req.URL.String() {
+		case tiktokVideoInboxInitURL:
+			if req.Header.Get(headerAuthorization) != bearerPrefix+"access" {
+				t.Fatalf("unexpected auth header %q", req.Header.Get(headerAuthorization))
+			}
+			body, err := io.ReadAll(req.Body)
+			if err != nil {
+				t.Fatalf("reading init body: %v", err)
+			}
+			if err := json.Unmarshal(body, &initPayload); err != nil {
+				t.Fatalf("decoding init payload: %v", err)
+			}
+			return jsonResponse(req, `{"data":{"publish_id":"publish-file-1","upload_url":"https://upload.tiktok.example/video?upload_id=1&upload_token=tok"},"error":{"code":"ok"}}`), nil
+		case "https://upload.tiktok.example/video?upload_id=1&upload_token=tok":
+			if req.Method != http.MethodPut {
+				t.Fatalf("unexpected upload method %s", req.Method)
+			}
+			if req.Header.Get(headerContentType) != "video/mp4" {
+				t.Fatalf("unexpected content type %q", req.Header.Get(headerContentType))
+			}
+			if req.Header.Get("Content-Range") != "bytes 0-9/10" {
+				t.Fatalf("unexpected content range %q", req.Header.Get("Content-Range"))
+			}
+			if req.Header.Get("Content-Length") != "10" {
+				t.Fatalf("unexpected content length %q", req.Header.Get("Content-Length"))
+			}
+			body, err := io.ReadAll(req.Body)
+			if err != nil {
+				t.Fatalf("reading upload body: %v", err)
+			}
+			uploadBody = string(body)
+			return jsonResponseWithStatus(req, http.StatusOK, ""), nil
+		case tiktokPublishStatusURL:
+			return jsonResponse(req, `{"data":{"status":"SEND_TO_USER_INBOX"},"error":{"code":"ok"}}`), nil
+		default:
+			t.Fatalf("unexpected request %s %s", req.Method, req.URL.String())
+			return nil, nil
+		}
+	})}
+
+	adapter := NewTikTokAdapter("client-key", "client-secret", "https://app.example/callback")
+	publishID, err := adapter.UploadMediaWithMetadata(context.Background(), "access", "open-1", UploadMediaRequest{
+		MimeType: "video/mp4",
+		Size:     10,
+		Settings: map[string]interface{}{"content_posting_method": "UPLOAD"},
+		Reader:   strings.NewReader("0123456789"),
+	})
+	if err != nil {
+		t.Fatalf("UploadMediaWithMetadata returned error: %v", err)
+	}
+	if publishID != "publish-file-1" {
+		t.Fatalf("expected publish ID, got %q", publishID)
+	}
+	sourceInfo, ok := initPayload["source_info"].(map[string]any)
+	if !ok {
+		t.Fatalf("missing source_info payload: %#v", initPayload)
+	}
+	if sourceInfo["source"] != "FILE_UPLOAD" || sourceInfo["video_size"] != float64(10) || sourceInfo["chunk_size"] != float64(10) || sourceInfo["total_chunk_count"] != float64(1) {
+		t.Fatalf("unexpected source_info: %#v", sourceInfo)
+	}
+	if uploadBody != "0123456789" {
+		t.Fatalf("unexpected upload body %q", uploadBody)
+	}
+}
+
 func TestTikTokPublishRequiresHTTPSVideoURL(t *testing.T) {
 	adapter := NewTikTokAdapter("client-key", "client-secret", "https://app.example/callback")
 	_, err := adapter.Publish(context.Background(), "access", "open-1", &PublishRequest{
@@ -165,8 +289,12 @@ func TestTikTokPublishRequiresHTTPSVideoURL(t *testing.T) {
 }
 
 func jsonResponse(req *http.Request, body string) *http.Response {
+	return jsonResponseWithStatus(req, http.StatusOK, body)
+}
+
+func jsonResponseWithStatus(req *http.Request, statusCode int, body string) *http.Response {
 	return &http.Response{
-		StatusCode: http.StatusOK,
+		StatusCode: statusCode,
 		Header:     http.Header{"Content-Type": []string{contentTypeJSON}},
 		Body:       io.NopCloser(strings.NewReader(body)),
 		Request:    req,

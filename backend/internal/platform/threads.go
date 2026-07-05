@@ -211,6 +211,73 @@ func (t *ThreadsAdapter) Publish(ctx context.Context, accessToken, userID string
 	return t.publishContainer(ctx, accessToken, userID, containerID)
 }
 
+func (t *ThreadsAdapter) ListComments(ctx context.Context, accessToken, _ string, externalID string) ([]Comment, error) {
+	fields := "id,text,username,timestamp,hide_status"
+	endpoint := "https://graph.threads.net/v1.0/" + externalID + "/replies?fields=" + url.QueryEscape(fields) + "&access_token=" + url.QueryEscape(accessToken)
+	respBody, err := DoRequest(ctx, "GET", endpoint, nil, nil)
+	if err != nil {
+		return nil, fmt.Errorf("threads replies: %w", err)
+	}
+	var result struct {
+		Data []struct {
+			ID         string `json:"id"`
+			Text       string `json:"text"`
+			Username   string `json:"username"`
+			Timestamp  string `json:"timestamp"`
+			HideStatus string `json:"hide_status"`
+		} `json:"data"`
+		Error struct {
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(respBody, &result); err != nil {
+		return nil, fmt.Errorf("decoding threads replies: %w", err)
+	}
+	if result.Error.Message != "" {
+		return nil, fmt.Errorf("threads replies: %s", result.Error.Message)
+	}
+
+	comments := make([]Comment, 0, len(result.Data))
+	for _, item := range result.Data {
+		comments = append(comments, Comment{
+			ID:         item.ID,
+			AuthorName: item.Username,
+			Text:       item.Text,
+			CreatedAt:  item.Timestamp,
+			Hidden:     strings.EqualFold(item.HideStatus, "HIDDEN"),
+			CanReply:   true,
+			CanHide:    true,
+		})
+	}
+	return comments, nil
+}
+
+func (t *ThreadsAdapter) ReplyToComment(ctx context.Context, accessToken, userID, commentID, message string) (string, error) {
+	containerID, err := t.createContainer(ctx, accessToken, userID, strings.TrimSpace(message), "", false, commentID)
+	if err != nil {
+		return "", err
+	}
+	if err := t.waitForContainerReady(ctx, accessToken, containerID); err != nil {
+		return "", err
+	}
+	return t.publishContainer(ctx, accessToken, userID, containerID)
+}
+
+func (t *ThreadsAdapter) HideComment(ctx context.Context, accessToken, _ string, commentID string) error {
+	_, err := DoFormURLEncoded(ctx, "POST", "https://graph.threads.net/v1.0/"+commentID+"/manage_reply", map[string]string{
+		"hide":                "true",
+		oauthParamAccessToken: accessToken,
+	}, nil)
+	if err != nil {
+		return fmt.Errorf("threads hide reply: %w", err)
+	}
+	return nil
+}
+
+func (t *ThreadsAdapter) DeleteComment(context.Context, string, string, string) error {
+	return fmt.Errorf("threads delete reply: %w", ErrUnsupportedCommentAction)
+}
+
 func (t *ThreadsAdapter) waitForContainerReady(ctx context.Context, accessToken, containerID string) error {
 	const (
 		maxAttempts = 10
