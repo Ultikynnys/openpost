@@ -2,7 +2,7 @@
 
 All notable changes to this project are documented in this file.
 
-## [1.0.39] - 2026-07-06
+## [1.0.40] - 2026-07-06
 
 ### Changed
 
@@ -13,6 +13,7 @@ All notable changes to this project are documented in this file.
 - Aligned the composer Schedule/Publish actions with the app button system, made the split-arrow schedule the next free queue slot, and added a per-post random-delay override in the schedule dialog.
 - Fixed the fullscreen calendar platform filter, day-level create actions, sidebar fullscreen shortcut, and dark-mode workspace filter styling.
 - Updated composer e2e coverage for the post-type selector so release preflight follows the new UI.
+- Kept release server-binary jobs out of the full frontend devenv shell after frontend assets are already built.
 
 ## [1.0.36] - 2026-07-06
 
