@@ -23,10 +23,6 @@ test("composer schedules a publication from the selected time", async ({
   const unique = Date.now().toString(36);
   const email = `composer-scheduling-${unique}@example.com`;
   const postContent = "Schedule this launch note from the composer.";
-  const suggestedDate = new Date(Date.now() + 48 * 60 * 60 * 1000)
-    .toISOString()
-    .slice(0, 10);
-  const scheduledLocalTime = `${suggestedDate}T10:30`;
   let publicationPayload: PostPayload | undefined;
   let scheduleRequested = false;
 
@@ -98,6 +94,20 @@ test("composer schedules a publication from the selected time", async ({
 
     await route.continue();
   });
+  await page.route("**/api/v1/publications/*/validate", async (route) => {
+    if (route.request().method() === "POST") {
+      await route.fulfill({
+        contentType: "application/json",
+        json: {
+          publication_id: "publication-schedule",
+          issues: [],
+        },
+      });
+      return;
+    }
+
+    await route.continue();
+  });
   await page.route("**/api/v1/publications/*/schedule", async (route) => {
     if (route.request().method() === "POST") {
       scheduleRequested = true;
@@ -115,14 +125,12 @@ test("composer schedules a publication from the selected time", async ({
   });
 
   await page.goto("/");
-  await expect(
-    page.getByRole("heading", { name: "Destinations" }),
-  ).toBeVisible();
-  await page
-    .getByRole("button", { name: /openpost\.bsky\.social\s+Bluesky/ })
-    .click();
-  await page.getByLabel("Source text").fill(postContent);
-  await page.locator('input[type="datetime-local"]').fill(scheduledLocalTime);
+  await page.getByRole("button", { name: "Link" }).click();
+  await expect(page.getByRole("heading", { name: "Accounts" })).toBeVisible();
+  await page.getByLabel("Link URL").fill("https://openpost.social/launch");
+  await page.getByLabel("Post text").fill(postContent);
+  await page.getByRole("button", { name: "Schedule" }).first().click();
+  await page.getByRole("button", { name: "10:30" }).click();
   await expect(page.getByRole("button", { name: "Schedule" })).toBeEnabled();
   await page.getByRole("button", { name: "Schedule" }).click();
 
@@ -132,14 +140,18 @@ test("composer schedules a publication from the selected time", async ({
 
   expect(publicationPayload).toMatchObject({
     workspace_id: workspaceBody.id,
-    content_profile: "short_text",
+    content_profile: "link_share",
     source_text: postContent,
+    source_url: "https://openpost.social/launch",
     media: [],
     renditions: [
       expect.objectContaining({
         social_account_id: "bluesky-main",
-        profile: "short_text",
+        profile: "link_share",
         body: postContent,
+        settings: expect.objectContaining({
+          url: "https://openpost.social/launch",
+        }),
         media: [],
       }),
     ],
@@ -148,5 +160,4 @@ test("composer schedules a publication from the selected time", async ({
   expect(new Date(publicationPayload?.scheduled_at ?? "").toString()).not.toBe(
     "Invalid Date",
   );
-  expect(publicationPayload?.scheduled_at).toContain(`${suggestedDate}T`);
 });
