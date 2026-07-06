@@ -14,6 +14,7 @@
 	import { Input } from '$lib/components/ui/input';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
+	import * as Select from '$lib/components/ui/select';
 	import * as Tooltip from '$lib/components/ui/tooltip';
 	import PlatformIcon from './platform-icon.svelte';
 	import { Badge } from '$lib/components/ui/badge';
@@ -117,6 +118,7 @@
 	let showScheduleDialog = $state(false);
 	let scheduleInput = $state('');
 	let scheduleInputError = $state('');
+	let randomDelayOverride = $state<string>('default');
 
 	let showPromptCard = $state(false);
 	let currentPrompt = $state<{ text: string; category: string } | null>(null);
@@ -137,6 +139,7 @@
 	let lastSavedSnapshot = $state('');
 	let textareaRefs = $state<Map<number, HTMLTextAreaElement>>(new Map());
 	const scheduleInputPlaceholder = 'Write any time, e.g. "tomorrow at 9am" or "in 3 hours"';
+	const randomDelayOptions = [0, 5, 10, 15, 30, 45, 60];
 
 	// --------------------------------------------------------------------------
 	// Constants & derived values
@@ -237,6 +240,21 @@
 		return minimumAccountCharacterLimit(editorLimitAccounts);
 	});
 	const scheduleTimezoneLabel = $derived(workspaceCtx.settings.timezone || getLocalTimeZone());
+	const effectiveRandomDelayMinutes = $derived.by(() => {
+		if (randomDelayOverride === 'default') return workspaceCtx.settings.random_delay_minutes;
+		const value = Number(randomDelayOverride);
+		return Number.isFinite(value)
+			? Math.max(0, Math.round(value))
+			: workspaceCtx.settings.random_delay_minutes;
+	});
+	const randomDelaySelectOptions = $derived.by(() => {
+		const options = new Set(randomDelayOptions);
+		const selected = Number(randomDelayOverride);
+		if (randomDelayOverride !== 'default' && Number.isFinite(selected)) {
+			options.add(selected);
+		}
+		return Array.from(options).sort((a, b) => a - b);
+	});
 
 	const editorResizeSignature = $derived.by(() =>
 		posts
@@ -255,6 +273,18 @@
 		if (pct >= 1) return 'text-red-500';
 		if (pct >= 0.8) return 'text-amber-500';
 		return 'text-muted-foreground';
+	}
+
+	function formatRandomDelay(minutes: number): string {
+		if (!Number.isFinite(minutes) || minutes <= 0) return 'Exact time';
+		if (minutes === 1) return '±1 minute';
+		if (minutes === 60) return '±1 hour';
+		return `±${minutes} minutes`;
+	}
+
+	function normalizeRandomDelayValue(value: number | null | undefined): string {
+		if (value === undefined || value === null || !Number.isFinite(value)) return 'default';
+		return String(Math.max(0, Math.round(value)));
 	}
 
 	function arraysEqual(left: string[], right: string[]): boolean {
@@ -331,6 +361,7 @@
 			variants: variantEntries,
 			scheduledDate: selectedDate?.toString() ?? null,
 			selectedTime,
+			randomDelayOverride,
 			selectedWorkspaceId
 		});
 	}
@@ -473,6 +504,7 @@
 			mediaSizes = new Map();
 			selectedDate = undefined;
 			selectedTime = null;
+			randomDelayOverride = 'default';
 			if (workspaces.length > 0) {
 				selectedWorkspaceId = workspaceCtx.currentWorkspace?.id ?? workspaces[0].id;
 				await loadAccounts(selectedWorkspaceId);
@@ -485,6 +517,7 @@
 		lastInitializedPostId = post.id;
 		selectedWorkspaceId = post.workspace_id;
 		selectedAccountIds = post.destinations?.map((d) => d.social_account_id) ?? [];
+		randomDelayOverride = normalizeRandomDelayValue(post.random_delay_minutes);
 
 		// Load alt texts from media
 		const newAlts = new Map<string, string>();
@@ -804,7 +837,7 @@
 			const draftContent = posts[0].content;
 			const draftMediaIds = isThreadDraft_ ? posts.flatMap((p) => p.mediaIds) : posts[0].mediaIds;
 
-			const defaultDelay = workspaceCtx.settings.random_delay_minutes;
+			const defaultDelay = effectiveRandomDelayMinutes;
 			const body = {
 				workspace_id: selectedWorkspaceId,
 				content: draftContent,
@@ -874,9 +907,7 @@
 		const mediaIds = isThreadDraft_
 			? posts.flatMap((post) => post.mediaIds)
 			: (posts[0]?.mediaIds ?? []);
-		const randomDelay = scheduledAt
-			? (initialPost.random_delay_minutes ?? workspaceCtx.settings.random_delay_minutes)
-			: 0;
+		const randomDelay = scheduledAt ? effectiveRandomDelayMinutes : 0;
 
 		isSaving = true;
 		try {
@@ -991,7 +1022,7 @@
 			}
 		}
 
-		const randomDelay = publishNow ? 0 : workspaceCtx.settings.random_delay_minutes;
+		const randomDelay = publishNow ? 0 : effectiveRandomDelayMinutes;
 		isSubmitting = true;
 
 		try {
@@ -1080,6 +1111,9 @@
 				lastSavedSnapshot = '';
 				variants = new Map();
 				activeVariantAccountId = null;
+				selectedDate = undefined;
+				selectedTime = null;
+				randomDelayOverride = 'default';
 				setTimeout(() => (success = ''), 3000);
 			}
 		} catch (e) {
@@ -1487,8 +1521,8 @@
 		await publish(false);
 	}
 
-	async function suggestNextSlot() {
-		if (!selectedWorkspaceId) return;
+	async function fillNextSlot(showComposerError = false): Promise<boolean> {
+		if (!selectedWorkspaceId) return false;
 		suggestingSlot = true;
 		try {
 			const { data, error: err } = await (client as any).GET('/posting-schedules/next-slot', {
@@ -1519,12 +1553,45 @@
 				}
 				scheduleInput = '';
 				scheduleInputError = '';
+				return true;
+			}
+			scheduleInputError = 'No free queue slot found.';
+			if (showComposerError) {
+				error = scheduleInputError;
 			}
 		} catch (e) {
 			console.error('Failed to get next available slot:', e);
+			scheduleInputError = 'Could not find the next free slot.';
+			if (showComposerError) {
+				error = scheduleInputError;
+			}
 		} finally {
 			suggestingSlot = false;
 		}
+		return false;
+	}
+
+	async function suggestNextSlot() {
+		await fillNextSlot(false);
+	}
+
+	async function scheduleNextFreeSlot() {
+		if (!selectedWorkspaceId) {
+			error = m.compose_please_select_workspace();
+			return;
+		}
+		if (!hasContent) {
+			error = m.compose_please_enter_content();
+			return;
+		}
+		if (selectedAccountIds.length === 0) {
+			error = m.compose_select_account();
+			return;
+		}
+		const didApplySlot = await fillNextSlot(true);
+		if (!didApplySlot) return;
+		showScheduleDialog = false;
+		await publish(false);
 	}
 
 	function formatScheduledDisplay(): string {
@@ -1866,40 +1933,59 @@
 				</Button>
 			{:else}
 				<div
-					class="flex h-9 overflow-hidden rounded-full bg-orange-500 text-sm font-semibold text-white shadow-sm"
+					class="inline-flex overflow-hidden rounded-md border bg-background"
 					title={formatScheduledDisplay()}
 				>
-					<button
+					<Button
 						type="button"
-						class="px-4 transition-colors hover:bg-orange-400 disabled:cursor-not-allowed"
+						variant="ghost"
+						size="sm"
+						class="h-8 rounded-none border-r border-border px-3 shadow-none"
 						onclick={openScheduleDialog}
 						disabled={isSubmitting || isSaving}
 					>
 						{m.compose_schedule()}
-					</button>
-					<div class="w-px bg-black/25"></div>
-					<button
-						type="button"
-						class="flex w-10 items-center justify-center transition-colors hover:bg-orange-400 disabled:cursor-not-allowed"
-						aria-label="Schedule post"
-						onclick={scheduleWithSelectedTime}
-						disabled={isSubmitting || !hasContent || selectedAccountIds.length === 0}
-					>
-						{#if isSubmitting}<LoaderIcon class="h-4 w-4 animate-spin" />{:else}<ArrowRightIcon
-								class="h-4 w-4"
-							/>{/if}
-					</button>
+					</Button>
+					<Tooltip.Root>
+						<Tooltip.Trigger>
+							{#snippet child({ props })}
+								<Button
+									{...props}
+									type="button"
+									variant="ghost"
+									size="icon-sm"
+									class="h-8 w-8 rounded-none shadow-none"
+									aria-label="Schedule to next free slot"
+									onclick={scheduleNextFreeSlot}
+									disabled={suggestingSlot ||
+										isSubmitting ||
+										!hasContent ||
+										selectedAccountIds.length === 0}
+								>
+									{#if suggestingSlot || isSubmitting}
+										<LoaderIcon class="h-3.5 w-3.5 animate-spin" />
+									{:else}
+										<ArrowRightIcon class="h-3.5 w-3.5" />
+									{/if}
+								</Button>
+							{/snippet}
+						</Tooltip.Trigger>
+						<Tooltip.Content>
+							<p class="text-sm">Schedule to next free slot</p>
+						</Tooltip.Content>
+					</Tooltip.Root>
 				</div>
 
-				<button
+				<Button
 					type="button"
-					class="h-9 rounded-full bg-sky-500 px-4 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-sky-400 disabled:cursor-not-allowed disabled:opacity-50"
+					size="sm"
+					class="h-8 px-3"
 					onclick={() => publish(true)}
 					disabled={isSubmitting || !hasContent || selectedAccountIds.length === 0}
 				>
-					{#if isSubmitting}<LoaderIcon class="mr-1.5 inline h-4 w-4 animate-spin" />{/if}
+					{#if isSubmitting}<LoaderIcon class="h-3.5 w-3.5 animate-spin" />{/if}
 					Publish
-				</button>
+				</Button>
 			{/if}
 		</div>
 	</div>
@@ -1926,7 +2012,7 @@
 					<Input
 						bind:value={scheduleInput}
 						placeholder={scheduleInputPlaceholder}
-						class="h-11 rounded-xl bg-muted/40 text-base"
+						class="h-10 bg-muted/40 text-base"
 						aria-label="Schedule time"
 					/>
 					{#if scheduleInputError}
@@ -1938,7 +2024,7 @@
 					<Button
 						type="button"
 						variant="secondary"
-						class="h-10 justify-center gap-2 rounded-xl"
+						class="h-10 justify-center gap-2"
 						onclick={suggestNextSlot}
 						disabled={suggestingSlot}
 					>
@@ -1952,7 +2038,7 @@
 					<Button
 						type="button"
 						variant="secondary"
-						class="h-10 justify-center rounded-xl"
+						class="h-10 justify-center"
 						onclick={() => {
 							const next = today(getLocalTimeZone()).add({ days: 1 });
 							selectedDate = new CalendarDate(next.year, next.month, next.day);
@@ -1966,7 +2052,7 @@
 					<Button
 						type="button"
 						variant="secondary"
-						class="h-10 justify-center rounded-xl"
+						class="h-10 justify-center"
 						onclick={() => {
 							const parsed = parseNaturalScheduleInput('in 3 hours');
 							if (!parsed) return;
@@ -1980,7 +2066,7 @@
 					</Button>
 				</div>
 
-				<div class="overflow-hidden rounded-xl border bg-muted/15 md:grid md:grid-cols-[1fr_10rem]">
+				<div class="overflow-hidden rounded-lg border bg-muted/15 md:grid md:grid-cols-[1fr_10rem]">
 					<div class="flex justify-center p-3 md:p-4">
 						<Calendar
 							type="single"
@@ -2014,7 +2100,7 @@
 												scheduleInput = '';
 												scheduleInputError = '';
 											}}
-											class="h-9 justify-center rounded-lg text-sm tabular-nums"
+											class="h-9 justify-center text-sm tabular-nums"
 										>
 											{time}
 										</Button>
@@ -2022,6 +2108,43 @@
 								</div>
 							{/if}
 						</div>
+					</div>
+				</div>
+
+				<div class="rounded-lg border bg-muted/10 p-3">
+					<div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+						<div class="space-y-1">
+							<div class="text-sm font-medium">Randomize publish time</div>
+							<div class="text-xs text-muted-foreground">
+								Workspace default: {formatRandomDelay(workspaceCtx.settings.random_delay_minutes)}.
+								Applies only to this post.
+							</div>
+						</div>
+						<Select.Root
+							type="single"
+							value={randomDelayOverride}
+							onValueChange={(value) => (randomDelayOverride = value || 'default')}
+						>
+							<Select.Trigger class="w-full sm:w-52">
+								{#if randomDelayOverride === 'default'}
+									Workspace default ({formatRandomDelay(
+										workspaceCtx.settings.random_delay_minutes
+									)})
+								{:else}
+									{formatRandomDelay(effectiveRandomDelayMinutes)}
+								{/if}
+							</Select.Trigger>
+							<Select.Content>
+								<Select.Item value="default">
+									Workspace default ({formatRandomDelay(
+										workspaceCtx.settings.random_delay_minutes
+									)})
+								</Select.Item>
+								{#each randomDelaySelectOptions as minutes (minutes)}
+									<Select.Item value={String(minutes)}>{formatRandomDelay(minutes)}</Select.Item>
+								{/each}
+							</Select.Content>
+						</Select.Root>
 					</div>
 				</div>
 
