@@ -1598,6 +1598,13 @@
 			error = m.compose_select_account();
 			return;
 		}
+
+		if (selectedDate && selectedTime) {
+			showScheduleDialog = false;
+			await publish(false);
+			return;
+		}
+
 		const didApplySlot = await fillNextSlot(true);
 		if (!didApplySlot) return;
 		showScheduleDialog = false;
