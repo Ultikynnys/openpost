@@ -125,7 +125,8 @@ test("composer schedules a publication from the selected time", async ({
   });
 
   await page.goto("/");
-  await page.getByRole("button", { name: "Link" }).click();
+  await page.getByTestId("composer-mode-select").click();
+  await page.getByRole("option", { name: "Link" }).click();
   await expect(page.getByRole("heading", { name: "Accounts" })).toBeVisible();
   await page.getByLabel("Link URL").fill("https://openpost.social/launch");
   await page.getByLabel("Post text").fill(postContent);
