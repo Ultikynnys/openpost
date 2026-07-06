@@ -491,14 +491,26 @@ func (h *PublicationHandler) upsertRenditions(api huma.API) {
 			return nil, err
 		}
 		err = h.db.RunInTx(ctx, &sql.TxOptions{}, func(txCtx context.Context, tx bun.Tx) error {
-			for _, rendition := range input.Body.Renditions {
-				if rendition.ID != "" {
-					if _, err := tx.NewDelete().Model((*models.RenditionMedia)(nil)).Where("rendition_id = ?", rendition.ID).Exec(txCtx); err != nil {
-						return err
-					}
-					if _, err := tx.NewDelete().Model((*models.Rendition)(nil)).Where("id = ? AND publication_id = ?", rendition.ID, publication.ID).Exec(txCtx); err != nil {
-						return err
-					}
+			var existingIDs []string
+			if err := tx.NewSelect().
+				Model((*models.Rendition)(nil)).
+				Column("id").
+				Where("publication_id = ?", publication.ID).
+				Scan(txCtx, &existingIDs); err != nil {
+				return err
+			}
+			if len(existingIDs) > 0 {
+				if _, err := tx.NewDelete().
+					Model((*models.RenditionMedia)(nil)).
+					Where("rendition_id IN (?)", bun.List(existingIDs)).
+					Exec(txCtx); err != nil {
+					return err
+				}
+				if _, err := tx.NewDelete().
+					Model((*models.Rendition)(nil)).
+					Where("publication_id = ?", publication.ID).
+					Exec(txCtx); err != nil {
+					return err
 				}
 			}
 			return h.insertRenditions(txCtx, tx, publication, input.Body.Renditions, nil, accountMap)

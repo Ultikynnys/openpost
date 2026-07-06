@@ -42,6 +42,27 @@ export default defineConfig({
 			}
 		})
 	],
+	optimizeDeps: {
+		include: [
+			'lucide-svelte/icons/align-left',
+			'lucide-svelte/icons/alert-circle',
+			'lucide-svelte/icons/calendar-clock',
+			'lucide-svelte/icons/check-circle-2',
+			'lucide-svelte/icons/image-plus',
+			'lucide-svelte/icons/images',
+			'lucide-svelte/icons/link',
+			'lucide-svelte/icons/list',
+			'lucide-svelte/icons/loader-2',
+			'lucide-svelte/icons/play',
+			'lucide-svelte/icons/save',
+			'lucide-svelte/icons/send',
+			'lucide-svelte/icons/settings-2',
+			'lucide-svelte/icons/smartphone',
+			'lucide-svelte/icons/upload',
+			'lucide-svelte/icons/video',
+			'lucide-svelte/icons/x'
+		]
+	},
 	server: {
 		proxy: {
 			'/api': 'http://localhost:8080',

@@ -4,6 +4,8 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [1.0.34] - 2026-07-06
+
 ### Changed
 
 - Made commit and push hooks faster by keeping pre-commit to lightweight checks and trimming pre-push to backend format/lint plus frontend lint.
@@ -19,12 +21,14 @@ All notable changes to this project are documented in this file.
 - Added MCP provider-readiness, publication-validation, media-analysis metadata, publication lifecycle, and rendition comment workflows for automation clients.
 - Added workspace image URLs and moved workspace-scoped navigation into the workspace switcher menu.
 - Added a fullscreen month calendar with workspace/platform filtering, account badges, publication sets, and drag-and-drop rescheduling.
+- Replaced the route-level unified composer with a focused old-shell composer picker that defaults to Short text and uses explicit output-role labels for rich publication modes.
 
 ### Fixed
 
 - Made provider readiness use the effective registered provider adapters so env-configured X, LinkedIn, and Threads credentials are not reported as missing.
 - Fixed Postgres migration normalization for numeric boolean defaults so hosted databases can apply the format-first schema migrations.
 - Reworked existing-post editing so posts open in the full composer with explicit save/cancel controls instead of prompt-based rescheduling.
+- Made publication rendition saves replace omitted account outputs instead of leaving stale renditions behind.
 - Rendered a success page for completed OAuth account callbacks before returning users to Accounts.
 - Stopped showing checkout CTAs for other plans when an organization already has an active hosted plan.
 

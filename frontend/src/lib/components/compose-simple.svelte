@@ -2132,6 +2132,21 @@
 
 									<div class="min-w-0 flex-1">
 										<div class="relative">
+											{#if activePostIndex === i}
+												<div
+													class="flex flex-wrap items-center gap-1 px-1 pt-2 text-xs text-muted-foreground"
+												>
+													<span class="font-medium text-foreground">Post text</span>
+													{#if isThread}
+														<span>· Thread post {i + 1}</span>
+													{:else if activeVariantAccountId && activeVariantAccount}
+														<span>· {getPlatformName(activeVariantAccount.platform)} post text</span
+														>
+													{:else}
+														<span>· Selected accounts</span>
+													{/if}
+												</div>
+											{/if}
 											<textarea
 												id="post-textarea-{i}"
 												use:textareaAction={i}

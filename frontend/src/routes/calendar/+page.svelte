@@ -413,6 +413,8 @@
 	function openItem(item: CalendarItem) {
 		if (item.kind === 'post') {
 			goto(resolve(`/posts/${item.id}`));
+		} else if (item.kind === 'publication') {
+			goto(resolve(`/publications/${item.id}`));
 		}
 	}
 
