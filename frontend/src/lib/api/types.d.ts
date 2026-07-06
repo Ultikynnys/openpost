@@ -1395,77 +1395,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/sets": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List social media sets for a workspace */
-        get: operations["list-sets"];
-        put?: never;
-        /** Create a social media set */
-        post: operations["create-set"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/sets/{id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get a single social media set */
-        get: operations["get-set"];
-        put?: never;
-        post?: never;
-        /** Delete a social media set */
-        delete: operations["delete-set"];
-        options?: never;
-        head?: never;
-        /** Update a social media set */
-        patch: operations["update-set"];
-        trace?: never;
-    };
-    "/sets/{id}/accounts": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Add accounts to a social media set */
-        post: operations["add-set-accounts"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/sets/{id}/accounts/{account_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        /** Remove an account from a social media set */
-        delete: operations["remove-set-account"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/workspace-invitations/accept": {
         parameters: {
             query?: never;
@@ -1682,18 +1611,6 @@ export interface components {
             readonly $schema?: string;
             job_id?: string;
             message: string;
-        };
-        AddSetAccountsInputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/AddSetAccountsInputBody.json
-             */
-            readonly $schema?: string;
-            /** @description Account IDs to add */
-            account_ids: string[] | null;
-            /** @description Mark as main platform */
-            is_main?: boolean;
         };
         ApproveCLIAuthInputBody: {
             /**
@@ -2141,8 +2058,6 @@ export interface components {
              * @description Minute in workspace local time (0-59)
              */
             local_minute?: number;
-            /** @description Optional set ID */
-            set_id?: string;
             /**
              * Format: int64
              * @description Hour in UTC (0-23)
@@ -2205,22 +2120,6 @@ export interface components {
             /** @description Internal publication title */
             title: string;
             /** @description Workspace ID */
-            workspace_id: string;
-        };
-        CreateSetInputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/CreateSetInputBody.json
-             */
-            readonly $schema?: string;
-            /** @description Initial account IDs to include in the set */
-            account_ids: string[] | null;
-            /** @description Set as the default set for this workspace */
-            is_default: boolean;
-            /** @description Set name */
-            name: string;
-            /** @description Target workspace ID */
             workspace_id: string;
         };
         CreateThreadInputBody: {
@@ -2348,16 +2247,6 @@ export interface components {
             readonly $schema?: string;
             /** @description Whether the server must restart before adapter changes apply */
             requires_restart: boolean;
-        };
-        DeleteSetOutputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/DeleteSetOutputBody.json
-             */
-            readonly $schema?: string;
-            /** @description Success message */
-            message: string;
         };
         DeleteVariantsOutputBody: {
             /**
@@ -3053,8 +2942,6 @@ export interface components {
              * @description Minute in workspace local time (0-59)
              */
             local_minute: number;
-            /** @description Optional set ID */
-            set_id?: string;
             /**
              * Format: int64
              * @description Hour in UTC (0-23)
@@ -3471,36 +3358,6 @@ export interface components {
             totp_enabled: boolean;
             user: components["schemas"]["UserProfile"];
         };
-        SetAccountResponse: {
-            /** @description Account username */
-            account_username: string;
-            /** @description Whether this is the main platform in the set */
-            is_main: boolean;
-            /** @description Platform name */
-            platform: string;
-            /** @description Social account ID */
-            social_account_id: string;
-        };
-        SetResponse: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/SetResponse.json
-             */
-            readonly $schema?: string;
-            /** @description Accounts in this set */
-            accounts?: components["schemas"]["SetAccountResponse"][] | null;
-            /** @description Creation time */
-            created_at: string;
-            /** @description Set ID */
-            id: string;
-            /** @description Is default set */
-            is_default: boolean;
-            /** @description Set name */
-            name: string;
-            /** @description Workspace ID */
-            workspace_id: string;
-        };
         SettingField: {
             help?: string;
             key: string;
@@ -3725,18 +3582,6 @@ export interface components {
             source_url?: string;
             /** @description Internal publication title */
             title?: string;
-        };
-        UpdateSetInputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/UpdateSetInputBody.json
-             */
-            readonly $schema?: string;
-            /** @description Set as default */
-            is_default?: boolean;
-            /** @description Set name */
-            name?: string;
         };
         UpdateWorkspaceSettingsInputBody: {
             /**
@@ -7398,8 +7243,6 @@ export interface operations {
             query?: {
                 /** @description Filter by workspace ID */
                 workspace_id?: string;
-                /** @description Filter by set ID (optional) */
-                set_id?: string;
             };
             header?: never;
             path?: never;
@@ -7510,8 +7353,6 @@ export interface operations {
             query?: {
                 /** @description Workspace ID */
                 workspace_id?: string;
-                /** @description Optional set ID */
-                set_id?: string;
             };
             header?: never;
             path?: never;
@@ -9158,412 +8999,6 @@ export interface operations {
             };
             /** @description Error */
             default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-        };
-    };
-    "list-sets": {
-        parameters: {
-            query?: {
-                /** @description Filter by workspace ID */
-                workspace_id?: string;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SetResponse"][] | null;
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-        };
-    };
-    "create-set": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CreateSetInputBody"];
-            };
-        };
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SetResponse"];
-                };
-            };
-            /** @description Bad Request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-            /** @description Forbidden */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-            /** @description Unprocessable Entity */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-        };
-    };
-    "get-set": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description Set ID */
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SetResponse"];
-                };
-            };
-            /** @description Not Found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-            /** @description Unprocessable Entity */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-        };
-    };
-    "delete-set": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description Set ID */
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["DeleteSetOutputBody"];
-                };
-            };
-            /** @description Forbidden */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-            /** @description Not Found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-            /** @description Unprocessable Entity */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-        };
-    };
-    "update-set": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description Set ID */
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["UpdateSetInputBody"];
-            };
-        };
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SetResponse"];
-                };
-            };
-            /** @description Bad Request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-            /** @description Forbidden */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-            /** @description Not Found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-            /** @description Unprocessable Entity */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-        };
-    };
-    "add-set-accounts": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description Set ID */
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AddSetAccountsInputBody"];
-            };
-        };
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SetResponse"];
-                };
-            };
-            /** @description Bad Request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-            /** @description Forbidden */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-            /** @description Not Found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-            /** @description Unprocessable Entity */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-        };
-    };
-    "remove-set-account": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description Set ID */
-                id: string;
-                /** @description Account ID to remove */
-                account_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SetResponse"];
-                };
-            };
-            /** @description Forbidden */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-            /** @description Not Found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-            /** @description Unprocessable Entity */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
                 headers: {
                     [name: string]: unknown;
                 };

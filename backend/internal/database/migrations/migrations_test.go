@@ -14,7 +14,7 @@ import (
 	"github.com/uptrace/bun/dialect/sqlitedialect"
 )
 
-func TestRunMigrationsRemovesInactiveSetMemberships(t *testing.T) {
+func TestRunMigrationsRemovesSocialSetsAndPromotesSchedules(t *testing.T) {
 	t.Parallel()
 
 	sqldb, err := sql.Open("sqlite3", fmt.Sprintf("file:%s?mode=memory&cache=shared", t.Name()))
@@ -27,14 +27,28 @@ func TestRunMigrationsRemovesInactiveSetMemberships(t *testing.T) {
 		(*models.Workspace)(nil),
 		(*models.User)(nil),
 		(*models.SocialAccount)(nil),
-		(*models.SocialMediaSet)(nil),
-		(*models.SocialMediaSetAccount)(nil),
 		(*models.Post)(nil),
 		(*models.PostVariant)(nil),
+		(*models.PostingSchedule)(nil),
 	} {
 		_, err := db.NewCreateTable().Model(model).IfNotExists().Exec(ctx)
 		require.NoError(t, err)
 	}
+	_, err = db.Exec(`CREATE TABLE social_media_sets (
+		id TEXT PRIMARY KEY,
+		workspace_id TEXT NOT NULL,
+		name TEXT NOT NULL,
+		is_default BOOLEAN DEFAULT FALSE,
+		created_at TIMESTAMP
+	)`)
+	require.NoError(t, err)
+	_, err = db.Exec(`CREATE TABLE social_media_set_accounts (
+		set_id TEXT NOT NULL,
+		social_account_id TEXT NOT NULL,
+		is_main BOOLEAN DEFAULT FALSE,
+		PRIMARY KEY (set_id, social_account_id)
+	)`)
+	require.NoError(t, err)
 
 	accounts := []models.SocialAccount{
 		{ID: "active-account", WorkspaceID: "ws-1", Platform: "x", AccountID: "1", AccessTokenEnc: []byte("token"), IsActive: true},
@@ -45,25 +59,38 @@ func TestRunMigrationsRemovesInactiveSetMemberships(t *testing.T) {
 	_, err = db.NewUpdate().Model((*models.SocialAccount)(nil)).Set("is_active = ?", false).Where("id = ?", "inactive-account").Exec(ctx)
 	require.NoError(t, err)
 
-	_, err = db.NewInsert().Model(&models.SocialMediaSet{ID: "set-1", WorkspaceID: "ws-1", Name: "Primary"}).Exec(ctx)
+	_, err = db.Exec(`INSERT INTO social_media_sets (id, workspace_id, name) VALUES ('set-1', 'ws-1', 'Primary')`)
 	require.NoError(t, err)
 
-	rows := []models.SocialMediaSetAccount{
-		{SetID: "set-1", SocialAccountID: "active-account"},
-		{SetID: "set-1", SocialAccountID: "inactive-account"},
-		{SetID: "set-1", SocialAccountID: "missing-account"},
-	}
-	_, err = db.NewInsert().Model(&rows).Exec(ctx)
+	_, err = db.Exec(`INSERT INTO social_media_set_accounts (set_id, social_account_id) VALUES
+		('set-1', 'active-account'),
+		('set-1', 'inactive-account'),
+		('set-1', 'missing-account')`)
+	require.NoError(t, err)
+
+	_, err = db.NewInsert().Model(&models.PostingSchedule{
+		ID:          "slot-1",
+		WorkspaceID: "ws-1",
+		SetID:       "set-1",
+		UTCHour:     9,
+		UTCMinute:   30,
+		DayOfWeek:   1,
+		IsActive:    true,
+	}).Exec(ctx)
 	require.NoError(t, err)
 
 	err = RunMigrations(db)
 	require.NoError(t, err)
 
-	var remaining []models.SocialMediaSetAccount
-	err = db.NewSelect().Model(&remaining).Scan(ctx)
+	var schedule models.PostingSchedule
+	err = db.NewSelect().Model(&schedule).Where("id = ?", "slot-1").Scan(ctx)
 	require.NoError(t, err)
-	require.Len(t, remaining, 1)
-	require.Equal(t, "active-account", remaining[0].SocialAccountID)
+	require.Empty(t, schedule.SetID)
+
+	_, err = db.Exec("SELECT 1 FROM social_media_sets LIMIT 1")
+	require.Error(t, err)
+	_, err = db.Exec("SELECT 1 FROM social_media_set_accounts LIMIT 1")
+	require.Error(t, err)
 }
 
 func TestRunMigrationsPromotesSingleExistingUserToInstanceAdmin(t *testing.T) {
@@ -78,7 +105,6 @@ func TestRunMigrationsPromotesSingleExistingUserToInstanceAdmin(t *testing.T) {
 	for _, model := range []interface{}{
 		(*models.Workspace)(nil),
 		(*models.SocialAccount)(nil),
-		(*models.SocialMediaSetAccount)(nil),
 		(*models.Post)(nil),
 		(*models.PostVariant)(nil),
 	} {

@@ -136,6 +136,10 @@ func (c *Client) PatchJSON(ctx context.Context, path string, body, out any) erro
 	return c.do(ctx, http.MethodPatch, path, body, out, "")
 }
 
+func (c *Client) PutJSON(ctx context.Context, path string, body, out any) error {
+	return c.do(ctx, http.MethodPut, path, body, out, "")
+}
+
 func (c *Client) DeleteJSON(ctx context.Context, path string, out any) error {
 	return c.do(ctx, http.MethodDelete, path, nil, out, "")
 }
@@ -345,7 +349,6 @@ func (c *Client) CreateBillingPortal(ctx context.Context, workspaceID string) (*
 type PostingSchedule struct {
 	ID             string `json:"id"`
 	WorkspaceID    string `json:"workspace_id"`
-	SetID          string `json:"set_id,omitempty"`
 	UTCHour        int    `json:"utc_hour"`
 	UTCMinute      int    `json:"utc_minute"`
 	DayOfWeek      int    `json:"day_of_week"`
@@ -359,7 +362,6 @@ type PostingSchedule struct {
 
 type NextAvailableSlotInput struct {
 	WorkspaceID string
-	SetID       string
 }
 
 type NextAvailableSlotOutput struct {
@@ -371,9 +373,6 @@ type NextAvailableSlotOutput struct {
 func (c *Client) NextAvailableSlot(ctx context.Context, in NextAvailableSlotInput) (*NextAvailableSlotOutput, error) {
 	v := url.Values{}
 	v.Set("workspace_id", in.WorkspaceID)
-	if in.SetID != "" {
-		v.Set("set_id", in.SetID)
-	}
 	var out NextAvailableSlotOutput
 	if err := c.GetJSON(ctx, "/api/v1/posting-schedules/next-slot?"+v.Encode(), &out); err != nil {
 		return nil, err
@@ -437,85 +436,6 @@ func (c *Client) UpdateAccount(ctx context.Context, accountID string, in UpdateA
 // DisconnectAccount deactivates a connected social account.
 func (c *Client) DisconnectAccount(ctx context.Context, accountID string) error {
 	return c.DeleteJSON(ctx, "/api/v1/accounts/"+url.PathEscape(accountID), nil)
-}
-
-// ----- Social media sets -----
-
-type SetAccount struct {
-	SocialAccountID string `json:"social_account_id"`
-	Platform        string `json:"platform"`
-	AccountUsername string `json:"account_username"`
-	IsMain          bool   `json:"is_main"`
-}
-
-type SocialSet struct {
-	ID          string       `json:"id"`
-	WorkspaceID string       `json:"workspace_id"`
-	Name        string       `json:"name"`
-	IsDefault   bool         `json:"is_default"`
-	CreatedAt   string       `json:"created_at"`
-	Accounts    []SetAccount `json:"accounts,omitempty"`
-}
-
-type CreateSetInput struct {
-	WorkspaceID string   `json:"workspace_id"`
-	Name        string   `json:"name"`
-	IsDefault   bool     `json:"is_default"`
-	AccountIDs  []string `json:"account_ids"`
-}
-
-func (c *Client) ListSets(ctx context.Context, workspaceID string) ([]SocialSet, error) {
-	var out []SocialSet
-	if err := c.GetJSON(ctx, "/api/v1/sets?workspace_id="+url.QueryEscape(workspaceID), &out); err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *Client) CreateSet(ctx context.Context, in CreateSetInput) (*SocialSet, error) {
-	var out SocialSet
-	if err := c.PostJSON(ctx, "/api/v1/sets", in, &out); err != nil {
-		return nil, err
-	}
-	return &out, nil
-}
-
-type UpdateSetInput struct {
-	Name      *string `json:"name,omitempty"`
-	IsDefault *bool   `json:"is_default,omitempty"`
-}
-
-func (c *Client) UpdateSet(ctx context.Context, setID string, in UpdateSetInput) (*SocialSet, error) {
-	var out SocialSet
-	if err := c.PatchJSON(ctx, "/api/v1/sets/"+url.PathEscape(setID), in, &out); err != nil {
-		return nil, err
-	}
-	return &out, nil
-}
-
-func (c *Client) DeleteSet(ctx context.Context, setID string) error {
-	return c.DeleteJSON(ctx, "/api/v1/sets/"+url.PathEscape(setID), nil)
-}
-
-type AddSetAccountsInput struct {
-	AccountIDs []string `json:"account_ids"`
-	IsMain     *bool    `json:"is_main,omitempty"`
-}
-
-func (c *Client) AddSetAccounts(ctx context.Context, setID string, in AddSetAccountsInput) (*SocialSet, error) {
-	var out SocialSet
-	if err := c.PostJSON(ctx, "/api/v1/sets/"+url.PathEscape(setID)+"/accounts", in, &out); err != nil {
-		return nil, err
-	}
-	return &out, nil
-}
-
-func (c *Client) RemoveSetAccount(ctx context.Context, setID, accountID string) (*SocialSet, error) {
-	var out SocialSet
-	if err := c.DeleteJSON(ctx, "/api/v1/sets/"+url.PathEscape(setID)+"/accounts/"+url.PathEscape(accountID), &out); err != nil {
-		return nil, err
-	}
-	return &out, nil
 }
 
 // ----- Media -----
@@ -736,6 +656,17 @@ type CreatePublicationInput struct {
 	Renditions       []RenditionInput        `json:"renditions,omitempty"`
 }
 
+type UpdatePublicationInput struct {
+	Title          string                 `json:"title,omitempty"`
+	ContentProfile string                 `json:"content_profile,omitempty"`
+	SourceText     string                 `json:"source_text,omitempty"`
+	SourceURL      string                 `json:"source_url,omitempty"`
+	Goal           string                 `json:"goal,omitempty"`
+	Audience       string                 `json:"audience,omitempty"`
+	ScheduledAt    *time.Time             `json:"scheduled_at,omitempty"`
+	Metadata       map[string]interface{} `json:"metadata,omitempty"`
+}
+
 type Publication struct {
 	ID             string      `json:"id"`
 	WorkspaceID    string      `json:"workspace_id"`
@@ -854,6 +785,14 @@ func (c *Client) GetPublication(ctx context.Context, id string) (*Publication, e
 	return &out, nil
 }
 
+func (c *Client) UpdatePublication(ctx context.Context, id string, in UpdatePublicationInput) (*Publication, error) {
+	var out Publication
+	if err := c.PutJSON(ctx, "/api/v1/publications/"+url.PathEscape(id), in, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 func (c *Client) ValidatePublication(ctx context.Context, id string) (*PublicationValidation, error) {
 	var out PublicationValidation
 	if err := c.PostJSON(ctx, "/api/v1/publications/"+url.PathEscape(id)+"/validate", map[string]any{}, &out); err != nil {
@@ -865,6 +804,14 @@ func (c *Client) ValidatePublication(ctx context.Context, id string) (*Publicati
 func (c *Client) PublishPublicationNow(ctx context.Context, id string) (*PublicationActionOutput, error) {
 	var out PublicationActionOutput
 	if err := c.PostJSON(ctx, "/api/v1/publications/"+url.PathEscape(id)+"/publish-now", map[string]any{}, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+func (c *Client) SchedulePublication(ctx context.Context, id string) (*PublicationActionOutput, error) {
+	var out PublicationActionOutput
+	if err := c.PostJSON(ctx, "/api/v1/publications/"+url.PathEscape(id)+"/schedule", map[string]any{}, &out); err != nil {
 		return nil, err
 	}
 	return &out, nil

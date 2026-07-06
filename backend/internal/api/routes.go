@@ -130,15 +130,6 @@ func RegisterHumaRoutes(api huma.API, deps RouteDeps) {
 	postHandler.GetVariants(api)
 	postHandler.DeleteVariants(api)
 
-	setHandler := handlers.NewSetHandler(deps.DB, deps.Authenticator)
-	setHandler.CreateSet(api)
-	setHandler.ListSets(api)
-	setHandler.GetSet(api)
-	setHandler.UpdateSet(api)
-	setHandler.DeleteSet(api)
-	setHandler.AddSetAccounts(api)
-	setHandler.RemoveSetAccount(api)
-
 	postingScheduleHandler := handlers.NewPostingScheduleHandler(deps.DB, deps.Authenticator)
 	postingScheduleHandler.ListSchedules(api)
 	postingScheduleHandler.CreateSchedule(api)

@@ -28,7 +28,7 @@ features:
   - title: Workspaces
     details: Keep separate brands, accounts, media, prompts, and schedules organized.
   - title: CLI
-    details: Create posts, upload media, use social sets, and automate workflows from scripts or CI.
+    details: Create posts, upload media, schedule rich publications, and automate workflows from scripts or CI.
   - title: MCP
     details: Let assistants inspect workspaces, draft posts, adapt renditions, and schedule through authenticated tools.
   - title: Android app

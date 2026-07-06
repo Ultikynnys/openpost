@@ -7,38 +7,17 @@
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
-	import { Checkbox } from '$lib/components/ui/checkbox';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import PageContainer from '$lib/components/page-container.svelte';
 	import EmptyState from '$lib/components/empty-state.svelte';
 	import ChevronDownIcon from 'lucide-svelte/icons/chevron-down';
-	import LayersIcon from 'lucide-svelte/icons/layers';
-	import PlusIcon from 'lucide-svelte/icons/plus';
-	import TrashIcon from 'lucide-svelte/icons/trash-2';
 	import { getPlatformName, getPlatformColor } from '$lib/utils';
 	import PlatformIcon from '$lib/components/platform-icon.svelte';
 	import LoaderIcon from 'lucide-svelte/icons/loader-2';
-	import SettingsIcon from 'lucide-svelte/icons/settings';
 	import UsersIcon from 'lucide-svelte/icons/users';
 	import XIcon from 'lucide-svelte/icons/x';
 	import { Skeleton } from '$lib/components/ui/skeleton';
-
-	interface SetAccount {
-		social_account_id: string;
-		platform: string;
-		account_username: string;
-		is_main: boolean;
-	}
-
-	interface SocialMediaSet {
-		id: string;
-		workspace_id: string;
-		name: string;
-		is_default: boolean;
-		created_at: string;
-		accounts: SetAccount[];
-	}
 
 	let workspaces = $state<Workspace[] | null>(null);
 	let selectedWorkspaceId = $state('');
@@ -47,9 +26,6 @@
 
 	let accounts = $state<SocialAccount[]>([]);
 	let accountsLoading = $state(false);
-
-	let sets = $state<SocialMediaSet[]>([]);
-	let setsLoading = $state(false);
 
 	let providerEntries = $state.raw<ProviderInfo[]>([]);
 	let providersLoading = $state(false);
@@ -69,18 +45,6 @@
 	let blueskyLoading = $state(false);
 	let blueskyError = $state('');
 
-	let createSetDialogOpen = $state(false);
-	let newSetName = $state('');
-	let newSetDefault = $state(false);
-	let newSetAccountIds = $state<string[]>([]);
-	let createSetLoading = $state(false);
-
-	let editSetDialogOpen = $state(false);
-	let editingSet = $state<SocialMediaSet | null>(null);
-	let editSetName = $state('');
-	let editSetDefault = $state(false);
-	let editSetAccountIds = $state<string[]>([]);
-	let editSetLoading = $state(false);
 	let editAccountDialogOpen = $state(false);
 	let editingAccount = $state<SocialAccount | null>(null);
 	let editAccountSlug = $state('');
@@ -119,26 +83,6 @@
 		);
 	}
 
-	function resetCreateSetForm() {
-		newSetName = '';
-		newSetDefault = false;
-		newSetAccountIds = [];
-	}
-
-	function closeEditSetDialog() {
-		editSetDialogOpen = false;
-		editingSet = null;
-		editSetName = '';
-		editSetDefault = false;
-		editSetAccountIds = [];
-	}
-
-	function syncSetSelectionsWithAccounts(nextAccounts: SocialAccount[]) {
-		const validIds = new Set(nextAccounts.map((account) => account.id));
-		newSetAccountIds = newSetAccountIds.filter((id) => validIds.has(id));
-		editSetAccountIds = editSetAccountIds.filter((id) => validIds.has(id));
-	}
-
 	async function loadAccounts() {
 		if (!selectedWorkspaceId) return;
 		accountsLoading = true;
@@ -147,41 +91,11 @@
 				params: { query: { workspace_id: selectedWorkspaceId } }
 			});
 			accounts = data ?? [];
-			syncSetSelectionsWithAccounts(accounts);
 		} catch (e) {
 			console.error('Failed to load accounts:', e);
 			accounts = [];
-			syncSetSelectionsWithAccounts([]);
 		} finally {
 			accountsLoading = false;
-		}
-	}
-
-	async function loadSets() {
-		if (!selectedWorkspaceId) return;
-		setsLoading = true;
-		try {
-			const { data, error: err } = await client.GET('/sets', {
-				params: { query: { workspace_id: selectedWorkspaceId } }
-			});
-			sets = (data ?? []) as unknown as SocialMediaSet[];
-			const currentEditingSet = editingSet;
-			if (currentEditingSet) {
-				const refreshedSet = sets.find((set) => set.id === currentEditingSet.id) ?? null;
-				if (!refreshedSet) {
-					closeEditSetDialog();
-				} else {
-					editingSet = refreshedSet;
-					editSetAccountIds = refreshedSet.accounts.map((account) => account.social_account_id);
-					editSetDefault = refreshedSet.is_default;
-					editSetName = refreshedSet.name;
-				}
-			}
-		} catch (e) {
-			console.error('Failed to load sets:', e);
-			sets = [];
-		} finally {
-			setsLoading = false;
 		}
 	}
 
@@ -205,91 +119,9 @@
 				params: { path: { account_id: accountId } }
 			});
 			await loadAccounts();
-			await loadSets();
 		} catch (e) {
 			error = (e as Error).message;
 		}
-	}
-
-	async function createSet() {
-		if (!newSetName.trim() || !selectedWorkspaceId) return;
-		createSetLoading = true;
-		try {
-			await (client as any).POST('/sets', {
-				body: {
-					workspace_id: selectedWorkspaceId,
-					name: newSetName.trim(),
-					is_default: newSetDefault,
-					account_ids: newSetAccountIds
-				}
-			});
-			createSetDialogOpen = false;
-			resetCreateSetForm();
-			await loadSets();
-		} catch (e) {
-			error = (e as Error).message;
-		} finally {
-			createSetLoading = false;
-		}
-	}
-
-	async function updateSet() {
-		if (!editingSet || !editSetName.trim()) return;
-		editSetLoading = true;
-		try {
-			await (client as any).PATCH('/sets/{id}', {
-				params: { path: { id: editingSet.id } },
-				body: {
-					name: editSetName.trim(),
-					is_default: editSetDefault
-				}
-			});
-
-			const currentAccIds = editingSet.accounts.map((a) => a.social_account_id);
-			const toAdd = editSetAccountIds.filter((id) => !currentAccIds.includes(id));
-			const toRemove = currentAccIds.filter((id) => !editSetAccountIds.includes(id));
-
-			for (const accId of toAdd) {
-				await (client as any).POST('/sets/{id}/accounts', {
-					params: { path: { id: editingSet.id } },
-					body: { account_ids: [accId] }
-				});
-			}
-
-			for (const accId of toRemove) {
-				await (client as any).DELETE('/sets/{id}/accounts/{account_id}', {
-					params: { path: { id: editingSet.id, account_id: accId } }
-				});
-			}
-
-			closeEditSetDialog();
-			await loadSets();
-		} catch (e) {
-			error = (e as Error).message;
-		} finally {
-			editSetLoading = false;
-		}
-	}
-
-	async function deleteSet(setId: string) {
-		if (!confirm('Delete this set? Posts using this set will keep their account selections.'))
-			return;
-		try {
-			await (client as any).DELETE('/sets/{id}', {
-				params: { path: { id: setId } }
-			});
-			await loadSets();
-		} catch (e) {
-			error = (e as Error).message;
-		}
-	}
-
-	function openEditSet(set: SocialMediaSet) {
-		editingSet = set;
-		editSetName = set.name;
-		editSetDefault = set.is_default;
-		editSetAccountIds = set.accounts.map((a) => a.social_account_id);
-		editSetDialogOpen = true;
 	}
 
 	function accountDisplayName(account: SocialAccount): string {
@@ -343,7 +175,6 @@
 					if (workspaces && workspaces.length > 0) {
 						selectedWorkspaceId = workspaces[0].id;
 						await loadAccounts();
-						await loadSets();
 					}
 					await loadProviders();
 				} catch (e) {
@@ -359,12 +190,8 @@
 	$effect(() => {
 		if (selectedWorkspaceId) {
 			loadAccounts();
-			loadSets();
 		} else {
 			accounts = [];
-			sets = [];
-			resetCreateSetForm();
-			closeEditSetDialog();
 		}
 	});
 
@@ -463,7 +290,6 @@
 			if (err) throw new Error(err.detail || 'Login failed');
 			blueskyModalOpen = false;
 			await loadAccounts();
-			await loadSets();
 		} catch (e) {
 			blueskyError = (e as Error).message;
 			showConnectError(e, 'Login failed');
@@ -788,22 +614,6 @@
 		}
 	}
 
-	function toggleNewSetAccount(accId: string) {
-		if (newSetAccountIds.includes(accId)) {
-			newSetAccountIds = newSetAccountIds.filter((id) => id !== accId);
-		} else {
-			newSetAccountIds = [...newSetAccountIds, accId];
-		}
-	}
-
-	function toggleEditSetAccount(accId: string) {
-		if (editSetAccountIds.includes(accId)) {
-			editSetAccountIds = editSetAccountIds.filter((id) => id !== accId);
-		} else {
-			editSetAccountIds = [...editSetAccountIds, accId];
-		}
-	}
-
 	const accountsByPlatform = $derived.by(() => {
 		const grouped = new Map<string, SocialAccount[]>();
 		for (const acc of accounts) {
@@ -864,7 +674,7 @@
 {:else}
 	<PageContainer
 		title="Accounts"
-		description="Connect and manage your social accounts and sets."
+		description="Connect and manage your social accounts."
 		icon={UsersIcon}
 	>
 		{#if error}
@@ -898,8 +708,6 @@
 						<DropdownMenu.Item
 							onSelect={() => {
 								selectedWorkspaceId = workspace.id;
-								resetCreateSetForm();
-								closeEditSetDialog();
 							}}
 							class="gap-2 p-2"
 						>
@@ -913,95 +721,6 @@
 					{/each}
 				</DropdownMenu.Content>
 			</DropdownMenu.Root>
-		</div>
-
-		<!-- Social Media Sets -->
-		<div class="mb-8">
-			<div class="mb-4 flex items-center justify-between">
-				<h2 class="text-lg font-semibold">Social Media Sets</h2>
-				<Button onclick={() => (createSetDialogOpen = true)} size="sm" class="gap-1.5">
-					<PlusIcon class="h-3.5 w-3.5" />
-					New Set
-				</Button>
-			</div>
-
-			{#if setsLoading}
-				<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-					<Skeleton class="h-28 rounded-lg" />
-					<Skeleton class="h-28 rounded-lg" />
-				</div>
-			{:else if sets.length === 0}
-				<EmptyState
-					icon={LayersIcon}
-					title="No sets yet"
-					description="Group accounts together for quick posting"
-					actionLabel="Create your first set"
-					onAction={() => (createSetDialogOpen = true)}
-					variant="muted"
-					size="md"
-				/>
-			{:else}
-				<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-					{#each sets as set (set.id)}
-						<div class="group rounded-lg border bg-card p-4 transition-all hover:shadow-sm">
-							<div class="mb-3 flex items-start justify-between">
-								<div class="flex items-center gap-3">
-									<div class="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
-										<LayersIcon class="h-5 w-5 text-primary" />
-									</div>
-									<div>
-										<h3 class="text-sm font-medium">{set.name}</h3>
-										<p class="text-sm text-muted-foreground">
-											{set.accounts.length} account{set.accounts.length !== 1 ? 's' : ''}
-										</p>
-									</div>
-								</div>
-								<div
-									class="flex items-center gap-0.5 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100"
-								>
-									{#if set.is_default}
-										<span
-											class="mr-1 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary"
-										>
-											Default
-										</span>
-									{/if}
-									<Button
-										variant="ghost"
-										size="icon"
-										class="h-7 w-7"
-										onclick={() => openEditSet(set)}
-									>
-										<SettingsIcon class="h-3.5 w-3.5" />
-									</Button>
-									<Button
-										variant="ghost"
-										size="icon"
-										class="h-7 w-7 text-destructive hover:text-destructive"
-										onclick={() => deleteSet(set.id)}
-									>
-										<TrashIcon class="h-3.5 w-3.5" />
-									</Button>
-								</div>
-							</div>
-							{#if set.accounts.length > 0}
-								<div class="flex flex-wrap gap-1.5">
-									{#each set.accounts as acc (acc.social_account_id)}
-										<span
-											class="inline-flex items-center gap-1.5 rounded-full bg-muted px-2.5 py-1 text-sm font-medium"
-										>
-											<PlatformIcon platform={acc.platform} class="h-3 w-3" />
-											{acc.account_username || acc.platform}
-										</span>
-									{/each}
-								</div>
-							{:else}
-								<p class="text-sm text-muted-foreground">No accounts in this set</p>
-							{/if}
-						</div>
-					{/each}
-				</div>
-			{/if}
 		</div>
 
 		<!-- Connected Accounts -->
@@ -1303,140 +1022,6 @@
 					</Dialog.Close>
 					<Button type="submit" disabled={editAccountLoading || !editAccountSlug.trim()}>
 						{editAccountLoading ? 'Saving...' : 'Save Slug'}
-					</Button>
-				</div>
-			</form>
-		{/if}
-	</Dialog.Content>
-</Dialog.Root>
-
-<Dialog.Root bind:open={createSetDialogOpen}>
-	<Dialog.Content class="sm:max-w-md">
-		<Dialog.Header>
-			<Dialog.Title>Create Social Media Set</Dialog.Title>
-			<Dialog.Description>
-				Group accounts together for quick posting. Sets appear in the compose post dropdown.
-			</Dialog.Description>
-		</Dialog.Header>
-		<form
-			class="space-y-4"
-			onsubmit={(e) => {
-				e.preventDefault();
-				createSet();
-			}}
-		>
-			<div class="space-y-2">
-				<Label for="set-name">Set Name</Label>
-				<Input
-					id="set-name"
-					bind:value={newSetName}
-					placeholder="e.g. Tech Twitter, Professional"
-					required
-				/>
-			</div>
-			<div class="flex items-center gap-2">
-				<Checkbox id="set-default" bind:checked={newSetDefault} />
-				<Label for="set-default" class="text-sm font-normal">
-					Set as the default set for this workspace
-				</Label>
-			</div>
-			{#if accounts.length > 0}
-				<div class="space-y-2">
-					<Label>Accounts to Include</Label>
-					<div class="max-h-48 space-y-2 overflow-y-auto rounded-md border p-2">
-						{#each accounts as account (account.id)}
-							<label class="flex items-center gap-2 rounded p-2 hover:bg-muted/50">
-								<Checkbox
-									checked={newSetAccountIds.includes(account.id)}
-									onCheckedChange={() => toggleNewSetAccount(account.id)}
-								/>
-								<PlatformIcon platform={account.platform} class="h-4 w-4" />
-								<span class="text-sm">
-									{#if account.account_username}
-										@{account.account_username}
-									{:else if account.instance_url}
-										{account.instance_url.replace('https://', '')}
-									{:else}
-										{account.platform}
-									{/if}
-								</span>
-							</label>
-						{/each}
-					</div>
-				</div>
-			{/if}
-			<div class="flex justify-end gap-2">
-				<Dialog.Close>
-					<Button variant="outline" type="button" onclick={resetCreateSetForm}>Cancel</Button>
-				</Dialog.Close>
-				<Button type="submit" disabled={createSetLoading || !newSetName.trim()}>
-					{createSetLoading ? 'Creating...' : 'Create Set'}
-				</Button>
-			</div>
-		</form>
-	</Dialog.Content>
-</Dialog.Root>
-
-<Dialog.Root bind:open={editSetDialogOpen}>
-	<Dialog.Content class="sm:max-w-md">
-		<Dialog.Header>
-			<Dialog.Title>Edit Social Media Set</Dialog.Title>
-			<Dialog.Description>Update the set name, default status, and accounts.</Dialog.Description>
-		</Dialog.Header>
-		{#if editingSet}
-			<form
-				class="space-y-4"
-				onsubmit={(e) => {
-					e.preventDefault();
-					updateSet();
-				}}
-			>
-				<div class="space-y-2">
-					<Label for="edit-set-name">Set Name</Label>
-					<Input
-						id="edit-set-name"
-						bind:value={editSetName}
-						placeholder="e.g. Tech Twitter, Professional"
-						required
-					/>
-				</div>
-				<div class="flex items-center gap-2">
-					<Checkbox id="edit-set-default" bind:checked={editSetDefault} />
-					<Label for="edit-set-default" class="text-sm font-normal">
-						Set as the default set for this workspace
-					</Label>
-				</div>
-				{#if accounts.length > 0}
-					<div class="space-y-2">
-						<Label>Accounts in Set</Label>
-						<div class="max-h-48 space-y-2 overflow-y-auto rounded-md border p-2">
-							{#each accounts as account (account.id)}
-								<label class="flex items-center gap-2 rounded p-2 hover:bg-muted/50">
-									<Checkbox
-										checked={editSetAccountIds.includes(account.id)}
-										onCheckedChange={() => toggleEditSetAccount(account.id)}
-									/>
-									<PlatformIcon platform={account.platform} class="h-4 w-4" />
-									<span class="text-sm">
-										{#if account.account_username}
-											@{account.account_username}
-										{:else if account.instance_url}
-											{account.instance_url.replace('https://', '')}
-										{:else}
-											{account.platform}
-										{/if}
-									</span>
-								</label>
-							{/each}
-						</div>
-					</div>
-				{/if}
-				<div class="flex justify-end gap-2">
-					<Dialog.Close>
-						<Button variant="outline" type="button" onclick={closeEditSetDialog}>Cancel</Button>
-					</Dialog.Close>
-					<Button type="submit" disabled={editSetLoading || !editSetName.trim()}>
-						{editSetLoading ? 'Saving...' : 'Save Changes'}
 					</Button>
 				</div>
 			</form>

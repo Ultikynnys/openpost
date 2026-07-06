@@ -1301,25 +1301,11 @@ func (h *OAuthHandler) DisconnectAccount(api huma.API) {
 			return nil, err
 		}
 
-		err = h.db.RunInTx(ctx, &sql.TxOptions{}, func(txCtx context.Context, tx bun.Tx) error {
-			if _, err := tx.NewUpdate().
-				Model((*models.SocialAccount)(nil)).
-				Set("is_active = ?", false).
-				Where("id = ?", account.ID).
-				Exec(txCtx); err != nil {
-				return err
-			}
-
-			if _, err := tx.NewDelete().
-				Model((*models.SocialMediaSetAccount)(nil)).
-				Where("social_account_id = ?", account.ID).
-				Exec(txCtx); err != nil {
-				return err
-			}
-
-			return nil
-		})
-		if err != nil {
+		if _, err := h.db.NewUpdate().
+			Model((*models.SocialAccount)(nil)).
+			Set("is_active = ?", false).
+			Where("id = ?", account.ID).
+			Exec(ctx); err != nil {
 			return nil, huma.Error500InternalServerError("failed to disconnect account")
 		}
 

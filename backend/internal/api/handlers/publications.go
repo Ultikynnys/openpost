@@ -576,7 +576,7 @@ func (h *PublicationHandler) schedulePublication(api huma.API) {
 		if err != nil {
 			return nil, err
 		}
-		if err := h.markPublicationQueued(ctx, publication.ID, models.PublicationStatusScheduled, models.RenditionStatusScheduled); err != nil {
+		if err := h.markPublicationQueued(ctx, publication.ID); err != nil {
 			return nil, err
 		}
 		return actionMessage("publication scheduled", jobID), nil
@@ -607,7 +607,7 @@ func (h *PublicationHandler) publishNow(api huma.API) {
 		if err != nil {
 			return nil, err
 		}
-		if err := h.markPublicationQueued(ctx, publication.ID, models.PublicationStatusScheduled, models.RenditionStatusScheduled); err != nil {
+		if err := h.markPublicationQueued(ctx, publication.ID); err != nil {
 			return nil, err
 		}
 		return actionMessage("publication queued", jobID), nil
@@ -972,16 +972,16 @@ func (h *PublicationHandler) replacePublicationJobTx(ctx context.Context, tx bun
 	return job.ID, nil
 }
 
-func (h *PublicationHandler) markPublicationQueued(ctx context.Context, publicationID, publicationStatus, renditionStatus string) error {
+func (h *PublicationHandler) markPublicationQueued(ctx context.Context, publicationID string) error {
 	if _, err := h.db.NewUpdate().Model((*models.Publication)(nil)).
-		Set("status = ?", publicationStatus).
+		Set("status = ?", models.PublicationStatusScheduled).
 		Set("updated_at = ?", time.Now().UTC()).
 		Where("id = ?", publicationID).
 		Exec(ctx); err != nil {
 		return huma.Error500InternalServerError("failed to update publication")
 	}
 	if _, err := h.db.NewUpdate().Model((*models.Rendition)(nil)).
-		Set("status = ?", renditionStatus).
+		Set("status = ?", models.RenditionStatusScheduled).
 		Set("updated_at = ?", time.Now().UTC()).
 		Where("publication_id = ?", publicationID).
 		Where("status NOT IN (?)", bun.List([]string{models.RenditionStatusPublished, models.RenditionStatusPublishing})).

@@ -11,7 +11,6 @@ const (
 	tagProviderReadiness = "Provider Readiness"
 	tagPublications      = "Publications"
 	tagPrompts           = "Prompts"
-	tagSets              = "Sets"
 	tagWorkspaces        = "Workspaces"
 
 	fieldError = "error"
@@ -27,7 +26,6 @@ const (
 	jobTypePublishPublication   = "publish_publication"
 	postPathByID                = "/posts/{id}"
 	postPathVariants            = "/posts/{id}/variants"
-	setPathByID                 = "/sets/{id}"
 	postingLabelEarlyMorning    = "Early Morning"
 	postingLabelMorning         = "Morning"
 	postingLabelLateMorning     = "Late Morning"

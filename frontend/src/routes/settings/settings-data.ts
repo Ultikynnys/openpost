@@ -271,7 +271,6 @@ export interface WorkspaceTeam {
 export interface PostingSchedule {
 	id: string;
 	workspace_id: string;
-	set_id: string;
 	utc_hour: number;
 	utc_minute: number;
 	day_of_week: number;

@@ -18,13 +18,11 @@
 	import ChevronLeftIcon from 'lucide-svelte/icons/chevron-left';
 	import ChevronRightIcon from 'lucide-svelte/icons/chevron-right';
 	import ClockIcon from 'lucide-svelte/icons/clock';
-	import LayersIcon from 'lucide-svelte/icons/layers';
 	import Loader2Icon from 'lucide-svelte/icons/loader-2';
 	import PlusIcon from 'lucide-svelte/icons/plus';
 	import RefreshCwIcon from 'lucide-svelte/icons/refresh-cw';
 
 	type Publication = components['schemas']['PublicationResponse'];
-	type SetResponse = components['schemas']['SetResponse'];
 	type PostDestination = components['schemas']['PostDestinationResponse'];
 	type Rendition = components['schemas']['RenditionResponse'];
 
@@ -54,7 +52,6 @@
 		workspaceName: string;
 		accounts: AccountBadge[];
 		platforms: string[];
-		setName: string;
 		mediaCount: number;
 		profile: string;
 		publication?: Publication;
@@ -66,7 +63,6 @@
 	let posts = $state<Post[]>([]);
 	let publications = $state<Publication[]>([]);
 	let accountsByWorkspace = $state<Record<string, SocialAccount[]>>({});
-	let setsByWorkspace = $state<Record<string, SetResponse[]>>({});
 	let loading = $state(true);
 	let errorMessage = $state('');
 	let successMessage = $state('');
@@ -197,22 +193,19 @@
 				posts = [];
 				publications = [];
 				accountsByWorkspace = {};
-				setsByWorkspace = {};
 				return;
 			}
 
-			const [postGroups, publicationGroups, accountEntries, setEntries] = await Promise.all([
+			const [postGroups, publicationGroups, accountEntries] = await Promise.all([
 				Promise.all(workspaceIds.map(fetchScheduledPosts)),
 				Promise.all(workspaceIds.map(fetchScheduledPublications)),
-				Promise.all(workspaceIds.map(fetchAccounts)),
-				Promise.all(workspaceIds.map(fetchSets))
+				Promise.all(workspaceIds.map(fetchAccounts))
 			]);
 
 			if (request !== activeRequest) return;
 			posts = postGroups.flat();
 			publications = publicationGroups.flat();
 			accountsByWorkspace = Object.fromEntries(accountEntries);
-			setsByWorkspace = Object.fromEntries(setEntries);
 		} catch (error) {
 			if (request !== activeRequest) return;
 			errorMessage = problemMessage(error, m.calendar_failed_load());
@@ -267,21 +260,9 @@
 		return [workspaceId, data ?? []];
 	}
 
-	async function fetchSets(workspaceId: string): Promise<[string, SetResponse[]]> {
-		const { data, error } = await client.GET('/sets', {
-			params: { query: { workspace_id: workspaceId } }
-		});
-		if (error) throw new Error(problemMessage(error, m.calendar_failed_load()));
-		return [workspaceId, data ?? []];
-	}
-
 	function postToCalendarItem(post: Post): CalendarItem | null {
 		if (!post.scheduled_at) return null;
 		const accounts = accountsForDestinations(post.workspace_id, post.destinations ?? []);
-		const setName = matchingSetName(
-			post.workspace_id,
-			accounts.map((account) => account.id)
-		);
 		const initial = initialPostText(post.content);
 		return {
 			id: post.id,
@@ -296,7 +277,6 @@
 			workspaceName: workspaceName(post.workspace_id),
 			accounts,
 			platforms: unique(accounts.map((account) => account.platform)),
-			setName,
 			mediaCount: post.media_ids?.length ?? 0,
 			profile: ''
 		};
@@ -306,12 +286,8 @@
 		if (!publication.scheduled_at) return null;
 		const renditions = publication.renditions ?? [];
 		const accounts = accountsForRenditions(publication.workspace_id, renditions);
-		const setName = matchingSetName(
-			publication.workspace_id,
-			accounts.map((account) => account.id)
-		);
 		const title =
-			publication.title || firstLine(publication.source_text) || m.calendar_untitled_set();
+			publication.title || firstLine(publication.source_text) || m.calendar_untitled_publication();
 		return {
 			id: publication.id,
 			key: `publication:${publication.id}`,
@@ -325,7 +301,6 @@
 			workspaceName: workspaceName(publication.workspace_id),
 			accounts,
 			platforms: unique(accounts.map((account) => account.platform)),
-			setName,
 			mediaCount: publication.media?.length ?? 0,
 			profile: publication.content_profile,
 			publication
@@ -377,16 +352,6 @@
 				? `@${username.replace(/^@/, '')}`
 				: account.slug || platformLabel(account.platform)
 		};
-	}
-
-	function matchingSetName(workspaceId: string, accountIds: string[]) {
-		const key = sortedKey(accountIds);
-		if (!key) return '';
-		const set = (setsByWorkspace[workspaceId] ?? []).find(
-			(candidate) =>
-				sortedKey((candidate.accounts ?? []).map((account) => account.social_account_id)) === key
-		);
-		return set?.name ?? '';
 	}
 
 	function toggleWorkspace(workspaceId: string) {
@@ -618,10 +583,6 @@
 		});
 	}
 
-	function sortedKey(values: string[]) {
-		return unique(values).sort().join('|');
-	}
-
 	function workspaceName(workspaceId: string) {
 		return (
 			workspaces.find((workspace) => workspace.id === workspaceId)?.name ??
@@ -726,7 +687,10 @@
 							<span>{m.calendar_scheduled_summary({ count: monthItems.length })}</span>
 							<span class="text-muted-foreground/40">/</span>
 							<span
-								>{m.calendar_post_set_summary({ posts: postCount, sets: publicationCount })}</span
+								>{m.calendar_post_publication_summary({
+									posts: postCount,
+									publications: publicationCount
+								})}</span
 							>
 						</div>
 					</div>
@@ -1009,7 +973,7 @@
 										)}
 										aria-label={item.kind === 'post'
 											? m.calendar_open_post({ title: item.title })
-											: m.calendar_set_card({ title: item.title })}
+											: m.calendar_publication_card({ title: item.title })}
 										ondragstart={(event) => onDragStart(event, item)}
 										ondragend={onDragEnd}
 										onclick={() => openItem(item)}
@@ -1044,20 +1008,11 @@
 												class="inline-flex items-center gap-1 rounded-sm bg-background/65 px-1.5 py-0.5 text-[11px] font-medium text-current/75 ring-1 ring-current/10"
 											>
 												{#if item.kind === 'publication'}
-													<LayersIcon class="size-3" />
-													{m.calendar_set_label()}
+													{m.calendar_publication_label()}
 												{:else}
 													{m.calendar_post_label()}
 												{/if}
 											</span>
-											{#if item.setName}
-												<span
-													class="inline-flex max-w-36 items-center gap-1 rounded-sm bg-background/65 px-1.5 py-0.5 text-[11px] font-medium text-current/75 ring-1 ring-current/10"
-												>
-													<LayersIcon class="size-3" />
-													<span class="truncate">{item.setName}</span>
-												</span>
-											{/if}
 											{#each item.accounts.slice(0, 3) as account (account.id)}
 												<span
 													class="inline-flex max-w-32 items-center gap-1 rounded-sm bg-background/65 px-1.5 py-0.5 text-[11px] font-medium text-current/75 ring-1 ring-current/10"

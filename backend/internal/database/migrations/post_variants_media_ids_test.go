@@ -30,8 +30,6 @@ func newPostVariantsTestDB(t *testing.T) *bun.DB {
 		(*models.Workspace)(nil),
 		(*models.User)(nil),
 		(*models.SocialAccount)(nil),
-		(*models.SocialMediaSet)(nil),
-		(*models.SocialMediaSetAccount)(nil),
 		(*models.Post)(nil),
 	}
 	for _, m := range modelList {

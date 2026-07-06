@@ -41,8 +41,6 @@ func newMigrationsTestDB(t *testing.T) *bun.DB {
 		(*models.Workspace)(nil),
 		(*models.User)(nil),
 		(*models.SocialAccount)(nil),
-		(*models.SocialMediaSet)(nil),
-		(*models.SocialMediaSetAccount)(nil),
 		(*models.MediaAttachment)(nil),
 		(*models.ThreadDraft)(nil),
 		(*models.Post)(nil),

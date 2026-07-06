@@ -44,7 +44,6 @@ func (h *PostingScheduleHandler) checkWorkspaceAccess(ctx context.Context, works
 type PostingScheduleResponse struct {
 	ID             string `json:"id" doc:"Schedule ID"`
 	WorkspaceID    string `json:"workspace_id" doc:"Workspace ID"`
-	SetID          string `json:"set_id,omitempty" doc:"Optional set ID"`
 	UTCHour        int    `json:"utc_hour" doc:"Hour in UTC (0-23)"`
 	UTCMinute      int    `json:"utc_minute" doc:"Minute in UTC (0-59)"`
 	DayOfWeek      int    `json:"day_of_week" doc:"Day of week (0=Sunday, 6=Saturday) in UTC"`
@@ -58,7 +57,6 @@ type PostingScheduleResponse struct {
 
 type ListPostingSchedulesInput struct {
 	WorkspaceID string `query:"workspace_id" doc:"Filter by workspace ID"`
-	SetID       string `query:"set_id" doc:"Filter by set ID (optional)"`
 }
 
 type ListPostingSchedulesOutput struct {
@@ -95,10 +93,6 @@ func (h *PostingScheduleHandler) ListSchedules(api huma.API) {
 			Model(&schedules).
 			Where("workspace_id = ?", input.WorkspaceID)
 
-		if input.SetID != "" {
-			query = query.Where("set_id = ?", input.SetID)
-		}
-
 		query = query.Order("day_of_week ASC", "utc_hour ASC", "utc_minute ASC")
 
 		if err := query.Scan(ctx); err != nil {
@@ -117,7 +111,6 @@ func (h *PostingScheduleHandler) ListSchedules(api huma.API) {
 type CreatePostingScheduleInput struct {
 	Body struct {
 		WorkspaceID    string `json:"workspace_id" doc:"Workspace ID"`
-		SetID          string `json:"set_id,omitempty" doc:"Optional set ID"`
 		UTCHour        int    `json:"utc_hour" doc:"Hour in UTC (0-23)"`
 		UTCMinute      int    `json:"utc_minute" doc:"Minute in UTC (0-59)"`
 		DayOfWeek      int    `json:"day_of_week" doc:"Day of week (0=Sunday, 6=Saturday)"`
@@ -191,7 +184,6 @@ func (h *PostingScheduleHandler) CreateSchedule(api huma.API) {
 		schedule := &models.PostingSchedule{
 			ID:          uuid.New().String(),
 			WorkspaceID: input.Body.WorkspaceID,
-			SetID:       input.Body.SetID,
 			UTCHour:     utcHour,
 			UTCMinute:   utcMinute,
 			DayOfWeek:   utcDayOfWeek,
@@ -353,7 +345,6 @@ type SuggestScheduleOutput struct {
 
 type NextAvailableSlotInput struct {
 	WorkspaceID string `query:"workspace_id" doc:"Workspace ID"`
-	SetID       string `query:"set_id" doc:"Optional set ID"`
 }
 
 type NextAvailableSlotOutput struct {
@@ -388,7 +379,6 @@ func postingScheduleResponseFromModel(schedule models.PostingSchedule) PostingSc
 	return PostingScheduleResponse{
 		ID:          schedule.ID,
 		WorkspaceID: schedule.WorkspaceID,
-		SetID:       schedule.SetID,
 		UTCHour:     schedule.UTCHour,
 		UTCMinute:   schedule.UTCMinute,
 		DayOfWeek:   schedule.DayOfWeek,
@@ -642,10 +632,6 @@ func (h *PostingScheduleHandler) GetNextAvailableSlot(api huma.API) {
 			Model(&schedules).
 			Where("workspace_id = ?", input.WorkspaceID).
 			Where("is_active = ?", true)
-
-		if input.SetID != "" {
-			query = query.Where("set_id = ?", input.SetID)
-		}
 
 		if err := query.Scan(ctx); err != nil {
 			return nil, huma.Error500InternalServerError("failed to fetch schedules")

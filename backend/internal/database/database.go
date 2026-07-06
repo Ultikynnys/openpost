@@ -105,8 +105,6 @@ func CreateSchema(db *bun.DB) error {
 		(*models.PostMedia)(nil),
 		(*models.ProviderMediaState)(nil),
 		(*models.Job)(nil),
-		(*models.SocialMediaSet)(nil),
-		(*models.SocialMediaSetAccount)(nil),
 		(*models.PostVariant)(nil),
 		(*models.PostingSchedule)(nil),
 		(*models.Prompt)(nil),

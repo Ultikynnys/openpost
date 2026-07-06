@@ -66,19 +66,6 @@
 		destinations: Array<{ social_account_id: string; platform: string }>;
 	}
 
-	interface SocialMediaSet {
-		id: string;
-		workspace_id: string;
-		name: string;
-		is_default: boolean;
-		accounts: Array<{
-			social_account_id: string;
-			platform: string;
-			account_username: string;
-			is_main: boolean;
-		}>;
-	}
-
 	interface Props {
 		initialPost?: InitialPost;
 		initialScheduleDate?: string | null;
@@ -118,10 +105,6 @@
 	let selectedAccountIds = $state<string[]>([]);
 	let loadingWorkspaces = $state(true);
 	let loadingAccounts = $state(false);
-
-	let sets = $state<SocialMediaSet[]>([]);
-	let selectedSetId = $state<string | null>(null);
-	let loadingSets = $state(false);
 
 	let selectedDate = $state<CalendarDate | undefined>(undefined);
 	let selectedTime = $state<string | null>(null);
@@ -354,11 +337,9 @@
 				: '';
 		if (nextWorkspaceId && nextWorkspaceId !== selectedWorkspaceId) {
 			selectedWorkspaceId = nextWorkspaceId;
-			selectedSetId = null;
 			variants = new Map();
 			activeVariantAccountId = null;
 			await loadAccounts(nextWorkspaceId);
-			await loadSets(nextWorkspaceId);
 		}
 
 		applyInitialScheduleDate(dateParam);
@@ -575,7 +556,6 @@
 			variants = new Map();
 			activeVariantAccountId = null;
 			selectedAccountIds = [];
-			selectedSetId = null;
 			mediaAltTexts = new Map();
 			mediaMimeTypes = new Map();
 			mediaSizes = new Map();
@@ -585,7 +565,6 @@
 			if (workspaces.length > 0) {
 				selectedWorkspaceId = workspaceCtx.currentWorkspace?.id ?? workspaces[0].id;
 				await loadAccounts(selectedWorkspaceId);
-				await loadSets(selectedWorkspaceId);
 			}
 			return;
 		}
@@ -647,7 +626,6 @@
 		}
 		activePostIndex = 0;
 		activeVariantAccountId = null;
-		selectedSetId = null;
 
 		if (post.scheduled_at && post.scheduled_at !== '0001-01-01T00:00:00Z') {
 			const date = new Date(post.scheduled_at);
@@ -659,7 +637,6 @@
 		}
 
 		await loadAccounts(selectedWorkspaceId, selectedAccountIds);
-		await loadSets(selectedWorkspaceId, false);
 		if (!source) {
 			await loadVariants(post.id);
 		}
@@ -805,60 +782,11 @@
 		}
 	}
 
-	async function loadSets(workspaceId: string, autoApplyDefault = true) {
-		if (!workspaceId) return;
-		try {
-			const { data, error: err } = await client.GET('/sets', {
-				params: { query: { workspace_id: workspaceId } }
-			});
-			sets = (data ?? []) as unknown as SocialMediaSet[];
-			if (selectedSetId) {
-				const selectedSet = sets.find((set) => set.id === selectedSetId) ?? null;
-				if (!selectedSet) {
-					selectedSetId = null;
-				} else {
-					const nextSelectedIds = selectedSet.accounts.map((account) => account.social_account_id);
-					if (!arraysEqual(nextSelectedIds, selectedAccountIds)) {
-						applySet(selectedSet);
-					}
-				}
-			}
-			if (autoApplyDefault && !selectedSetId) {
-				const defaultSet = sets.find((s) => s.is_default);
-				if (defaultSet) {
-					selectedSetId = defaultSet.id;
-					applySet(defaultSet);
-				}
-			}
-		} catch (e) {
-			console.error('Failed to load sets:', e);
-			sets = [];
-		}
-	}
-
-	function applySet(set: SocialMediaSet) {
-		selectedAccountIds = set.accounts.map((a) => a.social_account_id);
-		scheduleAutoSave();
-	}
-
 	function handleWorkspaceChange(value: string) {
 		selectedWorkspaceId = value;
-		selectedSetId = null;
 		variants = new Map();
 		activeVariantAccountId = null;
 		loadAccounts(value);
-		loadSets(value);
-	}
-
-	function handleSetChange(setId: string | null) {
-		selectedSetId = setId;
-		if (setId) {
-			const set = sets.find((s) => s.id === setId);
-			if (set) applySet(set);
-		} else {
-			selectedAccountIds = accounts.map((a) => a.id);
-			scheduleAutoSave();
-		}
 	}
 
 	function toggleAccount(id: string) {
@@ -1612,10 +1540,7 @@
 		try {
 			const { data, error: err } = await (client as any).GET('/posting-schedules/next-slot', {
 				params: {
-					query: {
-						workspace_id: selectedWorkspaceId,
-						...(selectedSetId ? { set_id: selectedSetId } : {})
-					}
+					query: { workspace_id: selectedWorkspaceId }
 				}
 			});
 			if (err) throw err;
@@ -1781,59 +1706,6 @@
 			{#if modeControl}
 				<div class="hidden h-4 w-px bg-border sm:block"></div>
 				{@render modeControl()}
-			{/if}
-
-			<!-- Set selector -->
-			{#if sets.length > 0}
-				<div class="h-4 w-px bg-border"></div>
-				<DropdownMenu.Root>
-					<DropdownMenu.Trigger>
-						{#snippet child({ props })}
-							<Button {...props} variant="ghost" size="sm" class="gap-1 text-xs">
-								<span class="text-muted-foreground"
-									>{sets.find((s) => s.id === selectedSetId)?.name ?? m.common_all()}</span
-								>
-								<ChevronDownIcon class="h-3 w-3" />
-							</Button>
-						{/snippet}
-					</DropdownMenu.Trigger>
-					<DropdownMenu.Content class="w-56" align="start">
-						<DropdownMenu.Label class="text-xs tracking-wider text-muted-foreground uppercase"
-							>{m.compose_social_set()}</DropdownMenu.Label
-						>
-						<DropdownMenu.Separator />
-						<DropdownMenu.Item
-							onclick={() => handleSetChange(null)}
-							class="gap-2 {selectedSetId === null ? 'bg-muted' : ''}"
-						>
-							<div class="flex h-6 w-6 items-center justify-center rounded-full bg-muted">
-								<span class="text-xs">{m.common_all()}</span>
-							</div>
-							<span class="text-sm">{m.compose_all_accounts()}</span>
-						</DropdownMenu.Item>
-						{#each sets as set (set.id)}
-							<DropdownMenu.Item
-								onclick={() => handleSetChange(set.id)}
-								class="gap-2 {selectedSetId === set.id ? 'bg-muted' : ''}"
-							>
-								<div
-									class="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary"
-								>
-									{set.name.slice(0, 2).toUpperCase()}
-								</div>
-								<div class="flex flex-col">
-									<span class="text-sm">{set.name}</span>
-									<span class="text-xs text-muted-foreground"
-										>{set.accounts.length} account{set.accounts.length !== 1 ? 's' : ''}</span
-									>
-								</div>
-								{#if set.is_default}<span class="ml-auto text-xs text-muted-foreground"
-										>Default</span
-									>{/if}
-							</DropdownMenu.Item>
-						{/each}
-					</DropdownMenu.Content>
-				</DropdownMenu.Root>
 			{/if}
 
 			<!-- Account selector -->

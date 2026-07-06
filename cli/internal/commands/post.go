@@ -3,6 +3,7 @@ package commands
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"os"
 	"strconv"
 	"strings"
@@ -20,7 +21,6 @@ type postFlags struct {
 	content     string
 	file        string
 	accounts    string
-	set         string
 	schedule    string
 	media       []string
 	mediaAlt    []string
@@ -56,11 +56,11 @@ func newPostCreateCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			targets, err := resolveSocialTargets(cmd, client, workspaceID, flags.accounts, flags.set, true)
+			accountIDs, err := resolveAccounts(cmd, client, workspaceID, flags.accounts)
 			if err != nil {
 				return err
 			}
-			scheduledAt, label, err := parseScheduleFlag(cmd, client, workspaceID, targets.SetID, flags.schedule, settings.Timezone)
+			scheduledAt, label, err := parseScheduleFlag(cmd, client, workspaceID, flags.schedule, settings.Timezone)
 			if err != nil {
 				return err
 			}
@@ -75,7 +75,7 @@ func newPostCreateCmd() *cobra.Command {
 				WorkspaceID:        workspaceID,
 				Content:            content,
 				ScheduledAt:        scheduledAt,
-				SocialAccountIDs:   targets.AccountIDs,
+				SocialAccountIDs:   accountIDs,
 				MediaIDs:           mediaIDs,
 				RandomDelayMinutes: flags.randomDelay,
 			}
@@ -190,21 +190,19 @@ func newPostUpdateCmd() *cobra.Command {
 			if cmd.Flags().Changed("content") {
 				in.Content = &flags.content
 			}
-			targetSetID := ""
-			if cmd.Flags().Changed("accounts") || cmd.Flags().Changed("set") {
-				targets, err := resolveSocialTargets(cmd, client, workspaceID, flags.accounts, flags.set, false)
+			if cmd.Flags().Changed("accounts") {
+				accountIDs, err := resolveAccounts(cmd, client, workspaceID, flags.accounts)
 				if err != nil {
 					return err
 				}
-				targetSetID = targets.SetID
-				in.SocialAccountIDs = targets.AccountIDs
+				in.SocialAccountIDs = accountIDs
 			}
 			if cmd.Flags().Changed("schedule") {
 				if flags.schedule == "" {
 					empty := ""
 					in.ScheduledAt = &empty
 				} else {
-					t, label, err := parseScheduleFlag(cmd, client, workspaceID, targetSetID, flags.schedule, settings.Timezone)
+					t, label, err := parseScheduleFlag(cmd, client, workspaceID, flags.schedule, settings.Timezone)
 					if err != nil {
 						return err
 					}
@@ -228,7 +226,6 @@ func newPostUpdateCmd() *cobra.Command {
 	cmd.Flags().StringVar(&flags.content, "content", "", "post content")
 	cmd.Flags().StringVar(&flags.schedule, "schedule", "", "natural-language, RFC3339, next-slot, now, or draft; empty string unschedules")
 	cmd.Flags().StringVar(&flags.accounts, "accounts", "", "comma-separated account selectors")
-	cmd.Flags().StringVar(&flags.set, "set", "", "social set name or ID to publish to")
 	cmd.Flags().IntVar(&flags.randomDelay, "random-delay", 0, "random delay in minutes")
 	return cmd
 }
@@ -273,7 +270,6 @@ func addCreatePostFlags(cmd *cobra.Command, flags *postFlags) {
 	cmd.Flags().StringVar(&flags.content, "content", "", "post content")
 	cmd.Flags().StringVar(&flags.file, "file", "", "read post content from a file")
 	cmd.Flags().StringVar(&flags.accounts, "accounts", "", "comma-separated account selectors")
-	cmd.Flags().StringVar(&flags.set, "set", "", "social set name or ID to publish to")
 	cmd.Flags().StringVar(&flags.schedule, "schedule", "", "natural-language, RFC3339, next-slot, now, or draft")
 	cmd.Flags().StringArrayVar(&flags.media, "media", nil, "media id or local file path; repeatable")
 	cmd.Flags().StringArrayVar(&flags.mediaAlt, "media-alt", nil, "alt text for the matching uploaded --media")
@@ -305,6 +301,13 @@ func contentFromFlags(content, file string) (string, error) {
 	if file == "" {
 		return content, nil
 	}
+	if file == "-" {
+		data, err := io.ReadAll(os.Stdin)
+		if err != nil {
+			return "", err
+		}
+		return strings.TrimSuffix(strings.TrimSuffix(string(data), "\n"), "\r"), nil
+	}
 	data, err := os.ReadFile(file)
 	if err != nil {
 		return "", err
@@ -312,12 +315,12 @@ func contentFromFlags(content, file string) (string, error) {
 	return strings.TrimSuffix(strings.TrimSuffix(string(data), "\n"), "\r"), nil
 }
 
-func parseScheduleFlag(cmd *cobra.Command, client *api.Client, workspaceID, setID, raw, workspaceTZ string) (*time.Time, string, error) {
+func parseScheduleFlag(cmd *cobra.Command, client *api.Client, workspaceID, raw, workspaceTZ string) (*time.Time, string, error) {
 	if strings.TrimSpace(raw) == "" {
 		return nil, "", nil
 	}
 	if isNextSlotSchedule(raw) {
-		out, err := client.NextAvailableSlot(cmd.Context(), api.NextAvailableSlotInput{WorkspaceID: workspaceID, SetID: setID})
+		out, err := client.NextAvailableSlot(cmd.Context(), api.NextAvailableSlotInput{WorkspaceID: workspaceID})
 		if err != nil {
 			return nil, "", err
 		}
@@ -392,53 +395,6 @@ func resolveAccounts(cmd *cobra.Command, client *api.Client, workspaceID, csv st
 		return nil, err
 	}
 	return accountpicker.Resolve(workspaceID, selectors, accounts)
-}
-
-type socialTargets struct {
-	AccountIDs []string
-	SetID      string
-}
-
-func resolveSocialTargets(cmd *cobra.Command, client *api.Client, workspaceID, accountCSV, setSelector string, useDefaultSet bool) (socialTargets, error) {
-	if strings.TrimSpace(accountCSV) != "" && strings.TrimSpace(setSelector) != "" {
-		return socialTargets{}, fmt.Errorf("use either --accounts or --set, not both")
-	}
-	if strings.TrimSpace(accountCSV) != "" {
-		accountIDs, err := resolveAccounts(cmd, client, workspaceID, accountCSV)
-		return socialTargets{AccountIDs: accountIDs}, err
-	}
-
-	var set *api.SocialSet
-	if strings.TrimSpace(setSelector) != "" {
-		resolved, err := resolveSet(cmd, client, workspaceID, setSelector)
-		if err != nil {
-			return socialTargets{}, err
-		}
-		set = resolved
-	} else if useDefaultSet {
-		sets, err := client.ListSets(cmd.Context(), workspaceID)
-		if err != nil {
-			return socialTargets{}, err
-		}
-		set = defaultSet(sets)
-	}
-	if set == nil {
-		return socialTargets{}, nil
-	}
-
-	accountIDs := make([]string, 0, len(set.Accounts))
-	seen := map[string]struct{}{}
-	for _, acc := range set.Accounts {
-		if acc.SocialAccountID == "" {
-			continue
-		}
-		if _, ok := seen[acc.SocialAccountID]; ok {
-			continue
-		}
-		seen[acc.SocialAccountID] = struct{}{}
-		accountIDs = append(accountIDs, acc.SocialAccountID)
-	}
-	return socialTargets{AccountIDs: accountIDs, SetID: set.ID}, nil
 }
 
 func resolveMedia(cmd *cobra.Command, client *api.Client, workspaceID string, mediaValues, altValues []string) ([]string, error) {

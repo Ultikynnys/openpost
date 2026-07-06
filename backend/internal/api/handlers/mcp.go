@@ -40,6 +40,8 @@ const (
 	mcpToolCreatePub     = "create_publication"
 	mcpToolListPubs      = "list_publications"
 	mcpToolValidatePub   = "validate_publication"
+	mcpToolSchedulePub   = "schedule_publication"
+	mcpToolPublishPubNow = "publish_publication_now"
 	mcpToolPubEvents     = "list_publication_events"
 	mcpToolComments      = "list_rendition_comments"
 	mcpToolListDrafts    = "list_drafts"
@@ -318,7 +320,7 @@ func (h *MCPHandler) dispatch(ctx context.Context, principal *middleware.Princip
 				"name":    "openpost",
 				"version": "0.1.0",
 			},
-			"instructions": "OpenPost schedules social posts from drafts and platform-specific renditions. List workspaces, accounts, providers, and media when IDs are unknown; create or update drafts before scheduling; use set_post_renditions when a platform needs custom copy or media; use render_scheduler_widget when a visual summary helps.",
+			"instructions": "OpenPost schedules social posts and format-first publications. Use create_publication for post types such as link, image, carousel, story, short video, and long video; pass explicit rendition title/description/caption/settings when provider outputs differ. Use create_draft/update_draft for legacy short-text drafts. List workspaces, accounts, providers, and media when IDs are unknown; validate publications before scheduling or publishing; use render_scheduler_widget when a visual summary helps.",
 			"capabilities": map[string]any{
 				"tools":     map[string]any{"listChanged": false},
 				"prompts":   map[string]any{"listChanged": false},
@@ -337,6 +339,8 @@ func (h *MCPHandler) dispatch(ctx context.Context, principal *middleware.Princip
 			mcpCreatePublicationTool(),
 			mcpListPublicationsTool(),
 			mcpValidatePublicationTool(),
+			mcpSchedulePublicationTool(),
+			mcpPublishPublicationNowTool(),
 			mcpListPublicationEventsTool(),
 			mcpListRenditionCommentsTool(),
 			mcpCreateDraftTool(),
@@ -839,10 +843,21 @@ func mcpCreateDraftTool() map[string]any {
 }
 
 func mcpCreatePublicationTool() map[string]any {
+	mediaSchema := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"media_id":               map[string]any{"type": "string", "description": "Media attachment ID returned by list_media or upload_media_from_url."},
+			"role":                   map[string]any{"type": "string", "description": "Media role such as attachment, cover, or thumbnail."},
+			"alt_text":               map[string]any{"type": "string", "description": "Alt text override."},
+			"thumbnail_timestamp_ms": map[string]any{"type": "integer", "description": "Video thumbnail timestamp in milliseconds."},
+		},
+		"required":             []string{"media_id"},
+		"additionalProperties": false,
+	}
 	return mcpToolDescriptor(map[string]any{
 		"name":        mcpToolCreatePub,
 		"title":       "Create publication",
-		"description": "Create a format-first publication with one rendition per selected destination account.",
+		"description": "Create a format-first publication. Use explicit renditions when selected accounts need different output roles, for example YouTube title/description plus TikTok caption for the same short video.",
 		"inputSchema": map[string]any{
 			"type": "object",
 			"properties": map[string]any{
@@ -850,23 +865,59 @@ func mcpCreatePublicationTool() map[string]any {
 				"content_profile": map[string]any{
 					"type":        "string",
 					"description": "OpenPost content profile: short_text, thread, link_share, image_post, carousel, story, short_video, or long_video.",
+					"enum":        []string{"short_text", "thread", "link_share", "image_post", "carousel", "story", "short_video", "long_video"},
 				},
 				"title":       map[string]any{"type": "string", "description": "Internal publication title."},
-				"source_text": map[string]any{"type": "string", "description": "Canonical source text."},
+				"source_text": map[string]any{"type": "string", "description": "Canonical source text. Compute from description, caption, or title; do not expose this term to users."},
 				"source_url":  map[string]any{"type": "string", "description": "Optional source URL for link shares."},
+				"scheduled_at": map[string]any{
+					"type":        "string",
+					"format":      "date-time",
+					"description": "Optional desired schedule time. Call schedule_publication after create_publication to validate and enqueue.",
+				},
 				"social_account_ids": map[string]any{
 					"type":        "array",
-					"description": "Destination account IDs returned by list_accounts.",
+					"description": "Destination account IDs returned by list_accounts. Used to create default renditions when renditions is omitted.",
 					"items":       map[string]any{"type": "string"},
-					"minItems":    1,
 				},
 				"media_ids": map[string]any{
 					"type":        "array",
-					"description": "Optional media attachment IDs returned by list_media or upload_media_from_url.",
+					"description": "Optional simple media attachment IDs. Prefer media when role, alt text, or thumbnail timestamp matters.",
 					"items":       map[string]any{"type": "string"},
 				},
+				"media": map[string]any{
+					"type":        "array",
+					"description": "Default ordered media used by renditions that do not provide their own media.",
+					"items":       mediaSchema,
+				},
+				"renditions": map[string]any{
+					"type":        "array",
+					"description": "Explicit account/provider outputs. Use fields by output role: body/caption as body, YouTube title as title, YouTube description as description, provider settings such as privacy.",
+					"items": map[string]any{
+						"type": "object",
+						"properties": map[string]any{
+							"social_account_id": map[string]any{"type": "string", "description": "Destination account ID."},
+							"profile":           map[string]any{"type": "string", "description": "Optional content profile override."},
+							"body":              map[string]any{"type": "string", "description": "Post text or caption output."},
+							"title":             map[string]any{"type": "string", "description": "Provider title output, especially YouTube video title."},
+							"description":       map[string]any{"type": "string", "description": "Provider description output, especially YouTube video description."},
+							"settings": map[string]any{
+								"type":                 "object",
+								"description":          "Provider-specific settings such as YouTube privacy, TikTok privacy_level, link_url, or post_type.",
+								"additionalProperties": true,
+							},
+							"media": map[string]any{
+								"type":        "array",
+								"description": "Rendition-specific ordered media.",
+								"items":       mediaSchema,
+							},
+						},
+						"required":             []string{"social_account_id"},
+						"additionalProperties": false,
+					},
+				},
 			},
-			"required":             []string{"workspace_id", "content_profile", "source_text", "social_account_ids"},
+			"required":             []string{"workspace_id", "content_profile", "source_text"},
 			"additionalProperties": false,
 		},
 	}, false, false)
@@ -905,6 +956,38 @@ func mcpValidatePublicationTool() map[string]any {
 			"additionalProperties": false,
 		},
 	}, true, false)
+}
+
+func mcpSchedulePublicationTool() map[string]any {
+	return mcpToolDescriptor(map[string]any{
+		"name":        mcpToolSchedulePub,
+		"title":       "Schedule publication",
+		"description": "Validate and enqueue a publication whose scheduled_at is already set.",
+		"inputSchema": map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"publication_id": map[string]any{"type": "string", "description": "Publication ID returned by create_publication or list_publications."},
+			},
+			"required":             []string{"publication_id"},
+			"additionalProperties": false,
+		},
+	}, false, true)
+}
+
+func mcpPublishPublicationNowTool() map[string]any {
+	return mcpToolDescriptor(map[string]any{
+		"name":        mcpToolPublishPubNow,
+		"title":       "Publish publication now",
+		"description": "Validate and queue a publication for immediate publishing.",
+		"inputSchema": map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"publication_id": map[string]any{"type": "string", "description": "Publication ID returned by create_publication or list_publications."},
+			},
+			"required":             []string{"publication_id"},
+			"additionalProperties": false,
+		},
+	}, false, true)
 }
 
 func mcpListPublicationEventsTool() map[string]any {
@@ -1226,10 +1309,6 @@ func mcpSuggestNextSlotTool() map[string]any {
 					"type":        "string",
 					"description": "Workspace ID returned by list_workspaces.",
 				},
-				"set_id": map[string]any{
-					"type":        "string",
-					"description": "Optional social media set ID to filter schedules.",
-				},
 				"after": map[string]any{
 					"type":        "string",
 					"format":      "date-time",
@@ -1354,6 +1433,8 @@ var mcpToolStatuses = map[string]mcpToolStatus{
 	mcpToolCreatePub:     {Invoking: "Creating publication", Invoked: "Publication created"},
 	mcpToolListPubs:      {Invoking: "Loading publications", Invoked: "Publications loaded"},
 	mcpToolValidatePub:   {Invoking: "Validating publication", Invoked: "Publication validated"},
+	mcpToolSchedulePub:   {Invoking: "Scheduling publication", Invoked: "Publication scheduled"},
+	mcpToolPublishPubNow: {Invoking: "Queueing publication", Invoked: "Publication queued"},
 	mcpToolPubEvents:     {Invoking: "Loading publication events", Invoked: "Publication events loaded"},
 	mcpToolComments:      {Invoking: "Loading comments", Invoked: "Comments loaded"},
 	mcpToolListDrafts:    {Invoking: "Loading drafts", Invoked: "Drafts loaded"},
@@ -1391,6 +1472,11 @@ func mcpToolOutputSchema(toolName string) map[string]any {
 		return mcpStructuredOutputSchema(map[string]any{
 			"publication": mcpOpenObjectSchema(),
 		}, "publication")
+	case mcpToolSchedulePub, mcpToolPublishPubNow:
+		return mcpStructuredOutputSchema(map[string]any{
+			"publication": mcpOpenObjectSchema(),
+			"job_id":      map[string]any{"type": "string"},
+		}, "publication", "job_id")
 	case mcpToolValidatePub:
 		return mcpStructuredOutputSchema(map[string]any{
 			"valid":  map[string]any{"type": "boolean"},
@@ -1511,7 +1597,7 @@ func (h *MCPHandler) callWorkspaceActionTool(ctx context.Context, userID, toolNa
 	switch toolName {
 	case mcpToolCreateDraft:
 		return h.createDraft(ctx, userID, args)
-	case mcpToolCreatePub, mcpToolListPubs, mcpToolValidatePub, mcpToolPubEvents, mcpToolComments:
+	case mcpToolCreatePub, mcpToolListPubs, mcpToolValidatePub, mcpToolSchedulePub, mcpToolPublishPubNow, mcpToolPubEvents, mcpToolComments:
 		return h.callPublicationTool(ctx, userID, toolName, args)
 	case mcpToolListDrafts:
 		return h.listDrafts(ctx, userID, args)
@@ -1546,6 +1632,10 @@ func (h *MCPHandler) callPublicationTool(ctx context.Context, userID, toolName s
 		return h.listPublications(ctx, userID, args)
 	case mcpToolValidatePub:
 		return h.validatePublication(ctx, userID, args)
+	case mcpToolSchedulePub:
+		return h.schedulePublication(ctx, userID, args)
+	case mcpToolPublishPubNow:
+		return h.publishPublicationNow(ctx, userID, args)
 	case mcpToolPubEvents:
 		return h.listPublicationEvents(ctx, userID, args)
 	case mcpToolComments:
@@ -1867,13 +1957,17 @@ func (h *MCPHandler) listAccounts(ctx context.Context, userID string, args map[s
 }
 
 type mcpCreatePublicationInput struct {
-	WorkspaceID      string   `json:"workspace_id"`
-	ContentProfile   string   `json:"content_profile"`
-	Title            string   `json:"title"`
-	SourceText       string   `json:"source_text"`
-	SourceURL        string   `json:"source_url"`
-	SocialAccountIDs []string `json:"social_account_ids"`
-	MediaIDs         []string `json:"media_ids"`
+	WorkspaceID      string                  `json:"workspace_id"`
+	ContentProfile   string                  `json:"content_profile"`
+	Title            string                  `json:"title"`
+	SourceText       string                  `json:"source_text"`
+	SourceURL        string                  `json:"source_url"`
+	ScheduledAt      *time.Time              `json:"scheduled_at"`
+	SocialAccountIDs []string                `json:"social_account_ids"`
+	MediaIDs         []string                `json:"media_ids"`
+	Media            []PublicationMediaInput `json:"media"`
+	Renditions       []RenditionInput        `json:"renditions"`
+	Metadata         map[string]interface{}  `json:"metadata"`
 }
 
 type mcpPublicationStatus struct {
@@ -1889,7 +1983,6 @@ type mcpPublicationStatus struct {
 	RenditionCount int    `json:"rendition_count"`
 }
 
-//nolint:gocyclo
 func (h *MCPHandler) createPublication(ctx context.Context, userID string, args map[string]any) (any, *mcpError) {
 	var input mcpCreatePublicationInput
 	if err := decodeMCPArguments(args, &input); err != nil {
@@ -1898,86 +1991,34 @@ func (h *MCPHandler) createPublication(ctx context.Context, userID string, args 
 	if rpcErr := h.ensureWorkspaceAccess(ctx, userID, input.WorkspaceID); rpcErr != nil {
 		return nil, rpcErr
 	}
-	if strings.TrimSpace(input.ContentProfile) == "" {
-		return nil, &mcpError{Code: -32602, Message: "content_profile is required"}
-	}
-	if strings.TrimSpace(input.SourceText) == "" {
-		return nil, &mcpError{Code: -32602, Message: "source_text is required"}
-	}
-	accountIDs, rpcErr := normalizeMCPIDs(input.SocialAccountIDs, "social_account_ids")
-	if rpcErr != nil {
-		return nil, rpcErr
-	}
-	if len(accountIDs) == 0 {
-		return nil, &mcpError{Code: -32602, Message: "social_account_ids must contain at least one account"}
-	}
-	if rpcErr := h.ensureActiveAccounts(ctx, input.WorkspaceID, accountIDs); rpcErr != nil {
-		return nil, rpcErr
-	}
-	mediaIDs, rpcErr := normalizeMCPIDs(input.MediaIDs, "media_ids")
-	if rpcErr != nil {
-		return nil, rpcErr
-	}
-	if rpcErr := h.ensureMediaBelongsToWorkspace(ctx, input.WorkspaceID, mediaIDs); rpcErr != nil {
+	if rpcErr := validateMCPCreatePublicationInput(input); rpcErr != nil {
 		return nil, rpcErr
 	}
 
-	var accounts []models.SocialAccount
-	if err := h.db.NewSelect().Model(&accounts).
-		Where("workspace_id = ?", input.WorkspaceID).
-		Where("id IN (?)", bun.List(accountIDs)).
-		Scan(ctx); err != nil {
-		return nil, &mcpError{Code: -32603, Message: "failed to load publication accounts"}
+	defaultMedia, rpcErr := mcpDefaultPublicationMedia(input)
+	if rpcErr != nil {
+		return nil, rpcErr
 	}
+	publicationHandler := &PublicationHandler{db: h.db}
+	renditions, rpcErr := mcpPublicationRenditions(publicationHandler, input, defaultMedia)
+	if rpcErr != nil {
+		return nil, rpcErr
+	}
+	accountMap, err := publicationHandler.loadAccounts(ctx, input.WorkspaceID, renditionAccountIDs(renditions))
+	if err != nil {
+		return nil, &mcpError{Code: -32602, Message: err.Error()}
+	}
+	if err := publicationHandler.validateMediaBelongsToWorkspace(ctx, input.WorkspaceID, allMediaIDs(defaultMedia, renditions)); err != nil {
+		return nil, &mcpError{Code: -32602, Message: err.Error()}
+	}
+
 	now := time.Now().UTC()
-	publication := &models.Publication{
-		ID:              newUUID(),
-		WorkspaceID:     input.WorkspaceID,
-		CreatedByID:     userID,
-		Title:           firstNonEmpty(input.Title, firstMCPContentLine(input.SourceText), "Untitled publication"),
-		ContentProfile:  input.ContentProfile,
-		SourceText:      input.SourceText,
-		SourceContent:   input.SourceText,
-		SourceURL:       input.SourceURL,
-		Status:          models.PublicationStatusDraft,
-		MetadataJSON:    `{"created_from":"mcp"}`,
-		ReleasePlanJSON: `{"created_from":"mcp"}`,
-		CreatedAt:       now,
-		UpdatedAt:       now,
-	}
-	err := h.db.RunInTx(ctx, &sql.TxOptions{}, func(txCtx context.Context, tx bun.Tx) error {
+	publication := newMCPPublication(input, userID, now)
+	err = h.db.RunInTx(ctx, &sql.TxOptions{}, func(txCtx context.Context, tx bun.Tx) error {
 		if _, err := tx.NewInsert().Model(publication).Exec(txCtx); err != nil {
 			return err
 		}
-		for _, account := range accounts {
-			rendition := &models.Rendition{
-				ID:              newUUID(),
-				PublicationID:   publication.ID,
-				SocialAccountID: account.ID,
-				Platform:        account.Platform,
-				Profile:         input.ContentProfile,
-				Body:            input.SourceText,
-				Title:           publication.Title,
-				SettingsJSON:    "{}",
-				Status:          models.RenditionStatusDraft,
-				CreatedAt:       now,
-				UpdatedAt:       now,
-			}
-			if _, err := tx.NewInsert().Model(rendition).Exec(txCtx); err != nil {
-				return err
-			}
-			for order, mediaID := range mediaIDs {
-				if _, err := tx.NewInsert().Model(&models.RenditionMedia{
-					RenditionID:  rendition.ID,
-					MediaID:      mediaID,
-					Role:         "attachment",
-					DisplayOrder: order,
-				}).Exec(txCtx); err != nil {
-					return err
-				}
-			}
-		}
-		return nil
+		return publicationHandler.insertRenditions(txCtx, tx, publication, renditions, defaultMedia, accountMap)
 	})
 	if err != nil {
 		return nil, &mcpError{Code: -32603, Message: "failed to create publication"}
@@ -1992,6 +2033,66 @@ func (h *MCPHandler) createPublication(ctx context.Context, userID string, args 
 			"publication": status,
 		},
 	}, nil
+}
+
+func validateMCPCreatePublicationInput(input mcpCreatePublicationInput) *mcpError {
+	if strings.TrimSpace(input.ContentProfile) == "" {
+		return &mcpError{Code: -32602, Message: "content_profile is required"}
+	}
+	if strings.TrimSpace(input.SourceText) == "" {
+		return &mcpError{Code: -32602, Message: "source_text is required"}
+	}
+	return nil
+}
+
+func mcpDefaultPublicationMedia(input mcpCreatePublicationInput) ([]PublicationMediaInput, *mcpError) {
+	mediaIDs, rpcErr := normalizeMCPIDs(input.MediaIDs, "media_ids")
+	if rpcErr != nil {
+		return nil, rpcErr
+	}
+	defaultMedia := append([]PublicationMediaInput{}, input.Media...)
+	for _, mediaID := range mediaIDs {
+		defaultMedia = append(defaultMedia, PublicationMediaInput{MediaID: mediaID, Role: "attachment"})
+	}
+	return defaultMedia, nil
+}
+
+func mcpPublicationRenditions(publicationHandler *PublicationHandler, input mcpCreatePublicationInput, defaultMedia []PublicationMediaInput) ([]RenditionInput, *mcpError) {
+	if len(input.Renditions) > 0 {
+		return input.Renditions, nil
+	}
+	accountIDs, rpcErr := normalizeMCPIDs(input.SocialAccountIDs, "social_account_ids")
+	if rpcErr != nil {
+		return nil, rpcErr
+	}
+	return publicationHandler.defaultRenditionInputs(accountIDs, input.ContentProfile, input.SourceText, input.Title, defaultMedia), nil
+}
+
+func newMCPPublication(input mcpCreatePublicationInput, userID string, now time.Time) *models.Publication {
+	metadata := map[string]interface{}{"created_from": "mcp"}
+	for key, value := range input.Metadata {
+		metadata[key] = value
+	}
+	publication := &models.Publication{
+		ID:              newUUID(),
+		WorkspaceID:     input.WorkspaceID,
+		CreatedByID:     userID,
+		Title:           publicationFirstNonEmpty(input.Title, firstMCPContentLine(input.SourceText), "Untitled publication"),
+		ContentProfile:  input.ContentProfile,
+		SourceText:      input.SourceText,
+		SourceContent:   input.SourceText,
+		SourceURL:       input.SourceURL,
+		Status:          models.PublicationStatusDraft,
+		MetadataJSON:    mustJSON(metadata),
+		ReleasePlanJSON: mustJSON(metadata),
+		CreatedAt:       now,
+		UpdatedAt:       now,
+	}
+	if input.ScheduledAt != nil {
+		publication.ScheduledAt = *input.ScheduledAt
+		publication.Status = models.PublicationStatusScheduled
+	}
+	return publication
 }
 
 func (h *MCPHandler) listPublications(ctx context.Context, userID string, args map[string]any) (any, *mcpError) {
@@ -2068,6 +2169,94 @@ func (h *MCPHandler) validatePublication(ctx context.Context, userID string, arg
 			"issues": issues,
 		},
 	}, nil
+}
+
+func (h *MCPHandler) schedulePublication(ctx context.Context, userID string, args map[string]any) (any, *mcpError) {
+	publication, rpcErr := h.loadMCPPublicationForAction(ctx, userID, args, "invalid schedule_publication arguments")
+	if rpcErr != nil {
+		return nil, rpcErr
+	}
+	if publication.ScheduledAt.IsZero() {
+		return nil, &mcpError{Code: -32602, Message: "scheduled_at is required before scheduling"}
+	}
+	handler := &PublicationHandler{db: h.db}
+	issues, err := handler.validatePublicationByID(ctx, publication.ID)
+	if err != nil {
+		return nil, &mcpError{Code: -32603, Message: "failed to validate publication"}
+	}
+	if hasBlockingIssues(issues) {
+		return nil, &mcpError{Code: -32602, Message: "publication has blocking validation errors"}
+	}
+	jobID, err := handler.replacePublicationJob(ctx, publication.ID, publication.ScheduledAt)
+	if err != nil {
+		return nil, &mcpError{Code: -32603, Message: "failed to schedule publication"}
+	}
+	if err := handler.markPublicationQueued(ctx, publication.ID); err != nil {
+		return nil, &mcpError{Code: -32603, Message: "failed to mark publication scheduled"}
+	}
+	status, rpcErr := h.loadMCPPublicationStatus(ctx, publication.ID)
+	if rpcErr != nil {
+		return nil, rpcErr
+	}
+	return mcpPublicationActionResult("Publication scheduled: "+publication.ID, jobID, status), nil
+}
+
+func (h *MCPHandler) publishPublicationNow(ctx context.Context, userID string, args map[string]any) (any, *mcpError) {
+	publication, rpcErr := h.loadMCPPublicationForAction(ctx, userID, args, "invalid publish_publication_now arguments")
+	if rpcErr != nil {
+		return nil, rpcErr
+	}
+	handler := &PublicationHandler{db: h.db}
+	issues, err := handler.validatePublicationByID(ctx, publication.ID)
+	if err != nil {
+		return nil, &mcpError{Code: -32603, Message: "failed to validate publication"}
+	}
+	if hasBlockingIssues(issues) {
+		return nil, &mcpError{Code: -32602, Message: "publication has blocking validation errors"}
+	}
+	jobID, err := handler.replacePublicationJob(ctx, publication.ID, time.Now().UTC())
+	if err != nil {
+		return nil, &mcpError{Code: -32603, Message: "failed to queue publication"}
+	}
+	if err := handler.markPublicationQueued(ctx, publication.ID); err != nil {
+		return nil, &mcpError{Code: -32603, Message: "failed to mark publication queued"}
+	}
+	status, rpcErr := h.loadMCPPublicationStatus(ctx, publication.ID)
+	if rpcErr != nil {
+		return nil, rpcErr
+	}
+	return mcpPublicationActionResult("Publication queued: "+publication.ID, jobID, status), nil
+}
+
+func (h *MCPHandler) loadMCPPublicationForAction(ctx context.Context, userID string, args map[string]any, invalidMessage string) (models.Publication, *mcpError) {
+	var input struct {
+		PublicationID string `json:"publication_id"`
+	}
+	if err := decodeMCPArguments(args, &input); err != nil {
+		return models.Publication{}, &mcpError{Code: -32602, Message: invalidMessage}
+	}
+	input.PublicationID = strings.TrimSpace(input.PublicationID)
+	if input.PublicationID == "" {
+		return models.Publication{}, &mcpError{Code: -32602, Message: "publication_id is required"}
+	}
+	var publication models.Publication
+	if err := h.db.NewSelect().Model(&publication).Where("id = ?", input.PublicationID).Scan(ctx); err != nil {
+		return models.Publication{}, &mcpError{Code: -32602, Message: "publication not found"}
+	}
+	if rpcErr := h.ensureWorkspaceAccess(ctx, userID, publication.WorkspaceID); rpcErr != nil {
+		return models.Publication{}, rpcErr
+	}
+	return publication, nil
+}
+
+func mcpPublicationActionResult(message, jobID string, status mcpPublicationStatus) map[string]any {
+	return map[string]any{
+		"content": []mcpContent{{Type: "text", Text: message}},
+		"structuredContent": map[string]any{
+			"publication": status,
+			"job_id":      jobID,
+		},
+	}
 }
 
 func (h *MCPHandler) listPublicationEvents(ctx context.Context, userID string, args map[string]any) (any, *mcpError) {
@@ -3084,7 +3273,6 @@ func (h *MCPHandler) cancelPost(ctx context.Context, userID string, args map[str
 
 type mcpSlotSuggestion struct {
 	WorkspaceID string                   `json:"workspace_id"`
-	SetID       string                   `json:"set_id,omitempty"`
 	Timezone    string                   `json:"timezone"`
 	SlotTime    string                   `json:"slot_time,omitempty"`
 	SlotTimeUTC string                   `json:"slot_time_utc,omitempty"`
@@ -3094,7 +3282,6 @@ type mcpSlotSuggestion struct {
 
 type mcpSuggestNextSlotInput struct {
 	WorkspaceID string `json:"workspace_id"`
-	SetID       string `json:"set_id"`
 	After       string `json:"after"`
 }
 
@@ -3145,9 +3332,6 @@ func (h *MCPHandler) suggestNextSlot(ctx context.Context, userID string, args ma
 		Model(&schedules).
 		Where("workspace_id = ?", input.WorkspaceID).
 		Where("is_active = ?", true)
-	if strings.TrimSpace(input.SetID) != "" {
-		query = query.Where("set_id = ?", input.SetID)
-	}
 	if err := query.Scan(ctx); err != nil && err != sql.ErrNoRows {
 		return nil, &mcpError{Code: -32603, Message: "failed to load posting schedules"}
 	}
@@ -3155,7 +3339,6 @@ func (h *MCPHandler) suggestNextSlot(ctx context.Context, userID string, args ma
 	if len(schedules) == 0 {
 		suggestion := mcpSlotSuggestion{
 			WorkspaceID: input.WorkspaceID,
-			SetID:       input.SetID,
 			Timezone:    workspace.Timezone,
 			Message:     "No posting schedules configured for this workspace.",
 		}
@@ -3176,7 +3359,6 @@ func (h *MCPHandler) suggestNextSlot(ctx context.Context, userID string, args ma
 	nextSlot, nextSlotTime := findNextConfiguredScheduleSlotTime(now, loc, schedules, scheduledPosts)
 	suggestion := mcpSlotSuggestion{
 		WorkspaceID: input.WorkspaceID,
-		SetID:       input.SetID,
 		Timezone:    workspace.Timezone,
 		Message:     "No available slots found in the next month.",
 	}

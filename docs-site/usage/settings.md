@@ -6,7 +6,7 @@ OpenPost settings are split by ownership so personal account changes do not get 
 
 Workspace settings belong to the selected workspace.
 
-- Connected social accounts and account sets
+- Connected social accounts
 - Workspace timezone and week start
 - Media cleanup policy
 - Posting schedule and default slot behavior

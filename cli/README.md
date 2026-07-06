@@ -82,25 +82,11 @@ openpost media upload ./image.png --alt "Product screenshot"
 openpost media list --limit 25
 ```
 
-## Social sets
+## Account targeting
 
-Social sets are reusable groups of social accounts in a workspace. Create a
-default set once, then `post create` and `thread create` use it automatically
-when neither `--accounts` nor `--set` is passed:
-
-```sh
-openpost set create launch --accounts main-x,linkedin --default
-openpost set list
-openpost set add launch --accounts bluesky
-openpost set remove launch --accounts linkedin
-```
-
-You can also target a specific set per command:
-
-```sh
-openpost post create --content "Launch note" --set launch
-openpost thread create ./thread.md --set launch --schedule "next monday 9am"
-```
+Use `account list` to see account IDs, slugs, and platform selectors. Pass
+`--accounts` when a post, thread, or publication should have destinations. If
+`--accounts` is omitted, the item is created as a draft with no destinations.
 
 ## Posting
 
@@ -108,7 +94,7 @@ Create a draft:
 
 ```sh
 openpost post create --content "Hello from OpenPost" --accounts x --workspace personal
-openpost post create --content "Hello from the default social set"
+openpost post create --content "Draft without destinations yet"
 ```
 
 Schedule a post with natural language or RFC3339:
@@ -121,8 +107,8 @@ openpost post create --content "Launch note" --accounts x --schedule 2026-06-20T
 Use the next available posting slot from the workspace schedule:
 
 ```sh
-openpost post create --content "Launch note" --schedule next-slot
-openpost thread create ./thread.md --set launch --schedule next-slot
+openpost post create --content "Launch note" --accounts x --schedule next-slot
+openpost thread create ./thread.md --accounts x,linkedin --schedule next-slot
 ```
 
 List and inspect posts:
@@ -136,6 +122,17 @@ Create a thread from markdown segments separated by `---` lines:
 
 ```sh
 openpost thread create ./thread.md --accounts x --schedule "next monday 9am"
+```
+
+## Rich publications
+
+Use `publication create` for platform-specific post types and media workflows:
+
+```sh
+openpost publication create --profile link_share --accounts linkedin --url https://openpost.social --content "Launch notes"
+openpost publication create --profile short_video --accounts youtube,tiktok --video-title "Short title" --video-description "YouTube description" --caption "TikTok caption" --media ./short.mp4
+openpost publication create --profile long_video --accounts youtube --video-title "Full walkthrough" --video-description "Long-form description" --privacy private --media ./walkthrough.mp4 --schedule next-slot
+openpost publication schedule pub_123 --at "tomorrow 9am"
 ```
 
 ## Billing

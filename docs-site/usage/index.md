@@ -21,7 +21,7 @@ The CLI is for terminal, CI, cron, and scripted workflows against a running Open
 - [CLI Overview](/cli/) explains the command model.
 - [Installation](/cli/installation) covers release binaries and source builds.
 - [Authentication](/cli/authentication) covers browser login, device flow, and API-token login.
-- [Posting](/cli/posting) covers posts, threads, media, social sets, and `next-slot`.
+- [Posting](/cli/posting) covers posts, threads, media, rich publications, and `next-slot`.
 - [Automation](/cli/automation) covers CI and recurring jobs.
 - [Command Reference](/reference/cli) is generated from the Cobra command tree.
 

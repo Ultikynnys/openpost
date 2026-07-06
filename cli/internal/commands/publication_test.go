@@ -1,10 +1,13 @@
 package commands
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/openpost/cli/internal/api"
 )
 
 func TestPublicationEventsCommandPrintsLifecycleEvents(t *testing.T) {
@@ -53,5 +56,130 @@ func TestPublicationCommentsCommandHidesUnsupportedActions(t *testing.T) {
 	}
 	if strings.Contains(out, "hide") || strings.Contains(out, "delete") {
 		t.Fatalf("output %q should not include unsupported actions", out)
+	}
+}
+
+func TestPublicationScheduleCommandUpdatesAndEnqueues(t *testing.T) {
+	t.Setenv("OPENPOST_CONFIG_DIR", t.TempDir())
+
+	var updateBody map[string]any
+	var scheduled bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/api/v1/workspaces":
+			_, _ = w.Write([]byte(`[{"id":"ws-1","name":"Production","created_at":"2026-01-01T00:00:00Z"}]`))
+		case "/api/v1/workspaces/ws-1/settings":
+			_, _ = w.Write([]byte(`{"timezone":"Europe/Lisbon","week_start":1,"media_cleanup_days":30,"random_delay_minutes":0,"draft_gap_minutes":0,"slot_start_hour":9,"slot_end_hour":17,"slot_interval_minutes":30}`))
+		case "/api/v1/publications/pub_1":
+			if r.Method != http.MethodPut {
+				t.Fatalf("publication update method = %s, want PUT", r.Method)
+			}
+			if err := json.NewDecoder(r.Body).Decode(&updateBody); err != nil {
+				t.Fatalf("decode update body: %v", err)
+			}
+			_, _ = w.Write([]byte(`{"id":"pub_1","workspace_id":"ws-1","created_by":"u-1","title":"Draft","content_profile":"short_video","source_text":"Demo","status":"draft","scheduled_at":"2026-07-07T09:00:00Z","created_at":"2026-07-06T09:00:00Z","renditions":[]}`))
+		case "/api/v1/publications/pub_1/schedule":
+			if r.Method != http.MethodPost {
+				t.Fatalf("publication schedule method = %s, want POST", r.Method)
+			}
+			scheduled = true
+			_, _ = w.Write([]byte(`{"message":"publication scheduled","job_id":"job_1"}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	out, err := executeRootCaptureStdout(
+		t,
+		"--instance", srv.URL,
+		"--token", "op_cli_test",
+		"--workspace", "Production",
+		"publication", "schedule", "pub_1",
+		"--at", "2026-07-07T09:00:00Z",
+	)
+
+	if err != nil {
+		t.Fatalf("publication schedule returned error: %v", err)
+	}
+	if updateBody["scheduled_at"] != "2026-07-07T09:00:00Z" {
+		t.Fatalf("scheduled_at body = %#v", updateBody)
+	}
+	if !scheduled {
+		t.Fatalf("schedule endpoint was not called")
+	}
+	if !strings.Contains(out, "publication scheduled") || !strings.Contains(out, "job_1") {
+		t.Fatalf("output %q missing schedule result", out)
+	}
+}
+
+func TestPublicationRenditionsMapYouTubeVideoFields(t *testing.T) {
+	flags := publicationFlags{
+		title:            "Internal draft",
+		videoTitle:       "Launch walkthrough",
+		videoDescription: "Full product demo.",
+		privacy:          "unlisted",
+	}
+	renditions := buildPublicationRenditions(
+		"long_video",
+		"fallback body",
+		flags,
+		[]api.SocialAccount{{ID: "acc_youtube", Platform: "youtube"}},
+		[]string{"acc_youtube"},
+		[]api.PublicationMediaInput{{MediaID: "med_video", Role: "attachment"}},
+	)
+
+	if len(renditions) != 1 {
+		t.Fatalf("renditions = %+v", renditions)
+	}
+	got := renditions[0]
+	if got.Title != "Launch walkthrough" {
+		t.Fatalf("title = %q", got.Title)
+	}
+	if got.Description != "Full product demo." || got.Body != "Full product demo." {
+		t.Fatalf("description/body = %q/%q", got.Description, got.Body)
+	}
+	if got.Settings["privacy"] != "unlisted" || got.Settings["title"] != "Launch walkthrough" || got.Settings["description"] != "Full product demo." {
+		t.Fatalf("settings = %+v", got.Settings)
+	}
+	if len(got.Media) != 1 || got.Media[0].MediaID != "med_video" {
+		t.Fatalf("media = %+v", got.Media)
+	}
+}
+
+func TestPublicationRenditionsMapMixedShortVideoTargets(t *testing.T) {
+	flags := publicationFlags{
+		videoTitle:       "YouTube Short title",
+		videoDescription: "YouTube Short description.",
+		caption:          "Social caption",
+		tiktokMethod:     "DIRECT_POST",
+		tiktokPrivacy:    "SELF_ONLY",
+	}
+	renditions := buildPublicationRenditions(
+		"short_video",
+		"",
+		flags,
+		[]api.SocialAccount{
+			{ID: "acc_youtube", Platform: "youtube"},
+			{ID: "acc_tiktok", Platform: "tiktok"},
+		},
+		[]string{"acc_youtube", "acc_tiktok"},
+		nil,
+	)
+
+	if len(renditions) != 2 {
+		t.Fatalf("renditions = %+v", renditions)
+	}
+	youtube := renditions[0]
+	tiktok := renditions[1]
+	if youtube.Title != "YouTube Short title" || youtube.Description != "YouTube Short description." || youtube.Body != "YouTube Short description." {
+		t.Fatalf("youtube rendition = %+v", youtube)
+	}
+	if tiktok.Body != "Social caption" || tiktok.Title != "" || tiktok.Description != "" {
+		t.Fatalf("tiktok rendition = %+v", tiktok)
+	}
+	if tiktok.Settings["content_posting_method"] != "DIRECT_POST" || tiktok.Settings["privacy_level"] != "SELF_ONLY" {
+		t.Fatalf("tiktok settings = %+v", tiktok.Settings)
 	}
 }

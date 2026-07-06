@@ -68,6 +68,29 @@ func TestListPublicationEvents_WireFormat(t *testing.T) {
 	}
 }
 
+func TestSchedulePublication_WireFormat(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Fatalf("method = %s, want POST", r.Method)
+		}
+		if r.URL.Path != "/api/v1/publications/pub_1/schedule" {
+			t.Fatalf("path = %s, want /api/v1/publications/pub_1/schedule", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"message":"publication scheduled","job_id":"job_1"}`))
+	}))
+	defer srv.Close()
+
+	c := New(srv.URL, "op_cli_test")
+	got, err := c.SchedulePublication(context.Background(), "pub_1")
+	if err != nil {
+		t.Fatalf("SchedulePublication returned error: %v", err)
+	}
+	if got.JobID != "job_1" {
+		t.Fatalf("result = %+v", got)
+	}
+}
+
 func TestListRenditionComments_WireFormat(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/v1/renditions/rend_1/comments" {
@@ -280,108 +303,6 @@ func TestUpdateAccount_WireFormat(t *testing.T) {
 	}
 }
 
-func TestListSets_WireFormat(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Query().Get("workspace_id") != "ws_1" {
-			t.Errorf("workspace_id = %q, want ws_1", r.URL.Query().Get("workspace_id"))
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`[{
-			"id":"set_1",
-			"workspace_id":"ws_1",
-			"name":"Launch",
-			"is_default":true,
-			"created_at":"2026-06-16T10:00:00Z",
-			"accounts":[{"social_account_id":"acc_1","platform":"x","account_username":"rodrigo","is_main":false}]
-		}]`))
-	}))
-	defer srv.Close()
-
-	c := New(srv.URL, "")
-	got, err := c.ListSets(context.Background(), "ws_1")
-	if err != nil {
-		t.Fatalf("ListSets returned error: %v", err)
-	}
-	if len(got) != 1 {
-		t.Fatalf("expected 1 set, got %d", len(got))
-	}
-	if got[0].ID != "set_1" || got[0].Name != "Launch" || !got[0].IsDefault {
-		t.Errorf("set wrong: %+v", got[0])
-	}
-	if len(got[0].Accounts) != 1 || got[0].Accounts[0].SocialAccountID != "acc_1" {
-		t.Errorf("accounts wrong: %+v", got[0].Accounts)
-	}
-}
-
-func TestSetMutations_WireFormat(t *testing.T) {
-	var sawCreate, sawUpdate, sawAdd, sawRemove, sawDelete bool
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		switch {
-		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/sets":
-			sawCreate = true
-			var body CreateSetInput
-			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-				t.Fatalf("decode create body: %v", err)
-			}
-			if body.WorkspaceID != "ws_1" || body.Name != "Launch" || !body.IsDefault || len(body.AccountIDs) != 1 || body.AccountIDs[0] != "acc_1" {
-				t.Errorf("create body wrong: %+v", body)
-			}
-			_, _ = w.Write([]byte(`{"id":"set_1","workspace_id":"ws_1","name":"Launch","is_default":true,"created_at":"2026-06-16T10:00:00Z"}`))
-		case r.Method == http.MethodPatch && r.URL.Path == "/api/v1/sets/set_1":
-			sawUpdate = true
-			var body UpdateSetInput
-			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-				t.Fatalf("decode update body: %v", err)
-			}
-			if body.Name == nil || *body.Name != "Renamed" {
-				t.Errorf("update body wrong: %+v", body)
-			}
-			_, _ = w.Write([]byte(`{"id":"set_1","workspace_id":"ws_1","name":"Renamed","is_default":true,"created_at":"2026-06-16T10:00:00Z"}`))
-		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/sets/set_1/accounts":
-			sawAdd = true
-			var body AddSetAccountsInput
-			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-				t.Fatalf("decode add body: %v", err)
-			}
-			if len(body.AccountIDs) != 1 || body.AccountIDs[0] != "acc_2" {
-				t.Errorf("add body wrong: %+v", body)
-			}
-			_, _ = w.Write([]byte(`{"id":"set_1","workspace_id":"ws_1","name":"Renamed","is_default":true,"created_at":"2026-06-16T10:00:00Z","accounts":[{"social_account_id":"acc_2","platform":"x"}]}`))
-		case r.Method == http.MethodDelete && r.URL.Path == "/api/v1/sets/set_1/accounts/acc_2":
-			sawRemove = true
-			_, _ = w.Write([]byte(`{"id":"set_1","workspace_id":"ws_1","name":"Renamed","is_default":true,"created_at":"2026-06-16T10:00:00Z","accounts":[]}`))
-		case r.Method == http.MethodDelete && r.URL.Path == "/api/v1/sets/set_1":
-			sawDelete = true
-			w.WriteHeader(http.StatusNoContent)
-		default:
-			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
-		}
-	}))
-	defer srv.Close()
-
-	c := New(srv.URL, "")
-	if _, err := c.CreateSet(context.Background(), CreateSetInput{WorkspaceID: "ws_1", Name: "Launch", IsDefault: true, AccountIDs: []string{"acc_1"}}); err != nil {
-		t.Fatalf("CreateSet returned error: %v", err)
-	}
-	name := "Renamed"
-	if _, err := c.UpdateSet(context.Background(), "set_1", UpdateSetInput{Name: &name}); err != nil {
-		t.Fatalf("UpdateSet returned error: %v", err)
-	}
-	if _, err := c.AddSetAccounts(context.Background(), "set_1", AddSetAccountsInput{AccountIDs: []string{"acc_2"}}); err != nil {
-		t.Fatalf("AddSetAccounts returned error: %v", err)
-	}
-	if _, err := c.RemoveSetAccount(context.Background(), "set_1", "acc_2"); err != nil {
-		t.Fatalf("RemoveSetAccount returned error: %v", err)
-	}
-	if err := c.DeleteSet(context.Background(), "set_1"); err != nil {
-		t.Fatalf("DeleteSet returned error: %v", err)
-	}
-	if !sawCreate || !sawUpdate || !sawAdd || !sawRemove || !sawDelete {
-		t.Fatalf("missing request create=%t update=%t add=%t remove=%t delete=%t", sawCreate, sawUpdate, sawAdd, sawRemove, sawDelete)
-	}
-}
-
 // TestListMedia_WireFormat verifies that ListMedia decodes the
 // server's `{media: [...], total: N}` shape, not a `{body: {media,
 // total}}` envelope.
@@ -530,12 +451,12 @@ func TestNextAvailableSlot_WireFormat(t *testing.T) {
 		if got := r.URL.Query().Get("workspace_id"); got != "ws_1" {
 			t.Errorf("workspace_id = %q, want ws_1", got)
 		}
-		if got := r.URL.Query().Get("set_id"); got != "set_1" {
-			t.Errorf("set_id = %q, want set_1", got)
+		if got := r.URL.Query().Get("set_id"); got != "" {
+			t.Errorf("set_id query = %q, want empty", got)
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{
-			"slot":{"id":"slot_1","workspace_id":"ws_1","set_id":"set_1","utc_hour":9,"utc_minute":0,"day_of_week":2,"local_hour":9,"local_minute":0,"local_day_of_week":2,"label":"Morning","is_active":true,"created_at":"2026-06-16T08:00:00Z"},
+			"slot":{"id":"slot_1","workspace_id":"ws_1","utc_hour":9,"utc_minute":0,"day_of_week":2,"local_hour":9,"local_minute":0,"local_day_of_week":2,"label":"Morning","is_active":true,"created_at":"2026-06-16T08:00:00Z"},
 			"slot_time":"2026-06-16T09:00:00Z",
 			"message":"Next available slot found"
 		}`))
@@ -543,14 +464,14 @@ func TestNextAvailableSlot_WireFormat(t *testing.T) {
 	defer srv.Close()
 
 	c := New(srv.URL, "")
-	got, err := c.NextAvailableSlot(context.Background(), NextAvailableSlotInput{WorkspaceID: "ws_1", SetID: "set_1"})
+	got, err := c.NextAvailableSlot(context.Background(), NextAvailableSlotInput{WorkspaceID: "ws_1"})
 	if err != nil {
 		t.Fatalf("NextAvailableSlot returned error: %v", err)
 	}
 	if got.SlotTime != "2026-06-16T09:00:00Z" {
 		t.Fatalf("slot_time = %q", got.SlotTime)
 	}
-	if got.Slot == nil || got.Slot.ID != "slot_1" || got.Slot.SetID != "set_1" {
+	if got.Slot == nil || got.Slot.ID != "slot_1" {
 		t.Fatalf("slot = %+v", got.Slot)
 	}
 }

@@ -4,27 +4,26 @@ The CLI is designed for headless use in CI, cron, and deployment jobs. Use an AP
 
 ## Environment
 
-| Variable | Purpose |
-| --- | --- |
-| `OPENPOST_TOKEN` | Bearer token for non-interactive API access. |
-| `OPENPOST_INSTANCE` | Default OpenPost instance URL. |
-| `OPENPOST_WORKSPACE` | Default workspace ID or slug. |
-| `OPENPOST_OUTPUT=json` | Default output format for scripts. |
-| `OPENPOST_PROFILE` | Selects a named CLI profile. |
+| Variable               | Purpose                                      |
+| ---------------------- | -------------------------------------------- |
+| `OPENPOST_TOKEN`       | Bearer token for non-interactive API access. |
+| `OPENPOST_INSTANCE`    | Default OpenPost instance URL.               |
+| `OPENPOST_WORKSPACE`   | Default workspace ID or slug.                |
+| `OPENPOST_OUTPUT=json` | Default output format for scripts.           |
+| `OPENPOST_PROFILE`     | Selects a named CLI profile.                 |
 
 Useful flags:
 
-| Flag | Purpose |
-| --- | --- |
-| `--yes` | Skip confirmation prompts. |
-| `--json` | Print machine-readable JSON for one command. |
-| `--set <name-or-id>` | Publish through a managed social set instead of spelling out `--accounts`. |
-| `--schedule next-slot` | Use the next available posting schedule slot instead of posting immediately or choosing a fixed time. |
+| Flag                     | Purpose                                                                                               |
+| ------------------------ | ----------------------------------------------------------------------------------------------------- |
+| `--yes`                  | Skip confirmation prompts.                                                                            |
+| `--json`                 | Print machine-readable JSON for one command.                                                          |
+| `--accounts <selectors>` | Select destination accounts by ID, slug, or platform. Omit for a destinationless draft.               |
+| `--schedule next-slot`   | Use the next available posting schedule slot instead of posting immediately or choosing a fixed time. |
 
-For recurring jobs, prefer a workspace default social set and `--schedule
-next-slot`. After creating a default set with `openpost set create <name>
---accounts ... --default`, automation can omit both `--accounts` and `--set`;
-the CLI resolves the default set at runtime.
+For recurring jobs, pass explicit `--accounts` selectors and `--schedule
+next-slot`. `next-slot` is workspace-scoped and uses the selected workspace
+posting schedule.
 
 The complete command and flag reference is generated from the Cobra command tree at `docs-site/reference/cli.md` by `scripts/sync-docs-openapi.mjs`.
 
@@ -55,6 +54,7 @@ jobs:
         run: |
           openpost post create \
             --content "Daily build completed for ${GITHUB_REPOSITORY}@${GITHUB_SHA}" \
+            --accounts x \
             --schedule next-slot \
             --yes \
             --json

@@ -6,7 +6,7 @@ Use it when you want to:
 
 - Create drafts, scheduled posts, and threads from scripts
 - Upload media from a terminal
-- Manage workspaces, account slugs, social sets, jobs, and API tokens
+- Manage workspaces, account slugs, jobs, and API tokens
 - Run OpenPost from CI, cron, deploy hooks, or a personal shell workflow
 
 ## Typical setup
@@ -19,19 +19,18 @@ openpost auth login http://localhost:8080
 openpost workspace use personal
 ```
 
-Then create a default social set so posting commands do not need repeated account selectors:
+Then inspect accounts and pass explicit selectors to posting commands:
 
 ```sh
 openpost account list
-openpost set create launch --accounts main-x,linkedin --default
-openpost post create --content "Hello from OpenPost" --schedule next-slot
+openpost post create --accounts main-x,linkedin --content "Hello from OpenPost" --schedule next-slot
 ```
 
 ## Docs
 
 - [Installation](/cli/installation)
 - [Authentication](/cli/authentication)
-- [Posting and social sets](/cli/posting)
+- [Posting](/cli/posting)
 - [Automation](/cli/automation)
 - [Generated command reference](/reference/cli)
 

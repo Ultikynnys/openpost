@@ -1289,8 +1289,8 @@
 					<div>
 						<p class="text-sm font-medium">Social accounts are workspace settings</p>
 						<p class="text-sm text-muted-foreground">
-							Connected platforms, account sets, posting schedule, timezone, and media cleanup all
-							belong to the selected workspace. User login security stays under Account.
+							Connected platforms, posting schedule, timezone, and media cleanup all belong to the
+							selected workspace. User login security stays under Account.
 						</p>
 					</div>
 					<Button variant="outline" onclick={() => goto('/accounts')}>Manage Social Accounts</Button
