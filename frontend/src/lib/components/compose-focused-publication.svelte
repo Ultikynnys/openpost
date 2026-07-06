@@ -810,9 +810,6 @@
 					<div class="flex items-center justify-between gap-3">
 						<div>
 							<h2 class="text-sm font-semibold">Accounts</h2>
-							<p class="text-xs text-muted-foreground">
-								Selected accounts decide which role fields are shown.
-							</p>
 						</div>
 						{#if accountsLoading}
 							<LoaderIcon class="h-4 w-4 animate-spin text-muted-foreground" />

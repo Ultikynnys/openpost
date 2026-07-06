@@ -83,8 +83,9 @@ export interface FocusedPublicationPayload {
 export const COMPOSER_MODES: ComposerMode[] = [
 	{
 		key: 'short_text',
-		label: 'Short text',
-		description: 'Fast text-first posts for timelines and feeds.',
+		label: 'Post',
+		description:
+			'Fast text-first posts for timelines and feeds. Add another post to make a thread.',
 		flow: 'legacy',
 		mediaFirst: false
 	},

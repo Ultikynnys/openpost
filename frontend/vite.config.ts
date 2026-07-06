@@ -46,6 +46,7 @@ export default defineConfig({
 		include: [
 			'lucide-svelte/icons/align-left',
 			'lucide-svelte/icons/alert-circle',
+			'lucide-svelte/icons/arrow-right',
 			'lucide-svelte/icons/calendar-clock',
 			'lucide-svelte/icons/check-circle-2',
 			'lucide-svelte/icons/image-plus',

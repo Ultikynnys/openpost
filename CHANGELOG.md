@@ -4,6 +4,17 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [1.0.36] - 2026-07-06
+
+### Changed
+
+- Reworked the legacy composer schedule control into a dialog with natural-language time input, quick picks, timezone context, and the existing calendar/time selector.
+- Renamed the default composer mode to Post and kept the mode picker in sync when users add or remove thread posts.
+
+### Fixed
+
+- Detected X Premium long-post limits from account capabilities and metadata instead of relying only on a manual limit profile flag.
+
 ## [1.0.34] - 2026-07-06
 
 ### Changed

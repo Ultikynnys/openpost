@@ -24,6 +24,16 @@
 	};
 
 	let selectedMode = $state<ComposerModeKey>('short_text');
+	let lastComposerThreadState = false;
+
+	function handleThreadStateChange(isThread: boolean) {
+		if (isThread) {
+			selectedMode = 'thread';
+		} else if (lastComposerThreadState && selectedMode === 'thread') {
+			selectedMode = 'short_text';
+		}
+		lastComposerThreadState = isThread;
+	}
 </script>
 
 <div class="flex min-h-0 flex-1 flex-col bg-background" data-testid="compose-shell">
@@ -46,13 +56,13 @@
 		</div>
 	</div>
 
-	{#key selectedMode}
-		{#if isLegacyComposerMode(selectedMode)}
-			<div data-testid="legacy-composer-shell" class="flex min-h-0 flex-1 flex-col">
-				<ComposeSimple />
-			</div>
-		{:else}
+	{#if isLegacyComposerMode(selectedMode)}
+		<div data-testid="legacy-composer-shell" class="flex min-h-0 flex-1 flex-col">
+			<ComposeSimple onThreadStateChange={handleThreadStateChange} />
+		</div>
+	{:else}
+		{#key selectedMode}
 			<ComposeFocusedPublication mode={selectedMode} />
-		{/if}
-	{/key}
+		{/key}
+	{/if}
 </div>

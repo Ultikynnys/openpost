@@ -3,6 +3,7 @@ export {
 	PLATFORM_LIMITS,
 	X_PREMIUM_CHAR_LIMIT,
 	X_STANDARD_CHAR_LIMIT,
+	accountHasXPremiumLongPosts,
 	accountCharacterLimit,
 	minimumAccountCharacterLimit,
 	platformCharacterLimit,

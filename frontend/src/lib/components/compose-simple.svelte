@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount, tick, type Snippet } from 'svelte';
+	import { onMount, tick } from 'svelte';
 	import { client, type SocialAccount, type Workspace, getToken } from '$lib/api/client';
 	import { getApiBase } from '$lib/stores/instance.svelte';
 	import { getAuthenticatedMediaByID } from '$lib/media-url';
@@ -11,33 +11,30 @@
 	import { workspaceCtx } from '$lib/stores/workspace.svelte';
 	import { Button } from '$lib/components/ui/button';
 	import { Calendar } from '$lib/components/ui/calendar';
-	import * as Popover from '$lib/components/ui/popover';
+	import { Input } from '$lib/components/ui/input';
+	import * as Dialog from '$lib/components/ui/dialog';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
 	import * as Tooltip from '$lib/components/ui/tooltip';
-	import ComposePreviewPanel, { type PreviewGroup } from './compose-preview-panel.svelte';
 	import PlatformIcon from './platform-icon.svelte';
 	import { Badge } from '$lib/components/ui/badge';
 	import { getPlatformKey, getPlatformName } from '$lib/utils';
 	import { CalendarDate, getLocalTimeZone, today, isEqualDay } from '@internationalized/date';
+	import ArrowRightIcon from 'lucide-svelte/icons/arrow-right';
 	import LoaderIcon from 'lucide-svelte/icons/loader-2';
 	import PlusIcon from 'lucide-svelte/icons/plus';
 	import XIcon from 'lucide-svelte/icons/x';
-	import ClockIcon from 'lucide-svelte/icons/clock';
 	import LightbulbIcon from 'lucide-svelte/icons/lightbulb';
 	import ShuffleIcon from 'lucide-svelte/icons/shuffle';
 	import ImageIcon from 'lucide-svelte/icons/image';
-	import SendIcon from 'lucide-svelte/icons/send';
 	import ChevronDownIcon from 'lucide-svelte/icons/chevron-down';
 	import UnlinkIcon from 'lucide-svelte/icons/unlink';
 	import Link2Icon from 'lucide-svelte/icons/link-2';
 	import GripVerticalIcon from 'lucide-svelte/icons/grip-vertical';
 	import Trash2Icon from 'lucide-svelte/icons/trash-2';
 	import TypeIcon from 'lucide-svelte/icons/type';
-	import EyeIcon from 'lucide-svelte/icons/eye';
 	import { ui } from '$lib/stores/ui.svelte';
 	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
 	import { ReorderableList } from 'svelte-reorderable-list';
-	import * as Sheet from '$lib/components/ui/sheet';
 	import { m } from '$lib/paraglide/messages';
 	import { getLocaleTag } from '$lib/i18n';
 	import {
@@ -50,11 +47,8 @@
 		hasAnyContent,
 		type VariantPost
 	} from './compose/draft-utils';
-	import {
-		X_PREMIUM_CHAR_LIMIT,
-		minimumAccountCharacterLimit,
-		uniquePlatformLimits
-	} from './compose/platform-limits';
+	import { minimumAccountCharacterLimit, uniquePlatformLimits } from './compose/platform-limits';
+	import { parseNaturalScheduleInput } from './compose/schedule-language';
 
 	// --------------------------------------------------------------------------
 	// Types
@@ -88,12 +82,13 @@
 		initialPost?: InitialPost;
 		onSuccess?: () => void;
 		onCancel?: () => void;
+		onThreadStateChange?: (isThread: boolean) => void;
 	}
 
 	// --------------------------------------------------------------------------
 	// Props & core state
 	// --------------------------------------------------------------------------
-	let { initialPost, onSuccess, onCancel }: Props = $props();
+	let { initialPost, onSuccess, onCancel, onThreadStateChange }: Props = $props();
 	let isEditMode = $derived(!!initialPost);
 
 	let posts = $state<PostItem[]>([makeEmptyPost()]);
@@ -116,14 +111,12 @@
 	let selectedSetId = $state<string | null>(null);
 	let loadingSets = $state(false);
 
-	let showPreview = $state(true);
-	let showMobilePreview = $state(false);
-	let xPremiumLimitsEnabled = $state(false);
-
 	let selectedDate = $state<CalendarDate | undefined>(undefined);
 	let selectedTime = $state<string | null>(null);
 	let suggestingSlot = $state(false);
-	let showSchedulePopover = $state(false);
+	let showScheduleDialog = $state(false);
+	let scheduleInput = $state('');
+	let scheduleInputError = $state('');
 
 	let showPromptCard = $state(false);
 	let currentPrompt = $state<{ text: string; category: string } | null>(null);
@@ -143,6 +136,7 @@
 	let autoSaveTimer: ReturnType<typeof setTimeout> | null = null;
 	let lastSavedSnapshot = $state('');
 	let textareaRefs = $state<Map<number, HTMLTextAreaElement>>(new Map());
+	const scheduleInputPlaceholder = 'Write any time, e.g. "tomorrow at 9am" or "in 3 hours"';
 
 	// --------------------------------------------------------------------------
 	// Constants & derived values
@@ -233,17 +227,7 @@
 		return selectedAccounts.filter((account) => !variants.has(account.id));
 	});
 
-	const editorHasXAccount = $derived.by(() => {
-		return editorTargetAccounts.some((account) => getPlatformKey(account.platform) === 'x');
-	});
-
-	const editorLimitAccounts = $derived.by(() => {
-		return editorTargetAccounts.map((account) => ({
-			...account,
-			limit_profile:
-				xPremiumLimitsEnabled && getPlatformKey(account.platform) === 'x' ? 'x-premium' : 'standard'
-		}));
-	});
+	const editorLimitAccounts = $derived(editorTargetAccounts);
 
 	const editorPlatformLimits = $derived.by(() => {
 		return uniquePlatformLimits(editorLimitAccounts);
@@ -252,38 +236,7 @@
 	const editorMaxChars = $derived.by(() => {
 		return minimumAccountCharacterLimit(editorLimitAccounts);
 	});
-	const previewGroups = $derived.by<PreviewGroup[]>(() => {
-		const groups: PreviewGroup[] = [];
-		const sourcePosts = isThread ? posts : activePost ? [activePost] : [];
-
-		for (const account of selectedAccounts) {
-			const platformKey = getPlatformKey(account.platform);
-			const previewPosts = sourcePosts
-				.map((post) => ({
-					key: post.key,
-					content: getVariantContent(account.id, post.key) ?? post.content,
-					mediaIds: getVariantMediaIds(account.id, post.key) ?? post.mediaIds,
-					mediaMimeTypes: getMediaMimeTypeRecord(
-						getVariantMediaIds(account.id, post.key) ?? post.mediaIds
-					)
-				}))
-				.filter((post) => !isThread || post.content.trim().length > 0 || post.mediaIds.length > 0);
-
-			groups.push({
-				key: `${account.id}:${platformKey}`,
-				accountId: account.id,
-				platformKey,
-				platformName: getPlatformName(account.platform),
-				username: account.account_username || 'username',
-				displayName: account.account_username || 'Display Name',
-				avatarUrl: account.account_avatar_url || '',
-				isUnsynced: variants.has(account.id),
-				posts: previewPosts
-			});
-		}
-
-		return groups;
-	});
+	const scheduleTimezoneLabel = $derived(workspaceCtx.settings.timezone || getLocalTimeZone());
 
 	const editorResizeSignature = $derived.by(() =>
 		posts
@@ -462,12 +415,6 @@
 		return getVariantMediaIds(activeVariantAccountId, post.key) ?? post.mediaIds;
 	}
 
-	function getMediaMimeTypeRecord(mediaIds: string[]): Record<string, string> {
-		return Object.fromEntries(
-			mediaIds.map((id) => [id, mediaMimeTypes.get(id) ?? '']).filter(([, mimeType]) => mimeType)
-		);
-	}
-
 	function clearAutoSaveTimer() {
 		if (autoSaveTimer) {
 			clearTimeout(autoSaveTimer);
@@ -524,9 +471,8 @@
 			mediaAltTexts = new Map();
 			mediaMimeTypes = new Map();
 			mediaSizes = new Map();
-			const tomorrow = today(getLocalTimeZone()).add({ days: 1 });
-			selectedDate = new CalendarDate(tomorrow.year, tomorrow.month, tomorrow.day);
-			selectedTime = '10:00';
+			selectedDate = undefined;
+			selectedTime = null;
 			if (workspaces.length > 0) {
 				selectedWorkspaceId = workspaceCtx.currentWorkspace?.id ?? workspaces[0].id;
 				await loadAccounts(selectedWorkspaceId);
@@ -1151,6 +1097,7 @@
 		posts = [...posts.slice(0, newIndex), makeEmptyPost(), ...posts.slice(newIndex)];
 		variants = normalizeVariantsMap(variants, posts);
 		activePostIndex = newIndex;
+		onThreadStateChange?.(true);
 		scheduleAutoSave();
 		tick().then(() => {
 			document.getElementById(`post-textarea-${newIndex}`)?.focus();
@@ -1164,6 +1111,7 @@
 		if (activePostIndex >= posts.length) {
 			activePostIndex = posts.length - 1;
 		}
+		onThreadStateChange?.(posts.length > 1);
 		scheduleAutoSave();
 	}
 
@@ -1494,6 +1442,51 @@
 	// --------------------------------------------------------------------------
 	// Scheduling
 	// --------------------------------------------------------------------------
+	function applyScheduleInput(): boolean {
+		const trimmed = scheduleInput.trim();
+		if (!trimmed) {
+			scheduleInputError = '';
+			return true;
+		}
+
+		const parsed = parseNaturalScheduleInput(trimmed);
+		if (!parsed) {
+			scheduleInputError = 'Could not understand that time.';
+			return false;
+		}
+
+		selectedDate = parsed.date;
+		selectedTime = parsed.time;
+		scheduleInputError = '';
+		return true;
+	}
+
+	function closeScheduleDialog() {
+		scheduleInputError = '';
+		showScheduleDialog = false;
+	}
+
+	function applyScheduleInputAndClose() {
+		if (!applyScheduleInput()) return;
+		closeScheduleDialog();
+	}
+
+	function openScheduleDialog() {
+		scheduleInput = '';
+		scheduleInputError = '';
+		showScheduleDialog = true;
+	}
+
+	async function scheduleWithSelectedTime() {
+		if (showScheduleDialog && !applyScheduleInput()) return;
+		if (!selectedDate || !selectedTime) {
+			openScheduleDialog();
+			return;
+		}
+		showScheduleDialog = false;
+		await publish(false);
+	}
+
 	async function suggestNextSlot() {
 		if (!selectedWorkspaceId) return;
 		suggestingSlot = true;
@@ -1524,6 +1517,8 @@
 				if (slotDateTime.getTime() <= Date.now()) {
 					selectedDate = selectedDate.add({ days: 1 });
 				}
+				scheduleInput = '';
+				scheduleInputError = '';
 			}
 		} catch (e) {
 			console.error('Failed to get next available slot:', e);
@@ -1740,18 +1735,8 @@
 		</div>
 
 		<div class="flex flex-wrap items-center gap-1.5 md:gap-2">
-			<!-- Mobile preview toggle -->
+			<!-- Per-account customization tabs -->
 			{#if selectedAccounts.length > 0}
-				<Button
-					variant="ghost"
-					size="icon"
-					class="h-8 w-8 lg:hidden"
-					onclick={() => (showMobilePreview = true)}
-					title={m.compose_show_preview()}
-				>
-					<EyeIcon class="h-4 w-4" />
-				</Button>
-
 				<div
 					class="flex max-w-[min(62vw,30rem)] [scrollbar-width:none] items-center gap-1 overflow-x-auto overflow-y-hidden py-1 pr-2 pl-1 [-ms-overflow-style:none] sm:max-w-[min(58vw,34rem)] lg:max-w-[40rem] lg:pr-3 [&::-webkit-scrollbar]:hidden"
 				>
@@ -1869,98 +1854,6 @@
 				</Tooltip.Content>
 			</Tooltip.Root>
 
-			<!-- Suggest next slot -->
-			<Tooltip.Root>
-				<Tooltip.Trigger>
-					{#snippet child({ props })}
-						<Button
-							{...props}
-							variant="ghost"
-							size="sm"
-							class="h-8 gap-1 text-xs"
-							onclick={suggestNextSlot}
-							disabled={suggestingSlot || isSubmitting || isSaving}
-						>
-							{#if suggestingSlot}<span
-									class="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-current"
-								></span>{:else}<ShuffleIcon class="h-3 w-3" />{/if}
-							<span class="hidden sm:inline">{m.compose_suggest()}</span>
-						</Button>
-					{/snippet}
-				</Tooltip.Trigger>
-				<Tooltip.Content><p class="text-sm">{m.compose_fill_next_slot()}</p></Tooltip.Content>
-			</Tooltip.Root>
-
-			<!-- Schedule picker -->
-			<Popover.Root bind:open={showSchedulePopover}>
-				<Popover.Trigger>
-					{#snippet child({ props })}
-						<Button
-							{...props}
-							variant="outline"
-							size="sm"
-							class="gap-1.5 text-xs"
-							disabled={isSubmitting || isSaving || !hasContent}
-						>
-							<ClockIcon class="h-3.5 w-3.5" />
-							<span class="hidden sm:inline">{formatScheduledDisplay()}</span>
-						</Button>
-					{/snippet}
-				</Popover.Trigger>
-				<Popover.Content class="w-auto max-w-[calc(100vw-2rem)] p-0" align="end">
-					<div class="p-3 md:p-4">
-						<div class="mb-3 flex items-center justify-between">
-							<span class="text-sm font-medium">{m.compose_schedule()}</span>
-						</div>
-						<Calendar
-							type="single"
-							bind:value={selectedDate}
-							minValue={today(getLocalTimeZone())}
-							class="bg-transparent p-0 [--cell-size:--spacing(8)]"
-							weekdayFormat="short"
-							weekStartsOn={workspaceCtx.weekStartsOn}
-						/>
-						<div class="mt-3 max-h-48 overflow-y-auto">
-							<div class="grid grid-cols-3 gap-1.5 sm:grid-cols-4">
-								{#each timeSlots as time (time)}
-									<Button
-										variant={selectedTime === time ? 'default' : 'outline'}
-										size="sm"
-										onclick={() => {
-											if (!selectedDate) {
-												const date = today(getLocalTimeZone());
-												selectedDate = new CalendarDate(date.year, date.month, date.day);
-											}
-											selectedTime = time;
-											showSchedulePopover = false;
-										}}
-										class="h-8 text-xs"
-									>
-										{time}
-									</Button>
-								{/each}
-							</div>
-						</div>
-						{#if selectedDate || selectedTime}
-							<div class="mt-3 border-t pt-3">
-								<Button
-									variant="ghost"
-									size="sm"
-									class="w-full text-xs"
-									onclick={() => {
-										selectedDate = undefined;
-										selectedTime = null;
-										showSchedulePopover = false;
-									}}
-								>
-									{m.compose_clear_schedule()}
-								</Button>
-							</div>
-						{/if}
-					</div>
-				</Popover.Content>
-			</Popover.Root>
-
 			{#if isEditMode}
 				<Button
 					size="sm"
@@ -1972,34 +1865,206 @@
 					<span>{isSaving ? m.compose_saving_changes() : m.compose_save_changes()}</span>
 				</Button>
 			{:else}
-				<!-- Schedule button -->
-				<Button
-					size="sm"
-					class="gap-1.5"
-					onclick={() => publish(false)}
-					disabled={isSubmitting || !hasContent || selectedAccountIds.length === 0}
+				<div
+					class="flex h-9 overflow-hidden rounded-full bg-orange-500 text-sm font-semibold text-white shadow-sm"
+					title={formatScheduledDisplay()}
 				>
-					{#if isSubmitting}<LoaderIcon class="h-3.5 w-3.5 animate-spin" />{:else}<SendIcon
-							class="h-3.5 w-3.5"
-						/>{/if}
-					<span class="hidden sm:inline">{m.compose_schedule()}</span>
-				</Button>
+					<button
+						type="button"
+						class="px-4 transition-colors hover:bg-orange-400 disabled:cursor-not-allowed"
+						onclick={openScheduleDialog}
+						disabled={isSubmitting || isSaving}
+					>
+						{m.compose_schedule()}
+					</button>
+					<div class="w-px bg-black/25"></div>
+					<button
+						type="button"
+						class="flex w-10 items-center justify-center transition-colors hover:bg-orange-400 disabled:cursor-not-allowed"
+						aria-label="Schedule post"
+						onclick={scheduleWithSelectedTime}
+						disabled={isSubmitting || !hasContent || selectedAccountIds.length === 0}
+					>
+						{#if isSubmitting}<LoaderIcon class="h-4 w-4 animate-spin" />{:else}<ArrowRightIcon
+								class="h-4 w-4"
+							/>{/if}
+					</button>
+				</div>
 
-				<!-- Publish now -->
-				<Button
-					size="sm"
-					variant="secondary"
+				<button
+					type="button"
+					class="h-9 rounded-full bg-sky-500 px-4 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-sky-400 disabled:cursor-not-allowed disabled:opacity-50"
 					onclick={() => publish(true)}
 					disabled={isSubmitting || !hasContent || selectedAccountIds.length === 0}
-					class="gap-1.5"
 				>
-					{#if isSubmitting}<LoaderIcon class="h-3.5 w-3.5 animate-spin" />{/if}
-					<span class="hidden sm:inline">{m.compose_publish_now()}</span>
-					<span class="sm:hidden">{m.compose_publish_now()}</span>
-				</Button>
+					{#if isSubmitting}<LoaderIcon class="mr-1.5 inline h-4 w-4 animate-spin" />{/if}
+					Publish
+				</button>
 			{/if}
 		</div>
 	</div>
+
+	<Dialog.Root bind:open={showScheduleDialog}>
+		<Dialog.Content class="max-h-[calc(100vh-2rem)] overflow-y-auto p-0 sm:max-w-3xl">
+			<Dialog.Header class="border-b px-5 pt-5 pb-4 text-center">
+				<Dialog.Title class="text-2xl font-semibold">{m.compose_schedule()}</Dialog.Title>
+				<Dialog.Description class="text-sm text-muted-foreground">
+					All times in <span class="rounded-md bg-muted px-1.5 py-0.5">{scheduleTimezoneLabel}</span
+					>
+					timezone.
+				</Dialog.Description>
+			</Dialog.Header>
+
+			<div class="space-y-4 p-5">
+				<form
+					class="space-y-2"
+					onsubmit={(event) => {
+						event.preventDefault();
+						applyScheduleInputAndClose();
+					}}
+				>
+					<Input
+						bind:value={scheduleInput}
+						placeholder={scheduleInputPlaceholder}
+						class="h-11 rounded-xl bg-muted/40 text-base"
+						aria-label="Schedule time"
+					/>
+					{#if scheduleInputError}
+						<p class="px-1 text-xs text-destructive">{scheduleInputError}</p>
+					{/if}
+				</form>
+
+				<div class="grid gap-2 sm:grid-cols-3">
+					<Button
+						type="button"
+						variant="secondary"
+						class="h-10 justify-center gap-2 rounded-xl"
+						onclick={suggestNextSlot}
+						disabled={suggestingSlot}
+					>
+						{#if suggestingSlot}
+							<LoaderIcon class="h-4 w-4 animate-spin" />
+						{:else}
+							<ArrowRightIcon class="h-4 w-4" />
+						{/if}
+						Next free slot
+					</Button>
+					<Button
+						type="button"
+						variant="secondary"
+						class="h-10 justify-center rounded-xl"
+						onclick={() => {
+							const next = today(getLocalTimeZone()).add({ days: 1 });
+							selectedDate = new CalendarDate(next.year, next.month, next.day);
+							selectedTime = '09:00';
+							scheduleInput = '';
+							scheduleInputError = '';
+						}}
+					>
+						Tomorrow 09:00
+					</Button>
+					<Button
+						type="button"
+						variant="secondary"
+						class="h-10 justify-center rounded-xl"
+						onclick={() => {
+							const parsed = parseNaturalScheduleInput('in 3 hours');
+							if (!parsed) return;
+							selectedDate = parsed.date;
+							selectedTime = parsed.time;
+							scheduleInput = '';
+							scheduleInputError = '';
+						}}
+					>
+						In 3 hours
+					</Button>
+				</div>
+
+				<div class="overflow-hidden rounded-xl border bg-muted/15 md:grid md:grid-cols-[1fr_10rem]">
+					<div class="flex justify-center p-3 md:p-4">
+						<Calendar
+							type="single"
+							bind:value={selectedDate}
+							minValue={today(getLocalTimeZone())}
+							class="bg-transparent p-0 [--cell-size:--spacing(9)]"
+							weekdayFormat="short"
+							weekStartsOn={workspaceCtx.weekStartsOn}
+						/>
+					</div>
+					<div class="border-t md:border-t-0 md:border-l">
+						<div class="border-b px-3 py-2 text-center text-sm font-medium">Time</div>
+						<div class="max-h-72 overflow-y-auto p-2">
+							{#if timeSlots.length === 0}
+								<p class="px-2 py-6 text-center text-xs text-muted-foreground">
+									No remaining slots today.
+								</p>
+							{:else}
+								<div class="grid grid-cols-2 gap-1.5 md:grid-cols-1">
+									{#each timeSlots as time (time)}
+										<Button
+											type="button"
+											variant={selectedTime === time ? 'default' : 'ghost'}
+											size="sm"
+											onclick={() => {
+												if (!selectedDate) {
+													const date = today(getLocalTimeZone());
+													selectedDate = new CalendarDate(date.year, date.month, date.day);
+												}
+												selectedTime = time;
+												scheduleInput = '';
+												scheduleInputError = '';
+											}}
+											class="h-9 justify-center rounded-lg text-sm tabular-nums"
+										>
+											{time}
+										</Button>
+									{/each}
+								</div>
+							{/if}
+						</div>
+					</div>
+				</div>
+
+				<div class="flex flex-wrap items-center justify-between gap-3 text-sm">
+					<div class="text-muted-foreground">
+						{#if selectedDate && selectedTime}
+							Selected <span class="font-medium text-foreground">{formatScheduledDisplay()}</span>
+						{:else}
+							Choose a date and time before scheduling.
+						{/if}
+					</div>
+					{#if selectedDate || selectedTime}
+						<Button
+							type="button"
+							variant="ghost"
+							size="sm"
+							onclick={() => {
+								selectedDate = undefined;
+								selectedTime = null;
+								scheduleInput = '';
+								scheduleInputError = '';
+							}}
+						>
+							{m.compose_clear_schedule()}
+						</Button>
+					{/if}
+				</div>
+			</div>
+
+			<Dialog.Footer class="border-t px-5 py-4">
+				<Button type="button" variant="outline" onclick={closeScheduleDialog}>Cancel</Button>
+				<Button type="button" variant="secondary" onclick={applyScheduleInputAndClose}>Done</Button>
+				<Button
+					type="button"
+					onclick={scheduleWithSelectedTime}
+					disabled={isSubmitting || !hasContent || selectedAccountIds.length === 0}
+				>
+					{#if isSubmitting}<LoaderIcon class="mr-2 h-4 w-4 animate-spin" />{/if}
+					{m.compose_schedule()}
+				</Button>
+			</Dialog.Footer>
+		</Dialog.Content>
+	</Dialog.Root>
 
 	<!-- ====================================================================== -->
 	<!-- Messages -->
@@ -2073,26 +2138,6 @@
 					</div>
 				{/if}
 
-				{#if editorHasXAccount}
-					<div class="mb-4 rounded-md border bg-muted/25 p-3">
-						<label class="flex items-start gap-3 text-sm">
-							<input
-								type="checkbox"
-								bind:checked={xPremiumLimitsEnabled}
-								class="mt-0.5 size-4 rounded border"
-							/>
-							<span>
-								<span class="font-medium">Use X Premium longer-post limit</span>
-								<span class="mt-1 block text-xs leading-5 text-muted-foreground">
-									Raises selected X targets to {X_PREMIUM_CHAR_LIMIT.toLocaleString()} characters. Longer
-									X posts require X Premium and may still be rejected if the connected account or API
-									path does not support them.
-								</span>
-							</span>
-						</label>
-					</div>
-				{/if}
-
 				<!-- Posts -->
 				<div class="space-y-0">
 					<ReorderableList
@@ -2137,14 +2182,6 @@
 													class="flex flex-wrap items-center gap-1 px-1 pt-2 text-xs text-muted-foreground"
 												>
 													<span class="font-medium text-foreground">Post text</span>
-													{#if isThread}
-														<span>· Thread post {i + 1}</span>
-													{:else if activeVariantAccountId && activeVariantAccount}
-														<span>· {getPlatformName(activeVariantAccount.platform)} post text</span
-														>
-													{:else}
-														<span>· Selected accounts</span>
-													{/if}
 												</div>
 											{/if}
 											<textarea
@@ -2424,51 +2461,5 @@
 				</div>
 			</div>
 		</div>
-
-		<!-- Preview Column -->
-		{#if showPreview && selectedAccounts.length > 0}
-			<div class="hidden w-[420px] border-l bg-muted/20 px-6 py-6 lg:block">
-				<div class="sticky top-6">
-					<div class="mb-4 flex items-center justify-between">
-						<span class="text-xs font-medium tracking-wider text-muted-foreground uppercase"
-							>Preview</span
-						>
-						<button
-							type="button"
-							class="text-xs text-muted-foreground hover:text-foreground"
-							onclick={() => (showPreview = false)}>{m.compose_hide()}</button
-						>
-					</div>
-					<ComposePreviewPanel groups={previewGroups} />
-				</div>
-			</div>
-		{:else if !showPreview && selectedAccounts.length > 0}
-			<div
-				class="hidden w-10 border-l bg-muted/20 lg:flex lg:items-start lg:justify-center lg:pt-4"
-			>
-				<button
-					type="button"
-					class="text-muted-foreground hover:text-foreground"
-					onclick={() => (showPreview = true)}
-					title={m.compose_show_preview()}
-				>
-					<PlatformIcon platform={getPlatformKey(selectedAccounts[0].platform)} class="h-4 w-4" />
-				</button>
-			</div>
-		{/if}
 	</div>
 </div>
-
-<!-- ====================================================================== -->
-<!-- Mobile Preview Sheet -->
-<!-- ====================================================================== -->
-<Sheet.Root bind:open={showMobilePreview}>
-	<Sheet.Content side="bottom" class="h-[85vh] rounded-t-xl p-0">
-		<Sheet.Header class="border-b px-4 py-3">
-			<Sheet.Title class="text-sm font-medium">Preview</Sheet.Title>
-		</Sheet.Header>
-		<div class="overflow-y-auto px-4 py-4">
-			<ComposePreviewPanel groups={previewGroups} />
-		</div>
-	</Sheet.Content>
-</Sheet.Root>

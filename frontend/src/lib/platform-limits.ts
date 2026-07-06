@@ -6,6 +6,14 @@ export const X_PREMIUM_CHAR_LIMIT = 25_000;
 
 export type AccountLimitProfile = 'standard' | 'x-premium';
 
+type AccountLimitTarget = {
+	platform: string;
+	limit_profile?: string | null;
+	capabilities?: unknown;
+	metadata?: unknown;
+	[key: string]: unknown;
+};
+
 export interface PlatformLimitDefinition {
 	key: string;
 	name: string;
@@ -88,13 +96,58 @@ export const PLATFORM_LIMITS: Record<string, PlatformLimitDefinition> = {
 	}
 };
 
-export function accountLimitProfile(account: {
-	platform: string;
-	limit_profile?: string | null;
-}): AccountLimitProfile {
-	if (getPlatformKey(account.platform) === 'x' && account.limit_profile === 'x-premium') {
-		return 'x-premium';
-	}
+function hasPremiumToken(value: unknown): boolean {
+	if (typeof value !== 'string') return false;
+	const normalized = value.toLowerCase().replace(/[\s-]+/g, '_');
+	return ['x_premium', 'premium', 'premium_plus', 'long_posts', 'longform'].includes(normalized);
+}
+
+function hasPremiumFlag(value: unknown): boolean {
+	if (!value || typeof value !== 'object') return false;
+	return Object.entries(value as Record<string, unknown>).some(([key, raw]) => {
+		const normalizedKey = key.toLowerCase().replace(/[\s-]+/g, '_');
+		if (
+			['x_premium', 'has_x_premium', 'premium', 'premium_plus', 'long_posts', 'longform'].includes(
+				normalizedKey
+			)
+		) {
+			return raw === true || hasPremiumToken(raw);
+		}
+		if (
+			['tier', 'profile', 'plan', 'subscription_tier', 'account_type', 'entitlement'].includes(
+				normalizedKey
+			)
+		) {
+			return hasPremiumToken(raw);
+		}
+		if (
+			Array.isArray(raw) &&
+			['capabilities', 'features', 'entitlements', 'permissions'].includes(normalizedKey)
+		) {
+			return raw.some(hasPremiumToken);
+		}
+		if (normalizedKey === 'metadata' || normalizedKey === 'settings') {
+			return hasPremiumFlag(raw);
+		}
+		return false;
+	});
+}
+
+export function accountHasXPremiumLongPosts(account: AccountLimitTarget): boolean {
+	if (getPlatformKey(account.platform) !== 'x') return false;
+	if (account.limit_profile === 'x-premium') return true;
+
+	const capabilityValues = Array.isArray(account.capabilities) ? account.capabilities : [];
+	if (capabilityValues.some(hasPremiumToken)) return true;
+
+	if (hasPremiumFlag(account.metadata)) return true;
+	if (hasPremiumFlag(account)) return true;
+
+	return false;
+}
+
+export function accountLimitProfile(account: AccountLimitTarget): AccountLimitProfile {
+	if (accountHasXPremiumLongPosts(account)) return 'x-premium';
 	return 'standard';
 }
 
@@ -109,20 +162,19 @@ export function platformCharacterLimit(
 export function accountCharacterLimit(account: {
 	platform: string;
 	limit_profile?: string | null;
+	capabilities?: unknown;
+	metadata?: unknown;
+	[key: string]: unknown;
 }) {
 	return platformCharacterLimit(account.platform, accountLimitProfile(account));
 }
 
-export function minimumAccountCharacterLimit(
-	accounts: Array<{ platform: string; limit_profile?: string | null }>
-): number {
+export function minimumAccountCharacterLimit(accounts: Array<AccountLimitTarget>): number {
 	if (accounts.length === 0) return DEFAULT_PLATFORM_CHAR_LIMIT;
 	return Math.min(...accounts.map(accountCharacterLimit));
 }
 
-export function uniquePlatformLimits(
-	accounts: Array<{ platform: string; limit_profile?: string | null }>
-): PlatformLimit[] {
+export function uniquePlatformLimits(accounts: Array<AccountLimitTarget>): PlatformLimit[] {
 	const seen = new Set<string>();
 	return accounts
 		.map((account) => {
