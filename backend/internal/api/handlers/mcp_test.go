@@ -371,6 +371,7 @@ func TestMCPInitializeAdvertisesPrompts(t *testing.T) {
 	t.Parallel()
 
 	srv := newMCPTestServer(t)
+	srv.handler.SetServerVersion("v9.8.7")
 	resp := srv.request(t, "web-token", map[string]any{
 		"jsonrpc": "2.0",
 		"id":      "init",
@@ -381,6 +382,9 @@ func TestMCPInitializeAdvertisesPrompts(t *testing.T) {
 	var out map[string]any
 	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &out))
 	result := out["result"].(map[string]any)
+	serverInfo := result["serverInfo"].(map[string]any)
+	require.Equal(t, "openpost", serverInfo["name"])
+	require.Equal(t, "v9.8.7", serverInfo["version"])
 	require.Contains(t, result["instructions"], "List workspaces, accounts, providers, and media")
 	require.Contains(t, result["instructions"], "render_scheduler_widget")
 	capabilities := result["capabilities"].(map[string]any)

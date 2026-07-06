@@ -42,6 +42,8 @@ import (
 	"github.com/openpost/backend/internal/services/tokenmanager"
 )
 
+var version = "dev"
+
 //nolint:gocyclo
 func main() {
 	if err := godotenv.Load(); err != nil {
@@ -194,6 +196,7 @@ func main() {
 	})
 
 	mcpHandler := handlers.NewMCPHandler(db, authenticator, entitlementService)
+	mcpHandler.SetServerVersion(version)
 	mcpHandler.SetMediaStorage(storage)
 	mcpHandler.SetPublicURL(cfg.PublicURL)
 	mcpHandler.SetProviderCatalog(providers, mastodonAppService != nil)

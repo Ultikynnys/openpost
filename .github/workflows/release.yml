@@ -103,6 +103,8 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VERSION=${{ github.ref_name || 'dev' }}
           no-cache: true
 
   build-frontend-assets:
@@ -178,7 +180,8 @@ jobs:
           CGO_ENABLED: 1
         run: |
           cd backend
-          go build -ldflags="-s -w" -o ../openpost-server-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }} ./cmd/openpost
+          version="${GITHUB_REF_NAME:-dev}"
+          go build -ldflags="-s -w -X main.version=${version}" -o ../openpost-server-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }} ./cmd/openpost
 
       - name: Upload binary to release
         uses: softprops/action-gh-release@v1

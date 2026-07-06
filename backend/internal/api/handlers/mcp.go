@@ -76,6 +76,7 @@ type MCPHandler struct {
 	providers         map[string]platform.Adapter
 	dynamicMastodon   bool
 	tokenEncryptor    *servicecrypto.TokenEncryptor
+	serverVersion     string
 }
 
 func NewMCPHandler(db *bun.DB, authenticator middleware.Authenticator, entitlement ...entitlements.Service) *MCPHandler {
@@ -85,11 +86,20 @@ func NewMCPHandler(db *bun.DB, authenticator middleware.Authenticator, entitleme
 		entitlementService = entitlement[0]
 	}
 	return &MCPHandler{
-		db:          db,
-		auth:        authenticator,
-		entitlement: entitlementService,
-		usage:       usage.NewService(db),
+		db:            db,
+		auth:          authenticator,
+		entitlement:   entitlementService,
+		usage:         usage.NewService(db),
+		serverVersion: "dev",
 	}
+}
+
+func (h *MCPHandler) SetServerVersion(version string) {
+	version = strings.TrimSpace(version)
+	if version == "" {
+		version = "dev"
+	}
+	h.serverVersion = version
 }
 
 func (h *MCPHandler) SetUsage(usageService *usage.Service) {
@@ -318,7 +328,7 @@ func (h *MCPHandler) dispatch(ctx context.Context, principal *middleware.Princip
 			"protocolVersion": mcpProtocolVersion,
 			"serverInfo": map[string]string{
 				"name":    "openpost",
-				"version": "0.1.0",
+				"version": h.serverVersion,
 			},
 			"instructions": "OpenPost schedules social posts and format-first publications. Use create_publication for post types such as link, image, carousel, story, short video, and long video; pass explicit rendition title/description/caption/settings when provider outputs differ. Use create_draft/update_draft for legacy short-text drafts. List workspaces, accounts, providers, and media when IDs are unknown; validate publications before scheduling or publishing; use render_scheduler_widget when a visual summary helps.",
 			"capabilities": map[string]any{
@@ -3629,7 +3639,7 @@ func (h *MCPHandler) fetchRemoteMedia(ctx context.Context, rawURL, requestedFile
 	if err != nil {
 		return nil, "", "", nil, &mcpError{Code: -32602, Message: "invalid url"}
 	}
-	req.Header.Set("User-Agent", "openpost-mcp-media/0.1.0")
+	req.Header.Set("User-Agent", "openpost-mcp-media/"+h.serverVersion)
 	resp, err := h.remoteMediaHTTPClient().Do(req)
 	if err != nil {
 		return nil, "", "", nil, &mcpError{Code: -32602, Message: "failed to fetch media url"}
