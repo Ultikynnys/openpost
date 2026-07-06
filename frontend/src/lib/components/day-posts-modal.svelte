@@ -83,7 +83,12 @@
 
 	function handleNewPost() {
 		ui.closeDayPosts();
-		goto('/');
+		const params = new URLSearchParams();
+		if (dateStr) params.set('date', dateStr);
+		if (workspaceCtx.currentWorkspace?.id) {
+			params.set('workspace_id', workspaceCtx.currentWorkspace.id);
+		}
+		goto(`/?${params.toString()}`);
 	}
 
 	function handleEdit(postId: string) {

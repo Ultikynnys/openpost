@@ -19,7 +19,7 @@
 	import SettingsIcon from 'lucide-svelte/icons/settings';
 	import TrashIcon from 'lucide-svelte/icons/trash-2';
 	import ScrollTextIcon from 'lucide-svelte/icons/scroll-text';
-	import CalendarDaysIcon from 'lucide-svelte/icons/calendar-days';
+	import Maximize2Icon from 'lucide-svelte/icons/maximize-2';
 	import { auth } from '$lib/stores/auth';
 	import { goto } from '$app/navigation';
 	import { toggleMode } from 'mode-watcher';
@@ -329,30 +329,25 @@
 		<!-- Calendar Section -->
 		<Sidebar.Group class="px-0 pt-2">
 			<Sidebar.GroupContent>
-				<CalendarUi.Calendar
-					type="single"
-					bind:value={selectedDate}
-					bind:placeholder={calendarPlaceholder}
-					day={dayMarker}
-					weekStartsOn={workspaceCtx.settings.week_start as 0 | 1 | 2 | 3 | 4 | 5 | 6}
-					class="mx-auto bg-transparent p-2 select-none [--cell-size:--spacing(8)] [&_[role=gridcell]_[role=button][data-today]]:bg-sidebar-primary [&_[role=gridcell]_[role=button][data-today]]:text-sidebar-primary-foreground [&_tr]:justify-center"
-				/>
-			</Sidebar.GroupContent>
-		</Sidebar.Group>
-
-		<Sidebar.Group class="px-2 pb-2">
-			<Sidebar.GroupContent>
-				<Sidebar.Menu>
-					<Sidebar.MenuItem>
-						<Sidebar.MenuButton
-							onclick={() => goto('/calendar')}
-							class={`text-sidebar-foreground/80 ${workspaceMenuItemClass('/calendar')}`}
-						>
-							<CalendarDaysIcon class="size-3.5" />
-							<span>{m.sidebar_full_calendar()}</span>
-						</Sidebar.MenuButton>
-					</Sidebar.MenuItem>
-				</Sidebar.Menu>
+				<div class="relative mx-auto w-fit">
+					<button
+						type="button"
+						class="absolute top-2 right-9 z-20 flex size-7 items-center justify-center rounded-md text-sidebar-foreground/60 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-none"
+						onclick={() => goto('/calendar')}
+						title={m.sidebar_full_calendar()}
+						aria-label={m.sidebar_full_calendar()}
+					>
+						<Maximize2Icon class="size-3.5" />
+					</button>
+					<CalendarUi.Calendar
+						type="single"
+						bind:value={selectedDate}
+						bind:placeholder={calendarPlaceholder}
+						day={dayMarker}
+						weekStartsOn={workspaceCtx.settings.week_start as 0 | 1 | 2 | 3 | 4 | 5 | 6}
+						class="mx-auto bg-transparent p-2 select-none [--cell-size:--spacing(8)] [&_[role=gridcell]_[role=button][data-today]]:bg-sidebar-primary [&_[role=gridcell]_[role=button][data-today]]:text-sidebar-primary-foreground [&_tr]:justify-center"
+					/>
+				</div>
 			</Sidebar.GroupContent>
 		</Sidebar.Group>
 

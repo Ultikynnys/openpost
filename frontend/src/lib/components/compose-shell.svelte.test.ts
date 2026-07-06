@@ -15,11 +15,11 @@ vi.mock('$lib/api/client', () => ({
 describe('ComposeShell', () => {
 	it('defaults to the legacy composer shell instead of the unified rails', async () => {
 		const screen = await render(ComposeShell);
-		const picker = screen.getByTestId('composer-mode-picker');
+		const modeSelect = screen.getByTestId('composer-mode-select');
 
-		await expect.element(picker).toBeVisible();
+		await expect.element(modeSelect).toBeVisible();
 		await expect.element(screen.getByTestId('legacy-composer-shell')).toBeVisible();
-		await expect.element(picker.getByRole('button', { name: 'Post' })).toBeVisible();
+		await expect.element(modeSelect).toHaveTextContent('Post');
 		expect(screen.container.textContent).not.toContain('Format-first composer');
 		expect(screen.container.textContent).not.toContain('Renditions');
 		expect(screen.container.textContent).not.toContain('Source text');

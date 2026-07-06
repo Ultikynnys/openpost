@@ -2,11 +2,16 @@
 
 All notable changes to this project are documented in this file.
 
-## [Unreleased]
+## [1.0.38] - 2026-07-06
+
+### Changed
+
+- Moved the composer post-type picker into the composer control row and made calendar-created posts prefill their schedule date.
 
 ### Fixed
 
 - Aligned the composer Schedule/Publish actions with the app button system, made the split-arrow schedule the next free queue slot, and added a per-post random-delay override in the schedule dialog.
+- Fixed the fullscreen calendar platform filter, day-level create actions, sidebar fullscreen shortcut, and dark-mode workspace filter styling.
 
 ## [1.0.36] - 2026-07-06
 

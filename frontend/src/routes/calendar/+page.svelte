@@ -20,6 +20,7 @@
 	import ClockIcon from 'lucide-svelte/icons/clock';
 	import LayersIcon from 'lucide-svelte/icons/layers';
 	import Loader2Icon from 'lucide-svelte/icons/loader-2';
+	import PlusIcon from 'lucide-svelte/icons/plus';
 	import RefreshCwIcon from 'lucide-svelte/icons/refresh-cw';
 
 	type Publication = components['schemas']['PublicationResponse'];
@@ -113,6 +114,11 @@
 	});
 	const availablePlatforms = $derived.by(() => {
 		const platforms = new Set<string>();
+		for (const workspaceId of activeWorkspaceIds) {
+			for (const account of accountsByWorkspace[workspaceId] ?? []) {
+				if (account.platform) platforms.add(account.platform);
+			}
+		}
 		for (const item of allItems) {
 			for (const platform of item.platforms) platforms.add(platform);
 		}
@@ -418,6 +424,24 @@
 		}
 	}
 
+	function composeWorkspaceId() {
+		if (selectedWorkspaceIds.length === 1) return selectedWorkspaceIds[0];
+		return workspaceCtx.currentWorkspace?.id ?? activeWorkspaceIds[0] ?? '';
+	}
+
+	function createPostOnDate(date: Date) {
+		const params = new URLSearchParams({ date: dateKey(date) });
+		const workspaceId = composeWorkspaceId();
+		if (workspaceId) params.set('workspace_id', workspaceId);
+		goto(resolve(`/?${params.toString()}`));
+	}
+
+	function handleDayClick(event: MouseEvent, day: CalendarDay) {
+		const target = event.target as HTMLElement | null;
+		if (target?.closest('[data-calendar-item], [data-calendar-day-action]')) return;
+		createPostOnDate(day.date);
+	}
+
 	function onDragStart(event: DragEvent, item: CalendarItem) {
 		draggingKey = item.key;
 		successMessage = '';
@@ -676,8 +700,8 @@
 
 	function activeWorkspaceButtonClass(workspace: Workspace) {
 		return workspaceSelected(workspace.id)
-			? 'border-foreground/20 bg-foreground text-background hover:bg-foreground/90'
-			: 'border-border bg-background text-muted-foreground hover:bg-muted hover:text-foreground';
+			? 'border-primary/30 bg-primary/10 text-primary hover:bg-primary/15 dark:border-primary/40 dark:bg-primary/15'
+			: 'border-border bg-background/70 text-muted-foreground hover:bg-muted hover:text-foreground dark:bg-input/20 dark:hover:bg-input/40';
 	}
 </script>
 
@@ -842,7 +866,7 @@
 					class={cn(
 						'shrink-0',
 						selectedWorkspaceIds.length === 0
-							? 'border-foreground/20 bg-foreground text-background hover:bg-foreground/90'
+							? 'border-primary/30 bg-primary/10 text-primary hover:bg-primary/15 dark:border-primary/40 dark:bg-primary/15'
 							: ''
 					)}
 					onclick={() => (selectedWorkspaceIds = [])}
@@ -897,13 +921,19 @@
 					{@const dayItems = itemsByDay.get(day.key) ?? []}
 					<section
 						role="gridcell"
-						tabindex="-1"
+						tabindex="0"
 						class={cn(
-							'group/day relative flex min-h-0 flex-col border-r border-b bg-background/70 p-2 transition-colors last:border-r-0',
+							'group/day relative flex min-h-0 cursor-pointer flex-col border-r border-b bg-background/70 p-2 transition-colors last:border-r-0 hover:bg-muted/30',
 							day.outsideMonth && 'bg-muted/25 text-muted-foreground',
 							day.today && 'bg-primary/[0.035]',
 							dropTargetKey === day.key && 'bg-primary/10 ring-2 ring-primary ring-inset'
 						)}
+						onclick={(event) => handleDayClick(event, day)}
+						onkeydown={(event) => {
+							if (event.key !== 'Enter' && event.key !== ' ') return;
+							event.preventDefault();
+							createPostOnDate(day.date);
+						}}
 						ondragover={(event) => onDragOver(event, day)}
 						ondragleave={() => onDragLeave(day)}
 						ondrop={(event) => onDrop(event, day)}
@@ -925,9 +955,33 @@
 									</Badge>
 								{/if}
 							</div>
-							{#if loading}
-								<Loader2Icon class="mt-1 size-3.5 animate-spin text-muted-foreground" />
-							{/if}
+							<div class="flex items-center gap-1">
+								{#if loading}
+									<Loader2Icon class="mt-1 size-3.5 animate-spin text-muted-foreground" />
+								{/if}
+								<Tooltip.Root>
+									<Tooltip.Trigger>
+										{#snippet child({ props })}
+											<Button
+												{...props}
+												type="button"
+												variant="outline"
+												size="icon-xs"
+												class="size-7 border-border/70 bg-background/85 opacity-80 shadow-xs group-hover/day:opacity-100 hover:bg-background dark:bg-input/30 dark:hover:bg-input/50"
+												aria-label={`${m.calendar_create_post()} ${day.key}`}
+												data-calendar-day-action
+												onclick={(event) => {
+													event.stopPropagation();
+													createPostOnDate(day.date);
+												}}
+											>
+												<PlusIcon class="size-3" />
+											</Button>
+										{/snippet}
+									</Tooltip.Trigger>
+									<Tooltip.Content>{m.calendar_create_post()}</Tooltip.Content>
+								</Tooltip.Root>
+							</div>
 						</div>
 
 						<div class="calendar-day-scroll min-h-0 flex-1 space-y-1.5 overflow-y-auto pr-1">
@@ -946,6 +1000,7 @@
 									<button
 										type="button"
 										draggable={true}
+										data-calendar-item
 										class={cn(
 											'w-full rounded-md border border-l-4 border-border/70 p-2 text-left shadow-xs transition-all hover:-translate-y-0.5 hover:shadow-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
 											itemTone(item),
@@ -1037,7 +1092,9 @@
 				<CalendarDaysIcon class="mx-auto size-8 text-muted-foreground" />
 				<h2 class="mt-3 text-base font-semibold">{m.calendar_no_scheduled_title()}</h2>
 				<p class="mt-1 text-sm text-muted-foreground">{m.calendar_no_scheduled_body()}</p>
-				<Button class="mt-4" onclick={() => goto(resolve('/'))}>{m.calendar_create_post()}</Button>
+				<Button class="mt-4" onclick={() => createPostOnDate(new Date())}
+					>{m.calendar_create_post()}</Button
+				>
 			</div>
 		{/if}
 	</main>

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount, tick } from 'svelte';
+	import { onMount, tick, type Snippet } from 'svelte';
 	import { client, type SocialAccount, type Workspace, getToken } from '$lib/api/client';
 	import { getApiBase } from '$lib/stores/instance.svelte';
 	import { getAuthenticatedMediaByID } from '$lib/media-url';
@@ -81,15 +81,26 @@
 
 	interface Props {
 		initialPost?: InitialPost;
+		initialScheduleDate?: string | null;
+		initialWorkspaceId?: string | null;
 		onSuccess?: () => void;
 		onCancel?: () => void;
 		onThreadStateChange?: (isThread: boolean) => void;
+		modeControl?: Snippet;
 	}
 
 	// --------------------------------------------------------------------------
 	// Props & core state
 	// --------------------------------------------------------------------------
-	let { initialPost, onSuccess, onCancel, onThreadStateChange }: Props = $props();
+	let {
+		initialPost,
+		initialScheduleDate = null,
+		initialWorkspaceId = null,
+		onSuccess,
+		onCancel,
+		onThreadStateChange,
+		modeControl
+	}: Props = $props();
 	let isEditMode = $derived(!!initialPost);
 
 	let posts = $state<PostItem[]>([makeEmptyPost()]);
@@ -137,6 +148,7 @@
 
 	let autoSaveTimer: ReturnType<typeof setTimeout> | null = null;
 	let lastSavedSnapshot = $state('');
+	let appliedInitialContextKey = $state('');
 	let textareaRefs = $state<Map<number, HTMLTextAreaElement>>(new Map());
 	const scheduleInputPlaceholder = 'Write any time, e.g. "tomorrow at 9am" or "in 3 hours"';
 	const randomDelayOptions = [0, 5, 10, 15, 30, 45, 60];
@@ -172,6 +184,16 @@
 			return h * 60 + m > currentMinutes;
 		});
 	});
+
+	function slotsForDate(date: CalendarDate): string[] {
+		if (!isEqualDay(date, today(getLocalTimeZone()))) return allTimeSlots;
+		const now = new Date();
+		const currentMinutes = now.getHours() * 60 + now.getMinutes();
+		return allTimeSlots.filter((slot) => {
+			const [hours, minutes] = slot.split(':').map(Number);
+			return hours * 60 + minutes > currentMinutes;
+		});
+	}
 
 	const activePost = $derived(posts[activePostIndex] ?? posts[0]);
 	const hasContent = $derived(hasAnyContent(posts));
@@ -285,6 +307,61 @@
 	function normalizeRandomDelayValue(value: number | null | undefined): string {
 		if (value === undefined || value === null || !Number.isFinite(value)) return 'default';
 		return String(Math.max(0, Math.round(value)));
+	}
+
+	function parseScheduleDateParam(value: string | null): CalendarDate | undefined {
+		const match = value?.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+		if (!match) return undefined;
+		const year = Number(match[1]);
+		const month = Number(match[2]);
+		const day = Number(match[3]);
+		const parsed = new Date(year, month - 1, day);
+		if (
+			parsed.getFullYear() !== year ||
+			parsed.getMonth() + 1 !== month ||
+			parsed.getDate() !== day
+		) {
+			return undefined;
+		}
+		return new CalendarDate(year, month, day);
+	}
+
+	function applyInitialScheduleDate(dateParam: string | null) {
+		const date = parseScheduleDateParam(dateParam);
+		if (!date) return;
+		selectedDate = date;
+		selectedTime = slotsForDate(date)[0] ?? allTimeSlots[0] ?? '09:00';
+		scheduleInput = '';
+		scheduleInputError = '';
+	}
+
+	async function applyInitialComposerContext(
+		dateParam: string | null,
+		workspaceParam: string | null
+	) {
+		if (!dateParam && !workspaceParam) {
+			appliedInitialContextKey = '';
+			return;
+		}
+
+		const contextKey = `${dateParam ?? ''}|${workspaceParam ?? ''}`;
+		if (contextKey === appliedInitialContextKey) return;
+		appliedInitialContextKey = contextKey;
+
+		const nextWorkspaceId =
+			workspaceParam && workspaces.some((workspace) => workspace.id === workspaceParam)
+				? workspaceParam
+				: '';
+		if (nextWorkspaceId && nextWorkspaceId !== selectedWorkspaceId) {
+			selectedWorkspaceId = nextWorkspaceId;
+			selectedSetId = null;
+			variants = new Map();
+			activeVariantAccountId = null;
+			await loadAccounts(nextWorkspaceId);
+			await loadSets(nextWorkspaceId);
+		}
+
+		applyInitialScheduleDate(dateParam);
 	}
 
 	function arraysEqual(left: string[], right: string[]): boolean {
@@ -606,6 +683,14 @@
 		const post = initialPost;
 		if (!loadingWorkspaces && post && lastInitializedPostId !== post.id) {
 			initializeFromPost(post);
+		}
+	});
+
+	$effect(() => {
+		const dateParam = initialScheduleDate;
+		const workspaceParam = initialWorkspaceId;
+		if (!loadingWorkspaces && !isEditMode) {
+			void applyInitialComposerContext(dateParam, workspaceParam);
 		}
 	});
 
@@ -1595,14 +1680,15 @@
 	}
 
 	function formatScheduledDisplay(): string {
-		if (!selectedDate || !selectedTime) return m.compose_schedule();
+		if (!selectedDate) return m.compose_schedule();
 		const now = today(getLocalTimeZone());
 		const diffDays = selectedDate.compare(now);
+		const timeSuffix = selectedTime ? ` ${selectedTime}` : '';
 
-		if (diffDays === 0) return `${m.common_today()} ${selectedTime}`;
-		if (diffDays === 1) return `${m.common_tomorrow()} ${selectedTime}`;
+		if (diffDays === 0) return `${m.common_today()}${timeSuffix}`;
+		if (diffDays === 1) return `${m.common_tomorrow()}${timeSuffix}`;
 		const date = selectedDate.toDate(getLocalTimeZone());
-		return `${date.toLocaleDateString(getLocaleTag(), { month: 'short', day: 'numeric' })} ${selectedTime}`;
+		return `${date.toLocaleDateString(getLocaleTag(), { month: 'short', day: 'numeric' })}${timeSuffix}`;
 	}
 
 	// --------------------------------------------------------------------------
@@ -1690,6 +1776,11 @@
 						{/each}
 					</DropdownMenu.Content>
 				</DropdownMenu.Root>
+			{/if}
+
+			{#if modeControl}
+				<div class="hidden h-4 w-px bg-border sm:block"></div>
+				{@render modeControl()}
 			{/if}
 
 			<!-- Set selector -->
@@ -1944,7 +2035,7 @@
 						onclick={openScheduleDialog}
 						disabled={isSubmitting || isSaving}
 					>
-						{m.compose_schedule()}
+						{formatScheduledDisplay()}
 					</Button>
 					<Tooltip.Root>
 						<Tooltip.Trigger>
@@ -2300,15 +2391,9 @@
 
 									<div class="min-w-0 flex-1">
 										<div class="relative">
-											{#if activePostIndex === i}
-												<div
-													class="flex flex-wrap items-center gap-1 px-1 pt-2 text-xs text-muted-foreground"
-												>
-													<span class="font-medium text-foreground">Post text</span>
-												</div>
-											{/if}
 											<textarea
 												id="post-textarea-{i}"
+												aria-label="Post text"
 												use:textareaAction={i}
 												value={getEditorContentForPost(post)}
 												oninput={(e) => {
