@@ -55,7 +55,7 @@ func main() {
 		}
 	}
 
-	proxy := mcpstdio.NewProxy(cfg.Instance, resolvedToken)
+	proxy := mcpstdio.NewProxyWithVersion(cfg.Instance, resolvedToken, version)
 	if showEndpoint {
 		fmt.Fprintln(os.Stderr, proxy.Endpoint)
 	}

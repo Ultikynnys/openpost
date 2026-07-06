@@ -15,6 +15,7 @@ import (
 )
 
 const contentLengthHeader = "content-length"
+const defaultVersion = "dev"
 
 type Proxy struct {
 	Endpoint  string
@@ -24,11 +25,19 @@ type Proxy struct {
 }
 
 func NewProxy(instance, token string) *Proxy {
+	return NewProxyWithVersion(instance, token, defaultVersion)
+}
+
+func NewProxyWithVersion(instance, token, version string) *Proxy {
+	version = strings.TrimSpace(version)
+	if version == "" {
+		version = defaultVersion
+	}
 	return &Proxy{
 		Endpoint:  strings.TrimRight(instance, "/") + "/mcp",
 		Token:     token,
 		HTTP:      &http.Client{Timeout: 60 * time.Second},
-		UserAgent: "openpost-mcp/0.1.0",
+		UserAgent: "openpost-mcp/" + version,
 	}
 }
 

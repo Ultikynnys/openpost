@@ -19,8 +19,32 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
+
+const defaultVersion = "dev"
+
+var (
+	versionMu     sync.RWMutex
+	clientVersion = defaultVersion
+)
+
+func SetVersion(version string) {
+	version = strings.TrimSpace(version)
+	if version == "" {
+		version = defaultVersion
+	}
+	versionMu.Lock()
+	clientVersion = version
+	versionMu.Unlock()
+}
+
+func Version() string {
+	versionMu.RLock()
+	defer versionMu.RUnlock()
+	return clientVersion
+}
 
 // Client is a thin wrapper around *http.Client with the bits every
 // OpenPost call needs: base URL, bearer token, JSON helpers, multipart
@@ -39,7 +63,7 @@ func New(baseURL, token string) *Client {
 		BaseURL:   strings.TrimRight(baseURL, "/"),
 		Token:     token,
 		HTTP:      &http.Client{Timeout: 60 * time.Second},
-		UserAgent: "openpost-cli/0.1.0",
+		UserAgent: "openpost-cli/" + Version(),
 	}
 }
 

@@ -23,6 +23,7 @@ package commands
 import (
 	"github.com/spf13/cobra"
 
+	"github.com/openpost/cli/internal/api"
 	"github.com/openpost/cli/internal/config"
 )
 
@@ -30,6 +31,8 @@ import (
 // all subcommands wired. version is shown in `openpost version` and
 // in --help.
 func NewRoot(version string) *cobra.Command {
+	api.SetVersion(version)
+
 	var (
 		profileName string
 		instance    string

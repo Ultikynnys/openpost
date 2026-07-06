@@ -240,7 +240,7 @@ func runDeviceLogin(ctx context.Context, instance string, printOnly, open bool, 
 	client := api.New(instance, "")
 	start, err := client.StartCLIAuth(ctx, api.CLIAuthStartInput{
 		ClientName:      "openpost CLI",
-		ClientVersion:   "dev",
+		ClientVersion:   api.Version(),
 		ClientOS:        config.Platform(),
 		RequestedScopes: "cli:full",
 	})

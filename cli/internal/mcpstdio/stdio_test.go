@@ -44,6 +44,9 @@ func TestProxyForwardUsesBearerAndMCPPath(t *testing.T) {
 		if got := r.Header.Get("Authorization"); got != "Bearer token-1" {
 			t.Fatalf("unexpected authorization header %q", got)
 		}
+		if got := r.Header.Get("User-Agent"); got != "openpost-mcp/v1.2.3" {
+			t.Fatalf("unexpected user-agent header %q", got)
+		}
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
 			t.Fatalf("read body: %v", err)
@@ -56,7 +59,7 @@ func TestProxyForwardUsesBearerAndMCPPath(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	proxy := NewProxy(srv.URL, "token-1")
+	proxy := NewProxyWithVersion(srv.URL, "token-1", "v1.2.3")
 	resp, err := proxy.Forward(context.Background(), []byte(`{"jsonrpc":"2.0","id":"a","method":"tools/list"}`))
 	if err != nil {
 		t.Fatalf("Forward: %v", err)

@@ -10,9 +10,15 @@ import (
 )
 
 func TestReadyChecksReadinessEndpoint(t *testing.T) {
+	SetVersion("v4.5.6")
+	t.Cleanup(func() { SetVersion("dev") })
+
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/v1/ready" {
 			t.Fatalf("path = %s, want /api/v1/ready", r.URL.Path)
+		}
+		if got := r.Header.Get("User-Agent"); got != "openpost-cli/v4.5.6" {
+			t.Fatalf("user-agent = %q, want openpost-cli/v4.5.6", got)
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"status":"ready","database":"ok"}`))
