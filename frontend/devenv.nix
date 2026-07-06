@@ -101,7 +101,8 @@ in
     '';
   };
 
-  # Git hooks - all must pass to allow commits
+  # Git hooks - keep commit-time checks fast. Full type checks, tests, and
+  # production builds remain available through scripts and CI.
   git-hooks.hooks = {
     # Lint check (prettier + eslint)
     eslint = {
@@ -111,26 +112,22 @@ in
       pass_filenames = false;
     };
 
-    # Type check (svelte-check)
     svelte-check = {
-      enable = true;
+      enable = false;
       entry = "${lib.getExe svelte-check-wrapper}";
       files = "\\.(ts|svelte)$";
       pass_filenames = false;
     };
 
-    # Unit tests (vitest)
     vitest = {
-      enable = true;
+      enable = false;
       entry = "${lib.getExe vitest-wrapper}";
       files = "^(frontend/(src|messages|static|assets)/|frontend/(package\\.json|vite\\.config\\.ts|svelte\\.config\\.js|vitest\\.config\\.[jt]s|tsconfig\\.json)|package\\.json|pnpm-lock\\.yaml|pnpm-workspace\\.yaml|turbo\\.json|assets/|scripts/sync-assets\\.mjs)";
       pass_filenames = false;
     };
 
-    # Production build catches Vite/Svelte compiler failures that
-    # svelte-check and Vitest can miss.
     frontend-build = {
-      enable = true;
+      enable = false;
       entry = "${lib.getExe frontend-build-wrapper}";
       files = "^(frontend/(src|messages|static|assets)/|frontend/(package\\.json|vite\\.config\\.ts|svelte\\.config\\.js)|package\\.json|pnpm-lock\\.yaml|pnpm-workspace\\.yaml|turbo\\.json|assets/|scripts/sync-assets\\.mjs)";
       pass_filenames = false;

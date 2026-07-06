@@ -3300,7 +3300,7 @@ func (h *MCPHandler) providerReadiness(ctx context.Context, userID string, args 
 	if rpcErr := h.ensureWorkspaceAccess(ctx, userID, input.WorkspaceID); rpcErr != nil {
 		return nil, rpcErr
 	}
-	handler := &ProviderReadinessHandler{db: h.db}
+	handler := &ProviderReadinessHandler{db: h.db, providers: h.providers}
 	apps, err := handler.loadProviderApps(ctx)
 	if err != nil {
 		return nil, &mcpError{Code: -32603, Message: "failed to load provider app configuration"}

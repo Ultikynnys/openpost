@@ -12,6 +12,7 @@ import (
 	"github.com/danielgtaylor/huma/v2/adapters/humaecho"
 	"github.com/labstack/echo/v4"
 	"github.com/openpost/backend/internal/models"
+	"github.com/openpost/backend/internal/platform"
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/bun"
 )
@@ -38,6 +39,10 @@ func TestProviderReadinessReportsConfigurationAccountsAndMediaHealth(t *testing.
 	require.Equal(t, "missing", youtube.ConfiguredAppState)
 	require.Contains(t, youtube.BlockingIssues, "provider_app_missing")
 	require.Contains(t, youtube.AppReviewWarnings, "Unaudited Google projects can force uploads private.")
+
+	x := findReadinessProvider(t, out.Providers, "x")
+	require.Equal(t, "configured", x.ConfiguredAppState)
+	require.NotContains(t, x.BlockingIssues, "provider_app_missing")
 
 	tiktok := findReadinessProvider(t, out.Providers, "tiktok")
 	require.Equal(t, []string{"user.info.basic", "video.upload"}, tiktok.GrantedScopes)
@@ -89,7 +94,9 @@ func newProviderReadinessTestServer(t *testing.T) *providerReadinessTestServer {
 
 	e := echo.New()
 	api := humaecho.NewWithGroup(e, e.Group("/api/v1"), huma.DefaultConfig("Test", "1.0.0"))
-	NewProviderReadinessHandler(db, testAuthenticator{}).RegisterRoutes(api)
+	NewProviderReadinessHandler(db, testAuthenticator{}, map[string]platform.Adapter{
+		"x": providerAvailabilityAdapter{},
+	}).RegisterRoutes(api)
 	return &providerReadinessTestServer{echo: e, db: db}
 }
 

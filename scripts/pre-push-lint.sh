@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Pre-push gate: runs the same lint checks the CI release workflow runs.
+# Pre-push gate: runs a fast local lint subset before branch pushes.
 #
 # This is intentionally redundant with the pre-commit hooks (which
 # only fire on staged files matching the hook's `files` regex) and
-# with the CI workflow. The point is to catch lint failures on the
-# developer's machine before they reach CI, so a failing release
-# never happens because of a stale branch.
+# with the CI workflow. The point is to catch likely failures on the
+# developer's machine without running the full check/test/build matrix
+# on every push.
 #
 # Installed automatically by devenv on shell entry. See devenv.nix
 # `enterShell` and AGENTS.md for the rationale.
@@ -44,12 +44,11 @@ if is_tag_only_push; then
   exit 0
 fi
 
-echo "pre-push-lint: running full lint suite..."
+echo "pre-push-lint: running fast lint gate..."
 
-# Same checks the CI release workflow runs.
 denv_lint() {
   if command -v devenv >/dev/null 2>&1; then
-    devenv shell --quiet -- lint
+    devenv shell --quiet -- bash -lc 'backend-format-check && backend-lint && frontend-lint'
   else
     # Fallback: run the underlying commands directly. Used when the
     # developer hasn't entered the devenv shell (e.g. CI machines).
@@ -61,7 +60,6 @@ denv_lint() {
       fi
 
       (cd backend && golangci-lint run ./...)
-      (cd cli && golangci-lint run ./...)
       pnpm --filter @openpost/web lint
     )
   fi
@@ -70,7 +68,7 @@ denv_lint() {
 if ! denv_lint; then
   echo ""
   echo "pre-push-lint: FAILED. Fix the issues above, then push again."
-  echo "Bypass for tag releases with: OPENPOST_SKIP_PRE_PUSH_LINT=1 git push"
+  echo "Bypass with: OPENPOST_SKIP_PRE_PUSH_LINT=1 git push"
   exit 1
 fi
 

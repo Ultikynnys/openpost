@@ -10,16 +10,22 @@ import (
 	"github.com/openpost/backend/internal/api/middleware"
 	"github.com/openpost/backend/internal/capabilities"
 	"github.com/openpost/backend/internal/models"
+	"github.com/openpost/backend/internal/platform"
 	"github.com/uptrace/bun"
 )
 
 type ProviderReadinessHandler struct {
-	db   *bun.DB
-	auth middleware.Authenticator
+	db        *bun.DB
+	auth      middleware.Authenticator
+	providers map[string]platform.Adapter
 }
 
-func NewProviderReadinessHandler(db *bun.DB, auth middleware.Authenticator) *ProviderReadinessHandler {
-	return &ProviderReadinessHandler{db: db, auth: auth}
+func NewProviderReadinessHandler(db *bun.DB, auth middleware.Authenticator, providers ...map[string]platform.Adapter) *ProviderReadinessHandler {
+	handler := &ProviderReadinessHandler{db: db, auth: auth}
+	if len(providers) > 0 {
+		handler.providers = providers[0]
+	}
+	return handler
 }
 
 type ProviderReadinessInput struct {
@@ -101,11 +107,25 @@ func (h *ProviderReadinessHandler) loadProviderApps(ctx context.Context) (map[st
 	if err := h.db.NewSelect().Model(&apps).Where("is_active = ?", true).Scan(ctx); err != nil {
 		return nil, huma.Error500InternalServerError("failed to load provider app configuration")
 	}
-	out := map[string]bool{}
+	out := h.configuredProviderAdapters()
 	for _, app := range apps {
 		out[app.Provider] = app.ClientID != "" || app.Provider == capabilities.ProviderMastodon
 	}
 	return out, nil
+}
+
+func (h *ProviderReadinessHandler) configuredProviderAdapters() map[string]bool {
+	out := map[string]bool{}
+	for key, adapter := range h.providers {
+		if adapter == nil {
+			continue
+		}
+		provider := strings.SplitN(key, ":", 2)[0]
+		if provider != "" {
+			out[provider] = true
+		}
+	}
+	return out
 }
 
 func (h *ProviderReadinessHandler) loadReadinessAccounts(ctx context.Context, workspaceID string) (map[string][]models.SocialAccount, error) {

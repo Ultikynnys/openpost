@@ -6,6 +6,7 @@ All notable changes to this project are documented in this file.
 
 ### Changed
 
+- Made commit and push hooks faster by keeping pre-commit to lightweight checks and trimming pre-push to backend format/lint plus frontend lint.
 - Added the format-first publication/rendition publishing model, capability registry, composer, CLI/MCP publication commands, and profile-aware Facebook, Instagram, YouTube, and TikTok publishing paths.
 - Added media analysis/public URL validation metadata and provider-readiness diagnostics for format-first publishing.
 - Switched YouTube publishing to resumable uploads with retry/resume handling, thumbnail upload, playlist insertion, and post-upload processing-status checks.
@@ -21,6 +22,7 @@ All notable changes to this project are documented in this file.
 
 ### Fixed
 
+- Made provider readiness use the effective registered provider adapters so env-configured X, LinkedIn, and Threads credentials are not reported as missing.
 - Fixed Postgres migration normalization for numeric boolean defaults so hosted databases can apply the format-first schema migrations.
 - Reworked existing-post editing so posts open in the full composer with explicit save/cancel controls instead of prompt-based rescheduling.
 - Rendered a success page for completed OAuth account callbacks before returning users to Accounts.

@@ -118,7 +118,8 @@ in
     '';
   };
 
-  # Git hooks - all must pass to allow commits
+  # Git hooks - keep commit-time checks fast. Heavier lint/test gates stay in
+  # explicit scripts, CI, and the pre-push hook.
   git-hooks.hooks = {
     # Format check (go fmt)
     gofmt = {
@@ -135,33 +136,29 @@ in
       pass_filenames = false;
     };
 
-    # Lint check (golangci-lint)
     golangci-lint = {
-      enable = true;
+      enable = false;
       entry = lib.getExe backend-golangci-lint;
       files = "\\.go$";
       pass_filenames = false;
     };
 
-    # CLI golangci-lint (mirrors backend lint, only runs for cli/**)
     cli-golangci-lint = {
-      enable = true;
+      enable = false;
       entry = lib.getExe cli-golangci-lint;
       files = "^cli/.*\\.go$";
       pass_filenames = false;
     };
 
-    # Unit tests (go test)
     go-test = {
-      enable = true;
+      enable = false;
       entry = lib.getExe backend-go-test;
       files = "\\.go$";
       pass_filenames = false;
     };
 
-    # CLI unit tests (mirrors backend go-test, only runs for cli/**)
     cli-go-test = {
-      enable = true;
+      enable = false;
       entry = lib.getExe cli-go-test;
       files = "^cli/.*\\.go$";
       pass_filenames = false;

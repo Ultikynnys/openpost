@@ -95,7 +95,7 @@ func RegisterHumaRoutes(api huma.API, deps RouteDeps) {
 	handlers.NewMCPActivityHandler(deps.DB, deps.Authenticator).RegisterRoutes(api)
 	handlers.NewProviderAppHandler(providerapps.NewService(deps.DB, deps.TokenEncryptor), deps.DB, deps.Authenticator).RegisterRoutes(api)
 	handlers.NewCapabilityHandler().RegisterRoutes(api)
-	handlers.NewProviderReadinessHandler(deps.DB, deps.Authenticator).RegisterRoutes(api)
+	handlers.NewProviderReadinessHandler(deps.DB, deps.Authenticator, deps.Providers).RegisterRoutes(api)
 	handlers.NewPublicationHandler(deps.DB, deps.Authenticator, deps.Entitlement).RegisterRoutes(api)
 	handlers.NewCommentHandler(deps.DB, deps.Authenticator, deps.Providers, deps.TokenEncryptor).RegisterRoutes(api)
 
