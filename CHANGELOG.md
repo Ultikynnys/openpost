@@ -6,6 +6,7 @@ All notable changes to this project are documented in this file.
 
 ### Changed
 
+- Added Windows amd64 server binary release support and documented Windows single-binary setup.
 - Removed social media sets from the app, API, CLI, MCP tools, and docs; posting schedules now resolve at the workspace/account level with a migration that drops the legacy set tables.
 - Updated CLI and MCP publication workflows for current post types, explicit account targeting, media roles, YouTube title/description/privacy, TikTok settings, and publication schedule/publish actions.
 
