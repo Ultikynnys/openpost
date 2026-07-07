@@ -22,6 +22,7 @@ import (
 	"github.com/disintegration/imaging"
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
+	echoMiddleware "github.com/labstack/echo/v4/middleware"
 	"github.com/openpost/backend/internal/api/middleware"
 	"github.com/openpost/backend/internal/models"
 	"github.com/openpost/backend/internal/services/auth"
@@ -1363,12 +1364,14 @@ func (h *MediaHandler) deleteMediaFiles(media *models.MediaAttachment) error {
 }
 
 func (h *MediaHandler) RegisterLegacyRoutes(e *echo.Echo) {
+	singleUploadLimit := strconv.FormatInt(MaxMediaUploadBytes+512*1024, 10)
+	batchUploadLimit := strconv.FormatInt((MaxMediaUploadBytes*10)+(10*1024*1024), 10)
 	// Legacy upload routes support both web (JWT) and CLI (op_cli_...)
 	// credentials via the unified Authenticator. AuthMiddleware cannot
 	// be used here because these are raw Echo handlers, not Huma ops.
 	uploadAuth := middleware.BearerMiddleware(h.authn)
-	e.POST("/api/v1/media/upload", h.uploadMedia, uploadAuth)
-	e.POST("/api/v1/media/batch-upload", h.batchUploadMedia, uploadAuth)
+	e.POST("/api/v1/media/upload", h.uploadMedia, echoMiddleware.BodyLimit(singleUploadLimit), uploadAuth)
+	e.POST("/api/v1/media/batch-upload", h.batchUploadMedia, echoMiddleware.BodyLimit(batchUploadLimit), uploadAuth)
 	e.GET("/api/v1/media/metadata", h.mediaMetadata, uploadAuth)
 	e.GET("/media/:id", h.serveMedia, h.optionalMediaAuth())
 	e.HEAD("/media/:id", h.serveMedia, h.optionalMediaAuth())
