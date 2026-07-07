@@ -4,7 +4,7 @@ import { defineConfig } from 'vitepress';
 // Repository-path deployments (for example, GitHub Pages at /openpost/) should set OPENPOST_DOCS_BASE explicitly.
 const docsBase = process.env.OPENPOST_DOCS_BASE?.trim() || '/';
 
-const docsSidebar = [
+const userDocsSidebar = [
 	{
 		text: 'Start Here',
 		collapsed: false,
@@ -15,7 +15,7 @@ const docsSidebar = [
 		],
 	},
 	{
-		text: 'User Docs: Web App',
+		text: 'Web App',
 		collapsed: false,
 		items: [
 			{ text: 'Overview', link: '/usage/' },
@@ -29,7 +29,7 @@ const docsSidebar = [
 		],
 	},
 	{
-		text: 'User Docs: CLI',
+		text: 'CLI',
 		collapsed: false,
 		items: [
 			{ text: 'Overview', link: '/cli/' },
@@ -37,21 +37,33 @@ const docsSidebar = [
 			{ text: 'Authentication', link: '/cli/authentication' },
 			{ text: 'Posting', link: '/cli/posting' },
 			{ text: 'Automation', link: '/cli/automation' },
-			{ text: 'Command Reference', link: '/reference/cli' },
 		],
 	},
 	{
-		text: 'User Docs: MCP',
+		text: 'MCP',
 		collapsed: false,
 		items: [{ text: 'Assistant Scheduling', link: '/mcp/' }],
 	},
 	{
-		text: 'Self-Hosting: Overview',
+		text: 'Apps',
+		collapsed: false,
+		items: [{ text: 'Android App', link: '/installation/android' }],
+	},
+	{
+		text: 'Reference',
+		collapsed: false,
+		items: [{ text: 'CLI Command Reference', link: '/reference/cli' }],
+	},
+];
+
+const selfHostingSidebar = [
+	{
+		text: 'Overview',
 		collapsed: false,
 		items: [{ text: 'Start Here', link: '/self-hosting/' }],
 	},
 	{
-		text: 'Self-Hosting: Install',
+		text: 'Install',
 		collapsed: false,
 		items: [
 			{ text: 'Why Self-Host?', link: '/guide/why-selfhost' },
@@ -64,7 +76,7 @@ const docsSidebar = [
 		],
 	},
 	{
-		text: 'Self-Hosting: Configure',
+		text: 'Configure',
 		collapsed: false,
 		items: [
 			{ text: 'Overview', link: '/configuration/overview' },
@@ -76,7 +88,7 @@ const docsSidebar = [
 		],
 	},
 	{
-		text: 'Self-Hosting: Providers',
+		text: 'Providers',
 		collapsed: false,
 		items: [
 			{ text: 'Overview', link: '/providers/overview' },
@@ -95,7 +107,7 @@ const docsSidebar = [
 		],
 	},
 	{
-		text: 'Self-Hosting: Operate',
+		text: 'Operate',
 		collapsed: false,
 		items: [
 			{ text: 'Backups', link: '/operations/backups' },
@@ -106,16 +118,10 @@ const docsSidebar = [
 		],
 	},
 	{
-		text: 'Apps',
-		collapsed: false,
-		items: [{ text: 'Android App', link: '/installation/android' }],
-	},
-	{
 		text: 'Reference',
 		collapsed: false,
 		items: [
 			{ text: 'API', link: '/reference/api' },
-			{ text: 'CLI', link: '/reference/cli' },
 			{ text: 'Environment Variables', link: '/reference/env-vars' },
 			{ text: 'Callback URLs', link: '/reference/callback-urls' },
 			{ text: 'Docker Compose', link: '/reference/docker-compose' },
@@ -125,7 +131,7 @@ const docsSidebar = [
 
 const developmentSidebar = [
 	{
-		text: 'Developer Docs',
+		text: 'Development',
 		collapsed: false,
 		items: [
 			{ text: 'Overview', link: '/development/' },
@@ -182,8 +188,23 @@ export default defineConfig({
 			copyright: 'Copyright © Rodrigo Dias',
 		},
 		sidebar: {
+			'/installation/android': userDocsSidebar,
+			'/reference/cli': userDocsSidebar,
+			'/guide/what-is-openpost': userDocsSidebar,
+			'/guide/quickstart': userDocsSidebar,
+			'/guide/concepts': userDocsSidebar,
+			'/usage/': userDocsSidebar,
+			'/cli/': userDocsSidebar,
+			'/mcp/': userDocsSidebar,
+			'/guide/why-selfhost': selfHostingSidebar,
+			'/self-hosting/': selfHostingSidebar,
+			'/installation/': selfHostingSidebar,
+			'/configuration/': selfHostingSidebar,
+			'/providers/': selfHostingSidebar,
+			'/operations/': selfHostingSidebar,
+			'/reference/': selfHostingSidebar,
 			'/development/': developmentSidebar,
-			'/': docsSidebar,
+			'/': userDocsSidebar,
 		},
 	},
 });
