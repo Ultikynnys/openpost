@@ -14,8 +14,8 @@ Provider-native API capabilities are not the same as OpenPost-supported capabili
 | LinkedIn | Supported | Single-image path supported                         | Implemented and recently fixed, still needs re-verification against the live API               | Thread children are posted as comments | Supported  | Supported |
 | Threads  | Supported | Single-media path in current OpenPost composer flow | Implemented with MIME-aware media handling and public media URL requirement                    | `reply_to_id`                          | Supported  | Supported |
 | Facebook | Supported | One public HTTPS image URL                          | Implemented for one public HTTPS video URL, needs live-account verification                    | No                                     | Supported  | Supported |
-| Instagram | No        | One public HTTPS image URL                          | Implemented for one public HTTPS video URL as Reels, needs live-account verification           | No                                     | Supported  | Supported |
-| TikTok   | No        | No                                                  | Implemented for one public HTTPS video URL through direct post, needs live-account verification | No                                     | Supported  | Supported |
+| Instagram | No        | Single image and carousel paths                     | Implemented for Reels, needs live-account verification                                         | Comment replies/story paths exist for supported settings | Supported  | Supported |
+| TikTok   | No        | Photo-post path implemented, needs app access verification | Direct Post and inbox/upload video paths implemented, needs live-account verification          | No                                     | Supported  | Supported |
 | YouTube  | No        | No                                                  | Implemented for one private video upload, needs live-account verification                      | No                                     | Supported  | Supported |
 
 ## Planned Platform Adapters
@@ -35,6 +35,6 @@ No planned provider adapter is exposed as connectable today. Future provider roa
 - A provider can support a feature natively while OpenPost still marks it unsupported or unverified.
 - "Implemented" means the code path exists in OpenPost.
 - "Verified" means the implementation has been confirmed against a live provider account recently.
-- Deployment details still matter. Threads, Facebook, Instagram, and TikTok depend on a public media URL, and LinkedIn depends heavily on granted app permissions.
+- Deployment details still matter. Threads, Facebook, Instagram, and TikTok direct-post flows depend on public media URLs, and LinkedIn depends heavily on granted app permissions.
 
 These limits are a starting point, not a permanent contract. Providers can change them.

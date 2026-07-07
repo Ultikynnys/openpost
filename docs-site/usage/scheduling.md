@@ -4,7 +4,7 @@ Scheduling is a core OpenPost workflow.
 
 ## Core ideas
 
-- Posts are stored in SQLite.
+- Posts are stored in the configured OpenPost database. SQLite is the self-hosted default; Postgres is supported for cloud/hosted deployments.
 - Background jobs make publishing durable across restarts.
 - Posting schedules help spread publishing across time slots.
 

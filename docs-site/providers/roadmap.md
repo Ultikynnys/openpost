@@ -19,9 +19,9 @@ No planned adapter is exposed as connectable right now. New provider roadmap ite
 | Provider | Current product focus                                                                                   |
 | -------- | ------------------------------------------------------------------------------------------------------- |
 | Facebook | Selected Page publishing for text, one public HTTPS image URL, or one public HTTPS video URL. |
-| Instagram | Selected Instagram Business account publishing for one public HTTPS image URL or Reel video URL. |
-| TikTok   | One-video direct publishing through public HTTPS media URLs, scheduling, per-platform variants, MCP workflows. |
-| YouTube  | Selected channel uploads for one private video, scheduling, per-platform variants, MCP workflows. |
+| Instagram | Selected Instagram Business account publishing for single image/Reel, carousel, story, and comment-reply paths, with live verification still recommended. |
+| TikTok   | Direct-post video, inbox/upload video, and photo-post paths, with app-review/live-account verification still required. |
+| YouTube  | Selected channel uploads with privacy/metadata/thumbnail/playlist settings and resumable upload handling, with live verification still recommended. |
 
 ## Account-selection requirement
 
@@ -30,7 +30,7 @@ Some providers cannot be modeled as a single OAuth user profile:
 - Instagram connects the selected Instagram Business account behind a Facebook Page.
 - YouTube connects the selected channel.
 
-Instagram, Facebook, and YouTube use the backend account-selection flow today. TikTok uses a direct OAuth account flow and is connectable when configured, but its initial adapter is intentionally video-only.
+Instagram, Facebook, and YouTube use the backend account-selection flow today. TikTok uses a direct OAuth account flow and is connectable when configured; its current adapter supports video plus photo-post paths, subject to TikTok app access and live verification.
 
 ## Implementation contract
 

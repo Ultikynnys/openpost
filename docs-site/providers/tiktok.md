@@ -1,6 +1,6 @@
 # TikTok
 
-TikTok support is available as an initial video publishing slice. It uses OAuth plus the Content Posting API direct-post video endpoint.
+TikTok support is available as an initial video/photo publishing slice. It uses OAuth plus the Content Posting API direct-post and upload flows.
 
 ## What you need
 
@@ -8,8 +8,8 @@ TikTok support is available as an initial video publishing slice. It uses OAuth 
 - Login Kit and Content Posting API access
 - Provider app registry entry with provider `tiktok`
 - Callback URL: `https://your-domain.com/api/v1/accounts/tiktok/callback`
-- Public `OPENPOST_MEDIA_URL` or S3/R2 public media URL
-- Scopes: `user.info.basic`, `user.info.profile`, `video.publish`, `video.upload`
+- Public `OPENPOST_MEDIA_URL` or S3/R2 public media URL for Direct Post media URLs
+- Scopes: `user.info.basic`, `user.info.profile`, `video.publish`, `video.upload`, and photo-post access when using image posts
 
 Example `OPENPOST_PROVIDER_APPS` entry:
 
@@ -24,11 +24,13 @@ Example `OPENPOST_PROVIDER_APPS` entry:
 ]
 ```
 
-## Current limits
+## Current scope and limits
 
-- One video attachment per post.
-- Public HTTPS media URL required.
-- Text-only, image, carousel, inbox upload, and photo-post paths are not enabled yet.
+- Supports one video attachment for Direct Post.
+- Supports inbox/upload mode for video when configured.
+- Supports image/photo posts when all attached media are images and TikTok app access allows the photo-post path.
+- Text-only posts are not supported.
+- Direct Post media URLs must be public HTTPS.
 - Live-account and app-review behavior still needs deployment verification.
 
 ## Common issues

@@ -17,6 +17,8 @@ services:
       - OPENPOST_DATABASE_PATH=/data/db/openpost.db
       - OPENPOST_MEDIA_PATH=/data/media
       - OPENPOST_MEDIA_URL=https://openpost.example.com/media
+    # The shipped image uses /api/v1/health for liveness. Use /api/v1/ready here
+    # if you want Compose to also wait for database readiness.
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/api/v1/ready"]
       interval: 30s

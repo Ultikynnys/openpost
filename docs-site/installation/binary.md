@@ -20,6 +20,8 @@ Create a working directory and write a complete `.env` file:
 OPENPOST_PORT=8080
 OPENPOST_DATABASE_PATH=/var/lib/openpost/openpost.db
 OPENPOST_MEDIA_PATH=/var/lib/openpost/media
+OPENPOST_APP_URL=https://social.example.com
+OPENPOST_PUBLIC_URL=https://social.example.com
 OPENPOST_MEDIA_URL=https://social.example.com/media
 
 OPENPOST_JWT_SECRET=replace-with-a-random-secret-at-least-32-characters-long
@@ -61,6 +63,8 @@ Use Windows paths in `.env`:
 ```dotenv
 OPENPOST_DATABASE_PATH=C:\OpenPost\data\openpost.db
 OPENPOST_MEDIA_PATH=C:\OpenPost\media
+OPENPOST_APP_URL=https://social.example.com
+OPENPOST_PUBLIC_URL=https://social.example.com
 OPENPOST_MEDIA_URL=https://social.example.com/media
 ```
 
@@ -159,5 +163,5 @@ Do not upgrade without a restorable backup. See [Backups](/operations/backups).
 
 ## Notes
 
-- Put the service behind HTTPS before enabling production OAuth callbacks.
+- Put the service behind HTTPS before enabling production OAuth callbacks. Set `OPENPOST_APP_URL` and `OPENPOST_PUBLIC_URL` to the same public browser origin unless you intentionally operate a split-origin deployment.
 - Protect the `.env` file because `OPENPOST_ENCRYPTION_KEY` is required to decrypt stored provider tokens.

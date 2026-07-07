@@ -39,7 +39,7 @@ Files stored locally and attached to posts. Some providers, especially Threads, 
 
 ## Job
 
-Durable background work stored in SQLite. Publishing should go through the jobs table rather than transient goroutines.
+Durable background work stored in the configured OpenPost database. Publishing should go through the jobs table rather than transient goroutines.
 
 ## Provider
 

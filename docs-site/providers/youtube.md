@@ -37,18 +37,16 @@ If `redirect_uri` is omitted, OpenPost derives it from `OPENPOST_APP_URL`.
 ## Current Scope
 
 - Connects a selected YouTube channel.
-- Uploads one video through the YouTube Data API `videos.insert` endpoint.
-- Uploads videos as private by default.
-- Derives the video title from the first non-empty line of the post or platform variant.
-- Uses the full post or variant content as the video description.
+- Uploads one video through the YouTube Data API `videos.insert` endpoint with resumable-upload handling.
+- Uploads videos as private by default, with YouTube-specific privacy settings available through publication/variant settings.
+- Supports title, description, tags, category, made-for-kids, thumbnail, and playlist settings when provided.
+- Derives fallback title/description from the post or platform variant when explicit video metadata is absent.
 - Supports scheduling and platform variants through the normal OpenPost post flow.
 
 ## Current Limits
 
-- No public/unlisted privacy selector yet.
-- No tags, category, made-for-kids, thumbnail, playlist, or comment support yet.
-- No resumable upload flow yet; keep the first slice focused on smaller video/Shorts uploads.
-- Live-account verification is still recommended before relying on production YouTube publishing.
+- Comment/moderation workflows are not the focus of the YouTube slice.
+- Live-account verification is still recommended before relying on production YouTube publishing, especially for app-review-sensitive metadata and playlist/thumbnail behavior.
 
 ## Troubleshooting
 
