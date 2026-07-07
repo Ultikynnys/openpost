@@ -67,6 +67,7 @@ Settings support the same optional workspace boundary.
 Desktop MCP clients can use the local stdio proxy from the CLI module:
 
 ```sh
+openpost --profile local auth login https://your-openpost-host.example
 openpost-mcp --profile local
 ```
 
@@ -87,6 +88,7 @@ GET /api/v1/mcp/activity?workspace_id=<workspace-id>
 - `list_provider_catalog`: returns provider launch status so assistants know which platforms are available, need server configuration, or are still planned.
 - `list_accounts`: returns active social accounts for a workspace.
 - `list_media`: returns recent workspace media attachments so assistants can reuse existing assets.
+- `get_provider_readiness`: returns provider configuration, account, app-review, and public-media readiness checks.
 - `create_draft`: creates a draft post in a workspace and assigns destination accounts and media attachments.
 - `list_drafts`: returns editable draft posts for a workspace so an assistant can inspect existing work before creating more drafts.
 - `update_draft`: updates a draft's source content and optionally replaces destination accounts or source media.
@@ -98,6 +100,13 @@ GET /api/v1/mcp/activity?workspace_id=<workspace-id>
 - `cancel_post`: cancels a queued scheduled post and returns it to drafts.
 - `suggest_next_slot`: returns the next free configured posting slot for a workspace.
 - `upload_media_from_url`: fetches a public HTTP(S) media URL and stores it in a workspace.
+- `create_publication`: creates a format-first publication with renditions and destination-specific settings.
+- `list_publications`: lists format-first publications for a workspace.
+- `validate_publication`: validates a publication before scheduling or publishing.
+- `schedule_publication`: schedules an existing publication.
+- `publish_publication_now`: queues an existing publication for immediate publishing.
+- `list_publication_events`: returns lifecycle events for a publication.
+- `list_rendition_comments`: lists comments for a published rendition.
 - `render_scheduler_widget`: renders structured OpenPost scheduler data in the ChatGPT Apps widget.
 
 ## Current prompts

@@ -8,8 +8,8 @@ The CLI is designed for headless use in CI, cron, and deployment jobs. Use an AP
 | ---------------------- | -------------------------------------------- |
 | `OPENPOST_TOKEN`       | Bearer token for non-interactive API access. |
 | `OPENPOST_INSTANCE`    | Default OpenPost instance URL.               |
-| `OPENPOST_WORKSPACE`   | Default workspace ID or slug.                |
-| `OPENPOST_OUTPUT=json` | Default output format for scripts.           |
+| `OPENPOST_WORKSPACE`   | Default workspace ID or name.                |
+| `OPENPOST_OUTPUT_JSON=true` | Default JSON output for scripts. You can also set `output = "json"` in the selected CLI profile. |
 | `OPENPOST_PROFILE`     | Selects a named CLI profile.                 |
 
 Useful flags:
@@ -45,7 +45,7 @@ jobs:
       OPENPOST_INSTANCE: ${{ secrets.OPENPOST_INSTANCE }}
       OPENPOST_TOKEN: ${{ secrets.OPENPOST_TOKEN }}
       OPENPOST_WORKSPACE: ${{ secrets.OPENPOST_WORKSPACE }}
-      OPENPOST_OUTPUT: json
+      OPENPOST_OUTPUT_JSON: "true"
     steps:
       - name: Install OpenPost CLI
         run: curl -fsSL https://raw.githubusercontent.com/rodrgds/openpost/main/scripts/install-cli.sh | sh

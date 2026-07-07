@@ -64,11 +64,14 @@ OPENPOST_MEDIA_PATH=C:\OpenPost\media
 OPENPOST_MEDIA_URL=https://social.example.com/media
 ```
 
-## 4. Make it executable on Linux/macOS
+## 4. Install or rename it on Linux/macOS
 
 ```bash
+mv ./openpost-server-linux-amd64 ./openpost
 chmod +x ./openpost
 ```
+
+On macOS Apple Silicon, use `openpost-server-darwin-arm64` instead of the Linux asset.
 
 ## 5. Run it
 

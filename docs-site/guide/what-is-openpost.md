@@ -21,6 +21,10 @@ OpenPost is for people who want the core social media scheduling workflow withou
 - Bluesky
 - LinkedIn
 - Threads
+- Facebook Pages
+- Instagram Business
+- TikTok
+- YouTube
 
 ## What OpenPost is not
 

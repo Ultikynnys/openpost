@@ -2,7 +2,7 @@
 
 This is the low-level quick reference version of the configuration docs.
 
-Every variable can also be loaded from `<VARIABLE>_FILE`; direct env values win over file-backed values. Legacy aliases support the same suffix, for example `DATABASE_URL_FILE`, `JWT_SECRET_FILE`, and `ENCRYPTION_KEY_FILE`.
+Most variables loaded through the main backend config loader can also be loaded from `<VARIABLE>_FILE`; direct env values win over file-backed values. Legacy aliases support the same suffix, for example `DATABASE_URL_FILE`, `JWT_SECRET_FILE`, and `ENCRYPTION_KEY_FILE`. Adapter-only variables read directly by provider code, such as `META_GRAPH_API_VERSION`, do not currently support `_FILE` variants.
 
 | Variable                              | Purpose                                                                                                     |
 | ------------------------------------- | ----------------------------------------------------------------------------------------------------------- |

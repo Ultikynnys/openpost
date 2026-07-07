@@ -36,11 +36,8 @@ Organization settings group collaboration and hosted billing.
 
 Invite people from **Settings -> Organization**. Pending invitations reserve seats until they are accepted, revoked, or expired.
 
-## Admin
+## Provider credentials
 
-The Admin tab is only visible to instance admins.
+Provider credentials are operator-level configuration, not regular user settings. Configure them with legacy provider env vars, `OPENPOST_PROVIDER_APPS`, or the instance-admin provider app API. The current web settings UI has no Admin tab or Provider Apps panel.
 
-- Mastodon provider apps for operator-managed instances
-- Optional OAuth app credentials for X, LinkedIn, Threads, Facebook, Instagram, TikTok, and YouTube
-
-Most self-hosted users only need Admin settings when they want to use their own OAuth keys. Mastodon custom instances are the most prominent case because each server can need its own app registration. See [Provider Overview](/providers/overview) and [Mastodon](/providers/mastodon).
+Most self-hosted users only need operator-managed provider credentials when they want to bring their own OAuth keys. Mastodon custom instances are the most prominent case because each server can need its own app registration. See [Provider Overview](/providers/overview) and [Mastodon](/providers/mastodon).

@@ -24,9 +24,9 @@ This is the implementation map for turning OpenPost into a production-ready self
 
 ### 1. Cloud Foundation
 
-- Add `OPENPOST_EDITION=selfhost|cloud`.
-- Add `OPENPOST_DATABASE_DRIVER=sqlite|postgres` and Postgres-backed Bun ORM initialization.
-- Add `OPENPOST_STORAGE_DRIVER=local|s3` with S3-compatible storage.
+- `OPENPOST_EDITION=selfhost|cloud` is implemented. Cloud mode now refuses to boot unless the required Postgres, S3-compatible media, and Polar billing config is present.
+- `OPENPOST_DATABASE_DRIVER=sqlite|postgres` is implemented. SQLite remains the self-hosted default; Postgres is the hosted/cloud path.
+- `OPENPOST_STORAGE_DRIVER=local|s3` is implemented with local filesystem and S3-compatible media storage.
 - Keep runtime database expressions portable. Background job recovery, job workspace scoping, publish-job cleanup, MCP scheduling cleanup, and schedule overview date aggregation now avoid SQLite-only JSON/date expressions so cloud Postgres deployments use the same paths.
 - Add usage counters and entitlement checks at API boundaries. The foundation is in place with monthly `usage_counters`, workspace-creation entitlement checks, team invitation seat checks, and scheduled-post usage accounting.
 - Enforce quota boundaries for workspace, team, provider, media, scheduling, and publishing paths. Social account connection quota enforcement is in place in the shared account saver, team invitations reserve active plus pending seats, media upload quota enforcement is in place for monthly uploaded bytes and stored bytes, scheduled-post quota enforcement is in place for single posts and threads, and publishing-worker quota enforcement is in place for published posts and provider write calls.
@@ -48,7 +48,7 @@ This is the implementation map for turning OpenPost into a production-ready self
 
 ### 3. Provider Readiness
 
-- Add a provider app registry for cloud and self-hosted credentials. Startup now builds adapters from a normalized registry populated by legacy env vars, optional `OPENPOST_PROVIDER_APPS` JSON, and active encrypted `provider_apps` database rows managed through instance-admin APIs for hosted/operator-managed credentials.
+- The provider app registry is implemented for cloud and self-hosted credentials. Startup builds adapters from a normalized registry populated by legacy env vars, optional `OPENPOST_PROVIDER_APPS` JSON, and active encrypted `provider_apps` database rows managed through instance-admin APIs for hosted/operator-managed credentials.
 - Replace fixed Mastodon env-only config with dynamic instance registration for cloud.
 - Keep user-supplied remote URLs guarded against SSRF. Dynamic Mastodon registration and MCP URL media ingestion now reject private/local targets, validate redirects, use guarded dial-time resolution, and ignore environment proxy settings for these fetches.
 - Add production OAuth app checklists for X, LinkedIn, Threads, Facebook, Instagram, YouTube, TikTok, Mastodon, and Bluesky.
@@ -77,7 +77,7 @@ This is the implementation map for turning OpenPost into a production-ready self
 
 - Expose a remote MCP endpoint for OpenPost Cloud at `/mcp`.
 - Keep the MCP server backend-owned, not frontend-owned.
-- Add a local `openpost-mcp` stdio binary for desktop/self-hosted clients. The CLI now includes a stdio proxy that loads the active OpenPost profile/token and forwards frames to `/mcp`.
+- The local `openpost-mcp` stdio binary is implemented for desktop/self-hosted clients. The CLI stdio proxy loads the active OpenPost profile/token and forwards frames to `/mcp`.
 - Reuse CLI/API client behavior where possible, but keep MCP stdout strict.
 - Start with safe semantic tools and prompts: list workspaces, list accounts, create/list/update drafts, set post renditions, upload media from URL, schedule post or draft, cancel post, get post status, suggest next slot, and prompt templates for planning posts, adapting renditions, and reviewing the queue. The remote MCP foundation now supports workspace/account listing, draft creation/review/revision, destination-specific rendition updates, guarded URL media upload, quota-checked scheduling for new posts and existing drafts, post status reads, scheduled-post queue inspection/cancellation, next-slot suggestions, and agentic scheduling prompt templates.
 - Require auth for remote MCP, scope sessions, log tool calls, and expose revocation in settings. Tool-call logging is now persisted in `mcp_tool_calls`, recent calls are visible in settings with API-token client attribution, Apps SDK-facing protected-resource/tool security metadata, invocation status labels, and output schemas are in place, Settings can create/revoke dedicated `mcp:full` tokens, OAuth authorization-code + PKCE account linking now mints audience-bound MCP tokens, and both manual tokens and OAuth approvals can be limited to one workspace.
@@ -101,8 +101,8 @@ This is the implementation map for turning OpenPost into a production-ready self
 
 1. Upgrade marketing-site into a real public front door.
 2. Add production-readiness docs and keep links discoverable.
-3. Add backend config primitives for edition, database driver, and storage driver.
-4. Add storage-driver tests before implementing S3/R2.
+3. Backend config primitives for edition, database driver, and storage driver are implemented.
+4. Storage-driver tests and the S3-compatible storage driver are implemented.
 5. Add entitlement interfaces and self-host defaults. Done for the service contract and workspace creation boundary.
 6. Add usage tables and API boundary checks. Monthly usage counters, workspace quota enforcement, team invitation seat enforcement, social-account quota enforcement, media quota enforcement, scheduled-post quota enforcement, and publishing-worker usage/quota enforcement are in place.
 7. Add Playwright coverage around the core app flows.

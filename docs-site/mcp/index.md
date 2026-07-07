@@ -30,7 +30,7 @@ Install and authenticate the OpenPost CLI with the MCP proxy, then run the local
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/rodrgds/openpost/main/scripts/install-cli.sh | sh -s -- --with-mcp
-openpost auth login https://your-openpost-host.example
+openpost --profile local auth login https://your-openpost-host.example
 openpost-mcp --profile local
 ```
 
@@ -42,6 +42,7 @@ The proxy reads the selected CLI profile and forwards MCP frames to the remote `
 - `list_provider_catalog`
 - `list_accounts`
 - `list_media`
+- `get_provider_readiness`
 - `create_draft`
 - `list_drafts`
 - `update_draft`
@@ -53,6 +54,13 @@ The proxy reads the selected CLI profile and forwards MCP frames to the remote `
 - `cancel_post`
 - `suggest_next_slot`
 - `upload_media_from_url`
+- `create_publication`
+- `list_publications`
+- `validate_publication`
+- `schedule_publication`
+- `publish_publication_now`
+- `list_publication_events`
+- `list_rendition_comments`
 - `render_scheduler_widget`
 
 ## Safe workflow

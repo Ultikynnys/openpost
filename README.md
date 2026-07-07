@@ -78,7 +78,7 @@ OpenPost is for people who want the core social media scheduling workflow withou
 - **Thread support**: publish multi-post threads in sequence
 - **Scheduling that stays queued**: plan posts ahead, queued posts survive restarts
 - **Workspaces**: separate brands, projects, or clients into different workspaces
-- **Reusable media library**: upload once, reuse across posts
+- **Media library**: upload, inspect, favorite, and clean up workspace media
 - **Self-hosted**: your data, schedules, and tokens stay on your server
 
 Built with Go, SvelteKit, and SQLite by default. Runs as a single binary or container with no Redis, no mandatory Postgres, and no external queue.
@@ -103,7 +103,7 @@ OpenPost is especially useful for:
 | Docker support | Yes |
 | Android app (Capacitor) | Yes (APK in every release) |
 | SQLite | Yes |
-| X, Mastodon, Bluesky, Threads, LinkedIn | Yes |
+| X, Mastodon, Bluesky, Threads, LinkedIn, Facebook Pages, Instagram Business, TikTok, YouTube | Yes |
 | Threads composer | Yes |
 | Platform-specific variants | Yes |
 | Media library | Yes |
@@ -138,6 +138,10 @@ Set fresh values for `OPENPOST_JWT_SECRET` and `OPENPOST_ENCRYPTION_KEY` before 
 - Bluesky
 - Threads
 - LinkedIn
+- Facebook Pages
+- Instagram Business
+- TikTok
+- YouTube
 
 ## Documentation
 

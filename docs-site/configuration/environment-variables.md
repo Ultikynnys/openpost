@@ -4,7 +4,9 @@ This page summarizes the env vars used by the backend. Some values in `.env.exam
 
 ## File-backed values
 
-Every variable below can also be loaded from `<VARIABLE>_FILE`. OpenPost checks the direct variable first, then its file variant, then any legacy aliases and their file variants. File contents are trimmed before use.
+Most variables loaded through the main backend config loader can also be loaded from `<VARIABLE>_FILE`. OpenPost checks the direct variable first, then its file variant, then any legacy aliases and their file variants. File contents are trimmed before use.
+
+Adapter-only variables read directly by provider code, such as `META_GRAPH_API_VERSION`, do not currently support `_FILE` variants.
 
 This is useful for Docker, Podman, Kubernetes, NixOS, and sops-managed secrets:
 
@@ -51,7 +53,6 @@ Leave the direct variable unset when you want the file value to win.
 | `OPENPOST_POLAR_PRO_PRODUCT_ID`       |                                    Required in cloud mode | empty                                    | Polar product ID for the Pro plan.                                                                                                                  |
 | `OPENPOST_POLAR_TEAM_PRODUCT_ID`      |                                    Required in cloud mode | empty                                    | Polar product ID for the Team plan.                                                                                                                 |
 | `OPENPOST_POLAR_AGENCY_PRODUCT_ID`    |                                    Required in cloud mode | empty                                    | Polar product ID for the Agency plan.                                                                                                               |
-| `OPENPOST_ENV`                        |                                                        No | empty                                    | Optional deployment label. Secret validation is enforced regardless of environment mode.                                                            |
 
 ## Provider app registry
 
@@ -61,7 +62,7 @@ Database rows are intended for hosted/operator-managed installs. They store `cli
 
 Instance admins can manage encrypted database rows through `GET /api/v1/admin/provider-apps`, `POST /api/v1/admin/provider-apps`, and `DELETE /api/v1/admin/provider-apps/{id}`. API responses never return client secrets; send `client_secret` only when creating a row or rotating the existing secret.
 
-The web app also exposes this registry in **Settings -> Admin -> Provider Apps** for instance admins. Saves and deletes take effect after the next OpenPost server restart.
+The backend exposes this registry through the instance-admin API. The current web settings UI does not include a Provider Apps panel, so self-hosted operators should use env vars or `OPENPOST_PROVIDER_APPS` unless they are deliberately scripting the admin API. Saves and deletes take effect after the next OpenPost server restart.
 
 ## X
 
@@ -77,7 +78,7 @@ The web app also exposes this registry in **Settings -> Admin -> Provider Apps**
 | Variable                |         Required | Default                     | Description                                                                                   |
 | ----------------------- | ---------------: | --------------------------- | --------------------------------------------------------------------------------------------- |
 | `MASTODON_REDIRECT_URI` |               No | `urn:ietf:wg:oauth:2.0:oob` | Mastodon redirect URI. The default uses the OOB flow and does not need a public callback URL. |
-| `MASTODON_SERVERS`      | Yes for Mastodon | `[]`                        | JSON array of configured Mastodon apps and instance URLs. Leave empty to disable Mastodon.    |
+| `MASTODON_SERVERS`      | No | `[]`                        | JSON array of operator-pinned Mastodon apps and instance URLs. Leave empty when relying on custom instance registration from the Accounts screen.    |
 
 ## LinkedIn
 

@@ -20,7 +20,7 @@ These providers have adapter code in OpenPost today. The Accounts page discovers
 
 Start with one provider, confirm the callback works, then expand.
 
-Provider app credentials can come from legacy env vars, `OPENPOST_PROVIDER_APPS` JSON, or active encrypted `provider_apps` database rows managed through the instance-admin provider app API. Instance admins can manage database rows from **Settings -> Admin -> Provider Apps**.
+Provider app credentials can come from legacy env vars, `OPENPOST_PROVIDER_APPS` JSON, or active encrypted `provider_apps` database rows managed through the instance-admin provider app API. The current web settings UI does not expose Provider Apps management, so self-hosted operators should normally use env vars or `OPENPOST_PROVIDER_APPS`; scripted/admin deployments can use the API.
 
 Mastodon is the most common reason to use Provider Apps because each instance can need its own app registration. Users can still connect public custom Mastodon instances from the Accounts screen when dynamic registration is available. For other OAuth providers, Provider Apps are mainly for operators who want to bring their own keys instead of relying on hosted/default credentials.
 
@@ -47,7 +47,7 @@ This matrix reflects current OpenPost support, not the full theoretical capabili
 ## Provider-specific caveats
 
 - **X:** Requires an X developer app with OAuth 1.0a user auth enabled and matching callback URLs.
-- **Mastodon:** Setup is per instance. Custom public instances can be entered from Accounts; operator-pinned instances can use `MASTODON_SERVERS` or **Settings -> Admin -> Provider Apps**.
+- **Mastodon:** Setup is per instance. Custom public instances can be entered from Accounts; operator-pinned instances can use `MASTODON_SERVERS`, `OPENPOST_PROVIDER_APPS`, or the instance-admin provider app API.
 - **Bluesky:** Uses handle plus app password. No server-side OAuth app is required.
 - **LinkedIn:** Permissions and app review can block some publishing or reply workflows even when the integration code is present.
 - **Threads:** Media must be reachable at a public `OPENPOST_MEDIA_URL`, and Meta fetches those files server-side.

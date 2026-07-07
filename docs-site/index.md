@@ -4,7 +4,7 @@ layout: home
 hero:
   name: OpenPost
   text: Self-hosted Buffer/Hootsuite alternative.
-  tagline: Schedule posts to X, Mastodon, Bluesky, Threads, LinkedIn, Facebook Pages, Instagram Business, TikTok, and YouTube from your own server. One binary or container. No Redis, no Postgres, no external queue.
+  tagline: Schedule posts to X, Mastodon, Bluesky, Threads, LinkedIn, Facebook Pages, Instagram Business, TikTok, and YouTube from your own server. One binary or container. No Redis, no required Postgres, no external queue.
   image:
     src: /assets/brand/logo-docs.svg
     alt: OpenPost logo
@@ -24,7 +24,7 @@ features:
   - title: Scheduling
     details: Plan posts ahead with durable jobs that survive restarts.
   - title: Media library
-    details: Upload once and reuse media across drafts and scheduled posts.
+    details: Upload, inspect, favorite, and clean up workspace media from one place.
   - title: Workspaces
     details: Keep separate brands, accounts, media, prompts, and schedules organized.
   - title: CLI

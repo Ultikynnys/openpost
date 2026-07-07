@@ -11,7 +11,7 @@ OpenPost is becoming a production-ready self-hosted scheduler plus OpenPost Clou
 - Cloud runtime primitives: edition mode, Postgres driver, S3-compatible media storage, direct S3 uploads, cloud-mode config validation, and portable database query fixes.
 - Polar billing foundation: checkout, portal sessions, signed webhooks, local subscription snapshots, entitlement checks, usage counters, Settings billing UI, and CLI billing commands.
 - MCP and ChatGPT-style app foundation: remote `/mcp`, stdio proxy, OAuth PKCE account linking, Apps SDK widget metadata, scoped MCP tokens, tool-call auditing, prompts, and scheduling/media/provider tools.
-- Provider readiness work: provider app registry, database-backed provider credentials, Settings provider-app admin panel, account-provider discovery, and first slices for Facebook Pages, Instagram Business, TikTok, and YouTube.
+- Provider readiness work: provider app registry, database-backed provider credentials for operator tooling, account-provider discovery, and first slices for Facebook Pages, Instagram Business, TikTok, and YouTube.
 - Production diagnostics: `/ready`, CLI `instance health`, redacted `instance diagnostics`, provider catalog snapshots, and billing usage snapshots.
 - E2E coverage for marketing, docs audience separation, auth/onboarding, settings/billing/MCP activity, provider discovery, workspace switching, composer scheduling, media library, and app smoke flows.
 

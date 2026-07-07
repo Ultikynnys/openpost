@@ -42,9 +42,14 @@ server {
 Update your provider apps to use your public domain:
 
 - `https://openpost.example.com/api/v1/accounts/x/callback`
-- `https://openpost.example.com/api/v1/accounts/mastodon/callback`
 - `https://openpost.example.com/api/v1/accounts/linkedin/callback`
 - `https://openpost.example.com/api/v1/accounts/threads/callback`
+- `https://openpost.example.com/api/v1/accounts/facebook/callback`
+- `https://openpost.example.com/api/v1/accounts/instagram/callback`
+- `https://openpost.example.com/api/v1/accounts/tiktok/callback`
+- `https://openpost.example.com/api/v1/accounts/youtube/callback`
+
+Mastodon uses `urn:ietf:wg:oauth:2.0:oob` by default, so you usually do not add a Mastodon callback URL unless you override `MASTODON_REDIRECT_URI`.
 
 ## Threads note
 
