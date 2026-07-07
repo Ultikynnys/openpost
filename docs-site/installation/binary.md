@@ -10,6 +10,7 @@ Expected release assets:
 
 - Linux x86_64: `openpost-server-linux-amd64`
 - macOS Apple Silicon: `openpost-server-darwin-arm64`
+- Windows x86_64: `openpost-server-windows-amd64.exe`
 
 ## 2. Create `.env`
 
@@ -49,7 +50,21 @@ Recommended production locations:
 - Database: `/var/lib/openpost/openpost.db`
 - Media: `/var/lib/openpost/media`
 
-## 4. Make it executable
+On Windows, keep the binary, `.env`, database, and media under stable service-owned paths. For example:
+
+```powershell
+New-Item -ItemType Directory -Force C:\OpenPost, C:\OpenPost\data, C:\OpenPost\media
+```
+
+Use Windows paths in `.env`:
+
+```dotenv
+OPENPOST_DATABASE_PATH=C:\OpenPost\data\openpost.db
+OPENPOST_MEDIA_PATH=C:\OpenPost\media
+OPENPOST_MEDIA_URL=https://social.example.com/media
+```
+
+## 4. Make it executable on Linux/macOS
 
 ```bash
 chmod +x ./openpost
@@ -57,13 +72,26 @@ chmod +x ./openpost
 
 ## 5. Run it
 
+Linux/macOS:
+
 ```bash
 ./openpost
 ```
 
+Windows PowerShell:
+
+```powershell
+cd C:\OpenPost
+.\openpost-server-windows-amd64.exe
+```
+
 By default, OpenPost listens on `http://localhost:8080`.
 
-## 6. Run it with systemd
+OpenPost loads `.env` from the process working directory. When running it as a Windows service, either set the service working directory to the folder containing `.env` or configure the environment variables directly in the service wrapper.
+
+## 6. Run it as a service
+
+### Linux systemd
 
 Example unit:
 
@@ -100,6 +128,18 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now openpost
 sudo systemctl status openpost
 ```
+
+### Windows
+
+Use a standard Windows service wrapper such as NSSM or WinSW, or a Task Scheduler entry that starts at boot.
+
+For NSSM, configure:
+
+- Application: `C:\OpenPost\openpost-server-windows-amd64.exe`
+- Startup directory: `C:\OpenPost`
+- Service account: a dedicated local user with read access to `C:\OpenPost` and write access to `C:\OpenPost\data` and `C:\OpenPost\media`
+
+If your wrapper does not load `.env`, set the same `OPENPOST_*` values as service environment variables.
 
 ## 7. Upgrade safely
 

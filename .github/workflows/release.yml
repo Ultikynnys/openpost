@@ -157,6 +157,10 @@ jobs:
             arch: arm64
             runner: macos-latest
             ext: ""
+          - os: windows
+            arch: amd64
+            runner: ubuntu-latest
+            ext: ".exe"
 
     steps:
       - name: Checkout repository
@@ -176,15 +180,17 @@ jobs:
 
       - name: Build binary
         shell: bash
-        env:
-          CGO_ENABLED: 1
         run: |
           cd backend
           version="${GITHUB_REF_NAME:-dev}"
-          go build -ldflags="-s -w -X main.version=${version}" -o ../openpost-server-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }} ./cmd/openpost
+          if [ "${{ matrix.os }}" = "windows" ]; then
+            CGO_ENABLED=0 GOOS=${{ matrix.os }} GOARCH=${{ matrix.arch }} go build -ldflags="-s -w -X main.version=${version}" -o ../openpost-server-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }} ./cmd/openpost
+          else
+            CGO_ENABLED=1 go build -ldflags="-s -w -X main.version=${version}" -o ../openpost-server-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }} ./cmd/openpost
+          fi
 
       - name: Upload binary to release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
         with:
           files: openpost-server-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }}
@@ -248,7 +254,7 @@ jobs:
           CGO_ENABLED=0 GOOS=${{ matrix.os }} GOARCH=${{ matrix.arch }} go build -ldflags="-s -w -X main.version=${version}" -o ../openpost-mcp-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }} ./cmd/openpost-mcp
 
       - name: Upload CLI binary to release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
         with:
           files: |
@@ -343,7 +349,7 @@ jobs:
 
       - name: Upload APK to GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           files: openpost-app-android.apk
           fail_on_unmatched_files: false
