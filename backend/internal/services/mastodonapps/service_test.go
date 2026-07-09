@@ -88,6 +88,38 @@ func TestAdapterForInstanceRegistersAndCachesMastodonApp(t *testing.T) {
 	require.Equal(t, 1, registrationCalls)
 }
 
+func TestListActiveAppConfigsReturnsPersistedDynamicMastodonInstances(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	db := createMastodonAppsTestDB(t)
+	encryptor := crypto.NewTokenEncryptor("0123456789abcdef0123456789abcdef")
+	secretEnc, err := encryptor.Encrypt("stored-secret")
+	require.NoError(t, err)
+
+	_, err = db.NewInsert().Model(&models.MastodonInstance{
+		ID:                 "instance-1",
+		InstanceURL:        "https://masto.pt",
+		Host:               "masto.pt",
+		ClientID:           "stored-client",
+		ClientSecretEnc:    secretEnc,
+		RedirectURI:        "urn:ietf:wg:oauth:2.0:oob",
+		Scopes:             defaultScopes,
+		RegistrationStatus: registrationStatusActive,
+	}).Exec(ctx)
+	require.NoError(t, err)
+
+	service := NewService(db, encryptor, Options{})
+	configs, err := service.ListActiveAppConfigs(ctx)
+	require.NoError(t, err)
+	require.Len(t, configs, 1)
+	require.Equal(t, "mastodon", configs[0].Provider)
+	require.Equal(t, "masto.pt", configs[0].Name)
+	require.Equal(t, "stored-client", configs[0].ClientID)
+	require.Equal(t, "stored-secret", configs[0].ClientSecret)
+	require.Equal(t, "https://masto.pt", configs[0].InstanceURL)
+}
+
 func TestAdapterForInstanceRejectsUnsafeURLs(t *testing.T) {
 	t.Parallel()
 

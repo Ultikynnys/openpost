@@ -117,7 +117,19 @@ func main() {
 		publishSvc.SetPublicMediaURL(cfg.MediaURL)
 	}
 
+	mastodonAppService := mastodonapps.NewService(db, tokenEncryptor, mastodonapps.Options{
+		RedirectURI: cfg.MastodonRedirectURI,
+		Website:     cfg.PublicURL,
+	})
+
 	platform.RegisterAllMediaValidators()
+	dynamicMastodonApps, err := mastodonAppService.ListActiveAppConfigs(context.Background())
+	if err != nil {
+		log.Fatalf("failed to load dynamic mastodon app registry from database: %v", err)
+	}
+	if len(dynamicMastodonApps) > 0 {
+		log.Printf("Loaded %d dynamic mastodon app config(s) from database", len(dynamicMastodonApps))
+	}
 	dbProviderApps, err := providerapps.NewService(db, tokenEncryptor).ListActiveAppConfigs(context.Background())
 	if err != nil {
 		log.Fatalf("failed to load provider app registry from database: %v", err)
@@ -125,7 +137,8 @@ func main() {
 	if len(dbProviderApps) > 0 {
 		log.Printf("Loaded %d provider app config(s) from database", len(dbProviderApps))
 	}
-	providerAppConfigs := platform.MergeAppConfigs(cfg.ProviderApps, dbProviderApps...)
+	providerAppConfigs := platform.MergeAppConfigs(cfg.ProviderApps, dynamicMastodonApps...)
+	providerAppConfigs = platform.MergeAppConfigs(providerAppConfigs, dbProviderApps...)
 	providers, providerEntries, err := platform.BuildAdapterRegistry(providerAppConfigs, platform.RegistryOptions{
 		DisableLinkedInThreadReplies: cfg.DisableLinkedInThreadReplies,
 	})
@@ -191,11 +204,6 @@ func main() {
 	e.GET("/robots.txt", robotsHandler)
 	e.HEAD("/robots.txt", robotsHandler)
 
-	mastodonAppService := mastodonapps.NewService(db, tokenEncryptor, mastodonapps.Options{
-		RedirectURI: cfg.MastodonRedirectURI,
-		Website:     cfg.PublicURL,
-	})
-
 	mcpHandler := handlers.NewMCPHandler(db, authenticator, entitlementService)
 	mcpHandler.SetServerVersion(version)
 	mcpHandler.SetMediaStorage(storage)
@@ -207,20 +215,24 @@ func main() {
 	mcpOAuthHandler.RegisterEchoRoutes(e)
 
 	apiroutes.RegisterHumaRoutes(api, apiroutes.RouteDeps{
-		DB:                           db,
-		AuthService:                  authService,
-		Authenticator:                authenticator,
-		SessionService:               sessionService,
-		APITokenService:              apiTokenService,
-		CLIAuthService:               cliAuthService,
-		MCPOAuthService:              mcpOAuthService,
-		BillingService:               billingService,
-		MediaStorage:                 storage,
-		MediaSigner:                  mediaSigner,
-		Entitlement:                  entitlementService,
-		TokenEncryptor:               tokenEncryptor,
-		MFAService:                   mfaService,
-		Providers:                    providers,
+		DB:              db,
+		AuthService:     authService,
+		Authenticator:   authenticator,
+		SessionService:  sessionService,
+		APITokenService: apiTokenService,
+		CLIAuthService:  cliAuthService,
+		MCPOAuthService: mcpOAuthService,
+		BillingService:  billingService,
+		MediaStorage:    storage,
+		MediaSigner:     mediaSigner,
+		Entitlement:     entitlementService,
+		TokenEncryptor:  tokenEncryptor,
+		MFAService:      mfaService,
+		Providers:       providers,
+		ProviderRegistrars: []func(string, platform.Adapter){
+			tokenManager.SetProvider,
+			publishSvc.SetProvider,
+		},
 		MastodonAppService:           mastodonAppService,
 		FrontendURL:                  cfg.FrontendURL,
 		PublicURL:                    cfg.PublicURL,

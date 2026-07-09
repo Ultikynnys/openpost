@@ -36,6 +36,7 @@ type OAuthHandler struct {
 	db                           *bun.DB
 	crypto                       *crypto.TokenEncryptor
 	providers                    map[string]platform.Adapter
+	providerRegistrars           []func(string, platform.Adapter)
 	auth                         middleware.Authenticator
 	disableLinkedInThreadReplies bool
 	accountSaver                 *account_saver.AccountSaver
@@ -89,6 +90,10 @@ func (h *OAuthHandler) SetEntitlement(entitlement entitlements.Service) {
 
 func (h *OAuthHandler) SetMastodonAppService(service *mastodonapps.Service) {
 	h.mastodonApps = service
+}
+
+func (h *OAuthHandler) SetProviderRegistrars(registrars ...func(string, platform.Adapter)) {
+	h.providerRegistrars = registrars
 }
 
 type MastodonServerInfo struct {
@@ -328,8 +333,20 @@ func (h *OAuthHandler) getDynamicMastodonProvider(ctx context.Context, instanceU
 	if h.providers == nil {
 		h.providers = map[string]platform.Adapter{}
 	}
-	h.providers["mastodon:"+canonicalURL] = adapter
+	h.registerProvider("mastodon:"+canonicalURL, adapter)
 	return adapter, canonicalURL, nil
+}
+
+func (h *OAuthHandler) registerProvider(key string, adapter platform.Adapter) {
+	if h.providers == nil {
+		h.providers = map[string]platform.Adapter{}
+	}
+	h.providers[key] = adapter
+	for _, registrar := range h.providerRegistrars {
+		if registrar != nil {
+			registrar(key, adapter)
+		}
+	}
 }
 
 func (h *OAuthHandler) isDynamicMastodonConfigured() bool {

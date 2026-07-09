@@ -12,6 +12,10 @@ All notable changes to this project are documented in this file.
 - Removed social media sets from the app, API, CLI, MCP tools, and docs; posting schedules now resolve at the workspace/account level with a migration that drops the legacy set tables.
 - Updated CLI and MCP publication workflows for current post types, explicit account targeting, media roles, YouTube title/description/privacy, TikTok settings, and publication schedule/publish actions.
 
+### Fixed
+
+- Registered persisted and newly added dynamic Mastodon instance adapters with publishing and token refresh so custom instances can publish without manual server restarts.
+
 ## [1.0.40] - 2026-07-06
 
 ### Changed

@@ -85,6 +85,35 @@ func (s *Service) AdapterForInstance(ctx context.Context, rawInstanceURL string)
 	return platform.NewMastodonAdapter(instance.ClientID, secret, instance.RedirectURI, instance.InstanceURL), instance.InstanceURL, nil
 }
 
+func (s *Service) ListActiveAppConfigs(ctx context.Context) ([]platform.AppConfig, error) {
+	var instances []models.MastodonInstance
+	if err := s.db.NewSelect().
+		Model(&instances).
+		Where("registration_status = ?", registrationStatusActive).
+		Where("blocked_at IS NULL").
+		Order("instance_url ASC").
+		Scan(ctx); err != nil {
+		return nil, fmt.Errorf("failed to list mastodon instances: %w", err)
+	}
+
+	configs := make([]platform.AppConfig, 0, len(instances))
+	for _, instance := range instances {
+		secret, err := s.encryptor.Decrypt(instance.ClientSecretEnc)
+		if err != nil {
+			return nil, fmt.Errorf("failed to decrypt mastodon instance %s: %w", instance.ID, err)
+		}
+		configs = append(configs, platform.NormalizeAppConfig(platform.AppConfig{
+			Provider:     "mastodon",
+			Name:         instance.Host,
+			ClientID:     instance.ClientID,
+			ClientSecret: secret,
+			RedirectURI:  instance.RedirectURI,
+			InstanceURL:  instance.InstanceURL,
+		}))
+	}
+	return configs, nil
+}
+
 func (s *Service) loadOrRegister(ctx context.Context, instanceURL, host string) (models.MastodonInstance, error) {
 	var instance models.MastodonInstance
 	err := s.db.NewSelect().

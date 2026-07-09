@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"sync"
 	"time"
 
 	"github.com/uptrace/bun"
@@ -14,9 +15,10 @@ import (
 )
 
 type TokenManager struct {
-	db        *bun.DB
-	crypto    *crypto.TokenEncryptor
-	providers map[string]platform.Adapter
+	db         *bun.DB
+	crypto     *crypto.TokenEncryptor
+	providerMu sync.RWMutex
+	providers  map[string]platform.Adapter
 }
 
 func NewTokenManager(db *bun.DB, encryptor *crypto.TokenEncryptor) *TokenManager {
@@ -28,6 +30,8 @@ func NewTokenManager(db *bun.DB, encryptor *crypto.TokenEncryptor) *TokenManager
 }
 
 func (tm *TokenManager) SetProvider(platformName string, adapter platform.Adapter) {
+	tm.providerMu.Lock()
+	defer tm.providerMu.Unlock()
 	tm.providers[platformName] = adapter
 }
 
@@ -107,7 +111,9 @@ func (tm *TokenManager) providerForAccount(account *models.SocialAccount) (platf
 		providerKey = "mastodon:" + account.InstanceURL
 	}
 
+	tm.providerMu.RLock()
 	provider, ok := tm.providers[providerKey]
+	tm.providerMu.RUnlock()
 	if !ok {
 		return nil, fmt.Errorf("unsupported platform for token refresh: %s (instance: %s)", account.Platform, account.InstanceURL)
 	}

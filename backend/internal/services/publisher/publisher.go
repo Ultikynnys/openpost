@@ -10,6 +10,7 @@ import (
 	"log"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/openpost/backend/internal/models"
@@ -33,6 +34,7 @@ const (
 type Service struct {
 	db                           *bun.DB
 	tm                           *tokenmanager.TokenManager
+	providerMu                   sync.RWMutex
 	providers                    map[string]platform.Adapter
 	disableLinkedInThreadReplies bool
 	publicMediaURL               string
@@ -81,6 +83,8 @@ func (s *Service) SetEntitlement(entitlement entitlements.Service) {
 }
 
 func (s *Service) SetProvider(platformName string, adapter platform.Adapter) {
+	s.providerMu.Lock()
+	defer s.providerMu.Unlock()
 	s.providers[platformName] = adapter
 }
 
@@ -575,14 +579,9 @@ func (s *Service) publishToDestination(ctx context.Context, post *models.Post, d
 		return fmt.Errorf("account not found: %v", err)
 	}
 
-	providerKey := account.Platform
-	if account.Platform == "mastodon" {
-		providerKey = "mastodon:" + account.InstanceURL
-	}
-
-	provider, ok := s.providers[providerKey]
-	if !ok {
-		return fmt.Errorf("unsupported platform: %s (instance: %s)", account.Platform, account.InstanceURL)
+	provider, _, err := s.providerForAccount(account)
+	if err != nil {
+		return err
 	}
 
 	token, err := s.tm.GetValidAccessToken(ctx, account.ID)
@@ -1084,7 +1083,9 @@ func (s *Service) providerForAccount(account *models.SocialAccount) (platform.Ad
 	if account.Platform == "mastodon" {
 		providerKey = "mastodon:" + account.InstanceURL
 	}
+	s.providerMu.RLock()
 	provider, ok := s.providers[providerKey]
+	s.providerMu.RUnlock()
 	if !ok {
 		return nil, providerKey, fmt.Errorf("unsupported platform: %s (instance: %s)", account.Platform, account.InstanceURL)
 	}

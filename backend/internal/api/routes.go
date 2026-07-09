@@ -39,6 +39,7 @@ type RouteDeps struct {
 	TokenEncryptor               *servicecrypto.TokenEncryptor
 	MFAService                   *mfa.Service
 	Providers                    map[string]platform.Adapter
+	ProviderRegistrars           []func(string, platform.Adapter)
 	MastodonAppService           *mastodonapps.Service
 	FrontendURL                  string
 	PublicURL                    string
@@ -157,6 +158,7 @@ func RegisterHumaRoutes(api huma.API, deps RouteDeps) {
 	)
 	oauthHandler.SetEntitlement(deps.Entitlement)
 	oauthHandler.SetMastodonAppService(deps.MastodonAppService)
+	oauthHandler.SetProviderRegistrars(deps.ProviderRegistrars...)
 	oauthHandler.ListProviders(api)
 	oauthHandler.ListMastodonServers(api)
 	oauthHandler.GetAuthURL(api)
