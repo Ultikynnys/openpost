@@ -2,10 +2,12 @@ package commands
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/openpost/cli/internal/api"
 )
@@ -62,6 +64,7 @@ func TestPublicationCommentsCommandHidesUnsupportedActions(t *testing.T) {
 func TestPublicationScheduleCommandUpdatesAndEnqueues(t *testing.T) {
 	t.Setenv("OPENPOST_CONFIG_DIR", t.TempDir())
 
+	scheduleAt := time.Now().UTC().Add(24 * time.Hour).Truncate(time.Second).Format(time.RFC3339)
 	var updateBody map[string]any
 	var scheduled bool
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -78,7 +81,7 @@ func TestPublicationScheduleCommandUpdatesAndEnqueues(t *testing.T) {
 			if err := json.NewDecoder(r.Body).Decode(&updateBody); err != nil {
 				t.Fatalf("decode update body: %v", err)
 			}
-			_, _ = w.Write([]byte(`{"id":"pub_1","workspace_id":"ws-1","created_by":"u-1","title":"Draft","content_profile":"short_video","source_text":"Demo","status":"draft","scheduled_at":"2026-07-07T09:00:00Z","created_at":"2026-07-06T09:00:00Z","renditions":[]}`))
+			_, _ = w.Write([]byte(fmt.Sprintf(`{"id":"pub_1","workspace_id":"ws-1","created_by":"u-1","title":"Draft","content_profile":"short_video","source_text":"Demo","status":"draft","scheduled_at":%q,"created_at":"2026-07-06T09:00:00Z","renditions":[]}`, scheduleAt)))
 		case "/api/v1/publications/pub_1/schedule":
 			if r.Method != http.MethodPost {
 				t.Fatalf("publication schedule method = %s, want POST", r.Method)
@@ -97,13 +100,13 @@ func TestPublicationScheduleCommandUpdatesAndEnqueues(t *testing.T) {
 		"--token", "op_cli_test",
 		"--workspace", "Production",
 		"publication", "schedule", "pub_1",
-		"--at", "2026-07-07T09:00:00Z",
+		"--at", scheduleAt,
 	)
 
 	if err != nil {
 		t.Fatalf("publication schedule returned error: %v", err)
 	}
-	if updateBody["scheduled_at"] != "2026-07-07T09:00:00Z" {
+	if updateBody["scheduled_at"] != scheduleAt {
 		t.Fatalf("scheduled_at body = %#v", updateBody)
 	}
 	if !scheduled {
