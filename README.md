@@ -96,21 +96,21 @@ OpenPost is especially useful for:
 
 ## Feature Snapshot
 
-| Capability | Status |
-|---|---|
-| Self-hosted | Yes |
-| Single binary | Yes |
-| Docker support | Yes |
-| Android app (Capacitor) | Yes (APK in every release) |
-| SQLite | Yes |
-| X, Mastodon, Bluesky, Threads, LinkedIn, Facebook Pages, Instagram Business, TikTok, YouTube | Yes |
-| Threads composer | Yes |
-| Platform-specific variants | Yes |
-| Media library | Yes |
-| 2FA / TOTP | Yes |
-| Passkeys | Yes |
-| Video posts | Partial, provider-dependent |
-| Analytics | Not a launch feature |
+| Capability                                                                                   | Status                      |
+| -------------------------------------------------------------------------------------------- | --------------------------- |
+| Self-hosted                                                                                  | Yes                         |
+| Single binary                                                                                | Yes                         |
+| Docker support                                                                               | Yes                         |
+| Android app (Capacitor)                                                                      | Yes (APK in every release)  |
+| SQLite                                                                                       | Yes                         |
+| X, Mastodon, Bluesky, Threads, LinkedIn, Facebook Pages, Instagram Business, TikTok, YouTube | Yes                         |
+| Threads composer                                                                             | Yes                         |
+| Platform-specific variants                                                                   | Yes                         |
+| Media library                                                                                | Yes                         |
+| 2FA / TOTP                                                                                   | Yes                         |
+| Passkeys                                                                                     | Yes                         |
+| Video posts                                                                                  | Partial, provider-dependent |
+| Analytics                                                                                    | Not a launch feature        |
 
 ## Current Limitations
 

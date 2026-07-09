@@ -37,14 +37,14 @@ frontend/
 
 ## Routes
 
-| Route                         | Description                                                                |
-| ----------------------------- | -------------------------------------------------------------------------- |
-| `/`                           | Dashboard — workspace overview, recent posts, schedule summary             |
-| `/accounts`                   | Manage connected social accounts and provider connection flows              |
-| `/accounts/mastodon/callback` | Mastodon authorization-code entry page for the OOB flow                     |
-| `/connect`                    | Connect new social platform accounts                                       |
-| `/login`                      | User login                                                                 |
-| `/register`                   | User registration                                                          |
+| Route                         | Description                                                    |
+| ----------------------------- | -------------------------------------------------------------- |
+| `/`                           | Dashboard — workspace overview, recent posts, schedule summary |
+| `/accounts`                   | Manage connected social accounts and provider connection flows |
+| `/accounts/mastodon/callback` | Mastodon authorization-code entry page for the OOB flow        |
+| `/connect`                    | Connect new social platform accounts                           |
+| `/login`                      | User login                                                     |
+| `/register`                   | User registration                                              |
 
 ## Scripts
 
