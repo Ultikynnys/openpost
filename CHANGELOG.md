@@ -6,6 +6,7 @@ All notable changes to this project are documented in this file.
 
 ### Changed
 
+- Documented the intended web, CLI, MCP, and HTTP API surface boundaries, corrected stale marketing automation examples, scoped heavy uploader styles to the uploader itself, and lazy-loaded the documentation API explorer outside its dedicated route.
 - Added mixed-media carousel publishing for Threads and aligned public-media constraints with the publishing modes supported by Threads, Facebook, Instagram, and TikTok.
 - Collapsed the MCP model-facing catalog from 24 operation descriptors to three compact tools (`search`, `execute`, and the scheduler widget), with on-demand schema discovery and compatibility for cached direct operation calls.
 - Pointed marketing self-hosting CTAs at the dedicated self-hosting docs and exposed user/developer docs links separately.
@@ -17,6 +18,7 @@ All notable changes to this project are documented in this file.
 
 ### Fixed
 
+- Kept English and Portuguese message catalogs in lockstep with a build-time parity check, aligned PWA/browser colors with the product theme, and added global reduced-motion and coarse-pointer accessibility safeguards.
 - Restricted workspace-scoped checkout and billing-portal mutations to workspace administrators.
 - Stopped server startup when database schema initialization fails instead of serving against a partially initialized database.
 - Allowed cross-origin `PATCH` requests so browser-based update flows work with configured external frontend origins.
