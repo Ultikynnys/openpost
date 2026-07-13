@@ -5,6 +5,7 @@
 	import XHRUpload from '@uppy/xhr-upload';
 	import DashboardModal from '@uppy/svelte/dashboard-modal';
 	import { getApiBase } from '$lib/stores/instance.svelte';
+	import { getToken } from '$lib/api/client';
 	import '@uppy/svelte/css/style.css';
 	import '@uppy/svelte/css/image-editor.css';
 
@@ -51,7 +52,7 @@
 			formData: true,
 			limit: 1,
 			headers: (): Record<string, string> => {
-				const token = localStorage.getItem('token');
+				const token = getToken();
 				return token ? { Authorization: `Bearer ${token}` } : {};
 			}
 		});

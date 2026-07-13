@@ -18,6 +18,7 @@ All notable changes to this project are documented in this file.
 - Added the frontend account-selection step for Facebook and Instagram OAuth callbacks so pending page/account choices are completed before showing success.
 - Preserved finalized `Location` headers on Meta OAuth callback redirects by setting redirect targets before Huma commits the 307 status.
 - Registered persisted and newly added dynamic Mastodon instance adapters with publishing and token refresh so custom instances can publish without manual server restarts.
+- Centralized frontend bearer-token access so profile avatar uploads, removal, authentication restoration, and logout stay synchronized with the shared API client.
 
 ## [1.0.40] - 2026-07-06
 

@@ -1,6 +1,6 @@
 import { browser } from '$app/environment';
 import { writable } from 'svelte/store';
-import { client, setToken, recreateClient, type User } from '$lib/api/client';
+import { client, getToken, setToken, recreateClient, type User } from '$lib/api/client';
 import { getPasskeyAssertion } from '$lib/auth/webauthn';
 
 interface AuthState {
@@ -32,7 +32,7 @@ function createAuthStore() {
 			// Recreate client in case instance URL was just set
 			recreateClient();
 
-			const storedToken = localStorage.getItem('token');
+			const storedToken = getToken();
 			if (!storedToken) {
 				set({ user: null, isLoading: false, isAuthenticated: false });
 				return;
@@ -44,7 +44,6 @@ function createAuthStore() {
 				if (error || !data) throw new Error('Failed to fetch user');
 				set({ user: data, isLoading: false, isAuthenticated: true });
 			} catch {
-				localStorage.removeItem('token');
 				setToken(null);
 				set({ user: null, isLoading: false, isAuthenticated: false });
 			}
@@ -127,7 +126,6 @@ function createAuthStore() {
 		},
 		logout() {
 			setToken(null);
-			localStorage.removeItem('token');
 			set({ user: null, isLoading: false, isAuthenticated: false });
 		},
 		setUser(user: User | null) {

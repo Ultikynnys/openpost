@@ -276,17 +276,8 @@
 		profileBusy = true;
 		profileError = '';
 		try {
-			const { error: err } = await fetch(`${getApiBase()}/auth/profile/avatar`, {
-				method: 'DELETE',
-				headers: {
-					Authorization: `Bearer ${localStorage.getItem('token') ?? ''}`
-				}
-			}).then(async (response) => ({
-				error: response.ok
-					? null
-					: await response.json().catch(() => ({ error: 'Failed to remove avatar' }))
-			}));
-			if (err) throw new Error(err.detail || err.error || 'Failed to remove avatar');
+			const { error: err } = await (client as any).DELETE('/auth/profile/avatar');
+			if (err) throw new Error(err.detail || 'Failed to remove avatar');
 			if (authState.user) {
 				auth.setUser({ ...authState.user, avatar_url: '' });
 			}
