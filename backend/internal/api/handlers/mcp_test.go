@@ -1263,6 +1263,33 @@ func TestMCPCallLogsFailedToolCall(t *testing.T) {
 	require.Contains(t, call.ErrorMessage, "outside this workspace")
 }
 
+func TestMCPRejectsUndocumentedToolArguments(t *testing.T) {
+	t.Parallel()
+
+	srv := newMCPTestServer(t)
+	resp := srv.request(t, "web-token", map[string]any{
+		"jsonrpc": "2.0",
+		"id":      "unknown-argument",
+		"method":  "tools/call",
+		"params": map[string]any{
+			"name": "create_draft",
+			"arguments": map[string]any{
+				"workspace_id": "ws-1",
+				"content":      "Draft from an agent",
+				"undocumented": true,
+			},
+		},
+	})
+
+	require.Equal(t, http.StatusOK, resp.Code)
+	var out map[string]any
+	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &out))
+	require.Equal(t, "invalid create_draft arguments", out["error"].(map[string]any)["message"])
+	count, err := srv.db.NewSelect().Model((*models.Post)(nil)).Where("content = ?", "Draft from an agent").Count(context.Background())
+	require.NoError(t, err)
+	require.Zero(t, count)
+}
+
 func TestMCPCallCreateDraft(t *testing.T) {
 	t.Parallel()
 

@@ -1,12 +1,14 @@
 package handlers
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"path"
@@ -1994,7 +1996,9 @@ func decodeMCPArguments(args map[string]any, dest any) error {
 	if err != nil {
 		return err
 	}
-	return json.Unmarshal(payload, dest)
+	decoder := json.NewDecoder(bytes.NewReader(payload))
+	decoder.DisallowUnknownFields()
+	return decoder.Decode(dest)
 }
 
 func (h *MCPHandler) recordToolCall(ctx context.Context, principal *middleware.Principal, toolName, workspaceID string, duration time.Duration, rpcErr *mcpError) {
@@ -2004,7 +2008,7 @@ func (h *MCPHandler) recordToolCall(ctx context.Context, principal *middleware.P
 		status = "error"
 		errorMessage = rpcErr.Message
 	}
-	_, _ = h.db.NewInsert().Model(&models.MCPToolCall{
+	if _, err := h.db.NewInsert().Model(&models.MCPToolCall{
 		ID:                newUUID(),
 		UserID:            principal.UserID,
 		WorkspaceID:       workspaceID,
@@ -2017,7 +2021,9 @@ func (h *MCPHandler) recordToolCall(ctx context.Context, principal *middleware.P
 		ErrorMessage:      errorMessage,
 		DurationMs:        duration.Milliseconds(),
 		CreatedAt:         time.Now().UTC(),
-	}).Exec(ctx)
+	}).Exec(ctx); err != nil {
+		log.Printf("[MCP] failed to record tool call %s: %v", toolName, err)
+	}
 }
 
 func workspaceIDFromMCPArguments(args map[string]any) string {
@@ -2230,7 +2236,6 @@ type mcpCreatePublicationInput struct {
 	MediaIDs         []string                `json:"media_ids"`
 	Media            []PublicationMediaInput `json:"media"`
 	Renditions       []RenditionInput        `json:"renditions"`
-	Metadata         map[string]interface{}  `json:"metadata"`
 }
 
 type mcpPublicationStatus struct {
@@ -2333,9 +2338,6 @@ func mcpPublicationRenditions(publicationHandler *PublicationHandler, input mcpC
 
 func newMCPPublication(input mcpCreatePublicationInput, userID string, now time.Time) *models.Publication {
 	metadata := map[string]interface{}{"created_from": "mcp"}
-	for key, value := range input.Metadata {
-		metadata[key] = value
-	}
 	publication := &models.Publication{
 		ID:              newUUID(),
 		WorkspaceID:     input.WorkspaceID,
