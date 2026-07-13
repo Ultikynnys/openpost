@@ -51,7 +51,8 @@ func TestGetAuthURLRegistersDynamicMastodonInstance(t *testing.T) {
 	e := echo.New()
 	api := humaecho.NewWithGroup(e, e.Group("/api/v1"), huma.DefaultConfig("Test", "1.0.0"))
 	encryptor := crypto.NewTokenEncryptor("0123456789abcdef0123456789abcdef")
-	handler := NewOAuthHandler(db, encryptor, map[string]platform.Adapter{}, testAuthenticator{}, false, "https://app.openpost.test")
+	providerCatalog := map[string]platform.Adapter{}
+	handler := NewOAuthHandler(db, encryptor, providerCatalog, testAuthenticator{}, false, "https://app.openpost.test")
 	registeredProviders := map[string]platform.Adapter{}
 	handler.SetProviderRegistrars(func(key string, adapter platform.Adapter) {
 		registeredProviders[key] = adapter
@@ -100,6 +101,7 @@ func TestGetAuthURLRegistersDynamicMastodonInstance(t *testing.T) {
 	require.NoError(t, db.NewSelect().Model(&state).Where("id = ?", authURL.Query().Get("state")).Scan(ctx))
 	require.Contains(t, state.Payload, `"server_name":"`+instanceServer.URL+`"`)
 	require.Contains(t, registeredProviders, "mastodon:"+instanceServer.URL)
+	require.NotContains(t, providerCatalog, "mastodon:"+instanceServer.URL)
 
 	restartedHandler := NewOAuthHandler(db, encryptor, map[string]platform.Adapter{}, testAuthenticator{}, false, "https://app.openpost.test")
 	restartedRegistrations := map[string]platform.Adapter{}

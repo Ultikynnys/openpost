@@ -64,6 +64,7 @@ func NewOAuthHandler(
 	disableLinkedInThreadReplies bool,
 	frontendURL string,
 ) *OAuthHandler {
+	providers = cloneProviderAdapters(providers)
 	if xProvider, ok := providers["x"]; ok {
 		if xAdapter, castOk := xProvider.(*platform.XAdapter); castOk {
 			xAdapter.SetRequestStore(newXRequestStore(db))
@@ -80,6 +81,14 @@ func NewOAuthHandler(
 		oauthStates:                  oauthstate.NewStore(db),
 		frontendURL:                  strings.TrimRight(frontendURL, "/"),
 	}
+}
+
+func cloneProviderAdapters(providers map[string]platform.Adapter) map[string]platform.Adapter {
+	cloned := make(map[string]platform.Adapter, len(providers))
+	for key, adapter := range providers {
+		cloned[key] = adapter
+	}
+	return cloned
 }
 
 func (h *OAuthHandler) SetEntitlement(entitlement entitlements.Service) {
