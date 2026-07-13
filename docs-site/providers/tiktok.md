@@ -28,9 +28,10 @@ Example `OPENPOST_PROVIDER_APPS` entry:
 
 - Supports one video attachment for Direct Post.
 - Supports inbox/upload mode for video when configured.
-- Supports image/photo posts when all attached media are images and TikTok app access allows the photo-post path.
+- Supports 1-35 JPEG or WebP photos, up to 20 MB each, when TikTok app access allows the photo-post path.
+- Photo descriptions support up to 4,000 characters; video captions support up to 2,200 characters.
 - Text-only posts are not supported.
-- Direct Post media URLs must be public HTTPS.
+- Pull-from-URL media must use public HTTPS URLs under a URL prefix or domain verified in the TikTok developer console.
 - Live-account and app-review behavior still needs deployment verification.
 
 ## Common issues

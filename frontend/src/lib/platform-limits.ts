@@ -56,36 +56,36 @@ export const PLATFORM_LIMITS: Record<string, PlatformLimitDefinition> = {
 		key: 'linkedin',
 		name: 'LinkedIn',
 		charLimit: 3000,
-		media: 'OpenPost currently publishes the first attachment',
-		note: 'Thread children publish as comments when configured.'
+		media: 'One image, video, or document per rendition',
+		note: 'Thread children publish as comments; use format-first publications for video and documents.'
 	},
 	threads: {
 		key: 'threads',
 		name: 'Threads',
 		charLimit: 500,
-		media: 'Single-media composer path',
-		note: 'Media must be served from a public URL.'
+		media: 'One media item or a 2-10 item carousel',
+		note: 'Media must be served from public HTTPS URLs.'
 	},
 	facebook: {
 		key: 'facebook',
 		name: 'Facebook Pages',
 		charLimit: 63206,
-		media: 'One image or video URL',
+		media: 'One image/video, a 2-10 photo post, or one Story item',
 		note: 'Pages publishing depends on Meta permissions and app review.'
 	},
 	instagram: {
 		key: 'instagram',
 		name: 'Instagram Business',
 		charLimit: 2200,
-		media: 'Exactly one image or video',
+		media: 'One image/video or a 2-10 item carousel',
 		note: 'Business accounts behind Facebook Pages only.'
 	},
 	tiktok: {
 		key: 'tiktok',
 		name: 'TikTok',
 		charLimit: 2200,
-		media: 'Exactly one video',
-		note: 'Provider review may apply.'
+		media: 'One video or 1-35 JPEG/WebP photos',
+		note: 'Public URL ownership verification and provider review may apply.'
 	},
 	youtube: {
 		key: 'youtube',

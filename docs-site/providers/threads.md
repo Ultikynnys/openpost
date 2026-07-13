@@ -1,6 +1,6 @@
 # Threads
 
-Threads is workable, but the media URL requirement makes deployment details matter.
+Threads supports text, single media, replies, and 2-10 item media carousels, but the media URL requirement makes deployment details matter.
 
 ## What you need
 
@@ -21,6 +21,8 @@ OPENPOST_MEDIA_URL=https://your-domain.com/media
 ```
 
 OpenPost passes stored media MIME types to the Threads publisher and serves public media URLs with file extensions where possible. Threads still fetches media from your URL server-side, so the URL must be reachable by Meta and return the correct media bytes.
+
+Carousel publishing creates and waits for each child media container, then creates and publishes the parent carousel. A single-media rendition remains a normal image or video post.
 
 ## Local development
 

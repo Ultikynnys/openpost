@@ -6,17 +6,17 @@ Provider-native API capabilities are not the same as OpenPost-supported capabili
 
 ## Current Platform Support
 
-| Provider | Text      | Images                                              | Video                                                                                          | Threading                              | Scheduling | Variants  |
-| -------- | --------- | --------------------------------------------------- | ---------------------------------------------------------------------------------------------- | -------------------------------------- | ---------- | --------- |
-| X        | Supported | Up to 4 images                                      | Implemented, real-account verification still required                                          | Replies                                | Supported  | Supported |
-| Mastodon | Supported | Up to 4 attachments                                 | Implemented through media upload + publish flow, real-account verification still required      | Replies                                | Supported  | Supported |
-| Bluesky  | Supported | Up to 4 images                                      | Implemented for one MP4 video via `app.bsky.video.*`, real-account verification still required | AT Protocol reply refs                 | Supported  | Supported |
-| LinkedIn | Supported | Single-image path supported                         | Implemented and recently fixed, still needs re-verification against the live API               | Thread children are posted as comments | Supported  | Supported |
-| Threads  | Supported | Single-media path in current OpenPost composer flow | Implemented with MIME-aware media handling and public media URL requirement                    | `reply_to_id`                          | Supported  | Supported |
-| Facebook | Supported | One public HTTPS image URL                          | Implemented for one public HTTPS video URL, needs live-account verification                    | No                                     | Supported  | Supported |
-| Instagram | No        | Single image and carousel paths                     | Implemented for Reels, needs live-account verification                                         | Comment replies/story paths exist for supported settings | Supported  | Supported |
-| TikTok   | No        | Photo-post path implemented, needs app access verification | Direct Post and inbox/upload video paths implemented, needs live-account verification          | No                                     | Supported  | Supported |
-| YouTube  | No        | No                                                  | Implemented for one private video upload, needs live-account verification                      | No                                     | Supported  | Supported |
+| Provider  | Text      | Images                                     | Video                                                                                          | Threading                                                | Scheduling | Variants  |
+| --------- | --------- | ------------------------------------------ | ---------------------------------------------------------------------------------------------- | -------------------------------------------------------- | ---------- | --------- |
+| X         | Supported | Up to 4 images                             | Implemented, real-account verification still required                                          | Replies                                                  | Supported  | Supported |
+| Mastodon  | Supported | Up to 4 attachments                        | Implemented through media upload + publish flow, real-account verification still required      | Replies                                                  | Supported  | Supported |
+| Bluesky   | Supported | Up to 4 images                             | Implemented for one MP4 video via `app.bsky.video.*`, real-account verification still required | AT Protocol reply refs                                   | Supported  | Supported |
+| LinkedIn  | Supported | Single-image path supported                | Implemented and recently fixed, still needs re-verification against the live API               | Thread children are posted as comments                   | Supported  | Supported |
+| Threads   | Supported | One image or a 2-10 item carousel          | One video or mixed carousel with public HTTPS media                                            | `reply_to_id`                                            | Supported  | Supported |
+| Facebook  | Supported | One image or a 2-10 image multi-photo post | One public HTTPS video URL; Story publishing accepts exactly one image or video                | Comment replies                                          | Supported  | Supported |
+| Instagram | No        | Single image and carousel paths            | Implemented for Reels, needs live-account verification                                         | Comment replies/story paths exist for supported settings | Supported  | Supported |
+| TikTok    | No        | 1-35 JPEG/WebP photos, up to 20 MB each    | Direct Post and inbox/upload video paths implemented, needs live-account verification          | No                                                       | Supported  | Supported |
+| YouTube   | No        | No                                         | Implemented for one private video upload, needs live-account verification                      | No                                                       | Supported  | Supported |
 
 ## Planned Platform Adapters
 

@@ -38,13 +38,16 @@ If `redirect_uri` is omitted, OpenPost derives it from `OPENPOST_APP_URL`.
 - Connects a selected Facebook Page.
 - Publishes text-only Page feed posts.
 - Publishes one image URL through the Page photos endpoint.
+- Publishes 2-10 images as an unpublished-photo set attached to one Page feed post.
 - Publishes one video URL through the Page videos endpoint.
+- Publishes one image or video as a Page Story when the Story profile is selected.
+- Lists, replies to, and hides eligible Page comments.
 - Supports scheduling and platform variants through the normal OpenPost post flow.
 
 ## Current Limits
 
-- No multi-image Page albums yet.
-- No Facebook comments or thread-reply mapping yet.
+- Multi-photo publishing creates a feed post, not a persistent Page album.
+- Comment deletion is not exposed; supported moderation actions depend on Meta's per-comment permissions.
 - Media URLs must be public HTTPS URLs.
 - Live-account verification is still recommended before relying on production Page publishing.
 
