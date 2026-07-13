@@ -46,10 +46,19 @@ GET /.well-known/oauth-protected-resource
 GET /.well-known/oauth-authorization-server
 ```
 
-Tool descriptors include OAuth security schemes, mirrored `_meta.securitySchemes`,
-and tool annotations so clients can distinguish read-only tools from actions that
-write OpenPost state or reach external URLs. They also include short Apps SDK
-invocation status labels and output schemas for the returned `structuredContent`.
+The advertised tool surface uses progressive discovery to keep model context
+small. Clients receive only `search`, `execute`, and the Apps widget renderer.
+`search` returns the exact input/output schema for relevant OpenPost operations
+on demand; `execute` delegates one selected operation through its existing
+authorization, validation, quota, and audit path. Operation documentation omits
+repeated OAuth and Apps metadata because those details already live on the three
+advertised descriptors.
+
+The scheduler widget remains directly advertised because its OAuth metadata and
+`_meta.ui.resourceUri` are needed by Apps-compatible clients to load the output
+template. Previously advertised operation names remain callable for cached
+clients, but new clients should discover them with `search` and invoke them
+through `execute`.
 
 OAuth-aware clients can start account linking at the browser authorization page,
 then exchange the returned code for an MCP-scoped bearer token:
@@ -82,7 +91,48 @@ GET /api/v1/mcp/activity?limit=20
 GET /api/v1/mcp/activity?workspace_id=<workspace-id>
 ```
 
-## Current tools
+## Advertised tools
+
+- `search`: accepts a plain-language capability query and returns up to ten
+  matching operation definitions with their exact input/output schemas and
+  safety annotations.
+- `execute`: accepts an `operation` returned by `search` plus its `arguments`,
+  then delegates to the existing operation handler.
+- `render_scheduler_widget`: renders structured OpenPost scheduler data in the
+  ChatGPT Apps widget and stays directly visible for UI resource discovery.
+
+Example discovery and execution calls:
+
+```json
+{"name":"search","arguments":{"query":"list connected accounts"}}
+```
+
+```json
+{
+  "name": "execute",
+  "arguments": {
+    "operation": "list_accounts",
+    "arguments": {"workspace_id": "workspace-id"}
+  }
+}
+```
+
+### Why `execute` delegates instead of evaluating JavaScript
+
+Cloudflare's full [Code Mode pattern](https://developers.cloudflare.com/agents/model-context-protocol/codemode/)
+runs model-written JavaScript in an isolated Worker, blocks direct outbound
+network access, and exposes only a host-controlled request function. OpenPost's
+portable Go binary does not currently include an equivalent sandbox or
+pause/approval runtime. Evaluating model-written code in the application process
+would create an avoidable security and resource-exhaustion boundary.
+
+The current `search`/`execute` design takes the part that produces the immediate
+context saving—progressive schema discovery—while delegating each operation to
+the existing typed handler. A future sandboxed or declarative batch executor can
+add loops, filtering, and multi-operation composition without changing the
+three-tool model-facing contract.
+
+## Discoverable operations
 
 - `list_workspaces`: returns the workspaces available to the authenticated user.
 - `list_provider_catalog`: returns provider launch status so assistants know which platforms are available, need server configuration, or are still planned.
@@ -107,7 +157,8 @@ GET /api/v1/mcp/activity?workspace_id=<workspace-id>
 - `publish_publication_now`: queues an existing publication for immediate publishing.
 - `list_publication_events`: returns lifecycle events for a publication.
 - `list_rendition_comments`: lists comments for a published rendition.
-- `render_scheduler_widget`: renders structured OpenPost scheduler data in the ChatGPT Apps widget.
+- `render_scheduler_widget`: also available through `execute`, though clients
+  should call the advertised renderer directly when they want the Apps UI.
 
 ## Current prompts
 

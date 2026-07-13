@@ -10,8 +10,10 @@ import (
 	"net/http"
 	"net/url"
 	"path"
+	"sort"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
@@ -31,6 +33,8 @@ import (
 
 const (
 	mcpProtocolVersion   = "2025-06-18"
+	mcpToolSearch        = "search"
+	mcpToolExecute       = "execute"
 	mcpToolWorkspaces    = "list_workspaces"
 	mcpToolProviders     = "list_provider_catalog"
 	mcpToolAccounts      = "list_accounts"
@@ -336,7 +340,7 @@ func (h *MCPHandler) dispatch(ctx context.Context, principal *middleware.Princip
 				"name":    "openpost",
 				"version": h.serverVersion,
 			},
-			"instructions": "OpenPost schedules social posts and format-first publications. Use create_publication for post types such as link, image, carousel, story, short video, and long video; pass explicit rendition title/description/caption/settings when provider outputs differ. Use create_draft/update_draft for legacy short-text drafts. List workspaces, accounts, providers, and media when IDs are unknown; validate publications before scheduling or publishing; use render_scheduler_widget when a visual summary helps.",
+			"instructions": "OpenPost schedules social posts and format-first publications through a compact tool surface. Call search with a plain-language task to discover relevant operation names and schemas, then call execute with one returned operation and its arguments. Search again when the required fields are unclear. Use render_scheduler_widget directly when a visual summary helps. Operations that change state still use the same OpenPost authorization, validation, quota, and audit controls.",
 			"capabilities": map[string]any{
 				"tools":     map[string]any{"listChanged": false},
 				"prompts":   map[string]any{"listChanged": false},
@@ -346,32 +350,7 @@ func (h *MCPHandler) dispatch(ctx context.Context, principal *middleware.Princip
 	case "ping":
 		return map[string]any{}, nil
 	case "tools/list":
-		return map[string]any{"tools": []map[string]any{
-			mcpListWorkspacesTool(),
-			mcpListProviderCatalogTool(),
-			mcpListAccountsTool(),
-			mcpListMediaTool(),
-			mcpProviderReadinessTool(),
-			mcpCreatePublicationTool(),
-			mcpListPublicationsTool(),
-			mcpValidatePublicationTool(),
-			mcpSchedulePublicationTool(),
-			mcpPublishPublicationNowTool(),
-			mcpListPublicationEventsTool(),
-			mcpListRenditionCommentsTool(),
-			mcpCreateDraftTool(),
-			mcpListDraftsTool(),
-			mcpUpdateDraftTool(),
-			mcpSetPostRenditionsTool(),
-			mcpSchedulePostTool(),
-			mcpScheduleDraftTool(),
-			mcpGetPostStatusTool(),
-			mcpListScheduledPostsTool(),
-			mcpCancelPostTool(),
-			mcpSuggestNextSlotTool(),
-			mcpUploadMediaFromURLTool(),
-			mcpRenderSchedulerWidgetTool(),
-		}}, nil
+		return map[string]any{"tools": mcpAdvertisedTools()}, nil
 	case "resources/list":
 		return h.listMCPResources(), nil
 	case "resources/read":
@@ -678,11 +657,11 @@ Source idea:
 %s
 
 Workflow:
-1. If workspace_id is missing, call list_workspaces and ask which workspace to use.
-2. Call list_provider_catalog to understand which requested platforms are available, need server configuration, or are still planned.
-3. Call list_accounts for the selected workspace and pick destination accounts matching these platform hints: %s.
-4. Call list_media if the idea needs existing media, or upload_media_from_url if the user supplied a public media URL.
-5. Create one concise draft with create_draft, attaching media_ids when relevant. Do not schedule it until the user approves timing and destinations.
+1. Use search to load the schemas for list_workspaces, list_provider_catalog, list_accounts, list_media, upload_media_from_url, and create_draft as needed.
+2. If workspace_id is missing, execute list_workspaces and ask which workspace to use.
+3. Execute list_provider_catalog and list_accounts to choose available destinations matching these platform hints: %s.
+4. Execute list_media if the idea needs existing media, or upload_media_from_url if the user supplied a public media URL.
+5. Execute create_draft with one concise draft and relevant media_ids. Do not schedule it until the user approves timing and destinations.
 6. Explain what you created and suggest the next scheduling step.
 
 workspace_id: %s
@@ -698,10 +677,11 @@ post_id: %s
 goal: %s
 
 Workflow:
-1. Call get_post_status to inspect destinations and current state.
-2. Write concise, platform-native copy for each destination account.
-3. Call set_post_renditions with one rendition per destination account.
-4. Summarize what changed and mention any platforms that need media, hashtags, or shorter copy.
+1. Use search to load the get_post_status and set_post_renditions schemas.
+2. Execute get_post_status to inspect destinations and current state.
+3. Write concise, platform-native copy for each destination account.
+4. Execute set_post_renditions with one rendition per destination account.
+5. Summarize what changed and mention any platforms that need media, hashtags, or shorter copy.
 `, promptArg(args, "workspace_id", "(required)"), promptArg(args, "post_id", "(required)"), promptArg(args, "goal", "match the source post and audience")))
 }
 
@@ -713,10 +693,11 @@ workspace_id: %s
 window: %s
 
 Workflow:
-1. Call list_scheduled_posts for the workspace and requested window.
-2. Look for collisions, empty stretches, missing platform coverage, and posts that need destination-specific renditions.
-3. Call suggest_next_slot if a useful new slot is needed.
-4. Recommend concrete actions without canceling or scheduling anything unless the user explicitly asks.
+1. Use search to load the list_scheduled_posts and suggest_next_slot schemas.
+2. Execute list_scheduled_posts for the workspace and requested window.
+3. Look for collisions, empty stretches, missing platform coverage, and posts that need destination-specific renditions.
+4. Execute suggest_next_slot if a useful new slot is needed.
+5. Recommend concrete actions without canceling or scheduling anything unless the user explicitly asks.
 `, promptArg(args, "workspace_id", "(required)"), promptArg(args, "window", "upcoming queue")))
 }
 
@@ -729,6 +710,94 @@ func promptArg(args map[string]string, name, fallback string) string {
 		return fallback
 	}
 	return value
+}
+
+func mcpAdvertisedTools() []map[string]any {
+	return []map[string]any{
+		mcpSearchTool(),
+		mcpExecuteTool(),
+		mcpRenderSchedulerWidgetTool(),
+	}
+}
+
+func mcpOperationCatalog() []map[string]any {
+	return []map[string]any{
+		mcpListWorkspacesTool(),
+		mcpListProviderCatalogTool(),
+		mcpListAccountsTool(),
+		mcpListMediaTool(),
+		mcpProviderReadinessTool(),
+		mcpCreatePublicationTool(),
+		mcpListPublicationsTool(),
+		mcpValidatePublicationTool(),
+		mcpSchedulePublicationTool(),
+		mcpPublishPublicationNowTool(),
+		mcpListPublicationEventsTool(),
+		mcpListRenditionCommentsTool(),
+		mcpCreateDraftTool(),
+		mcpListDraftsTool(),
+		mcpUpdateDraftTool(),
+		mcpSetPostRenditionsTool(),
+		mcpSchedulePostTool(),
+		mcpScheduleDraftTool(),
+		mcpGetPostStatusTool(),
+		mcpListScheduledPostsTool(),
+		mcpCancelPostTool(),
+		mcpSuggestNextSlotTool(),
+		mcpUploadMediaFromURLTool(),
+		mcpRenderSchedulerWidgetTool(),
+	}
+}
+
+func mcpSearchTool() map[string]any {
+	return mcpToolDescriptor(map[string]any{
+		"name":  mcpToolSearch,
+		"title": "Search OpenPost operations",
+		"description": "Discover the OpenPost operations relevant to a task. Returns their exact names and input/output schemas on demand. " +
+			"Call this before execute when the operation or arguments are not already known.",
+		"inputSchema": map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"query": map[string]any{
+					"type":        "string",
+					"description": "Plain-language capability or operation name to find, such as 'create and schedule a video publication' or 'list connected accounts'.",
+				},
+				"limit": map[string]any{
+					"type":        "integer",
+					"minimum":     1,
+					"maximum":     10,
+					"description": "Maximum matching operation definitions to return. Defaults to 5.",
+				},
+			},
+			"required":             []string{"query"},
+			"additionalProperties": false,
+		},
+	}, true, false)
+}
+
+func mcpExecuteTool() map[string]any {
+	return mcpToolDescriptor(map[string]any{
+		"name":  mcpToolExecute,
+		"title": "Execute OpenPost operation",
+		"description": "Execute one operation returned by search. Pass the operation name verbatim and arguments matching its discovered schema. " +
+			"State-changing operations retain their normal authorization, validation, quota, and audit checks.",
+		"inputSchema": map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"operation": map[string]any{
+					"type":        "string",
+					"description": "Exact operation name returned by search.",
+				},
+				"arguments": map[string]any{
+					"type":                 "object",
+					"description":          "Arguments matching the operation input schema returned by search.",
+					"additionalProperties": true,
+				},
+			},
+			"required":             []string{"operation", "arguments"},
+			"additionalProperties": false,
+		},
+	}, false, true)
 }
 
 func mcpListWorkspacesTool() map[string]any {
@@ -1440,6 +1509,8 @@ type mcpToolStatus struct {
 }
 
 var mcpToolStatuses = map[string]mcpToolStatus{
+	mcpToolSearch:        {Invoking: "Searching operations", Invoked: "Operations found"},
+	mcpToolExecute:       {Invoking: "Running OpenPost operation", Invoked: "OpenPost operation complete"},
 	mcpToolWorkspaces:    {Invoking: "Loading workspaces", Invoked: "Workspaces loaded"},
 	mcpToolProviders:     {Invoking: "Loading providers", Invoked: "Providers loaded"},
 	mcpToolAccounts:      {Invoking: "Loading accounts", Invoked: "Accounts loaded"},
@@ -1518,6 +1589,8 @@ func mcpToolOutputSchema(toolName string) map[string]any {
 			"workspace_id": map[string]any{"type": "string"},
 			"data":         mcpOpenObjectSchema(),
 		}, "view", "data")
+	case mcpToolExecute:
+		return mcpOpenObjectSchema()
 	default:
 		return mcpStructuredOutputSchema(map[string]any{})
 	}
@@ -1525,6 +1598,8 @@ func mcpToolOutputSchema(toolName string) map[string]any {
 
 func mcpArrayOutputKey(toolName string) (string, bool) {
 	switch toolName {
+	case mcpToolSearch:
+		return "operations", true
 	case mcpToolWorkspaces:
 		return "workspaces", true
 	case mcpToolProviders, mcpToolReadiness:
@@ -1576,6 +1651,133 @@ func mcpOAuthSecurityScheme() map[string]any {
 	}
 }
 
+type mcpOperationMatch struct {
+	index int
+	score int
+	doc   map[string]any
+}
+
+func searchMCPOperations(args map[string]any) (any, *mcpError) {
+	var input struct {
+		Query string `json:"query"`
+		Limit int    `json:"limit"`
+	}
+	if err := decodeMCPArguments(args, &input); err != nil {
+		return nil, &mcpError{Code: -32602, Message: "invalid search arguments"}
+	}
+	input.Query = strings.TrimSpace(input.Query)
+	if input.Query == "" {
+		return nil, &mcpError{Code: -32602, Message: "query is required"}
+	}
+	if input.Limit == 0 {
+		input.Limit = 5
+	}
+	if input.Limit < 1 || input.Limit > 10 {
+		return nil, &mcpError{Code: -32602, Message: "limit must be between 1 and 10"}
+	}
+
+	query := strings.ToLower(input.Query)
+	terms := mcpSearchTerms(query)
+	matches := make([]mcpOperationMatch, 0, input.Limit)
+	for index, tool := range mcpOperationCatalog() {
+		doc := mcpOperationDocument(tool)
+		name, _ := doc["name"].(string)
+		title, _ := doc["title"].(string)
+		description, _ := doc["description"].(string)
+		schema, _ := json.Marshal(map[string]any{
+			"input":  doc["inputSchema"],
+			"output": doc["outputSchema"],
+		})
+		score := mcpOperationSearchScore(query, terms, strings.ToLower(name), strings.ToLower(title), strings.ToLower(description), strings.ToLower(string(schema)))
+		if score > 0 {
+			matches = append(matches, mcpOperationMatch{index: index, score: score, doc: doc})
+		}
+	}
+	sort.SliceStable(matches, func(i, j int) bool {
+		if matches[i].score == matches[j].score {
+			return matches[i].index < matches[j].index
+		}
+		return matches[i].score > matches[j].score
+	})
+	if len(matches) > input.Limit {
+		matches = matches[:input.Limit]
+	}
+	operations := make([]map[string]any, 0, len(matches))
+	for _, match := range matches {
+		operations = append(operations, match.doc)
+	}
+	message := fmt.Sprintf("Found %d OpenPost operation(s) for %q.", len(operations), input.Query)
+	if len(operations) == 0 {
+		message = "No matching OpenPost operations found. Try a shorter capability phrase such as 'draft', 'schedule', 'media', 'accounts', or 'publication'."
+	}
+	return map[string]any{
+		"content": []mcpContent{{Type: "text", Text: message}},
+		"structuredContent": map[string]any{
+			"operations": operations,
+		},
+	}, nil
+}
+
+func mcpOperationDocument(tool map[string]any) map[string]any {
+	return map[string]any{
+		"name":         tool["name"],
+		"title":        tool["title"],
+		"description":  tool["description"],
+		"inputSchema":  tool["inputSchema"],
+		"outputSchema": tool["outputSchema"],
+		"annotations":  tool["annotations"],
+	}
+}
+
+func mcpSearchTerms(query string) []string {
+	stopWords := map[string]bool{
+		"a": true, "an": true, "and": true, "for": true, "in": true, "my": true,
+		"of": true, "openpost": true, "or": true, "the": true, "to": true, "with": true,
+	}
+	parts := strings.FieldsFunc(query, func(r rune) bool {
+		return !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '_'
+	})
+	terms := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if !stopWords[part] {
+			terms = append(terms, part)
+		}
+	}
+	if len(terms) == 0 {
+		return parts
+	}
+	return terms
+}
+
+func mcpOperationSearchScore(query string, terms []string, name, title, description, schema string) int {
+	if query == name {
+		return 1000
+	}
+	score := 0
+	if strings.Contains(name, query) {
+		score += 200
+	}
+	if strings.Contains(title, query) {
+		score += 100
+	}
+	if strings.Contains(description, query) {
+		score += 50
+	}
+	for _, term := range terms {
+		switch {
+		case strings.Contains(name, term):
+			score += 20
+		case strings.Contains(title, term):
+			score += 10
+		case strings.Contains(description, term):
+			score += 5
+		case strings.Contains(schema, term):
+			score++
+		}
+	}
+	return score
+}
+
 func (h *MCPHandler) callTool(ctx context.Context, principal *middleware.Principal, raw json.RawMessage) (any, *mcpError) {
 	var params struct {
 		Name      string         `json:"name"`
@@ -1586,27 +1788,57 @@ func (h *MCPHandler) callTool(ctx context.Context, principal *middleware.Princip
 	}
 	start := time.Now()
 	var (
-		result any
-		rpcErr *mcpError
+		result        any
+		rpcErr        *mcpError
+		auditToolName = params.Name
+		auditArgs     = params.Arguments
 	)
 	switch params.Name {
-	case mcpToolWorkspaces, mcpToolProviders:
-		result, rpcErr = h.callReadOnlyGlobalTool(ctx, principal.UserID, params.Name)
-	case mcpToolAccounts, mcpToolListMedia, mcpToolReadiness:
-		result, rpcErr = h.callReadOnlyWorkspaceTool(ctx, principal.UserID, params.Name, params.Arguments)
-	case mcpToolRenderWidget:
-		result, rpcErr = h.renderSchedulerWidget(params.Arguments)
-	case mcpToolCreateDraft, mcpToolListDrafts, mcpToolUpdateDraft,
-		mcpToolCreatePub, mcpToolListPubs, mcpToolValidatePub, mcpToolPubEvents, mcpToolComments,
-		mcpToolRenditions, mcpToolSchedulePost, mcpToolScheduleDraft,
-		mcpToolGetPost, mcpToolListPosts, mcpToolCancelPost,
-		mcpToolSuggestSlot, mcpToolUploadURL:
-		result, rpcErr = h.callWorkspaceActionTool(ctx, principal.UserID, params.Name, params.Arguments)
+	case mcpToolSearch:
+		result, rpcErr = searchMCPOperations(params.Arguments)
+	case mcpToolExecute:
+		var input mcpExecuteInput
+		if err := decodeMCPArguments(params.Arguments, &input); err != nil || strings.TrimSpace(input.Operation) == "" {
+			rpcErr = &mcpError{Code: -32602, Message: "invalid execute arguments"}
+			break
+		}
+		input.Operation = strings.TrimSpace(input.Operation)
+		if input.Arguments == nil {
+			input.Arguments = map[string]any{}
+		}
+		auditToolName = input.Operation
+		auditArgs = input.Arguments
+		result, rpcErr = h.callMCPOperation(ctx, principal.UserID, input.Operation, input.Arguments)
 	default:
-		rpcErr = &mcpError{Code: -32602, Message: "unknown tool"}
+		// Keep previously advertised operation names callable for clients that
+		// cached the legacy tool catalog before progressive discovery shipped.
+		result, rpcErr = h.callMCPOperation(ctx, principal.UserID, params.Name, params.Arguments)
 	}
-	h.recordToolCall(ctx, principal, params.Name, workspaceIDFromMCPArguments(params.Arguments), time.Since(start), rpcErr)
+	h.recordToolCall(ctx, principal, auditToolName, workspaceIDFromMCPArguments(auditArgs), time.Since(start), rpcErr)
 	return result, rpcErr
+}
+
+type mcpExecuteInput struct {
+	Operation string         `json:"operation"`
+	Arguments map[string]any `json:"arguments"`
+}
+
+func (h *MCPHandler) callMCPOperation(ctx context.Context, userID, operation string, args map[string]any) (any, *mcpError) {
+	switch operation {
+	case mcpToolWorkspaces, mcpToolProviders:
+		return h.callReadOnlyGlobalTool(ctx, userID, operation)
+	case mcpToolAccounts, mcpToolListMedia, mcpToolReadiness:
+		return h.callReadOnlyWorkspaceTool(ctx, userID, operation, args)
+	case mcpToolRenderWidget:
+		return h.renderSchedulerWidget(args)
+	case mcpToolCreateDraft, mcpToolListDrafts, mcpToolUpdateDraft,
+		mcpToolCreatePub, mcpToolListPubs, mcpToolValidatePub, mcpToolSchedulePub, mcpToolPublishPubNow,
+		mcpToolPubEvents, mcpToolComments, mcpToolRenditions, mcpToolSchedulePost, mcpToolScheduleDraft,
+		mcpToolGetPost, mcpToolListPosts, mcpToolCancelPost, mcpToolSuggestSlot, mcpToolUploadURL:
+		return h.callWorkspaceActionTool(ctx, userID, operation, args)
+	default:
+		return nil, &mcpError{Code: -32602, Message: "unknown operation; call search to discover supported operations"}
+	}
 }
 
 func (h *MCPHandler) callWorkspaceActionTool(ctx context.Context, userID, toolName string, args map[string]any) (any, *mcpError) {

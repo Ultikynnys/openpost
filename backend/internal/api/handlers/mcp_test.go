@@ -293,57 +293,15 @@ func TestMCPToolsList(t *testing.T) {
 	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &out))
 	result := out["result"].(map[string]any)
 	tools := result["tools"].([]any)
-	require.Len(t, tools, 24)
-	require.Equal(t, "list_workspaces", tools[0].(map[string]any)["name"])
-	require.Equal(t, "list_provider_catalog", tools[1].(map[string]any)["name"])
-	require.Equal(t, "list_accounts", tools[2].(map[string]any)["name"])
-	require.Equal(t, "list_media", tools[3].(map[string]any)["name"])
-	require.Equal(t, "get_provider_readiness", tools[4].(map[string]any)["name"])
-	require.Equal(t, "create_publication", tools[5].(map[string]any)["name"])
-	require.Equal(t, "list_publications", tools[6].(map[string]any)["name"])
-	require.Equal(t, "validate_publication", tools[7].(map[string]any)["name"])
-	require.Equal(t, "schedule_publication", tools[8].(map[string]any)["name"])
-	require.Equal(t, "publish_publication_now", tools[9].(map[string]any)["name"])
-	require.Equal(t, "list_publication_events", tools[10].(map[string]any)["name"])
-	require.Equal(t, "list_rendition_comments", tools[11].(map[string]any)["name"])
-	require.Equal(t, "create_draft", tools[12].(map[string]any)["name"])
-	require.Equal(t, "list_drafts", tools[13].(map[string]any)["name"])
-	require.Equal(t, "update_draft", tools[14].(map[string]any)["name"])
-	require.Equal(t, "set_post_renditions", tools[15].(map[string]any)["name"])
-	require.Equal(t, "schedule_post", tools[16].(map[string]any)["name"])
-	require.Equal(t, "schedule_draft", tools[17].(map[string]any)["name"])
-	require.Equal(t, "get_post_status", tools[18].(map[string]any)["name"])
-	require.Equal(t, "list_scheduled_posts", tools[19].(map[string]any)["name"])
-	require.Equal(t, "cancel_post", tools[20].(map[string]any)["name"])
-	require.Equal(t, "suggest_next_slot", tools[21].(map[string]any)["name"])
-	require.Equal(t, "upload_media_from_url", tools[22].(map[string]any)["name"])
-	require.Equal(t, "render_scheduler_widget", tools[23].(map[string]any)["name"])
+	require.Len(t, tools, 3)
+	require.Equal(t, mcpToolSearch, tools[0].(map[string]any)["name"])
+	require.Equal(t, mcpToolExecute, tools[1].(map[string]any)["name"])
+	require.Equal(t, mcpToolRenderWidget, tools[2].(map[string]any)["name"])
 
 	requiredOutputKeys := map[string][]any{
-		mcpToolWorkspaces:    {"workspaces"},
-		mcpToolProviders:     {"providers"},
-		mcpToolAccounts:      {"accounts"},
-		mcpToolListMedia:     {"media"},
-		mcpToolReadiness:     {"providers"},
-		mcpToolCreatePub:     {"publication"},
-		mcpToolListPubs:      {"publications"},
-		mcpToolValidatePub:   {"valid", "issues"},
-		mcpToolSchedulePub:   {"publication", "job_id"},
-		mcpToolPublishPubNow: {"publication", "job_id"},
-		mcpToolPubEvents:     {"events"},
-		mcpToolComments:      {"comments"},
-		mcpToolCreateDraft:   {"post"},
-		mcpToolListDrafts:    {"posts"},
-		mcpToolUpdateDraft:   {"post"},
-		mcpToolRenditions:    {"post_id", "renditions"},
-		mcpToolSchedulePost:  {"post"},
-		mcpToolScheduleDraft: {"post"},
-		mcpToolGetPost:       {"post"},
-		mcpToolListPosts:     {"posts"},
-		mcpToolCancelPost:    {"post"},
-		mcpToolSuggestSlot:   {"suggestion"},
-		mcpToolUploadURL:     {"media"},
-		mcpToolRenderWidget:  {"view", "data"},
+		mcpToolSearch:       {"operations"},
+		mcpToolExecute:      {},
+		mcpToolRenderWidget: {"view", "data"},
 	}
 	for _, tool := range tools {
 		descriptor := tool.(map[string]any)
@@ -369,7 +327,7 @@ func TestMCPToolsList(t *testing.T) {
 		outputSchema := descriptor["outputSchema"].(map[string]any)
 		require.Equal(t, "object", outputSchema["type"])
 		require.ElementsMatch(t, requiredOutputKeys[toolName], outputSchema["required"])
-		properties := outputSchema["properties"].(map[string]any)
+		properties, _ := outputSchema["properties"].(map[string]any)
 		for _, key := range requiredOutputKeys[toolName] {
 			require.Contains(t, properties, key)
 		}
@@ -378,6 +336,80 @@ func TestMCPToolsList(t *testing.T) {
 	require.Equal(t, true, annotations["readOnlyHint"])
 	require.Equal(t, false, annotations["destructiveHint"])
 	require.Equal(t, false, annotations["openWorldHint"])
+}
+
+func TestMCPAdvertisedToolCatalogIsCompact(t *testing.T) {
+	t.Parallel()
+
+	advertised, err := json.Marshal(mcpAdvertisedTools())
+	require.NoError(t, err)
+	legacy, err := json.Marshal(mcpOperationCatalog())
+	require.NoError(t, err)
+
+	t.Logf("advertised tool descriptors: %d bytes; legacy catalog: %d bytes", len(advertised), len(legacy))
+	require.Less(t, len(advertised), len(legacy)*30/100)
+}
+
+func TestMCPSearchReturnsRelevantOperationSchemas(t *testing.T) {
+	t.Parallel()
+
+	srv := newMCPTestServer(t)
+	resp := srv.request(t, "web-token", map[string]any{
+		"jsonrpc": "2.0",
+		"id":      "search",
+		"method":  "tools/call",
+		"params": map[string]any{
+			"name": mcpToolSearch,
+			"arguments": map[string]any{
+				"query": "schedule_publication",
+			},
+		},
+	})
+
+	require.Equal(t, http.StatusOK, resp.Code)
+	var out map[string]any
+	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &out))
+	result := out["result"].(map[string]any)
+	operations := result["structuredContent"].(map[string]any)["operations"].([]any)
+	require.NotEmpty(t, operations)
+	operation := operations[0].(map[string]any)
+	require.Equal(t, mcpToolSchedulePub, operation["name"])
+	require.NotNil(t, operation["inputSchema"])
+	require.NotNil(t, operation["outputSchema"])
+	require.NotNil(t, operation["annotations"])
+	require.NotContains(t, operation, "securitySchemes")
+	require.NotContains(t, operation, "_meta")
+}
+
+func TestMCPExecuteDelegatesToDiscoveredOperation(t *testing.T) {
+	t.Parallel()
+
+	srv := newMCPTestServer(t)
+	resp := srv.request(t, "web-token", map[string]any{
+		"jsonrpc": "2.0",
+		"id":      "execute",
+		"method":  "tools/call",
+		"params": map[string]any{
+			"name": mcpToolExecute,
+			"arguments": map[string]any{
+				"operation": mcpToolWorkspaces,
+				"arguments": map[string]any{},
+			},
+		},
+	})
+
+	require.Equal(t, http.StatusOK, resp.Code)
+	var out map[string]any
+	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &out))
+	require.Nil(t, out["error"])
+	result := out["result"].(map[string]any)
+	workspaces := result["structuredContent"].(map[string]any)["workspaces"].([]any)
+	require.Len(t, workspaces, 2)
+	require.Equal(t, "ws-1", workspaces[0].(map[string]any)["id"])
+
+	var call models.MCPToolCall
+	require.NoError(t, srv.db.NewSelect().Model(&call).Where("tool_name = ?", mcpToolWorkspaces).Scan(t.Context()))
+	require.Equal(t, mcpToolWorkspaces, call.ToolName)
 }
 
 func TestMCPInitializeAdvertisesPrompts(t *testing.T) {
@@ -398,7 +430,8 @@ func TestMCPInitializeAdvertisesPrompts(t *testing.T) {
 	serverInfo := result["serverInfo"].(map[string]any)
 	require.Equal(t, "openpost", serverInfo["name"])
 	require.Equal(t, "v9.8.7", serverInfo["version"])
-	require.Contains(t, result["instructions"], "List workspaces, accounts, providers, and media")
+	require.Contains(t, result["instructions"], "Call search")
+	require.Contains(t, result["instructions"], "call execute")
 	require.Contains(t, result["instructions"], "render_scheduler_widget")
 	capabilities := result["capabilities"].(map[string]any)
 	require.Contains(t, capabilities, "tools")

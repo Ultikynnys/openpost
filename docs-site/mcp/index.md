@@ -38,30 +38,20 @@ The proxy reads the selected CLI profile and forwards MCP frames to the remote `
 
 ## Current assistant tools
 
-- `list_workspaces`
-- `list_provider_catalog`
-- `list_accounts`
-- `list_media`
-- `get_provider_readiness`
-- `create_draft`
-- `list_drafts`
-- `update_draft`
-- `set_post_renditions`
-- `schedule_post`
-- `schedule_draft`
-- `get_post_status`
-- `list_scheduled_posts`
-- `cancel_post`
-- `suggest_next_slot`
-- `upload_media_from_url`
-- `create_publication`
-- `list_publications`
-- `validate_publication`
-- `schedule_publication`
-- `publish_publication_now`
-- `list_publication_events`
-- `list_rendition_comments`
-- `render_scheduler_widget`
+OpenPost advertises a compact three-tool surface so connecting it does not load
+every scheduling schema into the assistant's context:
+
+- `search` finds relevant OpenPost operations and returns only the schemas needed
+  for the current task.
+- `execute` runs one discovered operation with the supplied arguments.
+- `render_scheduler_widget` displays a visual scheduler summary in clients that
+  support MCP Apps resources.
+
+The discoverable operations still cover workspaces, providers, accounts, media,
+drafts, renditions, format-first publications, validation, scheduling,
+publishing, status, cancellation, lifecycle events, comments, and slot
+suggestions. You can usually ask for the outcome in plain language; the
+assistant should use `search` before `execute` when it needs an operation schema.
 
 ## Safe workflow
 
