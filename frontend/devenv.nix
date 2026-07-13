@@ -5,6 +5,12 @@
   ...
 }:
 let
+  chromiumRuntimeInputs = if pkgs.stdenv.hostPlatform.isLinux then [ pkgs.chromium ] else [ ];
+  chromiumEnvironment =
+    if pkgs.stdenv.hostPlatform.isLinux then
+      ''export PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH="${lib.getExe pkgs.chromium}"''
+    else
+      "";
   eslint-wrapper = pkgs.writeShellApplication {
     name = "eslint-wrapper";
     runtimeInputs = [
@@ -40,14 +46,14 @@ let
     runtimeInputs = [
       pkgs.nodejs_22
       pkgs.pnpm
-      pkgs.chromium
-    ];
+    ]
+    ++ chromiumRuntimeInputs;
     text = ''
       # Cap V8 heap at 1GB to keep the runner's OOM in check on
       # small-memory hosts (3–4GB). The default Node heap is ~1.7GB
       # and svelte-check / vite / paraglide will reliably OOM it.
       export NODE_OPTIONS="--max-old-space-size=1024"
-      export PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH="${lib.getExe pkgs.chromium}"
+      ${chromiumEnvironment}
       cd "${config.git.root}"
       # Run tests only if test files exist, otherwise skip silently
       if find frontend/src \( -name "*.test.ts" -o -name "*.spec.ts" \) 2>/dev/null | grep -q .; then

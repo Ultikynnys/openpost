@@ -19,6 +19,7 @@ All notable changes to this project are documented in this file.
 
 ### Fixed
 
+- Kept the project Devenv shell evaluable on macOS by only adding the declarative Chromium test runtime on Linux, restoring cross-platform CLI release builds.
 - Kept English and Portuguese message catalogs in lockstep with a build-time parity check, aligned PWA/browser colors with the product theme, and added global reduced-motion and coarse-pointer accessibility safeguards.
 - Restricted workspace-scoped checkout and billing-portal mutations to workspace administrators.
 - Stopped server startup when database schema initialization fails instead of serving against a partially initialized database.
