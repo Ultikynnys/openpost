@@ -25,9 +25,9 @@
 			icon: CalendarClock
 		},
 		{
-			title: 'Workspaces and social sets',
+			title: 'Workspaces and account destinations',
 			description:
-				'Separate brands, clients, products, schedules, prompts, media, accounts, and reusable account groups.',
+				'Separate brands, clients, products, schedules, prompts, media, and connected accounts.',
 			icon: Workflow
 		},
 		{

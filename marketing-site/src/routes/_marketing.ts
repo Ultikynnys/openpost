@@ -282,8 +282,8 @@ export const workflowBlocks = [
 		icon: CalendarClock
 	},
 	{
-		title: 'Social sets',
-		description: 'Save reusable account groups and make one the default for fast posting and automation.',
+		title: 'Account destinations',
+		description: 'Select connected accounts explicitly and tailor per-account variants before publishing.',
 		icon: Workflow
 	},
 	{
@@ -401,7 +401,7 @@ export const comparisons = [
 		openPostAngle: 'OpenPost broadens the workflow across workspaces, provider variants, media, CLI, MCP, and open-source deployment.',
 		pricing: 'Typefully is strongest for writing-first creator workflows. OpenPost focuses on multi-platform publishing operations.',
 		chooseOpenPost: [
-			'You need workspaces, social sets, media reuse, and provider-specific previews.',
+			'You need workspaces, account destinations, media reuse, and provider-specific previews.',
 			'You publish beyond X-style threads.',
 			'You want app, CLI, API, and MCP entry points.'
 		],
@@ -488,7 +488,7 @@ export const testimonials = [
 		avatar:
 			'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=160&h=160&q=80',
 		content:
-			'Social sets and next-slot scheduling are the details that make it feel fast. I can queue the same update across a few accounts without rebuilding the destination list every time.',
+			'Account destinations and next-slot scheduling are the details that make it feel fast. I can queue the same update across a few accounts and still tailor each rendition.',
 		source: 'Mastodon'
 	},
 	{
@@ -568,7 +568,7 @@ export const changelogEntries = [
 		date: '2026-06',
 		title: 'CLI, MCP, and next-slot scheduling',
 		detail:
-			'The CLI and MCP surfaces support social sets, workspace-bound tokens, assistant scheduling tools, and next available posting slots.'
+			'The CLI and MCP surfaces support explicit account destinations, workspace-bound tokens, assistant scheduling tools, and next available posting slots.'
 	}
 ] as const;
 

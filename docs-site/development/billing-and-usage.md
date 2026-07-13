@@ -19,7 +19,7 @@ OpenPost Cloud billing is built around local entitlement snapshots and durable u
 - Workspace invitation creation checks `team_members` before issuing a link. The check counts active members plus non-expired pending invitations so a plan cannot over-reserve seats.
 - Media uploads check `media_bytes_uploaded_monthly` and `media_bytes_stored`; successful new uploads increment monthly uploaded-byte usage.
 - Scheduled single posts and threads check `scheduled_posts_monthly` before inserting posts or jobs; successful scheduled creates increment monthly scheduled-post usage.
-- The publishing worker checks `published_posts_monthly` and `provider_write_calls_monthly` before publishing, then records successful published posts and provider publish write calls into monthly usage counters.
+- The publishing worker checks `published_posts_monthly` and `provider_write_calls_monthly` before publishing. It records provider write attempts when a provider request is sent and records published posts only after the provider returns success.
 
 ## Monthly metrics
 

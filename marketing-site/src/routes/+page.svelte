@@ -209,7 +209,7 @@
 				</h2>
 				<p class="mt-5 text-lg leading-8 text-muted-foreground">
 					Use the app to review content, then let scripts, CI, cron, or assistants create
-					drafts, upload media, choose social sets, and schedule approved posts.
+					drafts, upload media, select accounts, and schedule approved posts.
 				</p>
 				<div class="mt-8 flex flex-wrap gap-3">
 					<Button href="/tools" variant="secondary">
@@ -221,8 +221,8 @@
 			</div>
 			<div class="grid gap-4">
 				<div class="rounded-lg border bg-card p-5 font-mono text-sm leading-7">
-					<p class="text-muted-foreground">$ openpost set create launch --accounts x,linkedin</p>
-					<p class="text-muted-foreground">$ openpost post create --set launch --schedule next-slot</p>
+					<p class="text-muted-foreground">$ openpost auth login https://app.openpost.social</p>
+					<p class="text-muted-foreground">$ openpost post create --accounts x,linkedin --content 'Launch day.' --schedule next-slot</p>
 					<p class="mt-3 text-primary">scheduled for the next workspace slot</p>
 				</div>
 				<div class="grid gap-4 sm:grid-cols-3">

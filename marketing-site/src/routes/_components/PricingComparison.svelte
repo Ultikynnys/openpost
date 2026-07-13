@@ -20,7 +20,7 @@
 				{ title: 'Composer and drafts', values: ['check', 'check', 'check', 'check', 'check'] },
 				{ title: 'Platform variants', values: ['check', 'check', 'check', 'check', 'check'] },
 				{ title: 'Media library', values: ['check', 'check', 'check', 'check', 'check'] },
-				{ title: 'Social sets', values: ['check', 'check', 'check', 'check', 'check'] },
+				{ title: 'Account destinations', values: ['check', 'check', 'check', 'check', 'check'] },
 				{ title: 'Queue and activity states', values: ['check', 'check', 'check', 'check', 'check'] }
 			]
 		},

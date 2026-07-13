@@ -52,7 +52,10 @@ const userDocsSidebar = [
 	{
 		text: 'Reference',
 		collapsed: false,
-		items: [{ text: 'CLI Command Reference', link: '/reference/cli' }],
+		items: [
+			{ text: 'CLI Command Reference', link: '/reference/cli' },
+			{ text: 'Product Surface Parity', link: '/reference/surface-parity' },
+		],
 	},
 ];
 

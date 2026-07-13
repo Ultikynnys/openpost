@@ -27,7 +27,7 @@ Treat this as a living file: add concise repo learnings when they would save fut
 
 ## 2. Platform Adapter Architecture
 
-All social platform integrations follow a unified `PlatformAdapter` interface defined in `internal/platform/adapter.go`. Each platform implements this interface in its own file within `internal/platform/`:
+All social platform integrations follow the unified `platform.Adapter` interface defined in `internal/platform/adapter.go`. Each platform implements this interface in its own file within `internal/platform/`:
 
 | File | Platform | Auth Method |
 |------|----------|-------------|
@@ -37,7 +37,7 @@ All social platform integrations follow a unified `PlatformAdapter` interface de
 | `linkedin.go` | LinkedIn | OAuth 2.0 |
 | `threads.go` | Threads | Meta OAuth 2.0 |
 
-Adapters are registered in `main.go` via a `map[string]platform.PlatformAdapter` and passed to the token manager, publisher, and OAuth handler. **No switch statements** — everything uses map lookups.
+Adapters are registered in `main.go` via a `map[string]platform.Adapter` and passed to the token manager, publisher, and OAuth handler. Provider selection uses adapter-map and capability-catalog lookups; switches internal to a single adapter may still dispatch that provider's content modes.
 
 Shared HTTP helpers are in `internal/platform/http.go`:
 - `DoRequest` — generic HTTP request with error handling
@@ -56,7 +56,7 @@ When an AI agent is invoked to assist with this repository, it MUST adhere to th
 - **Pre-push lint gate is mandatory.** The repo installs a `pre-push` git hook (via `devenv` on shell entry, see `devenv.nix:enterShell` and `scripts/pre-push-lint.sh`) that runs a fast local lint subset: backend format check, backend lint, and frontend lint. Pre-commit is intentionally cheap and mostly formatting/light lint. **Run `devenv shell -- lint` before release tags or high-risk changes** because full frontend type checks, tests, and production builds are intentionally not run on every push. Bypass with `OPENPOST_SKIP_PRE_PUSH_LINT=1 git push ...` only when CI or a manual full lint run has already gated the commit.
 - **Production release flow:** for normal “commit, push, release, deploy prod” requests, run `pnpm release:prod "<conventional commit message>"` and let `scripts/release-prod.sh` stage all OpenPost changes, push `main`, create the next patch tag, wait for GitHub `Build and Release`, pull/restart the latest image on `rgo-vps`, and verify readiness. If a tag fails, do not retag it; fix forward with the next semver patch tag. Only fall back to the manual flow when the script itself is broken or the deployment target has drifted.
 - **Go Backend:** Use Echo for HTTP handlers and Huma for OpenAPI endpoints. Follow the dependency injection pattern in `main.go`. Maintain separation of concerns: Handlers -> Services -> Database.
-- **Platform Adapters:** Implement `PlatformAdapter` interface. Never put platform logic outside the `internal/platform/` package. Use shared HTTP helpers from `http.go`.
+- **Platform Adapters:** Implement `platform.Adapter`. Never put provider API logic outside the `internal/platform/` package. Use shared HTTP helpers from `http.go`.
 - **SvelteKit Frontend:** Always use standard Svelte 5 runes (`$state`, `$derived`, `$effect`, `$props`, `$bindable`). Use `+page.svelte`/`+page.ts` structures. Use the openapi-fetch typed client against `/api/v1` routes.
 - **ORM Patterns:** Always use `github.com/uptrace/bun` for database operations. Do not write raw SQL strings unless doing complex SQLite pragmas or advanced queue polling.
 
@@ -78,8 +78,8 @@ When an AI agent is invoked to assist with this repository, it MUST adhere to th
 
 *If you are an agent, read these context hints before performing actions:*
 
-- **"Add a new social platform"**: Create a new file in `internal/platform/` implementing `PlatformAdapter`. Register it in `main.go` under the provider map. Add platform icon to frontend's `compose-post.svelte`. Update the accounts page (`/accounts`) with connect UI.
-- **"Modify database schema"**: Update `internal/models/models.go` struct fields with appropriate bun tags. Since we rely on `.IfNotExists()` in `database.go` currently, provide migration steps or table alter scripts if the table already exists. For new tables, follow the pattern in `internal/database/migrations/NNN_<name>.sql` and add a corresponding `internal/database/migrations/<name>_test.go` regression test.
+- **"Add a new social platform"**: Create a new file in `internal/platform/` implementing `platform.Adapter`. Register it in `main.go` under the provider map. Add its icon and capability-driven composer treatment to the frontend, then update the accounts page (`/accounts`) with connect UI.
+- **"Modify database schema"**: Update `internal/models/models.go` struct fields with appropriate bun tags and add a numbered SQL migration in `internal/database/migrations/`. Base tables are bootstrapped with `.IfNotExists()`, but upgrades run through `RunMigrations`; add a corresponding migration regression test.
 - **"Handle thread drafts"**: Thread drafts (the in-progress state of a multi-post thread) live in the `thread_drafts` table — one row per parent post, keyed by `post_id` with `ON DELETE CASCADE`. The encoded draft JSON is the same `__openpost_thread__:` blob the frontend has always used; the backend now stores it in its own column instead of smearing it into `posts.content`. The composer sends/reads it through the typed `thread_draft` field on the post create/update/get endpoints. The legacy `posts.content` blob is still accepted on input and migrated on write, and is still readable as a fallback, so existing drafts survive the migration.
 - **"Create a background job"**: Do not use `goroutine` blindly for tasks that must survive server restarts. Insert a row into the `models.Job` table so the `BackgroundWorker` can pick it up.
 - **"Handle media uploads"**: Use the `BlobStorage` interface for file storage. The publisher fetches media from disk via `os.ReadFile()` and passes to `adapter.UploadMedia()`. For Threads, media must be served at a publicly accessible URL.

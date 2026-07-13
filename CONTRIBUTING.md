@@ -27,7 +27,7 @@ The frontend runs on `http://localhost:5173`, the backend on `http://localhost:8
 ### Prerequisites
 
 - **Go 1.25+** — For the backend
-- **Bun** — For the frontend (or use npm/pnpm with minor adjustments)
+- **pnpm 11+** — The repository-pinned frontend package manager
 - **Git** — Version control
 
 ### Running Tests
@@ -46,8 +46,9 @@ pnpm --filter @openpost/web test
 # Go linting (requires golangci-lint)
 cd backend && golangci-lint run
 
-# Frontend linting
-cd frontend && bun run lint
+# Frontend linting and type checks
+pnpm --filter @openpost/web lint
+pnpm --filter @openpost/web check
 ```
 
 ## Code Style and Conventions
@@ -57,7 +58,7 @@ We follow specific conventions to maintain consistency across the codebase:
 ### Go Backend
 
 - **Framework:** Echo for HTTP handlers, Huma for OpenAPI spec generation
-- **ORM:** Bun for SQLite operations
+- **ORM:** Bun for SQLite and Postgres operations
 - **Architecture:** Handlers → Services → Database (dependency injection pattern)
 - **Platform adapters:** All social platform integrations go in `internal/platform/`
 - **Error handling:** Use structured errors with proper HTTP status codes

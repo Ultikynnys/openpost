@@ -30,7 +30,7 @@ This is the implementation map for turning OpenPost into a production-ready self
 - Keep runtime database expressions portable. Background job recovery, job workspace scoping, publish-job cleanup, MCP scheduling cleanup, and schedule overview date aggregation now avoid SQLite-only JSON/date expressions so cloud Postgres deployments use the same paths.
 - Add usage counters and entitlement checks at API boundaries. The foundation is in place with monthly `usage_counters`, workspace-creation entitlement checks, team invitation seat checks, and scheduled-post usage accounting.
 - Enforce quota boundaries for workspace, team, provider, media, scheduling, and publishing paths. Social account connection quota enforcement is in place in the shared account saver, team invitations reserve active plus pending seats, media upload quota enforcement is in place for monthly uploaded bytes and stored bytes, scheduled-post quota enforcement is in place for single posts and threads, and publishing-worker quota enforcement is in place for published posts and provider write calls.
-- Add monthly usage counters for scheduled posts, published posts, uploaded bytes, stored bytes, and provider write calls. The publishing worker records published-post and provider-write usage.
+- Add monthly usage counters for scheduled posts, published posts, uploaded bytes, stored bytes, and provider write calls. The publishing worker records successful published posts and attempted provider writes separately.
 
 ### 2. Billing And Plans
 

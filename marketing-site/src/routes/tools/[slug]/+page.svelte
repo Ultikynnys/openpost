@@ -353,7 +353,7 @@
 
 				<p class="mt-4 text-xs leading-5 text-muted-foreground">
 					The full app adds connected accounts, media uploads, variants, workspace schedules,
-					social sets, and queue state.
+					per-account destinations, and queue state.
 				</p>
 			</div>
 		</div>

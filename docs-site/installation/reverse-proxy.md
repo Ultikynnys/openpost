@@ -1,16 +1,18 @@
 # Reverse Proxy
 
-HTTPS and a stable public URL matter for provider OAuth and for Threads media publishing.
+HTTPS and a stable public URL matter for provider OAuth, passkeys, MCP OAuth discovery, and public-URL media publishing.
 
 ## Why it matters
 
 - Providers validate callback URLs exactly.
 - `OPENPOST_APP_URL` should match what users open in the browser.
-- `OPENPOST_MEDIA_URL` must be public for Threads media publishing.
+- `OPENPOST_PUBLIC_URL` must match the externally visible origin for passkeys and MCP metadata.
+- `OPENPOST_MEDIA_URL` must be public HTTPS for Threads, Facebook, Instagram, and TikTok pull-from-URL publishing.
 
 ## Required app settings
 
 - `OPENPOST_APP_URL=https://openpost.example.com`
+- `OPENPOST_PUBLIC_URL=https://openpost.example.com`
 - `OPENPOST_MEDIA_URL=https://openpost.example.com/media`
 
 ## Caddy example
@@ -31,6 +33,7 @@ server {
   location / {
     proxy_pass http://127.0.0.1:8080;
     proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Host $host;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     proxy_set_header X-Forwarded-Proto $scheme;
   }
@@ -51,9 +54,9 @@ Update your provider apps to use your public domain:
 
 Mastodon uses `urn:ietf:wg:oauth:2.0:oob` by default, so you usually do not add a Mastodon callback URL unless you override `MASTODON_REDIRECT_URI`.
 
-## Threads note
+## Public-media providers
 
-Threads needs the media endpoint to be publicly reachable. If `OPENPOST_MEDIA_URL` points to a private hostname or plain local path, media publishing will fail.
+Threads, Facebook, Instagram, and TikTok need the media endpoint to be publicly reachable over HTTPS. TikTok additionally requires ownership verification for the configured URL prefix/domain. If `OPENPOST_MEDIA_URL` points to a private hostname or local path, capability validation blocks publishing before the provider request.
 
 ## Subpath mounts (e.g. `https://example.com/openpost/`)
 

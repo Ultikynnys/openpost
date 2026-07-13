@@ -37,7 +37,7 @@
 		},
 		{
 			feature: 'Workspace operations',
-			openpost: 'Workspaces, social sets, media reuse, prompts, roles on team plans, and usage limits.',
+			openpost: 'Workspaces, account destinations, media reuse, prompts, roles on team plans, and usage limits.',
 			other: 'May be stronger for enterprise governance, approvals, analytics, or engagement.',
 			icon: Workflow
 		},
