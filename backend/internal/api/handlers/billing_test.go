@@ -269,6 +269,28 @@ func TestCreateBillingCheckoutRoute(t *testing.T) {
 	require.Equal(t, "ws-1", metadata["workspace_id"])
 }
 
+func TestBillingMutationsRequireWorkspaceAdmin(t *testing.T) {
+	srv := newBillingAPITestServer(t)
+	_, err := srv.db.NewUpdate().
+		Model((*models.WorkspaceMember)(nil)).
+		Set("role = ?", models.WorkspaceRoleViewer).
+		Where("workspace_id = ? AND user_id = ?", "ws-1", "user-1").
+		Exec(t.Context())
+	require.NoError(t, err)
+
+	checkout := srv.postJSON(t, "/api/v1/billing/checkout", map[string]any{
+		"workspace_id": "ws-1",
+		"plan_id":      "creator",
+	})
+	portal := srv.postJSON(t, "/api/v1/billing/portal", map[string]any{
+		"workspace_id": "ws-1",
+	})
+
+	require.Equal(t, http.StatusForbidden, checkout.Code, checkout.Body.String())
+	require.Equal(t, http.StatusForbidden, portal.Code, portal.Body.String())
+	require.Empty(t, srv.client.requests)
+}
+
 func TestCreateBillingCheckoutRouteReturns503WhenPolarIsNotConfigured(t *testing.T) {
 	t.Parallel()
 

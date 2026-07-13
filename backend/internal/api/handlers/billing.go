@@ -264,6 +264,15 @@ func (h *BillingHandler) createCheckout(ctx context.Context, input *CreateBillin
 	if err != nil {
 		return nil, err
 	}
+	if workspaceID != "" {
+		allowed, accessErr := middleware.CheckWorkspaceAdminAccess(ctx, h.db, workspaceID, userID)
+		if accessErr != nil {
+			return nil, huma.Error500InternalServerError("failed to check workspace admin access")
+		}
+		if !allowed {
+			return nil, huma.Error403Forbidden("workspace admin role required")
+		}
+	}
 	if strings.TrimSpace(input.Body.OrganizationID) != "" {
 		if err := h.checkOrganizationAccess(ctx, organizationID, userID, true); err != nil {
 			return nil, err
@@ -299,9 +308,18 @@ func (h *BillingHandler) createPortalSession(ctx context.Context, input *CreateB
 	if err := h.ensureReady(); err != nil {
 		return nil, err
 	}
-	organizationID, _, err := h.resolveBillingScope(ctx, input.Body.OrganizationID, input.Body.WorkspaceID, userID)
+	organizationID, workspaceID, err := h.resolveBillingScope(ctx, input.Body.OrganizationID, input.Body.WorkspaceID, userID)
 	if err != nil {
 		return nil, err
+	}
+	if workspaceID != "" {
+		allowed, accessErr := middleware.CheckWorkspaceAdminAccess(ctx, h.db, workspaceID, userID)
+		if accessErr != nil {
+			return nil, huma.Error500InternalServerError("failed to check workspace admin access")
+		}
+		if !allowed {
+			return nil, huma.Error403Forbidden("workspace admin role required")
+		}
 	}
 	if strings.TrimSpace(input.Body.OrganizationID) != "" {
 		if err := h.checkOrganizationAccess(ctx, organizationID, userID, true); err != nil {
