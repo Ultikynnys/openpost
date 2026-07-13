@@ -5,6 +5,7 @@
     "pnpm-lock.yaml",
     "pnpm-workspace.yaml"
   ],
+  "globalPassThroughEnv": ["PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH"],
   "tasks": {
     "dev": {
       "cache": false,
