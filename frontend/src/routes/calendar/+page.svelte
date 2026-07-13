@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
+	import { SvelteDate, SvelteMap, SvelteSet } from 'svelte/reactivity';
 	import { resolve } from '$app/paths';
 	import { client, type Post, type SocialAccount, type Workspace } from '$lib/api/client';
 	import type { components } from '$lib/api/types';
@@ -86,9 +87,9 @@
 		days.slice(0, 7).map((day) => day.date.toLocaleDateString(getLocaleTag(), { weekday: 'short' }))
 	);
 	const visibleRange = $derived.by(() => {
-		const start = new Date(days[0]?.date ?? currentMonth);
+		const start = new SvelteDate(days[0]?.date ?? currentMonth);
 		start.setHours(0, 0, 0, 0);
-		const end = new Date(days[days.length - 1]?.date ?? currentMonth);
+		const end = new SvelteDate(days[days.length - 1]?.date ?? currentMonth);
 		end.setHours(23, 59, 59, 999);
 		return { start, end };
 	});
@@ -109,7 +110,7 @@
 		);
 	});
 	const availablePlatforms = $derived.by(() => {
-		const platforms = new Set<string>();
+		const platforms = new SvelteSet<string>();
 		for (const workspaceId of activeWorkspaceIds) {
 			for (const account of accountsByWorkspace[workspaceId] ?? []) {
 				if (account.platform) platforms.add(account.platform);
@@ -130,7 +131,7 @@
 		})
 	);
 	const itemsByDay = $derived.by(() => {
-		const map = new Map<string, CalendarItem[]>();
+		const map = new SvelteMap<string, CalendarItem[]>();
 		for (const item of visibleItems) {
 			const key = dateKey(new Date(item.scheduledAt));
 			const existing = map.get(key) ?? [];
@@ -513,7 +514,7 @@
 		const todayKey = dateKey(todayDate);
 		const monthValue = month.getMonth();
 		return Array.from({ length: 42 }, (_, index): CalendarDay => {
-			const date = new Date(first);
+			const date = new SvelteDate(first);
 			date.setDate(first.getDate() + index);
 			return {
 				date,
@@ -525,7 +526,7 @@
 	}
 
 	function startOfWeek(date: Date, weekStart: number) {
-		const out = new Date(date);
+		const out = new SvelteDate(date);
 		out.setHours(0, 0, 0, 0);
 		const diff = (out.getDay() - weekStart + 7) % 7;
 		out.setDate(out.getDate() - diff);
@@ -545,7 +546,7 @@
 
 	function moveDateKeepTime(sourceISO: string, targetDate: Date) {
 		const source = new Date(sourceISO);
-		const next = new Date(targetDate);
+		const next = new SvelteDate(targetDate);
 		next.setHours(
 			source.getHours(),
 			source.getMinutes(),
@@ -575,7 +576,7 @@
 	}
 
 	function uniqueById(accounts: AccountBadge[]) {
-		const seen = new Set<string>();
+		const seen = new SvelteSet<string>();
 		return accounts.filter((account) => {
 			if (!account.id || seen.has(account.id)) return false;
 			seen.add(account.id);

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { SvelteMap } from 'svelte/reactivity';
 	import { client, type ScheduleOverview, type Post, type Workspace } from '$lib/api/client';
 	import { page } from '$app/state';
 	import * as Sidebar from '$lib/components/ui/sidebar';
@@ -76,7 +77,7 @@
 	});
 
 	const dayCounts = $derived.by(() => {
-		const map = new Map<string, number>();
+		const map = new SvelteMap<string, number>();
 		if (!overview) return map;
 		for (const item of overview?.days ?? []) {
 			map.set(item.date, item.count);
@@ -85,7 +86,7 @@
 	});
 
 	const dayWorkspaceCounts = $derived.by(() => {
-		const map = new Map<string, { workspace_id: string; count: number }[]>();
+		const map = new SvelteMap<string, { workspace_id: string; count: number }[]>();
 		if (!overview) return map;
 		for (const item of overview?.days ?? []) {
 			// @ts-ignore - added via backend change
