@@ -481,7 +481,7 @@ func (h *MediaHandler) RegisterRoutes(api huma.API) {
 			return nil, huma.Error500InternalServerError("failed to fetch media")
 		}
 
-		if err := h.ensureMediaWorkspaceAccess(ctx, userID, media.WorkspaceID); err != nil {
+		if err := h.ensureMediaWorkspaceEditAccess(ctx, userID, media.WorkspaceID); err != nil {
 			return nil, err
 		}
 
@@ -541,7 +541,7 @@ func (h *MediaHandler) RegisterRoutes(api huma.API) {
 				continue
 			}
 
-			if err := h.ensureMediaWorkspaceAccess(ctx, userID, media.WorkspaceID); err != nil {
+			if err := h.ensureMediaWorkspaceEditAccess(ctx, userID, media.WorkspaceID); err != nil {
 				failedIDs = append(failedIDs, mediaID)
 				continue
 			}
@@ -598,7 +598,7 @@ func (h *MediaHandler) RegisterRoutes(api huma.API) {
 			return nil, huma.Error500InternalServerError("failed to fetch media")
 		}
 
-		if err := h.ensureMediaWorkspaceAccess(ctx, userID, media.WorkspaceID); err != nil {
+		if err := h.ensureMediaWorkspaceEditAccess(ctx, userID, media.WorkspaceID); err != nil {
 			return nil, err
 		}
 
@@ -633,7 +633,7 @@ func (h *MediaHandler) RegisterRoutes(api huma.API) {
 			return nil, huma.Error500InternalServerError("failed to fetch media")
 		}
 
-		if err := h.ensureMediaWorkspaceAccess(ctx, userID, media.WorkspaceID); err != nil {
+		if err := h.ensureMediaWorkspaceEditAccess(ctx, userID, media.WorkspaceID); err != nil {
 			return nil, err
 		}
 
@@ -663,7 +663,7 @@ func (h *MediaHandler) RegisterRoutes(api huma.API) {
 		if workspaceID == "" {
 			return nil, huma.Error400BadRequest(errWorkspaceIDRequired)
 		}
-		if err := h.ensureMediaWorkspaceAccess(ctx, userID, workspaceID); err != nil {
+		if err := h.ensureMediaWorkspaceEditAccess(ctx, userID, workspaceID); err != nil {
 			return nil, err
 		}
 
@@ -766,18 +766,23 @@ type mediaUsageSummary struct {
 }
 
 func (h *MediaHandler) ensureMediaWorkspaceAccess(ctx context.Context, userID, workspaceID string) error {
-	if !middleware.WorkspaceScopeAllows(ctx, workspaceID) {
-		return huma.Error403Forbidden(errWorkspaceAccessDenied)
-	}
-	var memberCount int
-	memberCount, err := h.db.NewSelect().Model((*models.WorkspaceMember)(nil)).
-		Where("workspace_id = ? AND user_id = ?", workspaceID, userID).
-		Count(ctx)
+	allowed, err := middleware.CheckWorkspaceAccess(ctx, h.db, workspaceID, userID)
 	if err != nil {
 		return huma.Error500InternalServerError(errValidateWorkspaceAccess)
 	}
-	if memberCount == 0 {
+	if !allowed {
 		return huma.Error403Forbidden(errWorkspaceAccessDenied)
+	}
+	return nil
+}
+
+func (h *MediaHandler) ensureMediaWorkspaceEditAccess(ctx context.Context, userID, workspaceID string) error {
+	allowed, err := middleware.CheckWorkspaceEditAccess(ctx, h.db, workspaceID, userID)
+	if err != nil {
+		return huma.Error500InternalServerError(errValidateWorkspaceAccess)
+	}
+	if !allowed {
+		return huma.Error403Forbidden("workspace editor role required")
 	}
 	return nil
 }
@@ -847,7 +852,7 @@ func (h *MediaHandler) loadDirectMediaUpload(ctx context.Context, userID, worksp
 	if media.WorkspaceID != workspaceID {
 		return media, huma.Error403Forbidden(errWorkspaceAccessDenied)
 	}
-	if err := h.ensureMediaWorkspaceAccess(ctx, userID, workspaceID); err != nil {
+	if err := h.ensureMediaWorkspaceEditAccess(ctx, userID, workspaceID); err != nil {
 		return media, err
 	}
 	if media.ProcessingStatus != mediaReadyStatus && media.ProcessingStatus != mediaProcessingStatus {
@@ -1387,7 +1392,7 @@ func (h *MediaHandler) uploadMedia(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, map[string]string{fieldError: errWorkspaceIDRequired})
 	}
 
-	if ok, err := h.userCanAccessWorkspace(c.Request().Context(), workspaceID, userID); err != nil {
+	if ok, err := h.userCanEditWorkspace(c.Request().Context(), workspaceID, userID); err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{fieldError: errValidateWorkspaceAccess})
 	} else if !ok {
 		return c.JSON(http.StatusForbidden, map[string]string{fieldError: errWorkspaceAccessDenied})
@@ -1414,7 +1419,7 @@ func (h *MediaHandler) batchUploadMedia(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, map[string]string{fieldError: errWorkspaceIDRequired})
 	}
 
-	if ok, err := h.userCanAccessWorkspace(c.Request().Context(), workspaceID, userID); err != nil {
+	if ok, err := h.userCanEditWorkspace(c.Request().Context(), workspaceID, userID); err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{fieldError: errValidateWorkspaceAccess})
 	} else if !ok {
 		return c.JSON(http.StatusForbidden, map[string]string{fieldError: errWorkspaceAccessDenied})
@@ -1841,16 +1846,9 @@ func (h *MediaHandler) userIDFromQueryToken(ctx context.Context, token string) s
 }
 
 func (h *MediaHandler) userCanAccessWorkspace(ctx context.Context, workspaceID, userID string) (bool, error) {
-	if !middleware.WorkspaceScopeAllows(ctx, workspaceID) {
-		return false, nil
-	}
-	memberCount, err := h.db.NewSelect().
-		Model((*models.WorkspaceMember)(nil)).
-		Where("workspace_id = ? AND user_id = ?", workspaceID, userID).
-		Count(ctx)
-	if err != nil {
-		return false, err
-	}
+	return middleware.CheckWorkspaceAccess(ctx, h.db, workspaceID, userID)
+}
 
-	return memberCount > 0, nil
+func (h *MediaHandler) userCanEditWorkspace(ctx context.Context, workspaceID, userID string) (bool, error) {
+	return middleware.CheckWorkspaceEditAccess(ctx, h.db, workspaceID, userID)
 }

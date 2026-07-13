@@ -151,6 +151,9 @@ func (h *CommentHandler) replyToComment(api huma.API) {
 		if err != nil {
 			return nil, err
 		}
+		if err := h.checkWorkspaceEditAccess(ctx, publication.WorkspaceID, middleware.GetUserID(ctx)); err != nil {
+			return nil, err
+		}
 		commenter, accessToken, err := h.commentAdapter(account)
 		if err != nil {
 			return nil, err
@@ -191,6 +194,9 @@ func (h *CommentHandler) hideComment(api huma.API) {
 		if err != nil {
 			return nil, err
 		}
+		if err := h.checkWorkspaceEditAccess(ctx, publication.WorkspaceID, middleware.GetUserID(ctx)); err != nil {
+			return nil, err
+		}
 		commenter, accessToken, err := h.commentAdapter(account)
 		if err != nil {
 			return nil, err
@@ -229,6 +235,9 @@ func (h *CommentHandler) deleteComment(api huma.API) {
 		if err != nil {
 			return nil, err
 		}
+		if err := h.checkWorkspaceEditAccess(ctx, publication.WorkspaceID, middleware.GetUserID(ctx)); err != nil {
+			return nil, err
+		}
 		commenter, accessToken, err := h.commentAdapter(account)
 		if err != nil {
 			return nil, err
@@ -247,6 +256,17 @@ func (h *CommentHandler) deleteComment(api huma.API) {
 		})
 		return commentActionMessage("comment deleted", ""), nil
 	})
+}
+
+func (h *CommentHandler) checkWorkspaceEditAccess(ctx context.Context, workspaceID, userID string) error {
+	allowed, err := middleware.CheckWorkspaceEditAccess(ctx, h.db, workspaceID, userID)
+	if err != nil {
+		return huma.Error500InternalServerError(errValidateWorkspaceAccess)
+	}
+	if !allowed {
+		return huma.Error403Forbidden("workspace editor role required")
+	}
+	return nil
 }
 
 func (h *CommentHandler) loadCommentContext(ctx context.Context, renditionID, userID string) (*models.Rendition, *models.Publication, *models.SocialAccount, error) {

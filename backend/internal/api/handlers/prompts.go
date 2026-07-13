@@ -143,17 +143,23 @@ func (h *PromptHandler) seedBuiltInPrompts(ctx context.Context) error {
 }
 
 func (h *PromptHandler) checkWorkspaceAccess(ctx context.Context, workspaceID, userID string) error {
-	if !middleware.WorkspaceScopeAllows(ctx, workspaceID) {
-		return huma.Error403Forbidden(errWorkspaceAccessDenied)
-	}
-	memberCount, err := h.db.NewSelect().Model((*models.WorkspaceMember)(nil)).
-		Where("workspace_id = ? AND user_id = ?", workspaceID, userID).
-		Count(ctx)
+	allowed, err := middleware.CheckWorkspaceAccess(ctx, h.db, workspaceID, userID)
 	if err != nil {
 		return huma.Error500InternalServerError(errValidateWorkspaceAccess)
 	}
-	if memberCount == 0 {
+	if !allowed {
 		return huma.Error403Forbidden(errWorkspaceAccessDenied)
+	}
+	return nil
+}
+
+func (h *PromptHandler) checkWorkspaceEditAccess(ctx context.Context, workspaceID, userID string) error {
+	allowed, err := middleware.CheckWorkspaceEditAccess(ctx, h.db, workspaceID, userID)
+	if err != nil {
+		return huma.Error500InternalServerError(errValidateWorkspaceAccess)
+	}
+	if !allowed {
+		return huma.Error403Forbidden("workspace editor role required")
 	}
 	return nil
 }
@@ -263,7 +269,7 @@ func (h *PromptHandler) CreatePrompt(api huma.API) {
 
 		// Verify workspace access if provided
 		if input.Body.WorkspaceID != "" {
-			if err := h.checkWorkspaceAccess(ctx, input.Body.WorkspaceID, userID); err != nil {
+			if err := h.checkWorkspaceEditAccess(ctx, input.Body.WorkspaceID, userID); err != nil {
 				return nil, err
 			}
 		} else if middleware.GetWorkspaceID(ctx) != "" {
@@ -338,7 +344,7 @@ func (h *PromptHandler) DeletePrompt(api huma.API) {
 			return nil, huma.Error403Forbidden("you do not have permission to delete this prompt")
 		}
 		if prompt.WorkspaceID != "" {
-			if err := h.checkWorkspaceAccess(ctx, prompt.WorkspaceID, userID); err != nil {
+			if err := h.checkWorkspaceEditAccess(ctx, prompt.WorkspaceID, userID); err != nil {
 				return nil, err
 			}
 		}

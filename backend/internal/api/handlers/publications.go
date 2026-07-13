@@ -260,7 +260,7 @@ func (h *PublicationHandler) createPublication(api huma.API) {
 		if input.Body.WorkspaceID == "" {
 			return nil, huma.Error400BadRequest(errWorkspaceIDRequired)
 		}
-		if err := h.checkWorkspaceAccess(ctx, input.Body.WorkspaceID, userID); err != nil {
+		if err := h.checkWorkspaceEditAccess(ctx, input.Body.WorkspaceID, userID); err != nil {
 			return nil, err
 		}
 		if input.Body.ContentProfile == "" {
@@ -424,7 +424,7 @@ func (h *PublicationHandler) updatePublication(api huma.API) {
 		Tags:        []string{tagPublications},
 		Middlewares: huma.Middlewares{middleware.AuthMiddleware(api, h.auth)},
 	}, func(ctx context.Context, input *UpdatePublicationInput) (*PublicationOutput, error) {
-		publication, err := h.loadPublication(ctx, input.PathID, middleware.GetUserID(ctx))
+		publication, err := h.loadPublicationForEdit(ctx, input.PathID, middleware.GetUserID(ctx))
 		if err != nil {
 			return nil, err
 		}
@@ -479,7 +479,7 @@ func (h *PublicationHandler) upsertRenditions(api huma.API) {
 		Tags:        []string{tagPublications},
 		Middlewares: huma.Middlewares{middleware.AuthMiddleware(api, h.auth)},
 	}, func(ctx context.Context, input *UpsertRenditionsInput) (*PublicationOutput, error) {
-		publication, err := h.loadPublication(ctx, input.PathID, middleware.GetUserID(ctx))
+		publication, err := h.loadPublicationForEdit(ctx, input.PathID, middleware.GetUserID(ctx))
 		if err != nil {
 			return nil, err
 		}
@@ -558,7 +558,7 @@ func (h *PublicationHandler) schedulePublication(api huma.API) {
 		Tags:        []string{tagPublications},
 		Middlewares: huma.Middlewares{middleware.AuthMiddleware(api, h.auth)},
 	}, func(ctx context.Context, input *PublicationActionInput) (*ActionOutput, error) {
-		publication, err := h.loadPublication(ctx, input.PathID, middleware.GetUserID(ctx))
+		publication, err := h.loadPublicationForEdit(ctx, input.PathID, middleware.GetUserID(ctx))
 		if err != nil {
 			return nil, err
 		}
@@ -592,7 +592,7 @@ func (h *PublicationHandler) publishNow(api huma.API) {
 		Tags:        []string{tagPublications},
 		Middlewares: huma.Middlewares{middleware.AuthMiddleware(api, h.auth)},
 	}, func(ctx context.Context, input *PublicationActionInput) (*ActionOutput, error) {
-		publication, err := h.loadPublication(ctx, input.PathID, middleware.GetUserID(ctx))
+		publication, err := h.loadPublicationForEdit(ctx, input.PathID, middleware.GetUserID(ctx))
 		if err != nil {
 			return nil, err
 		}
@@ -623,7 +623,7 @@ func (h *PublicationHandler) replyToRendition(api huma.API) {
 		Tags:        []string{tagPublications},
 		Middlewares: huma.Middlewares{middleware.AuthMiddleware(api, h.auth)},
 	}, func(ctx context.Context, input *ReplyInput) (*ActionOutput, error) {
-		rendition, publication, err := h.loadRenditionWithPublication(ctx, input.PathID, middleware.GetUserID(ctx))
+		rendition, publication, err := h.loadRenditionWithPublicationForEdit(ctx, input.PathID, middleware.GetUserID(ctx))
 		if err != nil {
 			return nil, err
 		}
@@ -732,6 +732,17 @@ func (h *PublicationHandler) loadPublication(ctx context.Context, publicationID,
 	return &publication, nil
 }
 
+func (h *PublicationHandler) loadPublicationForEdit(ctx context.Context, publicationID, userID string) (*models.Publication, error) {
+	publication, err := h.loadPublication(ctx, publicationID, userID)
+	if err != nil {
+		return nil, err
+	}
+	if err := h.checkWorkspaceEditAccess(ctx, publication.WorkspaceID, userID); err != nil {
+		return nil, err
+	}
+	return publication, nil
+}
+
 func (h *PublicationHandler) loadRenditionWithPublication(ctx context.Context, renditionID, userID string) (*models.Rendition, *models.Publication, error) {
 	var rendition models.Rendition
 	if err := h.db.NewSelect().Model(&rendition).Where("id = ?", renditionID).Scan(ctx); err != nil {
@@ -742,6 +753,17 @@ func (h *PublicationHandler) loadRenditionWithPublication(ctx context.Context, r
 		return nil, nil, err
 	}
 	return &rendition, publication, nil
+}
+
+func (h *PublicationHandler) loadRenditionWithPublicationForEdit(ctx context.Context, renditionID, userID string) (*models.Rendition, *models.Publication, error) {
+	rendition, publication, err := h.loadRenditionWithPublication(ctx, renditionID, userID)
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := h.checkWorkspaceEditAccess(ctx, publication.WorkspaceID, userID); err != nil {
+		return nil, nil, err
+	}
+	return rendition, publication, nil
 }
 
 func (h *PublicationHandler) loadRenditionMedia(ctx context.Context, ids []string) (map[string][]MediaSummary, []MediaSummary, error) {
@@ -890,6 +912,17 @@ func (h *PublicationHandler) checkWorkspaceAccess(ctx context.Context, workspace
 	}
 	if len(members) == 0 {
 		return huma.Error403Forbidden(errWorkspaceAccessDenied)
+	}
+	return nil
+}
+
+func (h *PublicationHandler) checkWorkspaceEditAccess(ctx context.Context, workspaceID, userID string) error {
+	allowed, err := middleware.CheckWorkspaceEditAccess(ctx, h.db, workspaceID, userID)
+	if err != nil {
+		return huma.Error500InternalServerError(errValidateWorkspaceAccess)
+	}
+	if !allowed {
+		return huma.Error403Forbidden("workspace editor role required")
 	}
 	return nil
 }

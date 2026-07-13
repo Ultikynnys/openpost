@@ -978,23 +978,12 @@ func (h *WorkspaceHandler) UpdateWorkspaceSettings(api huma.API) {
 		Errors:      []int{400, 403, 404},
 	}, func(ctx context.Context, input *UpdateWorkspaceSettingsInput) (*UpdateWorkspaceSettingsOutput, error) {
 		userID := middleware.GetUserID(ctx)
-		if !middleware.WorkspaceScopeAllows(ctx, input.PathID) {
-			return nil, huma.Error403Forbidden(errWorkspaceAccessDenied)
-		}
-
-		var memberCount int
-		memberCount, err := h.db.NewSelect().Model((*models.WorkspaceMember)(nil)).
-			Where("workspace_id = ? AND user_id = ?", input.PathID, userID).
-			Count(ctx)
-		if err != nil {
-			return nil, huma.Error500InternalServerError(errValidateWorkspaceAccess)
-		}
-		if memberCount == 0 {
-			return nil, huma.Error403Forbidden(errWorkspaceAccessDenied)
+		if err := h.requireWorkspaceAdmin(ctx, input.PathID, userID); err != nil {
+			return nil, err
 		}
 
 		var workspace models.Workspace
-		err = h.db.NewSelect().Model(&workspace).Where("id = ?", input.PathID).Scan(ctx)
+		err := h.db.NewSelect().Model(&workspace).Where("id = ?", input.PathID).Scan(ctx)
 		if err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				return nil, huma.Error404NotFound("workspace not found")

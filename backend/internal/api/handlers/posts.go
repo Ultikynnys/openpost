@@ -272,7 +272,7 @@ func (h *PostHandler) CreatePost(api huma.API) {
 		Errors:      []int{400, 402},
 	}, func(ctx context.Context, input *CreatePostInput) (*CreatePostOutput, error) {
 		userID := middleware.GetUserID(ctx)
-		if err := h.checkWorkspaceAccess(ctx, input.Body.WorkspaceID, userID); err != nil {
+		if err := h.checkWorkspaceEditAccess(ctx, input.Body.WorkspaceID, userID); err != nil {
 			return nil, err
 		}
 		if err := h.validateAccountsBelongToWorkspace(ctx, input.Body.WorkspaceID, input.Body.SocialAccountIDs); err != nil {
@@ -942,7 +942,7 @@ func (h *PostHandler) CreateThread(api huma.API) {
 		Errors:      []int{400, 402},
 	}, func(ctx context.Context, input *CreateThreadInput) (*CreateThreadOutput, error) {
 		userID := middleware.GetUserID(ctx)
-		if err := h.checkWorkspaceAccess(ctx, input.Body.WorkspaceID, userID); err != nil {
+		if err := h.checkWorkspaceEditAccess(ctx, input.Body.WorkspaceID, userID); err != nil {
 			return nil, err
 		}
 		if err := h.validateAccountsBelongToWorkspace(ctx, input.Body.WorkspaceID, input.Body.SocialAccountIDs); err != nil {
@@ -1272,7 +1272,7 @@ func (h *PostHandler) UpdatePost(api huma.API) {
 			return nil, huma.Error500InternalServerError("failed to fetch post")
 		}
 
-		if err := h.checkWorkspaceAccess(ctx, post.WorkspaceID, userID); err != nil {
+		if err := h.checkWorkspaceEditAccess(ctx, post.WorkspaceID, userID); err != nil {
 			return nil, err
 		}
 
@@ -1638,7 +1638,7 @@ func (h *PostHandler) DeletePost(api huma.API) {
 			return nil, huma.Error500InternalServerError("failed to fetch post")
 		}
 
-		if err := h.checkWorkspaceAccess(ctx, post.WorkspaceID, userID); err != nil {
+		if err := h.checkWorkspaceEditAccess(ctx, post.WorkspaceID, userID); err != nil {
 			return nil, err
 		}
 
@@ -1667,19 +1667,23 @@ func (h *PostHandler) DeletePost(api huma.API) {
 }
 
 func (h *PostHandler) checkWorkspaceAccess(ctx context.Context, workspaceID, userID string) error {
-	if !middleware.WorkspaceScopeAllows(ctx, workspaceID) {
-		return huma.Error403Forbidden("workspace not accessible")
-	}
-	var members []models.WorkspaceMember
-	err := h.db.NewSelect().
-		Model(&members).
-		Where("workspace_id = ? AND user_id = ?", workspaceID, userID).
-		Scan(ctx)
+	allowed, err := middleware.CheckWorkspaceAccess(ctx, h.db, workspaceID, userID)
 	if err != nil {
 		return huma.Error500InternalServerError("failed to check workspace access")
 	}
-	if len(members) == 0 {
+	if !allowed {
 		return huma.Error403Forbidden("workspace not accessible")
+	}
+	return nil
+}
+
+func (h *PostHandler) checkWorkspaceEditAccess(ctx context.Context, workspaceID, userID string) error {
+	allowed, err := middleware.CheckWorkspaceEditAccess(ctx, h.db, workspaceID, userID)
+	if err != nil {
+		return huma.Error500InternalServerError("failed to check workspace access")
+	}
+	if !allowed {
+		return huma.Error403Forbidden("workspace editor role required")
 	}
 	return nil
 }
@@ -1740,7 +1744,7 @@ func (h *PostHandler) UpsertVariants(api huma.API) {
 			return nil, huma.Error500InternalServerError("failed to fetch post")
 		}
 
-		if err := h.checkWorkspaceAccess(ctx, post.WorkspaceID, userID); err != nil {
+		if err := h.checkWorkspaceEditAccess(ctx, post.WorkspaceID, userID); err != nil {
 			return nil, err
 		}
 		accountIDs := make([]string, 0, len(input.Body.Variants))
@@ -1945,7 +1949,7 @@ func (h *PostHandler) DeleteVariants(api huma.API) {
 			return nil, huma.Error500InternalServerError("failed to fetch post")
 		}
 
-		if err := h.checkWorkspaceAccess(ctx, post.WorkspaceID, userID); err != nil {
+		if err := h.checkWorkspaceEditAccess(ctx, post.WorkspaceID, userID); err != nil {
 			return nil, err
 		}
 

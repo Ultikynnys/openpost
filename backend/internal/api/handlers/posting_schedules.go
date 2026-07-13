@@ -26,17 +26,23 @@ func NewPostingScheduleHandler(db *bun.DB, authenticator middleware.Authenticato
 }
 
 func (h *PostingScheduleHandler) checkWorkspaceAccess(ctx context.Context, workspaceID, userID string) error {
-	if !middleware.WorkspaceScopeAllows(ctx, workspaceID) {
-		return huma.Error403Forbidden(errWorkspaceAccessDenied)
-	}
-	memberCount, err := h.db.NewSelect().Model((*models.WorkspaceMember)(nil)).
-		Where("workspace_id = ? AND user_id = ?", workspaceID, userID).
-		Count(ctx)
+	allowed, err := middleware.CheckWorkspaceAccess(ctx, h.db, workspaceID, userID)
 	if err != nil {
 		return huma.Error500InternalServerError(errValidateWorkspaceAccess)
 	}
-	if memberCount == 0 {
+	if !allowed {
 		return huma.Error403Forbidden(errWorkspaceAccessDenied)
+	}
+	return nil
+}
+
+func (h *PostingScheduleHandler) checkWorkspaceAdminAccess(ctx context.Context, workspaceID, userID string) error {
+	allowed, err := middleware.CheckWorkspaceAdminAccess(ctx, h.db, workspaceID, userID)
+	if err != nil {
+		return huma.Error500InternalServerError(errValidateWorkspaceAccess)
+	}
+	if !allowed {
+		return huma.Error403Forbidden("workspace admin role required")
 	}
 	return nil
 }
@@ -149,7 +155,7 @@ func (h *PostingScheduleHandler) CreateSchedule(api huma.API) {
 			return nil, huma.Error400BadRequest("day_of_week must be between 0 (Sunday) and 6 (Saturday)")
 		}
 
-		if err := h.checkWorkspaceAccess(ctx, input.Body.WorkspaceID, userID); err != nil {
+		if err := h.checkWorkspaceAdminAccess(ctx, input.Body.WorkspaceID, userID); err != nil {
 			return nil, err
 		}
 
@@ -240,7 +246,7 @@ func (h *PostingScheduleHandler) UpdateSchedule(api huma.API) {
 			return nil, huma.Error500InternalServerError("failed to fetch schedule")
 		}
 
-		if err := h.checkWorkspaceAccess(ctx, schedule.WorkspaceID, userID); err != nil {
+		if err := h.checkWorkspaceAdminAccess(ctx, schedule.WorkspaceID, userID); err != nil {
 			return nil, err
 		}
 
@@ -315,7 +321,7 @@ func (h *PostingScheduleHandler) DeleteSchedule(api huma.API) {
 			return nil, huma.Error500InternalServerError("failed to fetch schedule")
 		}
 
-		if err := h.checkWorkspaceAccess(ctx, schedule.WorkspaceID, userID); err != nil {
+		if err := h.checkWorkspaceAdminAccess(ctx, schedule.WorkspaceID, userID); err != nil {
 			return nil, err
 		}
 

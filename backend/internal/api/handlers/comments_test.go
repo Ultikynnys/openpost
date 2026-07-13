@@ -53,6 +53,22 @@ func TestHideAndDeleteCommentReturnUnsupportedProvider(t *testing.T) {
 	require.Equal(t, http.StatusNotImplemented, deleteResp.Code, deleteResp.Body.String())
 }
 
+func TestViewerCannotModerateComments(t *testing.T) {
+	srv := newCommentsTestServer(t, map[string]platform.Adapter{"x": fakeCommentAdapter{}})
+	_, err := srv.db.NewUpdate().Model((*models.WorkspaceMember)(nil)).
+		Set("role = ?", models.WorkspaceRoleViewer).
+		Where("workspace_id = ? AND user_id = ?", "ws-1", "user-1").
+		Exec(context.Background())
+	require.NoError(t, err)
+	commentID, err := encodeCommentReference(commentReference{RenditionID: "rendition-1", ProviderCommentID: "provider-comment-1"})
+	require.NoError(t, err)
+
+	resp := srv.request(t, http.MethodPost, "/api/v1/comments/"+commentID+"/hide", nil)
+
+	require.Equal(t, http.StatusForbidden, resp.Code, resp.Body.String())
+	require.Contains(t, resp.Body.String(), "workspace editor role required")
+}
+
 func TestListRenditionCommentsEncodesProviderCommentIDs(t *testing.T) {
 	srv := newCommentsTestServer(t, map[string]platform.Adapter{
 		"x": fakeCommentAdapter{comments: []platform.Comment{{

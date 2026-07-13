@@ -510,7 +510,7 @@ func (h *OAuthHandler) ListMastodonServers(api huma.API) {
 }
 
 func (h *OAuthHandler) ensureCanStartAccountConnection(ctx context.Context, workspaceID, userID string) error {
-	if err := h.checkWorkspaceAccess(ctx, workspaceID, userID); err != nil {
+	if err := h.checkWorkspaceEditAccess(ctx, workspaceID, userID); err != nil {
 		return err
 	}
 	if err := h.accountSaver.CheckSocialAccountQuota(ctx, workspaceID); err != nil {
@@ -712,7 +712,7 @@ func (h *OAuthHandler) Callback(api huma.API) {
 			instanceRef = mastodonInstanceURL(adapter)
 		}
 
-		if err := h.checkWorkspaceAccess(ctx, workspaceID, userID); err != nil {
+		if err := h.checkWorkspaceEditAccess(ctx, workspaceID, userID); err != nil {
 			log.Printf("[Callback] Workspace access check failed: %v", err)
 			return h.redirectWithError("workspace access denied")
 		}
@@ -746,7 +746,7 @@ func (h *OAuthHandler) redirectWithAccountSelection(platformName, connectionID s
 }
 
 func (h *OAuthHandler) saveAccountSelectionAndRedirect(ctx context.Context, userID, platformName, workspaceID, instanceURL string, tokenResp *platform.TokenResult, selector platform.AccountSelectionAdapter) (*huma.StreamResponse, error) {
-	if err := h.checkWorkspaceAccess(ctx, workspaceID, userID); err != nil {
+	if err := h.checkWorkspaceEditAccess(ctx, workspaceID, userID); err != nil {
 		log.Printf("[Callback] Workspace access check failed: %v", err)
 		return h.redirectWithError("workspace access denied")
 	}
@@ -1132,7 +1132,7 @@ func (h *OAuthHandler) loadPendingAccountSelection(ctx context.Context, connecti
 		}
 		return nil, huma.Error500InternalServerError("failed to fetch account selection")
 	}
-	if err := h.checkWorkspaceAccess(ctx, pending.WorkspaceID, userID); err != nil {
+	if err := h.checkWorkspaceEditAccess(ctx, pending.WorkspaceID, userID); err != nil {
 		return nil, err
 	}
 	return &pending, nil
@@ -1195,18 +1195,23 @@ func parseAccountSelectionOptions(raw string) ([]platform.AccountSelectionOption
 }
 
 func (h *OAuthHandler) checkWorkspaceAccess(ctx context.Context, workspaceID, userID string) error {
-	if !middleware.WorkspaceScopeAllows(ctx, workspaceID) {
-		return huma.Error403Forbidden("workspace not accessible")
-	}
-	memberCount, err := h.db.NewSelect().
-		Model((*models.WorkspaceMember)(nil)).
-		Where("workspace_id = ? AND user_id = ?", workspaceID, userID).
-		Count(ctx)
+	allowed, err := middleware.CheckWorkspaceAccess(ctx, h.db, workspaceID, userID)
 	if err != nil {
 		return huma.Error500InternalServerError("failed to check workspace access")
 	}
-	if memberCount == 0 {
+	if !allowed {
 		return huma.Error403Forbidden("workspace not accessible")
+	}
+	return nil
+}
+
+func (h *OAuthHandler) checkWorkspaceEditAccess(ctx context.Context, workspaceID, userID string) error {
+	allowed, err := middleware.CheckWorkspaceEditAccess(ctx, h.db, workspaceID, userID)
+	if err != nil {
+		return huma.Error500InternalServerError("failed to check workspace access")
+	}
+	if !allowed {
+		return huma.Error403Forbidden("workspace editor role required")
 	}
 	return nil
 }
@@ -1275,7 +1280,7 @@ func (h *OAuthHandler) UpdateAccount(api huma.API) {
 			return nil, huma.Error400BadRequest("slug must be 1-63 lowercase letters, numbers, and single hyphens")
 		}
 
-		account, err := h.getAccessibleAccount(ctx, input.AccountID, middleware.GetUserID(ctx))
+		account, err := h.getEditableAccount(ctx, input.AccountID, middleware.GetUserID(ctx))
 		if err != nil {
 			return nil, err
 		}
@@ -1322,7 +1327,7 @@ func (h *OAuthHandler) DisconnectAccount(api huma.API) {
 		Middlewares: huma.Middlewares{middleware.AuthMiddleware(api, h.auth)},
 		Errors:      []int{404},
 	}, func(ctx context.Context, input *DisconnectAccountInput) (*struct{}, error) {
-		account, err := h.getAccessibleAccount(ctx, input.AccountID, middleware.GetUserID(ctx))
+		account, err := h.getEditableAccount(ctx, input.AccountID, middleware.GetUserID(ctx))
 		if err != nil {
 			return nil, err
 		}
@@ -1353,6 +1358,17 @@ func (h *OAuthHandler) getAccessibleAccount(ctx context.Context, accountID, user
 	}
 
 	if err := h.checkWorkspaceAccess(ctx, account.WorkspaceID, userID); err != nil {
+		return account, err
+	}
+	return account, nil
+}
+
+func (h *OAuthHandler) getEditableAccount(ctx context.Context, accountID, userID string) (models.SocialAccount, error) {
+	account, err := h.getAccessibleAccount(ctx, accountID, userID)
+	if err != nil {
+		return account, err
+	}
+	if err := h.checkWorkspaceEditAccess(ctx, account.WorkspaceID, userID); err != nil {
 		return account, err
 	}
 	return account, nil

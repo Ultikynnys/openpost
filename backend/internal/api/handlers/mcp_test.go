@@ -708,6 +708,35 @@ func TestMCPWorkspaceScopedTokenFiltersAndRejectsOtherWorkspaces(t *testing.T) {
 	require.Equal(t, 0, count)
 }
 
+func TestMCPViewerCannotCreateDraft(t *testing.T) {
+	t.Parallel()
+
+	srv := newMCPTestServer(t)
+	_, err := srv.db.NewUpdate().Model((*models.WorkspaceMember)(nil)).
+		Set("role = ?", models.WorkspaceRoleViewer).
+		Where("workspace_id = ? AND user_id = ?", "ws-1", "user-1").
+		Exec(context.Background())
+	require.NoError(t, err)
+
+	resp := srv.request(t, "web-token", map[string]any{
+		"jsonrpc": "2.0",
+		"id":      "viewer-create",
+		"method":  "tools/call",
+		"params": map[string]any{
+			"name": mcpToolCreateDraft,
+			"arguments": map[string]any{
+				"workspace_id": "ws-1",
+				"content":      "Viewer draft",
+			},
+		},
+	})
+
+	require.Equal(t, http.StatusOK, resp.Code)
+	var out map[string]any
+	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &out))
+	require.Equal(t, "workspace editor role required", out["error"].(map[string]any)["message"])
+}
+
 func TestMCPCallListProviderCatalog(t *testing.T) {
 	t.Parallel()
 

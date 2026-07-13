@@ -2051,6 +2051,21 @@ func (h *MCPHandler) ensureWorkspaceAccess(ctx context.Context, userID, workspac
 	return nil
 }
 
+func (h *MCPHandler) ensureWorkspaceEditAccess(ctx context.Context, userID, workspaceID string) *mcpError {
+	workspaceID = strings.TrimSpace(workspaceID)
+	if rpcErr := h.ensureWorkspaceAccess(ctx, userID, workspaceID); rpcErr != nil {
+		return rpcErr
+	}
+	allowed, err := middleware.CheckWorkspaceEditAccess(ctx, h.db, workspaceID, userID)
+	if err != nil {
+		return &mcpError{Code: -32603, Message: "failed to check workspace access"}
+	}
+	if !allowed {
+		return &mcpError{Code: -32602, Message: "workspace editor role required"}
+	}
+	return nil
+}
+
 type mcpWorkspace struct {
 	ID        string `json:"id"`
 	Name      string `json:"name"`
@@ -2236,7 +2251,7 @@ func (h *MCPHandler) createPublication(ctx context.Context, userID string, args 
 	if err := decodeMCPArguments(args, &input); err != nil {
 		return nil, &mcpError{Code: -32602, Message: "invalid create_publication arguments"}
 	}
-	if rpcErr := h.ensureWorkspaceAccess(ctx, userID, input.WorkspaceID); rpcErr != nil {
+	if rpcErr := h.ensureWorkspaceEditAccess(ctx, userID, input.WorkspaceID); rpcErr != nil {
 		return nil, rpcErr
 	}
 	if rpcErr := validateMCPCreatePublicationInput(input); rpcErr != nil {
@@ -2491,7 +2506,7 @@ func (h *MCPHandler) loadMCPPublicationForAction(ctx context.Context, userID str
 	if err := h.db.NewSelect().Model(&publication).Where("id = ?", input.PublicationID).Scan(ctx); err != nil {
 		return models.Publication{}, &mcpError{Code: -32602, Message: "publication not found"}
 	}
-	if rpcErr := h.ensureWorkspaceAccess(ctx, userID, publication.WorkspaceID); rpcErr != nil {
+	if rpcErr := h.ensureWorkspaceEditAccess(ctx, userID, publication.WorkspaceID); rpcErr != nil {
 		return models.Publication{}, rpcErr
 	}
 	return publication, nil
@@ -2667,7 +2682,7 @@ func (h *MCPHandler) createDraft(ctx context.Context, userID string, args map[st
 	if err := decodeMCPArguments(args, &input); err != nil {
 		return nil, &mcpError{Code: -32602, Message: "invalid create_draft arguments"}
 	}
-	if rpcErr := h.ensureWorkspaceAccess(ctx, userID, input.WorkspaceID); rpcErr != nil {
+	if rpcErr := h.ensureWorkspaceEditAccess(ctx, userID, input.WorkspaceID); rpcErr != nil {
 		return nil, rpcErr
 	}
 	if strings.TrimSpace(input.Content) == "" {
@@ -2834,6 +2849,9 @@ func (h *MCPHandler) validateUpdateDraftInput(ctx context.Context, userID string
 	if err := decodeMCPArguments(args, &input); err != nil {
 		return input, nil, nil, nil, &mcpError{Code: -32602, Message: "invalid update_draft arguments"}
 	}
+	if rpcErr := h.ensureWorkspaceEditAccess(ctx, userID, input.WorkspaceID); rpcErr != nil {
+		return input, nil, nil, nil, rpcErr
+	}
 	post, rpcErr := h.accessibleMCPDraft(ctx, userID, input.WorkspaceID, input.PostID, "update_draft can only edit draft posts")
 	if rpcErr != nil {
 		return input, nil, nil, nil, rpcErr
@@ -2919,7 +2937,7 @@ func (h *MCPHandler) validateSetPostRenditionsInput(ctx context.Context, userID 
 	if err := decodeMCPArguments(args, &input); err != nil {
 		return input, nil, &mcpError{Code: -32602, Message: "invalid set_post_renditions arguments"}
 	}
-	if rpcErr := h.ensureWorkspaceAccess(ctx, userID, input.WorkspaceID); rpcErr != nil {
+	if rpcErr := h.ensureWorkspaceEditAccess(ctx, userID, input.WorkspaceID); rpcErr != nil {
 		return input, nil, rpcErr
 	}
 	if strings.TrimSpace(input.PostID) == "" {
@@ -3124,7 +3142,7 @@ func (h *MCPHandler) validateSchedulePostInput(ctx context.Context, userID strin
 	if err := decodeMCPArguments(args, &input); err != nil {
 		return input, nil, nil, time.Time{}, &mcpError{Code: -32602, Message: "invalid schedule_post arguments"}
 	}
-	if rpcErr := h.ensureWorkspaceAccess(ctx, userID, input.WorkspaceID); rpcErr != nil {
+	if rpcErr := h.ensureWorkspaceEditAccess(ctx, userID, input.WorkspaceID); rpcErr != nil {
 		return input, nil, nil, time.Time{}, rpcErr
 	}
 	if strings.TrimSpace(input.Content) == "" {
@@ -3311,6 +3329,9 @@ func (h *MCPHandler) validateScheduleDraftInput(ctx context.Context, userID stri
 	if rpcErr != nil {
 		return input, nil, nil, nil, time.Time{}, time.Time{}, rpcErr
 	}
+	if rpcErr := h.ensureWorkspaceEditAccess(ctx, userID, input.WorkspaceID); rpcErr != nil {
+		return input, nil, nil, nil, time.Time{}, time.Time{}, rpcErr
+	}
 	post, rpcErr := h.accessibleMCPDraft(ctx, userID, input.WorkspaceID, input.PostID, "schedule_draft can only schedule draft posts")
 	if rpcErr != nil {
 		return input, nil, nil, nil, time.Time{}, time.Time{}, rpcErr
@@ -3482,6 +3503,9 @@ func (h *MCPHandler) listScheduledPosts(ctx context.Context, userID string, args
 func (h *MCPHandler) cancelPost(ctx context.Context, userID string, args map[string]any) (any, *mcpError) {
 	post, rpcErr := h.accessibleMCPPost(ctx, userID, args)
 	if rpcErr != nil {
+		return nil, rpcErr
+	}
+	if rpcErr := h.ensureWorkspaceEditAccess(ctx, userID, post.WorkspaceID); rpcErr != nil {
 		return nil, rpcErr
 	}
 	if post.Status == models.PostStatusPublished || post.Status == models.PostStatusPublishing {
@@ -3814,7 +3838,7 @@ func (h *MCPHandler) uploadMediaFromURL(ctx context.Context, userID string, args
 	if err := decodeMCPArguments(args, &input); err != nil {
 		return nil, &mcpError{Code: -32602, Message: "invalid upload_media_from_url arguments"}
 	}
-	if rpcErr := h.ensureWorkspaceAccess(ctx, userID, input.WorkspaceID); rpcErr != nil {
+	if rpcErr := h.ensureWorkspaceEditAccess(ctx, userID, input.WorkspaceID); rpcErr != nil {
 		return nil, rpcErr
 	}
 	if h.mediaStorage == nil {

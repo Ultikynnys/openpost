@@ -256,18 +256,47 @@ func TestCheckWorkspaceAccessHonorsTokenWorkspaceScope(t *testing.T) {
 	if _, err := db.NewInsert().Model(&[]models.Workspace{
 		{ID: "ws-1", Name: "Launch"},
 		{ID: "ws-2", Name: "Personal"},
+		{ID: "ws-3", Name: "Editorial"},
 	}).Exec(ctx); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := db.NewInsert().Model(&[]models.WorkspaceMember{
 		{WorkspaceID: "ws-1", UserID: "user-1", Role: models.WorkspaceRoleAdmin},
-		{WorkspaceID: "ws-2", UserID: "user-1", Role: models.WorkspaceRoleAdmin},
+		{WorkspaceID: "ws-2", UserID: "user-1", Role: models.WorkspaceRoleViewer},
+		{WorkspaceID: "ws-3", UserID: "user-1", Role: models.WorkspaceRoleEditor},
 	}).Exec(ctx); err != nil {
 		t.Fatal(err)
 	}
 
+	ok, err := CheckWorkspaceEditAccess(ctx, db, "ws-1", "user-1")
+	if err != nil || !ok {
+		t.Fatalf("expected admin edit access, ok=%v err=%v", ok, err)
+	}
+	ok, err = CheckWorkspaceAdminAccess(ctx, db, "ws-1", "user-1")
+	if err != nil || !ok {
+		t.Fatalf("expected admin configuration access, ok=%v err=%v", ok, err)
+	}
+	ok, err = CheckWorkspaceEditAccess(ctx, db, "ws-2", "user-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ok {
+		t.Fatal("expected viewer edit access to be rejected")
+	}
+	ok, err = CheckWorkspaceEditAccess(ctx, db, "ws-3", "user-1")
+	if err != nil || !ok {
+		t.Fatalf("expected editor edit access, ok=%v err=%v", ok, err)
+	}
+	ok, err = CheckWorkspaceAdminAccess(ctx, db, "ws-3", "user-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ok {
+		t.Fatal("expected editor configuration access to be rejected")
+	}
+
 	scopedCtx := context.WithValue(ctx, WorkspaceIDKey, "ws-1")
-	ok, err := CheckWorkspaceAccess(scopedCtx, db, "ws-1", "user-1")
+	ok, err = CheckWorkspaceAccess(scopedCtx, db, "ws-1", "user-1")
 	if err != nil || !ok {
 		t.Fatalf("expected scoped workspace access, ok=%v err=%v", ok, err)
 	}
@@ -277,5 +306,12 @@ func TestCheckWorkspaceAccessHonorsTokenWorkspaceScope(t *testing.T) {
 	}
 	if ok {
 		t.Fatal("expected workspace scope to reject ws-2")
+	}
+	ok, err = CheckWorkspaceEditAccess(scopedCtx, db, "ws-3", "user-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ok {
+		t.Fatal("expected workspace scope to reject editor access outside ws-1")
 	}
 }

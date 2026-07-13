@@ -2,6 +2,8 @@ package middleware
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"net/http"
 	"net/netip"
 	"strings"
@@ -224,17 +226,47 @@ func WorkspaceAccessMiddleware(api huma.API, _ *bun.DB) func(ctx huma.Context, n
 
 // CheckWorkspaceAccess is a helper function to verify workspace access.
 func CheckWorkspaceAccess(ctx context.Context, db *bun.DB, workspaceID, userID string) (bool, error) {
+	_, ok, err := WorkspaceRole(ctx, db, workspaceID, userID)
+	return ok, err
+}
+
+// WorkspaceRole returns the authenticated user's role in a workspace while
+// preserving an API token's optional workspace boundary.
+func WorkspaceRole(ctx context.Context, db *bun.DB, workspaceID, userID string) (string, bool, error) {
 	if !WorkspaceScopeAllows(ctx, workspaceID) {
-		return false, nil
+		return "", false, nil
 	}
-	var memberCount int
-	memberCount, err := db.NewSelect().Model((*models.WorkspaceMember)(nil)).
+	var member models.WorkspaceMember
+	err := db.NewSelect().Model(&member).
 		Where("workspace_id = ? AND user_id = ?", workspaceID, userID).
-		Count(ctx)
+		Scan(ctx)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", false, nil
+	}
 	if err != nil {
+		return "", false, err
+	}
+	return member.Role, true, nil
+}
+
+// CheckWorkspaceEditAccess permits workspace administrators and editors to
+// mutate editorial content. Viewers remain read-only.
+func CheckWorkspaceEditAccess(ctx context.Context, db *bun.DB, workspaceID, userID string) (bool, error) {
+	role, ok, err := WorkspaceRole(ctx, db, workspaceID, userID)
+	if err != nil || !ok {
 		return false, err
 	}
-	return memberCount > 0, nil
+	return role == models.WorkspaceRoleAdmin || role == models.WorkspaceRoleEditor, nil
+}
+
+// CheckWorkspaceAdminAccess restricts workspace configuration and team
+// administration to workspace administrators.
+func CheckWorkspaceAdminAccess(ctx context.Context, db *bun.DB, workspaceID, userID string) (bool, error) {
+	role, ok, err := WorkspaceRole(ctx, db, workspaceID, userID)
+	if err != nil || !ok {
+		return false, err
+	}
+	return role == models.WorkspaceRoleAdmin, nil
 }
 
 func WorkspaceScopeAllows(ctx context.Context, workspaceID string) bool {
