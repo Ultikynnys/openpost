@@ -75,7 +75,7 @@ backend/media/
 
 # devenv
 .devenv/
-devenv.lock
+/backend/devenv.lock
 
 .pre-commit-config.yaml
 .codex

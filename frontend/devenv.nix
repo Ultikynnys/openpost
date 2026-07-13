@@ -16,8 +16,7 @@ let
       # small-memory hosts (3–4GB). The default Node heap is ~1.7GB
       # and svelte-check / vite / paraglide will reliably OOM it.
       export NODE_OPTIONS="--max-old-space-size=1024"
-      cd "${config.git.root}/frontend"
-      pnpm install --frozen-lockfile
+      cd "${config.git.root}"
       pnpm --filter @openpost/web lint
     '';
   };
@@ -32,8 +31,7 @@ let
       # small-memory hosts (3–4GB). The default Node heap is ~1.7GB
       # and svelte-check / vite / paraglide will reliably OOM it.
       export NODE_OPTIONS="--max-old-space-size=1024"
-      cd "${config.git.root}/frontend"
-      pnpm install --frozen-lockfile
+      cd "${config.git.root}"
       pnpm --filter @openpost/web check
     '';
   };
@@ -50,10 +48,9 @@ let
       # and svelte-check / vite / paraglide will reliably OOM it.
       export NODE_OPTIONS="--max-old-space-size=1024"
       export PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH="${lib.getExe pkgs.chromium}"
-      cd "${config.git.root}/frontend"
-      pnpm install --frozen-lockfile
+      cd "${config.git.root}"
       # Run tests only if test files exist, otherwise skip silently
-      if find src -name "*.test.ts" -o -name "*.spec.ts" 2>/dev/null | grep -q .; then
+      if find frontend/src \( -name "*.test.ts" -o -name "*.spec.ts" \) 2>/dev/null | grep -q .; then
         pnpm --filter @openpost/web test
       else
         echo "No test files found, skipping tests..."
@@ -72,8 +69,7 @@ let
       # small-memory hosts (3–4GB). The default Node heap is ~1.7GB
       # and vite / paraglide will reliably OOM it.
       export NODE_OPTIONS="--max-old-space-size=1024"
-      cd "${config.git.root}/frontend"
-      pnpm install --frozen-lockfile
+      cd "${config.git.root}"
       pnpm --filter @openpost/web build
       mkdir -p "${config.git.root}/backend/cmd/openpost/public"
       touch "${config.git.root}/backend/cmd/openpost/public/.gitkeep"
@@ -90,7 +86,8 @@ in
   # Scripts for frontend development
   scripts = {
     frontend-dev.exec = ''
-      pnpm install && pnpm --filter @openpost/web dev
+      cd "${config.git.root}"
+      pnpm --filter @openpost/web dev
     '';
 
     frontend-build.exec = ''
@@ -110,40 +107,8 @@ in
     '';
 
     frontend-format.exec = ''
+      cd "${config.git.root}"
       pnpm --filter @openpost/web format
     '';
-  };
-
-  # Git hooks - keep commit-time checks fast. Full type checks, tests, and
-  # production builds remain available through scripts and CI.
-  git-hooks.hooks = {
-    # Lint check (prettier + eslint)
-    eslint = {
-      enable = true;
-      entry = "${lib.getExe eslint-wrapper}";
-      files = "\\.(js|ts|svelte)$";
-      pass_filenames = false;
-    };
-
-    svelte-check = {
-      enable = false;
-      entry = "${lib.getExe svelte-check-wrapper}";
-      files = "\\.(ts|svelte)$";
-      pass_filenames = false;
-    };
-
-    vitest = {
-      enable = false;
-      entry = "${lib.getExe vitest-wrapper}";
-      files = "^(frontend/(src|messages|static|assets)/|frontend/(package\\.json|vite\\.config\\.ts|svelte\\.config\\.js|vitest\\.config\\.[jt]s|tsconfig\\.json)|package\\.json|pnpm-lock\\.yaml|pnpm-workspace\\.yaml|turbo\\.json|assets/|scripts/sync-assets\\.mjs)";
-      pass_filenames = false;
-    };
-
-    frontend-build = {
-      enable = false;
-      entry = "${lib.getExe frontend-build-wrapper}";
-      files = "^(frontend/(src|messages|static|assets)/|frontend/(package\\.json|vite\\.config\\.ts|svelte\\.config\\.js)|package\\.json|pnpm-lock\\.yaml|pnpm-workspace\\.yaml|turbo\\.json|assets/|scripts/sync-assets\\.mjs)";
-      pass_filenames = false;
-    };
   };
 }

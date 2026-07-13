@@ -1,12 +1,10 @@
 {
   pkgs,
-  lib,
   config,
   ...
 }:
 
 {
-  # Shared packages for the entire project
   packages = [
     pkgs.git
     pkgs.curl
@@ -15,92 +13,114 @@
     pkgs.sqlite
     pkgs.wget
     pkgs.docker
-    pkgs.golangci-lint
   ];
 
-  # Environment variables
-  env.OPENPOST_PORT = "8080";
-  env.OPENPOST_DATABASE_PATH = "file:openpost.db?cache=shared&mode=rwc";
-  env.OPENPOST_APP_URL = "http://localhost:8080";
+  # Keep dependency/build caches with the checkout so a durable NAS clone can
+  # be resumed after a Hermes reboot without relying on /tmp or global state.
+  env.GOCACHE = "${config.git.root}/.devenv/state/go-build";
+  env.GOMODCACHE = "${config.git.root}/.devenv/state/go-mod";
+  env.npm_config_store_dir = "${config.git.root}/.devenv/state/pnpm-store";
 
-  # Scripts available in the shell
   scripts = {
     app.exec = ''
-      # Start frontend dev server directly — exec replaces the subshell with pnpm,
-      # so $! is pnpm's PID directly (no wrapper shell process in between).
-      (pnpm install && exec pnpm --filter @openpost/web dev) &
+      cd "${config.git.root}"
+      frontend-dev &
       FRONTEND_PID=$!
 
       cleanup() {
-        # SIGKILL pnpm/vite directly. No wrapper shell, no process groups, no wait.
-        kill -9 $FRONTEND_PID 2>/dev/null || true
+        kill "$FRONTEND_PID" 2>/dev/null || true
+        wait "$FRONTEND_PID" 2>/dev/null || true
       }
-      trap cleanup EXIT
+      trap cleanup EXIT INT TERM
 
       backend-run
-    '';
-
-    docs.exec = ''
-      pnpm install
-      pnpm --filter @openpost/docs docs:dev
     '';
 
     dev.exec = ''
-      (pnpm install && exec pnpm --filter @openpost/web dev) &
-      FRONTEND_PID=$!
+      app
+    '';
 
-      (pnpm install && exec pnpm --filter @openpost/docs docs:dev) &
-      DOCS_PID=$!
-
-      cleanup() {
-        kill -9 $FRONTEND_PID 2>/dev/null || true
-        kill -9 $DOCS_PID 2>/dev/null || true
-      }
-      trap cleanup EXIT
-
-      backend-run
+    docs.exec = ''
+      cd "${config.git.root}"
+      pnpm --filter @openpost/docs docs:dev
     '';
 
     build.exec = ''
+      cd "${config.git.root}"
       frontend-build && backend-build
     '';
 
     docs-build.exec = ''
-      pnpm install
+      cd "${config.git.root}"
       pnpm --filter @openpost/docs docs:build
     '';
 
+    check.exec = ''
+      cd "${config.git.root}"
+      frontend-check &&
+      pnpm --filter @openpost/site check &&
+      pnpm run check:contracts
+    '';
+
+    lint.exec = ''
+      cd "${config.git.root}"
+      backend-format-check &&
+      backend-lint &&
+      frontend-lint
+    '';
+
+    test.exec = ''
+      cd "${config.git.root}"
+      backend-test && frontend-test
+    '';
+
+    verify.exec = ''
+      cd "${config.git.root}"
+      check && lint && test-all && build
+    '';
+
+    backend-check.exec = ''
+      backend-format-check && backend-lint
+    '';
+
+    backend-verify.exec = ''
+      backend-check && backend-test && backend-build
+    '';
+
+    frontend-verify.exec = ''
+      frontend-lint && frontend-check && frontend-test && frontend-build
+    '';
+
+    # Compatibility alias for existing local workflows.
     test-all.exec = ''
       backend-test && frontend-test
     '';
 
-    lint.exec = ''
-      frontend-lint &&
-      frontend-check &&
-      frontend-test &&
-      frontend-build &&
-      backend-format-check &&
-      backend-lint
-    '';
-
     clean.exec = ''
-      rm -rf backend/openpost
-      rm -rf frontend/.svelte-kit
-      rm -rf frontend/node_modules
+      cd "${config.git.root}"
+      rm -rf backend/openpost frontend/.svelte-kit
       rm -f backend/*.db
     '';
 
     install.exec = ''
-      pnpm install
+      cd "${config.git.root}"
+      pnpm install --frozen-lockfile
       (cd backend && go mod download)
+      (cd cli && go mod download)
     '';
 
     setup.exec = ''
-      cp backend/.env.example backend/.env
-      echo "Created backend/.env - edit with your OAuth credentials"
+      cd "${config.git.root}"
+      install
+      if (umask 077; set -o noclobber; cat backend/.env.example > backend/.env) 2>/dev/null; then
+        echo "Created backend/.env; edit it with local credentials as needed"
+      else
+        echo "backend/.env already exists; left unchanged"
+      fi
     '';
 
     docker-build.exec = ''
+      cd "${config.git.root}"
       docker build -t openpost:latest -f docker/Dockerfile .
     '';
 
@@ -109,7 +129,6 @@
     '';
   };
 
-  # Shell initialization
   enterShell = ''
     echo ""
     echo "  OpenPost Development Environment"
@@ -118,42 +137,35 @@
     echo "  pnpm:   $(pnpm --version 2>/dev/null || echo 'not installed')"
     echo ""
     echo "  Commands:"
-    echo "    app          - Start frontend and backend dev servers"
+    echo "    install      - Install locked pnpm and Go dependencies"
+    echo "    setup        - Frozen install and create backend/.env if missing"
+    echo "    dev          - Start frontend and backend dev servers"
     echo "    docs         - Start the VitePress docs site"
-    echo "    dev          - Start frontend, backend, and docs together"
-    echo "    build        - Build production binary"
-    echo "    docs-build   - Build the VitePress docs site"
-    echo "    test-all     - Run all tests"
-    echo "    clean        - Clean build artifacts"
-    echo "    install      - Install frontend, docs, and backend dependencies"
-    echo "    setup        - Create .env from example"
-    echo "    docker-build - Build Docker image"
-    echo "    docker-run   - Run Docker container"
+    echo "    check        - Run type and generated-contract checks"
+    echo "    lint         - Run backend and frontend lint checks"
+    echo "    test         - Run backend and frontend tests"
+    echo "    build        - Build the frontend and backend binary"
+    echo "    verify       - Run check, lint, test, and build"
+    echo "    backend-*    - Targeted backend commands"
+    echo "    frontend-*   - Targeted frontend commands"
     echo ""
 
-    # Load .env if it exists
-    if [ -f backend/.env ]; then
-      set -a
-      source backend/.env
-      set +a
-    fi
-
-    # Install the pre-push lint gate. Pre-commit hooks stay fast and
-    # file-scoped, while pre-push runs a broader lint subset before
-    # branch pushes. Full tests/builds remain explicit and CI-gated.
-    # See scripts/pre-push-lint.sh and AGENTS.md.
+    # Install the tracked fast pre-push lint gate. Full verification stays
+    # explicit and CI-gated.
     if [ -d .git ] && [ -f scripts/pre-push-lint.sh ]; then
-      dest=".git/hooks/pre-push"
-      if [ ! -f "$dest" ] || [ "scripts/pre-push-lint.sh" -nt "$dest" ]; then
-        mkdir -p .git/hooks
-        cp scripts/pre-push-lint.sh "$dest"
-        chmod +x "$dest"
-        echo "  Installed pre-push lint gate -> $dest"
+      dest=.git/hooks/pre-push
+      mkdir -p .git/hooks
+      if [ ! -f "$dest" ] || ! cmp -s scripts/pre-push-lint.sh "$dest"; then
+        cp scripts/pre-push-lint.sh "$dest" 2>/dev/null ||
+          echo "  Warning: could not refresh $dest; tracked hook remains available"
+      fi
+      if [ -f "$dest" ] && [ ! -x "$dest" ]; then
+        chmod +x "$dest" 2>/dev/null ||
+          echo "  Warning: $dest exists but is not executable"
       fi
     fi
   '';
 
-  # Test that key tools are available
   enterTest = ''
     go version
     pnpm --version

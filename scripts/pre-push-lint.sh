@@ -48,7 +48,7 @@ echo "pre-push-lint: running fast lint gate..."
 
 denv_lint() {
   if command -v devenv >/dev/null 2>&1; then
-    devenv shell --quiet -- bash -lc 'backend-format-check && backend-lint && frontend-lint'
+    devenv shell --quiet -- bash -c 'backend-format-check && backend-lint && frontend-lint'
   else
     # Fallback: run the underlying commands directly. Used when the
     # developer hasn't entered the devenv shell (e.g. CI machines).

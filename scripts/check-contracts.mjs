@@ -5,7 +5,8 @@ import { fileURLToPath } from "node:url";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const env = {
   ...process.env,
-  GOCACHE: process.env.GOCACHE || path.join("/tmp", "openpost-go-cache"),
+  GOCACHE:
+    process.env.GOCACHE || path.join(root, ".devenv", "state", "go-build"),
 };
 
 run("node", ["scripts/sync-docs-openapi.mjs"]);

@@ -1,6 +1,7 @@
 {
   pkgs,
   lib,
+  config,
   ...
 }:
 
@@ -12,7 +13,7 @@ let
     runtimeInputs = [ goToolchain pkgs.gnumake ];
     text = ''
       export GOROOT="${goToolchain}/share/go"
-      cd backend
+      cd "${config.git.root}/backend"
       unformatted=$(gofmt -l .)
       if [ -n "$unformatted" ]; then
         echo "$unformatted"
@@ -26,9 +27,9 @@ let
     runtimeInputs = [ goToolchain pkgs.golangci-lint pkgs.gnumake ];
     text = ''
       export GOROOT="${goToolchain}/share/go"
-      mkdir -p backend/cmd/openpost/public
-      touch backend/cmd/openpost/public/.gitkeep
-      cd backend
+      mkdir -p "${config.git.root}/backend/cmd/openpost/public"
+      touch "${config.git.root}/backend/cmd/openpost/public/.gitkeep"
+      cd "${config.git.root}/backend"
       golangci-lint run ./...
     '';
   };
@@ -38,9 +39,10 @@ let
     runtimeInputs = [ goToolchain pkgs.gnumake ];
     text = ''
       export GOROOT="${goToolchain}/share/go"
-      mkdir -p backend/cmd/openpost/public
-      touch backend/cmd/openpost/public/.gitkeep
-      cd backend
+      mkdir -p "${config.git.root}/backend/cmd/openpost/public"
+      touch "${config.git.root}/backend/cmd/openpost/public/.gitkeep"
+      cd "${config.git.root}/backend"
+      go clean -testcache
       go test ./...
     '';
   };
@@ -50,7 +52,7 @@ let
     runtimeInputs = [ goToolchain pkgs.gnumake ];
     text = ''
       export GOROOT="${goToolchain}/share/go"
-      cd cli
+      cd "${config.git.root}/cli"
       unformatted=$(gofmt -l .)
       if [ -n "$unformatted" ]; then
         echo "$unformatted"
@@ -64,7 +66,7 @@ let
     runtimeInputs = [ goToolchain pkgs.golangci-lint pkgs.gnumake ];
     text = ''
       export GOROOT="${goToolchain}/share/go"
-      cd cli
+      cd "${config.git.root}/cli"
       golangci-lint run ./...
     '';
   };
@@ -74,7 +76,7 @@ let
     runtimeInputs = [ goToolchain pkgs.gnumake ];
     text = ''
       export GOROOT="${goToolchain}/share/go"
-      cd cli
+      cd "${config.git.root}/cli"
       go clean -testcache
       go test ./...
     '';
@@ -98,11 +100,11 @@ in
   # Scripts for backend development
   scripts = {
     backend-run.exec = ''
-      cd backend && go run ./cmd/openpost
+      cd "${config.git.root}/backend" && go run ./cmd/openpost
     '';
 
     backend-build.exec = ''
-      cd backend && go build -o openpost ./cmd/openpost
+      cd "${config.git.root}/backend" && go build -o openpost ./cmd/openpost
     '';
 
     backend-test.exec = ''
@@ -116,52 +118,21 @@ in
     backend-lint.exec = ''
       ${lib.getExe backend-golangci-lint}
     '';
-  };
 
-  # Git hooks - keep commit-time checks fast. Heavier lint/test gates stay in
-  # explicit scripts, CI, and the pre-push hook.
-  git-hooks.hooks = {
-    # Format check (go fmt)
-    gofmt = {
-      enable = true;
-      entry = lib.getExe backend-gofmt-check;
-      pass_filenames = false;
-    };
+    cli-format-check.exec = ''
+      ${lib.getExe cli-gofmt-check}
+    '';
 
-    # CLI gofmt check (mirrors backend gofmt, only runs for cli/**)
-    cli-gofmt = {
-      enable = true;
-      entry = lib.getExe cli-gofmt-check;
-      files = "^cli/.*\\.go$";
-      pass_filenames = false;
-    };
+    cli-lint.exec = ''
+      ${lib.getExe cli-golangci-lint}
+    '';
 
-    golangci-lint = {
-      enable = false;
-      entry = lib.getExe backend-golangci-lint;
-      files = "\\.go$";
-      pass_filenames = false;
-    };
+    cli-test.exec = ''
+      ${lib.getExe cli-go-test}
+    '';
 
-    cli-golangci-lint = {
-      enable = false;
-      entry = lib.getExe cli-golangci-lint;
-      files = "^cli/.*\\.go$";
-      pass_filenames = false;
-    };
-
-    go-test = {
-      enable = false;
-      entry = lib.getExe backend-go-test;
-      files = "\\.go$";
-      pass_filenames = false;
-    };
-
-    cli-go-test = {
-      enable = false;
-      entry = lib.getExe cli-go-test;
-      files = "^cli/.*\\.go$";
-      pass_filenames = false;
-    };
+    cli-build.exec = ''
+      cd "${config.git.root}/cli" && go build ./...
+    '';
   };
 }
