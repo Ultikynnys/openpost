@@ -27,8 +27,8 @@ export default defineConfig({
 				name: 'OpenPost',
 				short_name: 'OpenPost',
 				description: 'Schedule and publish content across multiple social platforms.',
-				theme_color: '#f97316',
-				background_color: '#0f0f10',
+				theme_color: '#9a4d2a',
+				background_color: '#faf9f7',
 				display: 'standalone',
 				start_url: '/',
 				icons: [

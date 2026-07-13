@@ -6,6 +6,10 @@
 	import DashboardModal from '@uppy/svelte/dashboard-modal';
 	import { getApiBase } from '$lib/stores/instance.svelte';
 	import { getToken } from '$lib/api/client';
+	import '@uppy/core/css/style.min.css';
+	import '@uppy/dashboard/css/style.min.css';
+	import '@uppy/webcam/css/style.min.css';
+	import '@uppy/image-editor/css/style.min.css';
 	import '@uppy/svelte/css/style.css';
 	import '@uppy/svelte/css/image-editor.css';
 

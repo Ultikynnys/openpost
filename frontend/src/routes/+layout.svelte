@@ -1,9 +1,5 @@
 <script lang="ts">
 	import '../app.css';
-	import '@uppy/core/css/style.min.css';
-	import '@uppy/dashboard/css/style.min.css';
-	import '@uppy/webcam/css/style.min.css';
-	import '@uppy/image-editor/css/style.min.css';
 	import './layout.css';
 	import { ModeWatcher } from 'mode-watcher';
 	import { onMount } from 'svelte';
