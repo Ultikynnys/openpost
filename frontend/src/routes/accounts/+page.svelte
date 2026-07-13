@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { SvelteMap } from 'svelte/reactivity';
 	import { auth } from '$lib/stores/auth';
 	import { client, type Workspace, type SocialAccount, type ProviderInfo } from '$lib/api/client';
 	import { Button } from '$lib/components/ui/button';
@@ -7,7 +8,7 @@
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
-	import { goto } from '$app/navigation';
+	import { goto, replaceState } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import PageContainer from '$lib/components/page-container.svelte';
 	import EmptyState from '$lib/components/empty-state.svelte';
@@ -162,7 +163,7 @@
 		const urlError = params.get('error');
 		if (urlError) {
 			error = urlError;
-			window.history.replaceState({}, document.title, window.location.pathname);
+			replaceState(window.location.pathname, {});
 		}
 
 		const unsubscribe = auth.subscribe(async (state) => {
@@ -615,7 +616,7 @@
 	}
 
 	const accountsByPlatform = $derived.by(() => {
-		const grouped = new Map<string, SocialAccount[]>();
+		const grouped = new SvelteMap<string, SocialAccount[]>();
 		for (const acc of accounts) {
 			const key = acc.platform;
 			if (!grouped.has(key)) grouped.set(key, []);

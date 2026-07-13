@@ -43,7 +43,7 @@ const pendingSelection = {
 };
 
 function setCallbackUrl(query: string) {
-	window.history.pushState({}, '', `/accounts/callback?${query}`);
+	History.prototype.pushState.call(window.history, {}, '', `/accounts/callback?${query}`);
 }
 
 function deferred<T>() {
