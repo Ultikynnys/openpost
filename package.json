@@ -9,6 +9,7 @@
     "dev": "turbo run dev --parallel",
     "build": "turbo run build",
     "check": "turbo run check",
+    "check:contracts": "node scripts/check-contracts.mjs",
     "test": "turbo run test",
     "test:e2e": "playwright test",
     "test:e2e:app": "playwright test --config playwright.app.config.ts",

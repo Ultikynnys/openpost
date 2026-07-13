@@ -43,6 +43,12 @@ jobs:
               - 'devenv.lock'
             frontend:
               - 'frontend/**'
+              - 'backend/internal/api/**'
+              - 'backend/cmd/openpost-openapi/**'
+              - 'cli/internal/commands/**'
+              - 'cli/cmd/openpost-docs/**'
+              - 'scripts/sync-docs-openapi.mjs'
+              - 'scripts/check-contracts.mjs'
               - 'marketing-site/**'
               - 'docs-site/**'
               - 'e2e/**'
@@ -311,6 +317,7 @@ jobs:
         shell: devenv shell bash -- -e {0}
         run: |
           pnpm install --frozen-lockfile
+          pnpm run check:contracts
           pnpm exec playwright install --with-deps chromium
           pnpm --filter @openpost/web test
           pnpm --filter @openpost/web build
