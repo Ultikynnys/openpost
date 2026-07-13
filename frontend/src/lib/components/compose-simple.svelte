@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount, tick, type Snippet } from 'svelte';
+	import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 	import { client, type SocialAccount, type Workspace, getToken } from '$lib/api/client';
 	import { getApiBase } from '$lib/stores/instance.svelte';
 	import { getAuthenticatedMediaByID } from '$lib/media-url';
@@ -132,7 +133,7 @@
 	let autoSaveTimer: ReturnType<typeof setTimeout> | null = null;
 	let lastSavedSnapshot = $state('');
 	let appliedInitialContextKey = $state('');
-	let textareaRefs = $state<Map<number, HTMLTextAreaElement>>(new Map());
+	const textareaRefs = new SvelteMap<number, HTMLTextAreaElement>();
 	const scheduleInputPlaceholder = 'Write any time, e.g. "tomorrow at 9am" or "in 3 hours"';
 	const randomDelayOptions = [0, 5, 10, 15, 30, 45, 60];
 
@@ -253,7 +254,7 @@
 			: workspaceCtx.settings.random_delay_minutes;
 	});
 	const randomDelaySelectOptions = $derived.by(() => {
-		const options = new Set(randomDelayOptions);
+		const options = new SvelteSet(randomDelayOptions);
 		const selected = Number(randomDelayOverride);
 		if (randomDelayOverride !== 'default' && Number.isFinite(selected)) {
 			options.add(selected);
@@ -357,7 +358,7 @@
 			selectedAccountIds = nextSelectedIds;
 		}
 
-		const nextVariants = new Map<string, Record<string, VariantPost>>();
+		const nextVariants = new SvelteMap<string, Record<string, VariantPost>>();
 		for (const [accountID, value] of variants.entries()) {
 			if (validIds.has(accountID)) {
 				nextVariants.set(accountID, value);
@@ -384,16 +385,11 @@
 		el.style.height = el.scrollHeight + 'px';
 	}
 
-	function textareaAction(el: HTMLTextAreaElement, index: number) {
-		textareaRefs.set(index, el);
-		autoResize(el);
-		return {
-			update() {
-				textareaRefs.set(index, el);
-			},
-			destroy() {
-				textareaRefs.delete(index);
-			}
+	function textareaAttachment(index: number) {
+		return (el: HTMLTextAreaElement) => {
+			textareaRefs.set(index, el);
+			autoResize(el);
+			return () => textareaRefs.delete(index);
 		};
 	}
 
@@ -516,7 +512,7 @@
 	}
 
 	function mergeMediaIds(current: string[], incoming: string[]): string[] {
-		const seen = new Set<string>();
+		const seen = new SvelteSet<string>();
 		const merged: string[] = [];
 		for (const id of [...current, ...incoming]) {
 			const clean = id.trim();
@@ -532,7 +528,7 @@
 		nextVariants: Map<string, Record<string, VariantPost>>,
 		sourcePosts: PostItem[] = posts
 	): Map<string, Record<string, VariantPost>> {
-		const normalized = new Map<string, Record<string, VariantPost>>();
+		const normalized = new SvelteMap<string, Record<string, VariantPost>>();
 		for (const accountId of selectedAccountIds) {
 			const values = nextVariants.get(accountId);
 			if (values) {
@@ -576,8 +572,8 @@
 		randomDelayOverride = normalizeRandomDelayValue(post.random_delay_minutes);
 
 		// Load alt texts from media
-		const newAlts = new Map<string, string>();
-		const newMimeTypes = new Map<string, string>();
+		const newAlts = new SvelteMap<string, string>();
+		const newMimeTypes = new SvelteMap<string, string>();
 		post.media?.forEach((m) => {
 			if (m.alt_text) newAlts.set(m.media_id, m.alt_text);
 			if (m.mime_type) newMimeTypes.set(m.media_id, m.mime_type);
@@ -692,7 +688,7 @@
 	$effect(() => {
 		const selected = new Set(selectedAccountIds);
 		let changed = false;
-		const nextVariants = new Map<string, Record<string, VariantPost>>();
+		const nextVariants = new SvelteMap<string, Record<string, VariantPost>>();
 		for (const [accountId, value] of variants.entries()) {
 			if (selected.has(accountId)) {
 				const normalized = normalizeVariantRecord(value, posts);
@@ -732,9 +728,9 @@
 			if (!resp.ok) return;
 
 			const mediaData = await resp.json();
-			const nextMimeTypes = new Map(mediaMimeTypes);
-			const nextAltTexts = new Map(mediaAltTexts);
-			const nextSizes = new Map(mediaSizes);
+			const nextMimeTypes = new SvelteMap(mediaMimeTypes);
+			const nextAltTexts = new SvelteMap(mediaAltTexts);
+			const nextSizes = new SvelteMap(mediaSizes);
 			for (const media of mediaData.media ?? []) {
 				if (media.mime_type) {
 					nextMimeTypes.set(media.id, media.mime_type);
@@ -793,7 +789,7 @@
 		if (selectedAccountIds.includes(id)) {
 			selectedAccountIds = selectedAccountIds.filter((a) => a !== id);
 			if (variants.has(id)) {
-				const nextVariants = new Map(variants);
+				const nextVariants = new SvelteMap(variants);
 				nextVariants.delete(id);
 				variants = nextVariants;
 			}
@@ -1188,12 +1184,12 @@
 
 				const data = await uploadMediaFile({ workspaceId: selectedWorkspaceId, file });
 				if (data.mime_type) {
-					const nextMimeTypes = new Map(mediaMimeTypes);
+					const nextMimeTypes = new SvelteMap(mediaMimeTypes);
 					nextMimeTypes.set(data.id, data.mime_type);
 					mediaMimeTypes = nextMimeTypes;
 				}
 				if (typeof data.size === 'number') {
-					const nextSizes = new Map(mediaSizes);
+					const nextSizes = new SvelteMap(mediaSizes);
 					nextSizes.set(data.id, data.size);
 					mediaSizes = nextSizes;
 				}
@@ -1261,13 +1257,13 @@
 			);
 		}
 		if (mediaId) {
-			const newAlts = new Map(mediaAltTexts);
+			const newAlts = new SvelteMap(mediaAltTexts);
 			newAlts.delete(mediaId);
 			mediaAltTexts = newAlts;
-			const newMimeTypes = new Map(mediaMimeTypes);
+			const newMimeTypes = new SvelteMap(mediaMimeTypes);
 			newMimeTypes.delete(mediaId);
 			mediaMimeTypes = newMimeTypes;
-			const newSizes = new Map(mediaSizes);
+			const newSizes = new SvelteMap(mediaSizes);
 			newSizes.delete(mediaId);
 			mediaSizes = newSizes;
 		}
@@ -1292,7 +1288,7 @@
 	function setVariantMediaIds(accountId: string, index: number, mediaIds: string[]) {
 		const postKey = posts[index]?.key;
 		if (!postKey) return;
-		const newVariants = new Map(variants);
+		const newVariants = new SvelteMap(variants);
 		const current = {
 			...normalizeVariantRecord(newVariants.get(accountId), posts),
 			[postKey]: {
@@ -1305,7 +1301,7 @@
 	}
 
 	function setMediaAltText(mediaId: string, alt: string) {
-		const newAlts = new Map(mediaAltTexts);
+		const newAlts = new SvelteMap(mediaAltTexts);
 		if (alt.trim()) {
 			newAlts.set(mediaId, alt.trim());
 		} else {
@@ -1355,7 +1351,7 @@
 	// Variants
 	// --------------------------------------------------------------------------
 	function handleVariantChange(accountId: string, index: number, value: string) {
-		const newVariants = new Map(variants);
+		const newVariants = new SvelteMap(variants);
 		const postKey = posts[index]?.key;
 		if (!postKey) return;
 		const current = {
@@ -1376,8 +1372,8 @@
 				params: { path: { id: postId } }
 			});
 			if (err) throw err;
-			const nextVariants = new Map<string, Record<string, VariantPost>>();
-			const variantMediaIds = new Set<string>();
+			const nextVariants = new SvelteMap<string, Record<string, VariantPost>>();
+			const variantMediaIds = new SvelteSet<string>();
 			for (const variant of data?.variants ?? []) {
 				if (variant.is_unsynced) {
 					let mediaIds = [...(posts[0]?.mediaIds ?? [])];
@@ -1458,7 +1454,7 @@
 
 	function resyncAccount(accountId: string) {
 		if (!variants.has(accountId)) return;
-		const nextVariants = new Map(variants);
+		const nextVariants = new SvelteMap(variants);
 		nextVariants.delete(accountId);
 		variants = nextVariants;
 		activeVariantAccountId = null;
@@ -2273,7 +2269,7 @@
 											<textarea
 												id="post-textarea-{i}"
 												aria-label="Post text"
-												use:textareaAction={i}
+												{@attach textareaAttachment(i)}
 												value={getEditorContentForPost(post)}
 												oninput={(e) => {
 													const target = e.target as HTMLTextAreaElement;
