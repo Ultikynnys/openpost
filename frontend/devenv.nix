@@ -7,7 +7,10 @@
 let
   eslint-wrapper = pkgs.writeShellApplication {
     name = "eslint-wrapper";
-    runtimeInputs = [ pkgs.nodejs_22 pkgs.pnpm ];
+    runtimeInputs = [
+      pkgs.nodejs_22
+      pkgs.pnpm
+    ];
     text = ''
       # Cap V8 heap at 1GB to keep the runner's OOM in check on
       # small-memory hosts (3–4GB). The default Node heap is ~1.7GB
@@ -20,7 +23,10 @@ let
   };
   svelte-check-wrapper = pkgs.writeShellApplication {
     name = "svelte-check-wrapper";
-    runtimeInputs = [ pkgs.nodejs_22 pkgs.pnpm ];
+    runtimeInputs = [
+      pkgs.nodejs_22
+      pkgs.pnpm
+    ];
     text = ''
       # Cap V8 heap at 1GB to keep the runner's OOM in check on
       # small-memory hosts (3–4GB). The default Node heap is ~1.7GB
@@ -33,15 +39,19 @@ let
   };
   vitest-wrapper = pkgs.writeShellApplication {
     name = "vitest-wrapper";
-    runtimeInputs = [ pkgs.nodejs_22 pkgs.pnpm ];
+    runtimeInputs = [
+      pkgs.nodejs_22
+      pkgs.pnpm
+      pkgs.chromium
+    ];
     text = ''
       # Cap V8 heap at 1GB to keep the runner's OOM in check on
       # small-memory hosts (3–4GB). The default Node heap is ~1.7GB
       # and svelte-check / vite / paraglide will reliably OOM it.
       export NODE_OPTIONS="--max-old-space-size=1024"
+      export PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH="${lib.getExe pkgs.chromium}"
       cd "${config.git.root}/frontend"
       pnpm install --frozen-lockfile
-      pnpm exec playwright install chromium
       # Run tests only if test files exist, otherwise skip silently
       if find src -name "*.test.ts" -o -name "*.spec.ts" 2>/dev/null | grep -q .; then
         pnpm --filter @openpost/web test
@@ -53,7 +63,10 @@ let
   };
   frontend-build-wrapper = pkgs.writeShellApplication {
     name = "frontend-build-wrapper";
-    runtimeInputs = [ pkgs.nodejs_22 pkgs.pnpm ];
+    runtimeInputs = [
+      pkgs.nodejs_22
+      pkgs.pnpm
+    ];
     text = ''
       # Cap V8 heap at 1GB to keep the runner's OOM in check on
       # small-memory hosts (3–4GB). The default Node heap is ~1.7GB
