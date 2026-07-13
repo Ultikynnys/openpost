@@ -187,8 +187,8 @@ export interface SecurityStatus {
 		created_at: string;
 	};
 	totp_enabled: boolean;
-	passkeys: PasskeySummary[];
-	methods: string[];
+	passkeys: PasskeySummary[] | null;
+	methods: string[] | null;
 }
 
 export interface AuthSessionSummary {
@@ -277,7 +277,7 @@ export interface PostingSchedule {
 	local_hour: number;
 	local_minute: number;
 	local_day_of_week: number;
-	label: string;
+	label?: string;
 	is_active: boolean;
 	created_at: string;
 }

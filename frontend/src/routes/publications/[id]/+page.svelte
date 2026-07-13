@@ -23,7 +23,7 @@
 		hasLoaded = false;
 		error = '';
 		try {
-			const { data, error: err } = await (client as any).GET('/publications/{id}', {
+			const { data, error: err } = await client.GET('/publications/{id}', {
 				params: { path: { id } }
 			});
 			if (err) throw new Error((err as any)?.detail || 'Failed to load publication');

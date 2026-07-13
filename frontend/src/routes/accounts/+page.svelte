@@ -115,7 +115,7 @@
 
 	async function disconnectAccount(accountId: string) {
 		try {
-			await (client as any).DELETE('/accounts/{account_id}', {
+			await client.DELETE('/accounts/{account_id}', {
 				params: { path: { account_id: accountId } }
 			});
 			await loadAccounts();
@@ -142,7 +142,7 @@
 		editAccountLoading = true;
 		editAccountError = '';
 		try {
-			const { error: err } = await (client as any).PATCH('/accounts/{account_id}', {
+			const { error: err } = await client.PATCH('/accounts/{account_id}', {
 				params: { path: { account_id: editingAccount.id } },
 				body: { slug: editAccountSlug.trim() }
 			});
@@ -280,7 +280,7 @@
 		blueskyError = '';
 
 		try {
-			const { error: err } = await (client as any).POST('/accounts/bluesky/login', {
+			const { error: err } = await client.POST('/accounts/bluesky/login', {
 				body: {
 					workspace_id: selectedWorkspaceId,
 					handle: blueskyHandle.trim(),

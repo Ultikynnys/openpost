@@ -50,7 +50,7 @@ function createAuthStore() {
 		},
 		async login(email: string, password: string): Promise<AuthActionResult> {
 			try {
-				const { data, error } = await (client as any).POST('/auth/login', {
+				const { data, error } = await client.POST('/auth/login', {
 					body: { email, password }
 				});
 				if (error || !data) throw new Error(error?.detail ?? 'Login failed');
@@ -85,7 +85,7 @@ function createAuthStore() {
 		},
 		async verifyTOTP(mfaToken: string, code: string): Promise<AuthActionResult> {
 			try {
-				const { data, error } = await (client as any).POST('/auth/login/totp', {
+				const { data, error } = await client.POST('/auth/login/totp', {
 					body: { mfa_token: mfaToken, code }
 				});
 				if (error || !data) throw new Error(error?.detail ?? 'Authenticator verification failed');
@@ -98,7 +98,7 @@ function createAuthStore() {
 		},
 		async verifyPasskey(mfaToken: string): Promise<AuthActionResult> {
 			try {
-				const { data: beginData, error: beginError } = await (client as any).POST(
+				const { data: beginData, error: beginError } = await client.POST(
 					'/auth/login/passkey/options',
 					{
 						body: { mfa_token: mfaToken }
@@ -109,7 +109,7 @@ function createAuthStore() {
 				}
 
 				const credential = await getPasskeyAssertion(beginData.options);
-				const { data, error } = await (client as any).POST('/auth/login/passkey/verify', {
+				const { data, error } = await client.POST('/auth/login/passkey/verify', {
 					body: {
 						challenge_id: beginData.challenge_id,
 						credential

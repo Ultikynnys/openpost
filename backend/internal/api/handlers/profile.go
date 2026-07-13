@@ -2,11 +2,13 @@ package handlers
 
 import (
 	"bytes"
+	"context"
 	"io"
 	"net/http"
 	"path/filepath"
 	"strings"
 
+	"github.com/danielgtaylor/huma/v2"
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	"github.com/openpost/backend/internal/api/middleware"
@@ -27,12 +29,36 @@ func NewProfileHandler(db *bun.DB, authenticator middleware.Authenticator, stora
 	return &ProfileHandler{db: db, auth: authenticator, storage: storage}
 }
 
-func (h *ProfileHandler) RegisterRoutes(e *echo.Echo) {
+func (h *ProfileHandler) RegisterLegacyRoutes(e *echo.Echo) {
 	auth := middleware.BearerMiddleware(h.auth)
 	e.POST("/api/v1/auth/profile/avatar", h.uploadAvatar, auth)
-	e.DELETE("/api/v1/auth/profile/avatar", h.deleteAvatar, auth)
 	e.GET("/avatars/:id", h.serveAvatar)
 	e.HEAD("/avatars/:id", h.serveAvatar)
+}
+
+type RemoveAvatarOutput struct {
+	Body struct {
+		Removed bool `json:"removed" doc:"Whether the profile avatar was removed"`
+	}
+}
+
+func (h *ProfileHandler) RegisterRoutes(api huma.API) {
+	huma.Register(api, huma.Operation{
+		OperationID: "delete-profile-avatar",
+		Method:      http.MethodDelete,
+		Path:        "/auth/profile/avatar",
+		Summary:     "Remove current user profile avatar",
+		Tags:        []string{tagAuth},
+		Middlewares: huma.Middlewares{middleware.AuthMiddleware(api, h.auth)},
+		Errors:      []int{401, 404, 500},
+	}, func(ctx context.Context, _ *struct{}) (*RemoveAvatarOutput, error) {
+		if err := h.deleteAvatarForUser(ctx, middleware.GetUserID(ctx)); err != nil {
+			return nil, err
+		}
+		out := &RemoveAvatarOutput{}
+		out.Body.Removed = true
+		return out, nil
+	})
 }
 
 func (h *ProfileHandler) uploadAvatar(c echo.Context) error {
@@ -92,24 +118,23 @@ func (h *ProfileHandler) uploadAvatar(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]string{"avatar_url": avatarURL})
 }
 
-func (h *ProfileHandler) deleteAvatar(c echo.Context) error {
-	userID := c.Get(string(middleware.UserIDKey)).(string)
+func (h *ProfileHandler) deleteAvatarForUser(ctx context.Context, userID string) error {
 	var user models.User
-	if err := h.db.NewSelect().Model(&user).Where("id = ?", userID).Scan(c.Request().Context()); err != nil {
-		return c.JSON(http.StatusNotFound, map[string]string{fieldError: "user not found"})
+	if err := h.db.NewSelect().Model(&user).Where("id = ?", userID).Scan(ctx); err != nil {
+		return huma.Error404NotFound("user not found")
 	}
 	if _, err := h.db.NewUpdate().
 		Model((*models.User)(nil)).
 		Set("avatar_url = ?", "").
 		Set("avatar_object_key = ?", "").
 		Where("id = ?", userID).
-		Exec(c.Request().Context()); err != nil {
-		return c.JSON(http.StatusInternalServerError, map[string]string{fieldError: "failed to remove profile avatar"})
+		Exec(ctx); err != nil {
+		return huma.Error500InternalServerError("failed to remove profile avatar")
 	}
-	if strings.TrimSpace(user.AvatarObjectKey) != "" {
+	if h.storage != nil && strings.TrimSpace(user.AvatarObjectKey) != "" {
 		_ = h.storage.Delete(filepath.Base(user.AvatarObjectKey))
 	}
-	return c.JSON(http.StatusOK, map[string]bool{"removed": true})
+	return nil
 }
 
 func (h *ProfileHandler) serveAvatar(c echo.Context) error {

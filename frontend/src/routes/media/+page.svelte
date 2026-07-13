@@ -105,7 +105,7 @@
 		selectedMediaIds.clear();
 		isSelectionMode = false;
 		try {
-			const { data, error: err } = await (client as any).GET('/media', {
+			const { data, error: err } = await client.GET('/media', {
 				params: {
 					query: {
 						workspace_id: selectedWorkspaceId,
@@ -129,7 +129,7 @@
 
 	async function toggleFavorite(mediaId: string) {
 		try {
-			const { data, error: err } = await (client as any).PATCH('/media/{id}/favorite', {
+			const { data, error: err } = await client.PATCH('/media/{id}/favorite', {
 				params: { path: { id: mediaId } }
 			});
 			if (err) throw new Error(err.detail || 'Failed to update favorite');
@@ -154,7 +154,7 @@
 	async function deleteMedia(mediaId: string) {
 		if (!confirm('Delete this media? This cannot be undone.')) return;
 		try {
-			const { error: err } = await (client as any).DELETE('/media/{id}', {
+			const { error: err } = await client.DELETE('/media/{id}', {
 				params: { path: { id: mediaId } }
 			});
 			if (err) throw new Error(err.detail || 'Failed to delete media');
@@ -172,7 +172,7 @@
 			return;
 
 		try {
-			const { data, error: err } = await (client as any).POST('/media/batch-delete', {
+			const { data, error: err } = await client.POST('/media/batch-delete', {
 				body: {
 					media_ids: Array.from(selectedMediaIds)
 				}
@@ -218,7 +218,7 @@
 		usageLoading = true;
 		mediaUsage = [];
 		try {
-			const { data, error: err } = await (client as any).GET('/media/{id}/usage', {
+			const { data, error: err } = await client.GET('/media/{id}/usage', {
 				params: { path: { id: media.id } }
 			});
 			if (err) throw new Error(err.detail || 'Failed to load usage');

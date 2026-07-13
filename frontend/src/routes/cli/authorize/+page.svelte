@@ -55,7 +55,7 @@
 		error = '';
 
 		try {
-			const { data, error: apiError } = await (client as any).GET('/cli/auth/session', {
+			const { data, error: apiError } = await client.GET('/cli/auth/session', {
 				params: { query: { user_code: code } }
 			});
 
@@ -92,7 +92,7 @@
 				decision === 'approved'
 					? { user_code: userCode, name: tokenName || 'OpenPost CLI' }
 					: { user_code: userCode };
-			const { error: apiError } = await (client as any).POST(path, { body });
+			const { error: apiError } = await client.POST(path, { body });
 
 			if (apiError) {
 				throw new Error(apiError?.detail ?? m.cli_authorize_decision_failed());

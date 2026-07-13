@@ -34,7 +34,7 @@
 		label: string;
 		type: string;
 		required?: boolean;
-		options?: string[];
+		options?: string[] | null;
 		help?: string;
 	};
 
@@ -49,13 +49,13 @@
 		media: {
 			min_count: number;
 			max_count: number;
-			allowed_mimes?: string[];
-			aspect_ratios?: string[];
+			allowed_mimes?: string[] | null;
+			aspect_ratios?: string[] | null;
 			max_duration_seconds?: number;
 			requires_public_url?: boolean;
 		};
-		settings?: SettingField[];
-		caveats?: string[];
+		settings?: SettingField[] | null;
+		caveats?: string[] | null;
 	};
 
 	type UploadedMedia = {
@@ -78,7 +78,7 @@
 	};
 
 	type ValidationIssue = {
-		severity: 'error' | 'warning';
+		severity: string;
 		code: string;
 		message: string;
 		provider?: string;
@@ -91,8 +91,8 @@
 		provider: string;
 		configured_app_state: string;
 		connected_accounts: number;
-		blocking_issues?: string[];
-		next_actions?: string[];
+		blocking_issues?: string[] | null;
+		next_actions?: string[] | null;
 		public_media_health?: {
 			status: string;
 			failing_count: number;
@@ -169,10 +169,7 @@
 		error = '';
 		try {
 			const [{ data: workspaceData }, { data: capabilityData, error: capabilityError }] =
-				await Promise.all([
-					client.GET('/workspaces', {}),
-					(client as any).GET('/capabilities', {})
-				]);
+				await Promise.all([client.GET('/workspaces', {}), client.GET('/capabilities', {})]);
 			if (capabilityError) throw new Error(capabilityError.detail || 'Failed to load capabilities');
 			workspaces = workspaceData ?? [];
 			profiles = capabilityData?.profiles ?? [];
@@ -215,7 +212,7 @@
 	async function loadProviderReadiness() {
 		if (!selectedWorkspaceId) return;
 		try {
-			const { data, error: err } = await (client as any).GET('/provider-readiness', {
+			const { data, error: err } = await client.GET('/provider-readiness', {
 				params: { query: { workspace_id: selectedWorkspaceId } }
 			});
 			if (err) throw new Error(err.detail || 'Failed to load provider readiness');
@@ -383,21 +380,21 @@
 		success = '';
 		try {
 			const body = publicationPayload();
-			const { data, error: createError } = await (client as any).POST('/publications', { body });
+			const { data, error: createError } = await client.POST('/publications', { body });
 			if (createError) throw new Error(createError.detail || 'Failed to create publication');
 			const publicationId = data.id;
 			if (action === 'validate') {
 				await validatePublication(publicationId);
 				success = 'Validation complete';
 			} else if (action === 'schedule') {
-				const { data: scheduleData, error: scheduleError } = await (client as any).POST(
+				const { data: scheduleData, error: scheduleError } = await client.POST(
 					'/publications/{id}/schedule',
 					{ params: { path: { id: publicationId } } }
 				);
 				if (scheduleError) throw new Error(scheduleError.detail || 'Failed to schedule');
 				success = scheduleData?.message ?? 'Publication scheduled';
 			} else if (action === 'publish') {
-				const { data: publishData, error: publishError } = await (client as any).POST(
+				const { data: publishData, error: publishError } = await client.POST(
 					'/publications/{id}/publish-now',
 					{ params: { path: { id: publicationId } } }
 				);
@@ -414,7 +411,7 @@
 	}
 
 	async function validatePublication(publicationId: string) {
-		const { data, error: err } = await (client as any).POST('/publications/{id}/validate', {
+		const { data, error: err } = await client.POST('/publications/{id}/validate', {
 			params: { path: { id: publicationId } }
 		});
 		if (err) throw new Error(err.detail || 'Validation failed');

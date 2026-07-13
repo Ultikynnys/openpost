@@ -111,7 +111,7 @@
 				: '';
 
 		try {
-			const { data, error: apiError } = await (client as any).POST('/mcp/oauth/authorize', {
+			const { data, error: apiError } = await client.POST('/mcp/oauth/authorize', {
 				body: { ...params, approved, ...(workspaceID ? { workspace_id: workspaceID } : {}) }
 			});
 			if (apiError || !data?.redirect_url) {

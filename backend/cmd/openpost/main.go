@@ -183,7 +183,7 @@ func main() {
 	api := humaecho.NewWithGroup(e, apiGroup, humaConfig)
 
 	mediaHandler.RegisterLegacyRoutes(e)
-	profileHandler.RegisterRoutes(e)
+	profileHandler.RegisterLegacyRoutes(e)
 	billingHandler := handlers.NewBillingHandler(billingService, db, authenticator)
 	billingHandler.RegisterRoutes(e)
 
@@ -239,6 +239,7 @@ func main() {
 		DisableRegistrations:         cfg.DisableRegistrations,
 		DisableLinkedInThreadReplies: cfg.DisableLinkedInThreadReplies,
 		MediaHandler:                 mediaHandler,
+		ProfileHandler:               profileHandler,
 		BillingHandler:               billingHandler,
 		MCPOAuthHandler:              mcpOAuthHandler,
 	})

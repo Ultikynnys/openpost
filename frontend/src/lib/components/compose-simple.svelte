@@ -860,7 +860,7 @@
 				...(threadDraft ? { thread_draft: threadDraft } : {})
 			};
 			if (draftId) {
-				const { error: patchErr } = await (client as any).PATCH('/posts/{id}', {
+				const { error: patchErr } = await client.PATCH('/posts/{id}', {
 					params: { path: { id: draftId } },
 					body: {
 						content: draftContent,
@@ -935,7 +935,7 @@
 				return;
 			}
 
-			const { error: patchErr } = await (client as any).PATCH('/posts/{id}', {
+			const { error: patchErr } = await client.PATCH('/posts/{id}', {
 				params: { path: { id: draftId } },
 				body: {
 					content: draftContent,
@@ -996,7 +996,7 @@
 			await persistThreadVariants(data.post_ids, validPosts);
 		}
 
-		const { error: deleteErr } = await (client as any).DELETE('/posts/{id}', {
+		const { error: deleteErr } = await client.DELETE('/posts/{id}', {
 			params: { path: { id: draftId } }
 		});
 		if (deleteErr) {
@@ -1080,7 +1080,7 @@
 				// only one was left, and is now publishing a single post.
 				const clearThreadDraft = isThread ? undefined : '';
 				if (postId) {
-					const { error: patchErr } = await (client as any).PATCH('/posts/{id}', {
+					const { error: patchErr } = await client.PATCH('/posts/{id}', {
 						params: { path: { id: postId } },
 						body: {
 							content: posts[0].content,
@@ -1314,7 +1314,7 @@
 		mediaAltTexts = newAlts;
 
 		// Persist to backend
-		(client as any)
+		client
 			.PATCH('/media/{id}', {
 				params: { path: { id: mediaId } },
 				body: { alt_text: alt.trim() }
@@ -1331,7 +1331,7 @@
 		if (!selectedWorkspaceId) return;
 		loadingPrompt = true;
 		try {
-			const { data, error: err } = await (client as any).GET('/prompts/random', {
+			const { data, error: err } = await client.GET('/prompts/random', {
 				params: { query: { workspace_id: selectedWorkspaceId } }
 			});
 			if (err) throw err;
@@ -1372,7 +1372,7 @@
 
 	async function loadVariants(postId: string) {
 		try {
-			const { data, error: err } = await (client as any).GET('/posts/{id}/variants', {
+			const { data, error: err } = await client.GET('/posts/{id}/variants', {
 				params: { path: { id: postId } }
 			});
 			if (err) throw err;
@@ -1420,7 +1420,7 @@
 	async function persistVariants(postId: string) {
 		if (isThread) return;
 
-		const { error: deleteErr } = await (client as any).DELETE('/posts/{id}/variants', {
+		const { error: deleteErr } = await client.DELETE('/posts/{id}/variants', {
 			params: { path: { id: postId } }
 		});
 		if (deleteErr) {
@@ -1435,7 +1435,7 @@
 			media_ids: JSON.stringify(values[posts[0]?.key ?? '']?.mediaIds ?? posts[0]?.mediaIds ?? []),
 			is_unsynced: true
 		}));
-		const { error: upsertErr } = await (client as any).PUT('/posts/{id}/variants', {
+		const { error: upsertErr } = await client.PUT('/posts/{id}/variants', {
 			params: { path: { id: postId } },
 			body: { variants: variantPayload }
 		});
@@ -1476,7 +1476,7 @@
 				is_unsynced: true
 			}));
 			if (payload.length === 0) continue;
-			const { error: upsertErr } = await (client as any).PUT('/posts/{id}/variants', {
+			const { error: upsertErr } = await client.PUT('/posts/{id}/variants', {
 				params: { path: { id: postIds[index] } },
 				body: { variants: payload }
 			});
@@ -1538,7 +1538,7 @@
 		if (!selectedWorkspaceId) return false;
 		suggestingSlot = true;
 		try {
-			const { data, error: err } = await (client as any).GET('/posting-schedules/next-slot', {
+			const { data, error: err } = await client.GET('/posting-schedules/next-slot', {
 				params: {
 					query: { workspace_id: selectedWorkspaceId }
 				}

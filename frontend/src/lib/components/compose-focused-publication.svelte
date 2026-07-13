@@ -148,10 +148,7 @@
 			const [
 				{ data: workspaceData, error: workspaceError },
 				{ data: capabilityData, error: capError }
-			] = await Promise.all([
-				client.GET('/workspaces', {}),
-				(client as any).GET('/capabilities', {})
-			]);
+			] = await Promise.all([client.GET('/workspaces', {}), client.GET('/capabilities', {})]);
 			if (workspaceError) throw new Error(workspaceError.detail || 'Failed to load workspaces');
 			if (capError) throw new Error(capError.detail || 'Failed to load capabilities');
 			workspaces = workspaceData ?? [];
@@ -190,7 +187,7 @@
 	async function loadProviderReadiness() {
 		if (!selectedWorkspaceId) return;
 		try {
-			const { data, error: err } = await (client as any).GET('/provider-readiness', {
+			const { data, error: err } = await client.GET('/provider-readiness', {
 				params: { query: { workspace_id: selectedWorkspaceId } }
 			});
 			if (err) throw new Error(err.detail || 'Failed to load provider readiness');
@@ -532,7 +529,7 @@
 	async function persistPublication(): Promise<string> {
 		const payload = publicationPayload();
 		if (publicationId) {
-			const { error: updateError } = await (client as any).PUT('/publications/{id}', {
+			const { error: updateError } = await client.PUT('/publications/{id}', {
 				params: { path: { id: publicationId } },
 				body: {
 					title: payload.title,
@@ -544,7 +541,7 @@
 				}
 			});
 			if (updateError) throw new Error(updateError.detail || 'Failed to save publication');
-			const { error: renditionError } = await (client as any).PUT('/publications/{id}/renditions', {
+			const { error: renditionError } = await client.PUT('/publications/{id}/renditions', {
 				params: { path: { id: publicationId } },
 				body: { renditions: payload.renditions }
 			});
@@ -552,7 +549,7 @@
 			return publicationId;
 		}
 
-		const { data, error: createError } = await (client as any).POST('/publications', {
+		const { data, error: createError } = await client.POST('/publications', {
 			body: payload
 		});
 		if (createError) throw new Error(createError.detail || 'Failed to create publication');
@@ -561,7 +558,7 @@
 	}
 
 	async function validatePublication(id: string): Promise<ValidationIssue[]> {
-		const { data, error: err } = await (client as any).POST('/publications/{id}/validate', {
+		const { data, error: err } = await client.POST('/publications/{id}/validate', {
 			params: { path: { id } }
 		});
 		if (err) throw new Error(err.detail || 'Validation failed');
@@ -593,10 +590,9 @@
 				if (issues.some((issue) => issue.severity === 'error')) {
 					throw new Error('Fix blocking issues before scheduling.');
 				}
-				const { data, error: scheduleError } = await (client as any).POST(
-					'/publications/{id}/schedule',
-					{ params: { path: { id } } }
-				);
+				const { data, error: scheduleError } = await client.POST('/publications/{id}/schedule', {
+					params: { path: { id } }
+				});
 				if (scheduleError) throw new Error(scheduleError.detail || 'Failed to schedule');
 				success = data?.message ?? 'Publication scheduled';
 			} else if (action === 'publish') {
@@ -604,10 +600,9 @@
 				if (issues.some((issue) => issue.severity === 'error')) {
 					throw new Error('Fix blocking issues before publishing.');
 				}
-				const { data, error: publishError } = await (client as any).POST(
-					'/publications/{id}/publish-now',
-					{ params: { path: { id } } }
-				);
+				const { data, error: publishError } = await client.POST('/publications/{id}/publish-now', {
+					params: { path: { id } }
+				});
 				if (publishError) throw new Error(publishError.detail || 'Failed to publish');
 				success = data?.message ?? 'Publication queued';
 			} else {

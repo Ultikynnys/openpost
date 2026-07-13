@@ -83,7 +83,7 @@ class WorkspaceContext {
 		if (!this.currentWorkspace) return;
 
 		try {
-			const { data, error } = await (client as any).GET('/workspaces/{id}/settings', {
+			const { data, error } = await client.GET('/workspaces/{id}/settings', {
 				params: { path: { id: this.currentWorkspace.id } }
 			});
 			if (!error && data) {
@@ -117,7 +117,7 @@ class WorkspaceContext {
 		if (!this.currentWorkspace) return;
 
 		try {
-			const { error } = await (client as any).PATCH('/workspaces/{id}/settings', {
+			const { error } = await client.PATCH('/workspaces/{id}/settings', {
 				params: { path: { id: this.currentWorkspace.id } },
 				body: updates
 			});

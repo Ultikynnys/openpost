@@ -68,11 +68,11 @@
 		provider: string;
 		configured_app_state: string;
 		connected_accounts: number;
-		required_scopes?: string[];
-		app_review_warnings?: string[];
-		blocking_issues?: string[];
-		next_actions?: string[];
-		supported_profiles?: string[];
+		required_scopes: string[] | null;
+		app_review_warnings?: string[] | null;
+		blocking_issues?: string[] | null;
+		next_actions?: string[] | null;
+		supported_profiles: string[] | null;
 		public_media_health: {
 			status: string;
 			checked_count: number;
@@ -133,7 +133,7 @@
 	let teamError = $state('');
 	let workspaceTeam = $state<WorkspaceTeam | null>(null);
 	let inviteEmail = $state('');
-	let inviteRole = $state('editor');
+	let inviteRole = $state<'viewer' | 'editor' | 'admin'>('editor');
 	let createdInviteURL = $state('');
 	let providerReadiness = $state.raw<ProviderReadinessItem[]>([]);
 	let providerReadinessLoading = $state(false);
@@ -141,7 +141,7 @@
 
 	const authState = $derived($auth);
 	const currentOrganizationID = $derived(workspaceCtx.currentWorkspace?.organization_id ?? '');
-	const passkeyCount = $derived(securityStatus?.passkeys.length ?? 0);
+	const passkeyCount = $derived((securityStatus?.passkeys ?? []).length);
 	const teamMembers = $derived(workspaceTeam?.members ?? []);
 	const pendingInvitations = $derived(workspaceTeam?.invitations ?? []);
 	const currentTeamSeats = $derived(workspaceTeam?.current_seats ?? 0);
@@ -276,7 +276,7 @@
 		profileBusy = true;
 		profileError = '';
 		try {
-			const { error: err } = await (client as any).DELETE('/auth/profile/avatar');
+			const { error: err } = await client.DELETE('/auth/profile/avatar', {});
 			if (err) throw new Error(err.detail || 'Failed to remove avatar');
 			if (authState.user) {
 				auth.setUser({ ...authState.user, avatar_url: '' });
@@ -293,7 +293,7 @@
 		loadingSecurity = true;
 		securityError = '';
 		try {
-			const { data, error: err } = await (client as any).GET('/auth/security');
+			const { data, error: err } = await client.GET('/auth/security');
 			if (err || !data) throw new Error(err?.detail || 'Failed to load account security');
 			securityStatus = data;
 		} catch (e) {
@@ -307,7 +307,7 @@
 		authSessionsLoading = true;
 		authSessionsError = '';
 		try {
-			const { data, error: err } = await (client as any).GET('/auth/sessions');
+			const { data, error: err } = await client.GET('/auth/sessions');
 			if (err || !data) throw new Error(err?.detail || 'Failed to load active sessions');
 			authSessions = data as AuthSessionSummary[];
 		} catch (e) {
@@ -322,7 +322,7 @@
 		apiTokensLoading = true;
 		securityError = '';
 		try {
-			const { data, error: err } = await (client as any).GET('/api-tokens');
+			const { data, error: err } = await client.GET('/api-tokens');
 			if (err || !data) throw new Error(err?.detail || 'Failed to load API tokens');
 			apiTokens = data as APITokenSummary[];
 		} catch (e) {
@@ -336,7 +336,7 @@
 		mcpActivityLoading = true;
 		mcpActivityError = '';
 		try {
-			const { data, error: err } = await (client as any).GET('/mcp/activity', {
+			const { data, error: err } = await client.GET('/mcp/activity', {
 				params: { query: { limit: 8 } }
 			});
 			if (err || !data) throw new Error(err?.detail || 'Failed to load MCP activity');
@@ -355,7 +355,7 @@
 		teamLoading = true;
 		teamError = '';
 		try {
-			const { data, error: err } = await (client as any).GET('/workspaces/{id}/team', {
+			const { data, error: err } = await client.GET('/workspaces/{id}/team', {
 				params: { path: { id: workspaceID } }
 			});
 			if (err || !data) throw new Error(err?.detail || 'Failed to load workspace team');
@@ -374,7 +374,7 @@
 		providerReadinessLoading = true;
 		providerReadinessError = '';
 		try {
-			const { data, error: err } = await (client as any).GET('/provider-readiness', {
+			const { data, error: err } = await client.GET('/provider-readiness', {
 				params: { query: { workspace_id: workspaceID } }
 			});
 			if (err || !data) throw new Error(err?.detail || 'Failed to load provider readiness');
@@ -395,7 +395,7 @@
 		teamError = '';
 		createdInviteURL = '';
 		try {
-			const { data, error: err } = await (client as any).POST('/workspaces/{id}/invitations', {
+			const { data, error: err } = await client.POST('/workspaces/{id}/invitations', {
 				params: { path: { id: workspaceID } },
 				body: {
 					email: inviteEmail.trim(),
@@ -425,12 +425,9 @@
 		teamBusy = true;
 		teamError = '';
 		try {
-			const { error: err } = await (client as any).DELETE(
-				'/workspaces/{id}/invitations/{invitation_id}',
-				{
-					params: { path: { id: workspaceID, invitation_id: invitationID } }
-				}
-			);
+			const { error: err } = await client.DELETE('/workspaces/{id}/invitations/{invitation_id}', {
+				params: { path: { id: workspaceID, invitation_id: invitationID } }
+			});
 			if (err) throw new Error(err.detail || 'Failed to revoke workspace invitation');
 			await loadWorkspaceTeam();
 			toastMessage = 'Invitation revoked';
@@ -455,7 +452,7 @@
 		const workspaceID =
 			apiTokenWorkspaceScope === 'current' ? (workspaceCtx.currentWorkspace?.id ?? '') : '';
 		try {
-			const { data, error: err } = await (client as any).POST('/api-tokens', {
+			const { data, error: err } = await client.POST('/api-tokens', {
 				body: {
 					name: apiTokenName.trim() || fallbackName,
 					scope: apiTokenScope,
@@ -481,7 +478,7 @@
 		authSessionBusyID = session.id;
 		authSessionsError = '';
 		try {
-			const { data, error: err } = await (client as any).DELETE('/auth/sessions/{session_id}', {
+			const { data, error: err } = await client.DELETE('/auth/sessions/{session_id}', {
 				params: { path: { session_id: session.id } }
 			});
 			if (err) throw new Error(err.detail || 'Failed to revoke session');
@@ -505,7 +502,7 @@
 		apiTokenBusy = true;
 		securityError = '';
 		try {
-			const { error: err } = await (client as any).DELETE('/api-tokens/{id}', {
+			const { error: err } = await client.DELETE('/api-tokens/{id}', {
 				params: { path: { id: tokenID } }
 			});
 			if (err) throw new Error(err.detail || 'Failed to revoke API token');
@@ -590,7 +587,7 @@
 		securityBusy = true;
 		securityError = '';
 		try {
-			const { data, error: err } = await (client as any).POST('/auth/security/totp/setup', {
+			const { data, error: err } = await client.POST('/auth/security/totp/setup', {
 				body: { current_password: currentPassword }
 			});
 			if (err || !data) throw new Error(err?.detail || 'Failed to start authenticator setup');
@@ -610,7 +607,7 @@
 		securityBusy = true;
 		securityError = '';
 		try {
-			const { data, error: err } = await (client as any).POST('/auth/security/totp/confirm', {
+			const { data, error: err } = await client.POST('/auth/security/totp/confirm', {
 				body: {
 					challenge_id: totpSetupChallengeId,
 					code: totpCode
@@ -635,7 +632,7 @@
 		securityBusy = true;
 		securityError = '';
 		try {
-			const { data, error: err } = await (client as any).POST('/auth/security/totp/disable', {
+			const { data, error: err } = await client.POST('/auth/security/totp/disable', {
 				body: { current_password: currentPassword }
 			});
 			if (err || !data) throw new Error(err?.detail || 'Failed to disable authenticator app');
@@ -653,7 +650,7 @@
 		securityBusy = true;
 		securityError = '';
 		try {
-			const { data: beginData, error: beginError } = await (client as any).POST(
+			const { data: beginData, error: beginError } = await client.POST(
 				'/auth/security/passkeys/begin',
 				{
 					body: {
@@ -667,7 +664,7 @@
 			}
 
 			const credential = await createPasskeyCredential(beginData.options);
-			const { data, error: err } = await (client as any).POST('/auth/security/passkeys/finish', {
+			const { data, error: err } = await client.POST('/auth/security/passkeys/finish', {
 				body: {
 					challenge_id: beginData.challenge_id,
 					name: newPasskeyName,
@@ -690,7 +687,7 @@
 		securityBusy = true;
 		securityError = '';
 		try {
-			const { data, error: err } = await (client as any).POST(
+			const { data, error: err } = await client.POST(
 				'/auth/security/passkeys/{passkey_id}/remove',
 				{
 					params: { path: { passkey_id: passkeyId } },
@@ -795,7 +792,7 @@
 					key,
 					local_hour: schedule.local_hour,
 					local_minute: schedule.local_minute,
-					label: schedule.label,
+					label: schedule.label ?? '',
 					days: {}
 				};
 			}
@@ -814,7 +811,7 @@
 		if (!workspaceCtx.currentWorkspace) return;
 		loadingSchedules = true;
 		try {
-			const { data, error: err } = await (client as any).GET('/posting-schedules', {
+			const { data, error: err } = await client.GET('/posting-schedules', {
 				params: { query: { workspace_id: workspaceCtx.currentWorkspace.id } }
 			});
 			if (!err && data) {
@@ -838,7 +835,7 @@
 
 	async function createSchedule(dayOfWeek: number, localHour: number, localMinute: number) {
 		if (!workspaceCtx.currentWorkspace) return;
-		const { error: err } = await (client as any).POST('/posting-schedules', {
+		const { error: err } = await client.POST('/posting-schedules', {
 			body: {
 				workspace_id: workspaceCtx.currentWorkspace.id,
 				local_day_of_week: dayOfWeek,
@@ -885,7 +882,7 @@
 
 	async function deleteSchedule(id: string) {
 		try {
-			const { error: err } = await (client as any).DELETE('/posting-schedules/{id}', {
+			const { error: err } = await client.DELETE('/posting-schedules/{id}', {
 				params: { path: { id } }
 			});
 			if (err) throw err;
@@ -915,7 +912,7 @@
 		try {
 			for (const schedule of Object.values(row.days)) {
 				if (schedule) {
-					const { error: err } = await (client as any).DELETE('/posting-schedules/{id}', {
+					const { error: err } = await client.DELETE('/posting-schedules/{id}', {
 						params: { path: { id: schedule.id } }
 					});
 					if (err) throw err;
@@ -940,7 +937,7 @@
 		if (!workspaceCtx.currentWorkspace) return;
 		generatingSchedule = true;
 		try {
-			const { error: err } = await (client as any).POST('/posting-schedules/suggest', {
+			const { error: err } = await client.POST('/posting-schedules/suggest', {
 				body: {
 					workspace_id: workspaceCtx.currentWorkspace.id,
 					posts_per_day: suggestedPostsPerDay
@@ -1436,7 +1433,11 @@
 					<Select.Root
 						type="single"
 						value={inviteRole}
-						onValueChange={(value) => value && (inviteRole = value)}
+						onValueChange={(value) => {
+							if (value === 'viewer' || value === 'editor' || value === 'admin') {
+								inviteRole = value;
+							}
+						}}
 					>
 						<Select.Trigger id="team-invite-role" data-testid="team-invite-role" class="w-full">
 							{selectedInviteRole.label}
@@ -1726,8 +1727,8 @@
 								<p class="text-sm font-medium">{securityStatus?.user.email}</p>
 								<p class="text-sm text-muted-foreground">
 									Active methods:
-									{securityStatus?.methods.length
-										? securityStatus.methods.join(', ')
+									{securityStatus?.methods?.length
+										? (securityStatus.methods ?? []).join(', ')
 										: 'none configured'}
 								</p>
 							</div>
@@ -1941,8 +1942,8 @@
 							</div>
 
 							<div class="mt-4 space-y-2">
-								{#if securityStatus?.passkeys.length}
-									{#each securityStatus.passkeys as passkey (passkey.id)}
+								{#if (securityStatus?.passkeys ?? []).length}
+									{#each securityStatus?.passkeys ?? [] as passkey (passkey.id)}
 										<div class="flex items-center justify-between rounded-md border px-3 py-2">
 											<div>
 												<p class="text-sm font-medium">{passkey.name}</p>

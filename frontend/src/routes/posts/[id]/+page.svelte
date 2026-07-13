@@ -3,39 +3,18 @@
 	import { resolve } from '$app/paths';
 	import { page } from '$app/stores';
 	import { client } from '$lib/api/client';
+	import type { components } from '$lib/api/types';
 	import ComposeSimple from '$lib/components/compose-simple.svelte';
 	import { ui } from '$lib/stores/ui.svelte';
 	import { Button } from '$lib/components/ui/button';
 	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
 	import TrashIcon from 'lucide-svelte/icons/trash-2';
 
-	interface PostMedia {
-		media_id: string;
-		display_order: number;
-		file_path: string;
-		mime_type: string;
-		alt_text?: string;
-	}
-
-	interface PostDestination {
-		social_account_id: string;
-		platform: string;
-		status: string;
-	}
-
-	interface PostDetail {
-		id: string;
-		workspace_id: string;
-		created_by: string;
-		content: string;
-		thread_draft?: string | null;
-		status: string;
-		scheduled_at: string;
-		random_delay_minutes?: number;
-		created_at: string;
-		media: PostMedia[];
-		destinations: PostDestination[];
-	}
+	type PostDetailResponse = components['schemas']['PostDetailResponse'];
+	type PostDetail = Omit<PostDetailResponse, 'media' | 'destinations'> & {
+		media: NonNullable<PostDetailResponse['media']>;
+		destinations: NonNullable<PostDetailResponse['destinations']>;
+	};
 
 	let post = $state<PostDetail | null>(null);
 	let hasLoaded = $state(false);
@@ -50,11 +29,13 @@
 		hasLoaded = false;
 		error = '';
 		try {
-			const { data, error: err } = await (client as any).GET('/posts/{id}', {
+			const { data, error: err } = await client.GET('/posts/{id}', {
 				params: { path: { id } }
 			});
-			if (err) throw new Error((err as any)?.detail || 'Failed to load post');
-			post = data;
+			if (err) throw new Error(err.detail || 'Failed to load post');
+			post = data
+				? { ...data, media: data.media ?? [], destinations: data.destinations ?? [] }
+				: null;
 		} catch (e) {
 			error = (e as Error).message;
 			if (!hasLoaded) post = null;
@@ -74,10 +55,10 @@
 		if (!post) return;
 		deleting = true;
 		try {
-			const { error: err } = await (client as any).DELETE('/posts/{id}', {
+			const { error: err } = await client.DELETE('/posts/{id}', {
 				params: { path: { id: post.id } }
 			});
-			if (err) throw new Error((err as any)?.detail || 'Failed to delete post');
+			if (err) throw new Error(err.detail || 'Failed to delete post');
 			ui.triggerRefresh();
 			goto(resolve('/'));
 		} catch (e) {

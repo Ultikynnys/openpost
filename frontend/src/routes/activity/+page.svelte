@@ -104,7 +104,7 @@
 			return;
 		}
 
-		const { data, error: err } = await (client as any).GET('/publications', {
+		const { data, error: err } = await client.GET('/publications', {
 			params: { query: { workspace_id: workspaceId, status: 'published', limit: 100 } }
 		});
 		if (err || !data) throw new Error(readProblem(err, 'Failed to load publications'));

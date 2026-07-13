@@ -205,7 +205,7 @@
 	async function deleteDraft(postId: string) {
 		if (!confirm(m.sidebar_delete_draft_confirm())) return;
 		try {
-			const { error: err } = await (client as any).DELETE('/posts/{id}', {
+			const { error: err } = await client.DELETE('/posts/{id}', {
 				params: { path: { id: postId } }
 			});
 			if (err) throw new Error((err as any)?.detail || 'Failed to delete');

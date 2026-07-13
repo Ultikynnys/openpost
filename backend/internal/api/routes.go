@@ -49,9 +49,16 @@ type RouteDeps struct {
 	MediaHandler    *handlers.MediaHandler
 	BillingHandler  *handlers.BillingHandler
 	MCPOAuthHandler *handlers.MCPOAuthHandler
+	ProfileHandler  *handlers.ProfileHandler
 }
 
 func RegisterHumaRoutes(api huma.API, deps RouteDeps) {
+	profileHandler := deps.ProfileHandler
+	if profileHandler == nil {
+		profileHandler = handlers.NewProfileHandler(deps.DB, deps.Authenticator, deps.MediaStorage)
+	}
+	profileHandler.RegisterRoutes(api)
+
 	mediaHandler := deps.MediaHandler
 	if mediaHandler == nil {
 		mediaHandler = handlers.NewMediaHandler(deps.DB, deps.MediaStorage, deps.AuthService, deps.Authenticator, deps.MediaSigner)

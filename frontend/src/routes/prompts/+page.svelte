@@ -48,7 +48,7 @@
 			if (selectedCategory !== 'all') {
 				params.category = selectedCategory;
 			}
-			const { data, error: err } = await (client as any).GET('/prompts', {
+			const { data, error: err } = await client.GET('/prompts', {
 				params: { query: params }
 			});
 			if (!err && data) {
@@ -64,9 +64,9 @@
 	async function loadCategories() {
 		loadingCategories = true;
 		try {
-			const { data, error: err } = await (client as any).GET('/prompts/categories');
+			const { data, error: err } = await client.GET('/prompts/categories');
 			if (!err && data) {
-				categories = data.categories;
+				categories = data.categories ?? [];
 				if (categories.length > 0 && !newPromptCategory) {
 					newPromptCategory = categories[0];
 				}
@@ -82,7 +82,7 @@
 		if (!workspaceCtx.currentWorkspace || !newPromptText.trim() || !newPromptCategory) return;
 		submitting = true;
 		try {
-			const { error: err } = await (client as any).POST('/prompts', {
+			const { error: err } = await client.POST('/prompts', {
 				body: {
 					workspace_id: workspaceCtx.currentWorkspace.id,
 					text: newPromptText.trim(),
@@ -103,7 +103,7 @@
 
 	async function deletePrompt(id: string) {
 		try {
-			const { error: err } = await (client as any).DELETE('/prompts/{id}', {
+			const { error: err } = await client.DELETE('/prompts/{id}', {
 				params: { path: { id } }
 			});
 			if (err) throw err;
@@ -121,7 +121,7 @@
 			if (selectedCategory !== 'all') {
 				params.category = selectedCategory;
 			}
-			const { data, error: err } = await (client as any).GET('/prompts/random', {
+			const { data, error: err } = await client.GET('/prompts/random', {
 				params: { query: params }
 			});
 			if (!err && data) {

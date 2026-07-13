@@ -29,12 +29,9 @@
 		loading = true;
 		error = '';
 		try {
-			const { data, error: apiError } = await (client as any).POST(
-				'/workspace-invitations/accept',
-				{
-					body: { token: inviteToken }
-				}
-			);
+			const { data, error: apiError } = await client.POST('/workspace-invitations/accept', {
+				body: { token: inviteToken }
+			});
 			if (apiError || !data) {
 				throw new Error(apiError?.detail || 'Failed to accept workspace invitation');
 			}
