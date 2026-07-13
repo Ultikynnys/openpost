@@ -21,6 +21,7 @@
 		platforms,
 		productFeatures,
 		securityItems,
+		selfHostingDocsUrl,
 		siteUrl,
 		testimonials,
 		workflowBlocks
@@ -80,7 +81,7 @@
 						Start publishing
 						<ArrowRight data-icon="inline-end" />
 					</Button>
-					<Button href={docsUrl} variant="outline" size="lg">
+					<Button href={selfHostingDocsUrl} variant="outline" size="lg">
 						Self-host instead
 						<ChevronRight data-icon="inline-end" />
 					</Button>
@@ -279,7 +280,7 @@
 			</p>
 		</div>
 		<div class="flex flex-wrap gap-3">
-			<Button href="/open-source" variant="secondary">Open-source page</Button>
+			<Button href={selfHostingDocsUrl} variant="secondary">Self-hosting docs</Button>
 			<Button href={githubUrl} variant="outline" class="border-primary-foreground/25 text-primary-foreground hover:bg-primary-foreground/10">
 				View GitHub
 			</Button>

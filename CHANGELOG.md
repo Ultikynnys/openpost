@@ -6,6 +6,7 @@ All notable changes to this project are documented in this file.
 
 ### Changed
 
+- Pointed marketing self-hosting CTAs at the dedicated self-hosting docs and exposed user/developer docs links separately.
 - Split the docs sidebar into user, self-hosting, and development navigation groups with cleaner section labels.
 - Corrected stale CLI/config/provider/settings/production-readiness docs so the documented automation env vars, file-backed config behavior, provider-app management paths, MCP setup/tool lists, callback URL guidance, frontend route docs, README/platform lists, homepage/media/scheduling/thread wording, provider capability notes, binary install steps, and cloud-readiness status match the current codebase.
 - Added Windows amd64 server binary release support and documented Windows single-binary setup.

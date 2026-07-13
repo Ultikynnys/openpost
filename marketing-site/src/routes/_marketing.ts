@@ -20,7 +20,10 @@ import {
 import { PLATFORM_LIMITS, publicPlatformLimits } from '$lib/platform-limits';
 
 export const appUrl = 'https://app.openpost.social';
-export const docsUrl = 'https://docs.openpost.social';
+export const userDocsUrl = 'https://docs.openpost.social/usage/';
+export const selfHostingDocsUrl = 'https://docs.openpost.social/self-hosting/';
+export const developerDocsUrl = 'https://docs.openpost.social/development/';
+export const docsUrl = userDocsUrl;
 export const githubUrl = 'https://github.com/rodrgds/openpost';
 export const siteUrl = 'https://openpost.social';
 

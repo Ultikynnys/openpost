@@ -1,7 +1,15 @@
 <script lang="ts">
 	import Github from 'lucide-svelte/icons/github';
 	import Logo from '$lib/components/Logo.svelte';
-	import { comparisons, docsUrl, githubUrl, platforms, tools } from '../_marketing';
+	import {
+		comparisons,
+		developerDocsUrl,
+		githubUrl,
+		platforms,
+		selfHostingDocsUrl,
+		tools,
+		userDocsUrl
+	} from '../_marketing';
 
 	const groups = [
 		{
@@ -32,7 +40,9 @@
 		{
 			title: 'Resources',
 			links: [
-				{ label: 'Docs', href: docsUrl },
+				{ label: 'User docs', href: userDocsUrl },
+				{ label: 'Self-hosting docs', href: selfHostingDocsUrl },
+				{ label: 'Developer docs', href: developerDocsUrl },
 				{ label: 'Changelog', href: '/changelog' },
 				{ label: 'Privacy', href: '/privacy' },
 				{ label: 'Terms', href: '/terms' },

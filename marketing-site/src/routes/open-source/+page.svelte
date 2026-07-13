@@ -2,7 +2,7 @@
 	import { Box, Database, GitBranch, Server } from 'lucide-svelte';
 	import { Button } from '$lib/components/ui/button';
 	import PageHero from '../_components/PageHero.svelte';
-	import { docsUrl, githubUrl, siteUrl } from '../_marketing';
+	import { githubUrl, selfHostingDocsUrl, siteUrl } from '../_marketing';
 
 	const items = [
 		['Single binary or container', Box],
@@ -25,8 +25,8 @@
 	eyebrow="Open source"
 	title="Ready to use, but never locked away."
 	description="OpenPost is source open and remains practical to inspect, run, and extend."
-	secondaryHref={docsUrl}
-	secondaryLabel="Read docs"
+	secondaryHref={selfHostingDocsUrl}
+	secondaryLabel="Self-hosting docs"
 />
 
 <section class="section-pad">
@@ -50,7 +50,7 @@
 			</p>
 			<div class="mt-6 flex flex-wrap gap-3">
 				<Button href={githubUrl} target="_blank" rel="noreferrer">View source</Button>
-				<Button href={docsUrl} variant="outline">Self-hosting docs</Button>
+				<Button href={selfHostingDocsUrl} variant="outline">Self-hosting docs</Button>
 			</div>
 		</div>
 	</div>
