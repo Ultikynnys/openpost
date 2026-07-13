@@ -129,6 +129,50 @@ func TestLinkedInCapabilitiesExposeDocumentCarousel(t *testing.T) {
 	require.Contains(t, capability.ValidationCategories, "document")
 }
 
+func TestPublicMediaCountsMatchAdapterPublishingModes(t *testing.T) {
+	tests := []struct {
+		provider string
+		profile  string
+		min      int
+		max      int
+	}{
+		{ProviderThreads, models.ContentProfileImagePost, 1, 1},
+		{ProviderThreads, models.ContentProfileCarousel, 2, 10},
+		{ProviderFacebook, models.ContentProfileImagePost, 1, 1},
+		{ProviderFacebook, models.ContentProfileCarousel, 2, 10},
+		{ProviderFacebook, models.ContentProfileStory, 1, 1},
+		{ProviderInstagram, models.ContentProfileImagePost, 1, 1},
+		{ProviderInstagram, models.ContentProfileCarousel, 2, 10},
+		{ProviderTikTok, models.ContentProfileCarousel, 1, 35},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.provider+"/"+tt.profile, func(t *testing.T) {
+			capability, ok := Find(tt.provider, tt.profile)
+			require.True(t, ok)
+			require.Equal(t, tt.min, capability.Media.MinCount)
+			require.Equal(t, tt.max, capability.Media.MaxCount)
+		})
+	}
+}
+
+func TestTikTokPhotoCapabilityMatchesDocumentedMediaLimits(t *testing.T) {
+	capability, ok := Find(ProviderTikTok, models.ContentProfileCarousel)
+
+	require.True(t, ok)
+	require.Equal(t, 4000, capability.TextLimit)
+	require.Equal(t, int64(20*1024*1024), capability.Media.MaxSizeBytes)
+	require.ElementsMatch(t, []string{"image/jpeg", "image/webp"}, capability.Media.AllowedMIMEs)
+}
+
+func TestThreadsCarouselCapabilityAllowsMixedMedia(t *testing.T) {
+	capability, ok := Find(ProviderThreads, models.ContentProfileCarousel)
+
+	require.True(t, ok)
+	require.Contains(t, capability.Media.AllowedMIMEs, "image/jpeg")
+	require.Contains(t, capability.Media.AllowedMIMEs, "video/mp4")
+}
+
 func TestValidateBlocksMastodonPollWithMedia(t *testing.T) {
 	issues := Validate(ProviderMastodon, models.ContentProfileImagePost, "caption", "", "", []MediaItem{{
 		ID:       "image-1",

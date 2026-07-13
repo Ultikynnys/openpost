@@ -6,6 +6,7 @@ All notable changes to this project are documented in this file.
 
 ### Changed
 
+- Added mixed-media carousel publishing for Threads and aligned public-media constraints with the publishing modes supported by Threads, Facebook, Instagram, and TikTok.
 - Collapsed the MCP model-facing catalog from 24 operation descriptors to three compact tools (`search`, `execute`, and the scheduler widget), with on-demand schema discovery and compatibility for cached direct operation calls.
 - Pointed marketing self-hosting CTAs at the dedicated self-hosting docs and exposed user/developer docs links separately.
 - Split the docs sidebar into user, self-hosting, and development navigation groups with cleaner section labels.

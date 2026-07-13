@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/openpost/backend/internal/capabilities"
 	"github.com/openpost/backend/internal/models"
 	"github.com/openpost/backend/internal/platform"
 	"github.com/openpost/backend/internal/services/entitlements"
@@ -806,7 +807,7 @@ func isExpiredTokenError(err error) bool {
 
 //nolint:dupl
 func (s *Service) platformMediaIDForDestination(ctx context.Context, post *models.Post, dest *models.PostDestination, account *models.SocialAccount, provider platform.Adapter, token string, media models.MediaAttachment, content string) (string, error) {
-	if usesPublicMediaURLProvider(account.Platform) {
+	if requiresPublicMedia(account.Platform, "") {
 		return s.uploadMediaToPlatform(ctx, account, provider, token, media, content)
 	}
 
@@ -824,7 +825,7 @@ func (s *Service) platformMediaIDForDestination(ctx context.Context, post *model
 
 //nolint:dupl
 func (s *Service) platformMediaIDForRendition(ctx context.Context, rendition *models.Rendition, account *models.SocialAccount, provider platform.Adapter, token string, media models.MediaAttachment) (string, error) {
-	if usesPublicMediaURLProvider(account.Platform) {
+	if requiresPublicMedia(account.Platform, rendition.Profile) {
 		return s.uploadRenditionMediaToPlatform(ctx, account, provider, token, rendition, media)
 	}
 
@@ -942,7 +943,7 @@ func (s *Service) saveProviderMediaState(ctx context.Context, postID, socialAcco
 }
 
 func (s *Service) uploadMediaToPlatform(ctx context.Context, account *models.SocialAccount, provider platform.Adapter, token string, media models.MediaAttachment, content string) (string, error) {
-	if usesPublicMediaURLProvider(account.Platform) {
+	if requiresPublicMedia(account.Platform, "") {
 		return s.getPublicMediaURL(media), nil
 	}
 
@@ -973,7 +974,7 @@ func (s *Service) uploadRenditionMediaToPlatform(ctx context.Context, account *m
 	settings := map[string]interface{}{}
 	_ = json.Unmarshal([]byte(rendition.SettingsJSON), &settings)
 
-	if usesPublicMediaURLProvider(account.Platform) && !usesTikTokFileUpload(account.Platform, settings) {
+	if requiresPublicMedia(account.Platform, rendition.Profile) && !usesTikTokFileUpload(account.Platform, settings) {
 		return s.getPublicMediaURL(media), nil
 	}
 	if s.storage == nil {
@@ -1135,13 +1136,19 @@ func mustPublisherJSON(value interface{}) string {
 	return string(data)
 }
 
-func usesPublicMediaURLProvider(platformName string) bool {
-	switch platformName {
-	case "threads", "tiktok", "facebook", "instagram":
-		return true
-	default:
-		return false
+func requiresPublicMedia(platformName, profile string) bool {
+	if profile != "" {
+		capability, ok := capabilities.Find(platformName, profile)
+		if ok {
+			return capability.RequiresPublicMedia || capability.Media.RequiresPublicURL
+		}
 	}
+	for _, capability := range capabilities.All() {
+		if capability.Provider == platformName && (capability.RequiresPublicMedia || capability.Media.RequiresPublicURL) {
+			return true
+		}
+	}
+	return false
 }
 
 func usesTikTokFileUpload(platformName string, settings map[string]interface{}) bool {

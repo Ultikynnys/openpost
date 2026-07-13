@@ -189,6 +189,23 @@ func (t *ThreadsAdapter) UploadMedia(_ context.Context, _ string, _ string, _ st
 }
 
 func (t *ThreadsAdapter) Publish(ctx context.Context, accessToken, userID string, req *PublishRequest) (string, error) {
+	if len(req.PlatformMediaIDs) != len(req.Media) {
+		return "", fmt.Errorf("threads media publishing requires media metadata")
+	}
+	if len(req.PlatformMediaIDs) > 1 {
+		if len(req.PlatformMediaIDs) > 10 {
+			return "", fmt.Errorf("threads carousel requires 2-10 media items")
+		}
+		containerID, err := t.createCarouselContainer(ctx, accessToken, userID, req)
+		if err != nil {
+			return "", err
+		}
+		if err := t.waitForContainerReady(ctx, accessToken, containerID); err != nil {
+			return "", err
+		}
+		return t.publishContainer(ctx, accessToken, userID, containerID)
+	}
+
 	isVideo := false
 	var mediaURL string
 
@@ -209,6 +226,49 @@ func (t *ThreadsAdapter) Publish(ctx context.Context, accessToken, userID string
 	}
 
 	return t.publishContainer(ctx, accessToken, userID, containerID)
+}
+
+func (t *ThreadsAdapter) createCarouselContainer(ctx context.Context, accessToken, userID string, req *PublishRequest) (string, error) {
+	childIDs := make([]string, 0, len(req.PlatformMediaIDs))
+	for index, mediaURL := range req.PlatformMediaIDs {
+		if !strings.HasPrefix(mediaURL, "https://") {
+			return "", fmt.Errorf("threads requires a publicly-accessible HTTPS URL for media. Set OPENPOST_MEDIA_URL to your server's public HTTPS URL. Current url: %s", mediaURL)
+		}
+		payload := map[string]string{
+			oauthParamAccessToken: accessToken,
+			"is_carousel_item":    "true",
+		}
+		if isVideoMime(req.Media[index].MimeType) {
+			payload["media_type"] = "VIDEO"
+			payload["video_url"] = mediaURL
+		} else {
+			payload["media_type"] = "IMAGE"
+			payload["image_url"] = mediaURL
+		}
+		childID, err := t.postContainer(ctx, userID, payload)
+		if err != nil {
+			return "", fmt.Errorf("threads carousel item %d: %w", index+1, err)
+		}
+		if err := t.waitForContainerReady(ctx, accessToken, childID); err != nil {
+			return "", fmt.Errorf("threads carousel item %d: %w", index+1, err)
+		}
+		childIDs = append(childIDs, childID)
+	}
+
+	payload := map[string]string{
+		jsonFieldText:         req.Content,
+		"media_type":          "CAROUSEL",
+		"children":            strings.Join(childIDs, ","),
+		oauthParamAccessToken: accessToken,
+	}
+	if req.ReplyToID != "" {
+		payload["reply_to_id"] = req.ReplyToID
+	}
+	containerID, err := t.postContainer(ctx, userID, payload)
+	if err != nil {
+		return "", fmt.Errorf("threads carousel container: %w", err)
+	}
+	return containerID, nil
 }
 
 func (t *ThreadsAdapter) ListComments(ctx context.Context, accessToken, _ string, externalID string) ([]Comment, error) {
@@ -351,14 +411,21 @@ func (t *ThreadsAdapter) createContainer(ctx context.Context, accessToken, userI
 		payload["reply_to_id"] = replyToID
 	}
 
-	containerURL := "https://graph.threads.net/v1.0/" + userID + "/threads"
-
-	respBody, err := DoFormURLEncoded(ctx, "POST", containerURL, payload, nil)
+	containerID, err := t.postContainer(ctx, userID, payload)
 	if err != nil {
 		if replyToID != "" && strings.Contains(err.Error(), `"code":10`) {
 			return "", fmt.Errorf("threads container creation (reply permission/check root ownership): %w", err)
 		}
 		return "", fmt.Errorf("threads container creation: %w", err)
+	}
+	return containerID, nil
+}
+
+func (t *ThreadsAdapter) postContainer(ctx context.Context, userID string, payload map[string]string) (string, error) {
+	containerURL := "https://graph.threads.net/v1.0/" + userID + "/threads"
+	respBody, err := DoFormURLEncoded(ctx, "POST", containerURL, payload, nil)
+	if err != nil {
+		return "", err
 	}
 
 	var containerResp struct {
@@ -367,7 +434,9 @@ func (t *ThreadsAdapter) createContainer(ctx context.Context, accessToken, userI
 	if err := json.Unmarshal(respBody, &containerResp); err != nil {
 		return "", fmt.Errorf("decoding threads container: %w", err)
 	}
-
+	if containerResp.ID == "" {
+		return "", fmt.Errorf("decoding threads container: missing id")
+	}
 	return containerResp.ID, nil
 }
 

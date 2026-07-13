@@ -117,6 +117,19 @@ func All() []Capability {
 	publicImages := feedImages
 	publicImages.RequiresPublicURL = true
 	publicImages.RequiresHTTPSFetchable = true
+	publicImage := publicImages
+	publicImage.MaxCount = 1
+	publicCarousel := publicImages
+	publicCarousel.MinCount = 2
+	threadsCarousel := MediaConstraint{
+		MinCount:               2,
+		MaxCount:               10,
+		AllowedMIMEs:           []string{"image/jpeg", "image/png", "image/webp", "video/mp4", "video/quicktime"},
+		RequiresPublicURL:      true,
+		RequiresHTTPSFetchable: true,
+	}
+	publicStory := publicImages
+	publicStory.MaxCount = 1
 	video := MediaConstraint{MinCount: 1, MaxCount: 1, AllowedMIMEs: []string{"video/mp4", "video/quicktime"}, MaxSizeBytes: 2 * 1024 * 1024 * 1024}
 	shortVideo := video
 	shortVideo.MaxDurationSeconds = 180
@@ -125,6 +138,14 @@ func All() []Capability {
 	publicShortVideo := shortVideo
 	publicShortVideo.RequiresPublicURL = true
 	publicShortVideo.RequiresHTTPSFetchable = true
+	tiktokPhotos := MediaConstraint{
+		MinCount:               1,
+		MaxCount:               35,
+		AllowedMIMEs:           []string{"image/jpeg", "image/webp"},
+		MaxSizeBytes:           20 * 1024 * 1024,
+		RequiresPublicURL:      true,
+		RequiresHTTPSFetchable: true,
+	}
 	longVideo := video
 	longVideo.MaxDurationSeconds = 43200
 
@@ -154,8 +175,8 @@ func All() []Capability {
 
 		defaultQueued(Capability{Provider: ProviderThreads, Profile: models.ContentProfileShortText, Label: "Threads post", TextLimit: 500, Media: text}),
 		defaultQueued(Capability{Provider: ProviderThreads, Profile: models.ContentProfileThread, Label: "Threads thread", TextLimit: 500, Media: text}),
-		defaultQueued(Capability{Provider: ProviderThreads, Profile: models.ContentProfileImagePost, Label: "Threads media", TextLimit: 500, Media: publicImages, RequiresPublicMedia: true}),
-		defaultQueued(Capability{Provider: ProviderThreads, Profile: models.ContentProfileCarousel, Label: "Threads carousel", TextLimit: 500, Media: publicImages, RequiresPublicMedia: true}),
+		defaultQueued(Capability{Provider: ProviderThreads, Profile: models.ContentProfileImagePost, Label: "Threads media", TextLimit: 500, Media: publicImage, RequiresPublicMedia: true}),
+		defaultQueued(Capability{Provider: ProviderThreads, Profile: models.ContentProfileCarousel, Label: "Threads carousel", TextLimit: 500, Media: threadsCarousel, RequiresPublicMedia: true}),
 		defaultQueued(Capability{Provider: ProviderThreads, Profile: models.ContentProfileShortVideo, Label: "Threads video", TextLimit: 500, Media: publicShortVideo, RequiresPublicMedia: true}),
 
 		defaultQueued(Capability{Provider: ProviderLinkedIn, Profile: models.ContentProfileShortText, Label: "LinkedIn post", TextLimit: 3000, Media: text}),
@@ -168,14 +189,14 @@ func All() []Capability {
 
 		defaultQueued(Capability{Provider: ProviderFacebook, Profile: models.ContentProfileShortText, Label: "Facebook Page post", TextLimit: 63206, Media: text, Settings: facebookSettings()}),
 		defaultQueued(Capability{Provider: ProviderFacebook, Profile: models.ContentProfileLinkShare, Label: "Facebook Page link", TextLimit: 63206, Media: text, Settings: facebookSettings()}),
-		defaultQueued(Capability{Provider: ProviderFacebook, Profile: models.ContentProfileImagePost, Label: "Facebook Page photo", TextLimit: 63206, Media: publicImages, RequiresPublicMedia: true, Settings: facebookSettings()}),
-		defaultQueued(Capability{Provider: ProviderFacebook, Profile: models.ContentProfileCarousel, Label: "Facebook multi-photo", TextLimit: 63206, Media: publicImages, RequiresPublicMedia: true, Settings: facebookSettings()}),
-		defaultQueued(Capability{Provider: ProviderFacebook, Profile: models.ContentProfileStory, Label: "Facebook Page Story", Media: publicImages, RequiresPublicMedia: true, RequiresAppReview: true, Settings: facebookSettings()}),
+		defaultQueued(Capability{Provider: ProviderFacebook, Profile: models.ContentProfileImagePost, Label: "Facebook Page photo", TextLimit: 63206, Media: publicImage, RequiresPublicMedia: true, Settings: facebookSettings()}),
+		defaultQueued(Capability{Provider: ProviderFacebook, Profile: models.ContentProfileCarousel, Label: "Facebook multi-photo", TextLimit: 63206, Media: publicCarousel, RequiresPublicMedia: true, Settings: facebookSettings()}),
+		defaultQueued(Capability{Provider: ProviderFacebook, Profile: models.ContentProfileStory, Label: "Facebook Page Story", Media: publicStory, RequiresPublicMedia: true, RequiresAppReview: true, Settings: facebookSettings()}),
 		defaultQueued(Capability{Provider: ProviderFacebook, Profile: models.ContentProfileShortVideo, Label: "Facebook Reel/video", TextLimit: 63206, Media: publicShortVideo, RequiresPublicMedia: true, Settings: facebookSettings()}),
 		defaultQueued(Capability{Provider: ProviderFacebook, Profile: models.ContentProfileLongVideo, Label: "Facebook video", TextLimit: 63206, Media: longVideo, RequiresPublicMedia: true, Settings: facebookSettings()}),
 
-		defaultQueued(Capability{Provider: ProviderInstagram, Profile: models.ContentProfileImagePost, Label: "Instagram feed", TextLimit: 2200, Media: publicImages, RequiresPublicMedia: true, Settings: instagramSettings()}),
-		defaultQueued(Capability{Provider: ProviderInstagram, Profile: models.ContentProfileCarousel, Label: "Instagram carousel", TextLimit: 2200, Media: publicImages, RequiresPublicMedia: true, Settings: instagramSettings()}),
+		defaultQueued(Capability{Provider: ProviderInstagram, Profile: models.ContentProfileImagePost, Label: "Instagram feed", TextLimit: 2200, Media: publicImage, RequiresPublicMedia: true, Settings: instagramSettings()}),
+		defaultQueued(Capability{Provider: ProviderInstagram, Profile: models.ContentProfileCarousel, Label: "Instagram carousel", TextLimit: 2200, Media: publicCarousel, RequiresPublicMedia: true, Settings: instagramSettings()}),
 		defaultQueued(Capability{Provider: ProviderInstagram, Profile: models.ContentProfileStory, Label: "Instagram Story", Media: publicImages, RequiresPublicMedia: true, RequiresAppReview: true, Settings: instagramSettings()}),
 		defaultQueued(Capability{Provider: ProviderInstagram, Profile: models.ContentProfileShortVideo, Label: "Instagram Reel", TextLimit: 2200, Media: publicShortVideo, RequiresPublicMedia: true, Settings: instagramSettings()}),
 
@@ -183,7 +204,7 @@ func All() []Capability {
 		defaultQueued(Capability{Provider: ProviderYouTube, Profile: models.ContentProfileLongVideo, Label: "YouTube video", TitleRequired: true, DescriptionRequired: false, Media: longVideo, Settings: youtubeSettings(), Caveats: []string{"Unaudited Google projects can force uploads private."}}),
 
 		defaultQueued(Capability{Provider: ProviderTikTok, Profile: models.ContentProfileShortVideo, Label: "TikTok video", TextLimit: 2200, Media: publicShortVideo, RequiresPublicMedia: true, RequiresAppReview: true, Settings: tiktokSettings()}),
-		defaultQueued(Capability{Provider: ProviderTikTok, Profile: models.ContentProfileCarousel, Label: "TikTok photo post", TextLimit: 2200, Media: publicImages, RequiresPublicMedia: true, RequiresAppReview: true, Settings: tiktokSettings()}),
+		defaultQueued(Capability{Provider: ProviderTikTok, Profile: models.ContentProfileCarousel, Label: "TikTok photo post", TextLimit: 4000, Media: tiktokPhotos, RequiresPublicMedia: true, RequiresAppReview: true, Settings: tiktokSettings()}),
 	}
 }
 
