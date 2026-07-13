@@ -17,6 +17,7 @@ All notable changes to this project are documented in this file.
 
 ### Fixed
 
+- Stopped server startup when database schema initialization fails instead of serving against a partially initialized database.
 - Allowed cross-origin `PATCH` requests so browser-based update flows work with configured external frontend origins.
 - Rejected undocumented MCP operation arguments and surfaced failures to persist MCP tool-call audit records in server logs.
 - Enforced workspace roles across mutations so viewers remain read-only, editors can manage publishing content and connected accounts, and workspace configuration stays admin-only.

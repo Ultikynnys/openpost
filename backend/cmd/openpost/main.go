@@ -72,7 +72,7 @@ func main() {
 		log.Fatal(err)
 	}
 	if err := database.CreateSchema(db); err != nil {
-		log.Printf("CreateSchema error (already exists?): %v", err)
+		log.Fatalf("database schema initialization failed: %v", err)
 	}
 
 	tokenEncryptor := crypto.NewTokenEncryptor(cfg.EncryptionKey)
