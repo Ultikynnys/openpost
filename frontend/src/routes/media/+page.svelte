@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { SvelteSet } from 'svelte/reactivity';
 	import { client, type Workspace } from '$lib/api/client';
 	import { getAuthenticatedMediaURL } from '$lib/media-url';
 	import { videoProviderSupportDetail, videoProviderSupportLabel } from '$lib/media-capabilities';
@@ -81,7 +82,7 @@
 	let mediaUsage = $state<MediaUsage[]>([]);
 	let usageLoading = $state(false);
 
-	let selectedMediaIds = $state<Set<string>>(new Set());
+	const selectedMediaIds = new SvelteSet<string>();
 	let isSelectionMode = $state(false);
 
 	async function loadWorkspaces() {
@@ -315,7 +316,6 @@
 		} else {
 			selectedMediaIds.add(mediaId);
 		}
-		selectedMediaIds = new Set(selectedMediaIds);
 		isSelectionMode = selectedMediaIds.size > 0;
 	}
 
@@ -326,13 +326,11 @@
 		} else {
 			deletableMedia.forEach((m) => selectedMediaIds.add(m.id));
 		}
-		selectedMediaIds = new Set(selectedMediaIds);
 		isSelectionMode = selectedMediaIds.size > 0;
 	}
 
 	function cancelSelection() {
 		selectedMediaIds.clear();
-		selectedMediaIds = new Set(selectedMediaIds);
 		isSelectionMode = false;
 	}
 
