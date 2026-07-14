@@ -293,15 +293,23 @@ func TestMCPToolsList(t *testing.T) {
 	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &out))
 	result := out["result"].(map[string]any)
 	tools := result["tools"].([]any)
-	require.Len(t, tools, 3)
+	require.Len(t, tools, 4)
 	require.Equal(t, mcpToolSearch, tools[0].(map[string]any)["name"])
-	require.Equal(t, mcpToolExecute, tools[1].(map[string]any)["name"])
-	require.Equal(t, mcpToolRenderWidget, tools[2].(map[string]any)["name"])
+	require.Equal(t, mcpToolQuery, tools[1].(map[string]any)["name"])
+	require.Equal(t, mcpToolExecute, tools[2].(map[string]any)["name"])
+	require.Equal(t, mcpToolRenderWidget, tools[3].(map[string]any)["name"])
 
 	requiredOutputKeys := map[string][]any{
 		mcpToolSearch:       {"operations"},
+		mcpToolQuery:        {},
 		mcpToolExecute:      {},
 		mcpToolRenderWidget: {"view", "data"},
+	}
+	expectedSafety := map[string]map[string]any{
+		mcpToolSearch:       {"readOnlyHint": true, "destructiveHint": false, "openWorldHint": false},
+		mcpToolQuery:        {"readOnlyHint": true, "destructiveHint": false, "openWorldHint": true},
+		mcpToolExecute:      {"readOnlyHint": false, "destructiveHint": true, "openWorldHint": true},
+		mcpToolRenderWidget: {"readOnlyHint": true, "destructiveHint": false, "openWorldHint": false},
 	}
 	for _, tool := range tools {
 		descriptor := tool.(map[string]any)
@@ -331,11 +339,8 @@ func TestMCPToolsList(t *testing.T) {
 		for _, key := range requiredOutputKeys[toolName] {
 			require.Contains(t, properties, key)
 		}
+		require.Equal(t, expectedSafety[toolName], descriptor["annotations"])
 	}
-	annotations := tools[0].(map[string]any)["annotations"].(map[string]any)
-	require.Equal(t, true, annotations["readOnlyHint"])
-	require.Equal(t, false, annotations["destructiveHint"])
-	require.Equal(t, false, annotations["openWorldHint"])
 }
 
 func TestMCPAdvertisedToolCatalogIsCompact(t *testing.T) {
@@ -348,6 +353,56 @@ func TestMCPAdvertisedToolCatalogIsCompact(t *testing.T) {
 
 	t.Logf("advertised tool descriptors: %d bytes; legacy catalog: %d bytes", len(advertised), len(legacy))
 	require.Less(t, len(advertised), len(legacy)*30/100)
+}
+
+func TestMCPOperationCatalogHasCompleteSafetyClassification(t *testing.T) {
+	t.Parallel()
+
+	expectedModes := map[string]mcpOperationMode{
+		mcpToolWorkspaces:    mcpOperationQuery,
+		mcpToolProviders:     mcpOperationQuery,
+		mcpToolAccounts:      mcpOperationQuery,
+		mcpToolListMedia:     mcpOperationQuery,
+		mcpToolReadiness:     mcpOperationQuery,
+		mcpToolCreatePub:     mcpOperationExecute,
+		mcpToolListPubs:      mcpOperationQuery,
+		mcpToolValidatePub:   mcpOperationQuery,
+		mcpToolSchedulePub:   mcpOperationExecute,
+		mcpToolPublishPubNow: mcpOperationExecute,
+		mcpToolPubEvents:     mcpOperationQuery,
+		mcpToolComments:      mcpOperationQuery,
+		mcpToolCreateDraft:   mcpOperationExecute,
+		mcpToolListDrafts:    mcpOperationQuery,
+		mcpToolUpdateDraft:   mcpOperationExecute,
+		mcpToolRenditions:    mcpOperationExecute,
+		mcpToolSchedulePost:  mcpOperationExecute,
+		mcpToolScheduleDraft: mcpOperationExecute,
+		mcpToolGetPost:       mcpOperationQuery,
+		mcpToolListPosts:     mcpOperationQuery,
+		mcpToolCancelPost:    mcpOperationExecute,
+		mcpToolSuggestSlot:   mcpOperationQuery,
+		mcpToolUploadURL:     mcpOperationExecute,
+	}
+
+	catalog := mcpOperationCatalog()
+	require.Len(t, catalog, len(expectedModes))
+	seen := make(map[string]bool, len(catalog))
+	for _, operation := range catalog {
+		name, ok := operation.Descriptor["name"].(string)
+		require.True(t, ok)
+		require.False(t, seen[name], "duplicate operation %s", name)
+		seen[name] = true
+		require.Equal(t, expectedModes[name], operation.Mode, "unexpected safety classification for %s", name)
+
+		annotations := operation.Descriptor["annotations"].(map[string]any)
+		require.Equal(t, operation.Mode == mcpOperationQuery, annotations["readOnlyHint"], "readOnlyHint drifted for %s", name)
+		if operation.Mode == mcpOperationQuery {
+			require.Equal(t, false, annotations["destructiveHint"], "read-only operation %s cannot be destructive", name)
+		}
+		require.Equal(t, string(operation.Mode), mcpOperationDocument(operation)["executionTool"])
+	}
+	require.Equal(t, len(expectedModes), len(seen))
+	require.False(t, seen[mcpToolRenderWidget], "the directly advertised renderer must not be delegated")
 }
 
 func TestMCPSearchReturnsRelevantOperationSchemas(t *testing.T) {
@@ -374,6 +429,7 @@ func TestMCPSearchReturnsRelevantOperationSchemas(t *testing.T) {
 	require.NotEmpty(t, operations)
 	operation := operations[0].(map[string]any)
 	require.Equal(t, mcpToolSchedulePub, operation["name"])
+	require.Equal(t, mcpToolExecute, operation["executionTool"])
 	require.NotNil(t, operation["inputSchema"])
 	require.NotNil(t, operation["outputSchema"])
 	require.NotNil(t, operation["annotations"])
@@ -381,16 +437,41 @@ func TestMCPSearchReturnsRelevantOperationSchemas(t *testing.T) {
 	require.NotContains(t, operation, "_meta")
 }
 
-func TestMCPExecuteDelegatesToDiscoveredOperation(t *testing.T) {
+func TestMCPSearchRoutesReadOnlyOperationsToQuery(t *testing.T) {
 	t.Parallel()
 
 	srv := newMCPTestServer(t)
 	resp := srv.request(t, "web-token", map[string]any{
 		"jsonrpc": "2.0",
-		"id":      "execute",
+		"id":      "search-read",
 		"method":  "tools/call",
 		"params": map[string]any{
-			"name": mcpToolExecute,
+			"name": mcpToolSearch,
+			"arguments": map[string]any{
+				"query": mcpToolWorkspaces,
+			},
+		},
+	})
+
+	require.Equal(t, http.StatusOK, resp.Code)
+	var out map[string]any
+	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &out))
+	operations := out["result"].(map[string]any)["structuredContent"].(map[string]any)["operations"].([]any)
+	require.NotEmpty(t, operations)
+	require.Equal(t, mcpToolWorkspaces, operations[0].(map[string]any)["name"])
+	require.Equal(t, mcpToolQuery, operations[0].(map[string]any)["executionTool"])
+}
+
+func TestMCPQueryDelegatesToDiscoveredReadOnlyOperation(t *testing.T) {
+	t.Parallel()
+
+	srv := newMCPTestServer(t)
+	resp := srv.request(t, "web-token", map[string]any{
+		"jsonrpc": "2.0",
+		"id":      "query",
+		"method":  "tools/call",
+		"params": map[string]any{
+			"name": mcpToolQuery,
 			"arguments": map[string]any{
 				"operation": mcpToolWorkspaces,
 				"arguments": map[string]any{},
@@ -412,6 +493,100 @@ func TestMCPExecuteDelegatesToDiscoveredOperation(t *testing.T) {
 	require.Equal(t, mcpToolWorkspaces, call.ToolName)
 }
 
+func TestMCPExecuteDelegatesToDiscoveredMutation(t *testing.T) {
+	t.Parallel()
+
+	srv := newMCPTestServer(t)
+	resp := srv.request(t, "web-token", map[string]any{
+		"jsonrpc": "2.0",
+		"id":      "execute",
+		"method":  "tools/call",
+		"params": map[string]any{
+			"name": mcpToolExecute,
+			"arguments": map[string]any{
+				"operation": mcpToolCreateDraft,
+				"arguments": map[string]any{
+					"workspace_id": "ws-1",
+					"content":      "Draft through execute",
+				},
+			},
+		},
+	})
+
+	require.Equal(t, http.StatusOK, resp.Code)
+	var out map[string]any
+	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &out))
+	require.Nil(t, out["error"])
+	post := out["result"].(map[string]any)["structuredContent"].(map[string]any)["post"].(map[string]any)
+	require.Equal(t, "Draft through execute", post["content"])
+	require.Equal(t, "draft", post["status"])
+
+	var call models.MCPToolCall
+	require.NoError(t, srv.db.NewSelect().Model(&call).Where("tool_name = ?", mcpToolCreateDraft).Scan(t.Context()))
+	require.Equal(t, "success", call.Status)
+	require.Equal(t, "ws-1", call.WorkspaceID)
+}
+
+func TestMCPDelegatedToolsRejectOperationsAcrossSafetyBoundary(t *testing.T) {
+	t.Parallel()
+
+	srv := newMCPTestServer(t)
+	tests := []struct {
+		name          string
+		tool          string
+		operation     string
+		arguments     map[string]any
+		expectedError string
+	}{
+		{
+			name:          "query rejects mutation",
+			tool:          mcpToolQuery,
+			operation:     mcpToolCreateDraft,
+			arguments:     map[string]any{"workspace_id": "ws-1", "content": "must not be created"},
+			expectedError: "create_draft changes state or performs an external action; call execute with this operation",
+		},
+		{
+			name:          "execute rejects read",
+			tool:          mcpToolExecute,
+			operation:     mcpToolWorkspaces,
+			arguments:     map[string]any{},
+			expectedError: "list_workspaces is read-only; call query with this operation",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			resp := srv.request(t, "web-token", map[string]any{
+				"jsonrpc": "2.0",
+				"id":      test.name,
+				"method":  "tools/call",
+				"params": map[string]any{
+					"name": test.tool,
+					"arguments": map[string]any{
+						"operation": test.operation,
+						"arguments": test.arguments,
+					},
+				},
+			})
+			require.Equal(t, http.StatusOK, resp.Code)
+			var out map[string]any
+			require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &out))
+			require.Equal(t, test.expectedError, out["error"].(map[string]any)["message"])
+		})
+	}
+
+	count, err := srv.db.NewSelect().Model((*models.Post)(nil)).Where("content = ?", "must not be created").Count(t.Context())
+	require.NoError(t, err)
+	require.Zero(t, count)
+
+	var calls []models.MCPToolCall
+	require.NoError(t, srv.db.NewSelect().Model(&calls).Where("tool_name IN (?)", bun.List([]string{mcpToolCreateDraft, mcpToolWorkspaces})).Order("tool_name ASC").Scan(t.Context()))
+	require.Len(t, calls, 2)
+	for _, call := range calls {
+		require.Equal(t, "error", call.Status)
+		require.NotEmpty(t, call.ErrorMessage)
+	}
+}
+
 func TestMCPInitializeAdvertisesPrompts(t *testing.T) {
 	t.Parallel()
 
@@ -431,7 +606,8 @@ func TestMCPInitializeAdvertisesPrompts(t *testing.T) {
 	require.Equal(t, "openpost", serverInfo["name"])
 	require.Equal(t, "v9.8.7", serverInfo["version"])
 	require.Contains(t, result["instructions"], "Call search")
-	require.Contains(t, result["instructions"], "call execute")
+	require.Contains(t, result["instructions"], "Call query")
+	require.Contains(t, result["instructions"], "execute for operations")
 	require.Contains(t, result["instructions"], "render_scheduler_widget")
 	capabilities := result["capabilities"].(map[string]any)
 	require.Contains(t, capabilities, "tools")

@@ -47,18 +47,22 @@ GET /.well-known/oauth-authorization-server
 ```
 
 The advertised tool surface uses progressive discovery to keep model context
-small. Clients receive only `search`, `execute`, and the Apps widget renderer.
-`search` returns the exact input/output schema for relevant OpenPost operations
-on demand; `execute` delegates one selected operation through its existing
-authorization, validation, quota, and audit path. Operation documentation omits
-repeated OAuth and Apps metadata because those details already live on the three
-advertised descriptors.
+small. Clients receive only `search`, `query`, `execute`, and the Apps widget
+renderer. `search` returns the exact input/output schema, safety annotations,
+and required execution tool for relevant OpenPost operations on demand. `query`
+accepts only catalog operations guaranteed to be read-only; `execute` accepts
+only state-changing or external-action operations. Both delegate through the
+existing authorization, workspace-scope, validation, quota, and audit path.
+Operation documentation omits repeated OAuth and Apps metadata because those
+details already live on the four advertised descriptors.
 
 The scheduler widget remains directly advertised because its OAuth metadata and
 `_meta.ui.resourceUri` are needed by Apps-compatible clients to load the output
 template. Previously advertised operation names remain callable for cached
 clients, but new clients should discover them with `search` and invoke them
-through `execute`.
+through the returned `query` or `execute` path. Cached direct descriptors keep
+their operation-specific safety annotations and do not weaken the new generic
+tool boundary.
 
 OAuth-aware clients can start account linking at the browser authorization page,
 then exchange the returned code for an MCP-scoped bearer token:
@@ -95,9 +99,12 @@ GET /api/v1/mcp/activity?workspace_id=<workspace-id>
 
 - `search`: accepts a plain-language capability query and returns up to ten
   matching operation definitions with their exact input/output schemas and
-  safety annotations.
-- `execute`: accepts an `operation` returned by `search` plus its `arguments`,
-  then delegates to the existing operation handler.
+  safety annotations plus an `executionTool` routing field.
+- `query`: accepts a read-only `operation` returned by `search` plus its
+  `arguments`. The server rejects every mutation before dispatch.
+- `execute`: accepts a state-changing or external-action `operation` returned by
+  `search` plus its `arguments`. The server rejects every read-only operation
+  before dispatch so clients can require approval for this tool as a whole.
 - `render_scheduler_widget`: renders structured OpenPost scheduler data in the
   ChatGPT Apps widget and stays directly visible for UI resource discovery.
 
@@ -109,7 +116,7 @@ Example discovery and execution calls:
 
 ```json
 {
-  "name": "execute",
+  "name": "query",
   "arguments": {
     "operation": "list_accounts",
     "arguments": {"workspace_id": "workspace-id"}
@@ -117,7 +124,11 @@ Example discovery and execution calls:
 }
 ```
 
-### Why `execute` delegates instead of evaluating JavaScript
+Mutation discovery uses the same shape with `"name": "execute"`; clients should
+use the `executionTool` returned by `search` rather than infer safety from an
+operation name.
+
+### Why `query` and `execute` delegate instead of evaluating JavaScript
 
 Cloudflare's full [Code Mode pattern](https://developers.cloudflare.com/agents/model-context-protocol/codemode/)
 runs model-written JavaScript in an isolated Worker, blocks direct outbound
@@ -126,11 +137,11 @@ portable Go binary does not currently include an equivalent sandbox or
 pause/approval runtime. Evaluating model-written code in the application process
 would create an avoidable security and resource-exhaustion boundary.
 
-The current `search`/`execute` design takes the part that produces the immediate
-context saving—progressive schema discovery—while delegating each operation to
-the existing typed handler. A future sandboxed or declarative batch executor can
-add loops, filtering, and multi-operation composition without changing the
-three-tool model-facing contract.
+The current `search`/`query`/`execute` design takes the part that produces the
+immediate context saving—progressive schema discovery—while delegating each
+operation to the existing typed handler. A future sandboxed or declarative batch
+executor can add loops, filtering, and multi-operation composition without
+collapsing the hard read/mutation safety boundary.
 
 ## Discoverable operations
 
@@ -157,8 +168,9 @@ three-tool model-facing contract.
 - `publish_publication_now`: queues an existing publication for immediate publishing.
 - `list_publication_events`: returns lifecycle events for a publication.
 - `list_rendition_comments`: lists comments for a published rendition.
-- `render_scheduler_widget`: also available through `execute`, though clients
-  should call the advertised renderer directly when they want the Apps UI.
+
+The directly advertised `render_scheduler_widget` is intentionally outside the
+delegated operation catalog; clients call it only when they want the Apps UI.
 
 ## Current prompts
 
@@ -176,6 +188,7 @@ three-tool model-facing contract.
 - Provides a browser approval page at `/oauth/authorize` and a form-encoded `/oauth/token` code exchange that mints `mcp:full` API tokens.
 - Validates client metadata redirect URIs for URL-based client IDs, accepts ChatGPT fallback redirects for predefined clients, and binds OAuth-issued MCP tokens to the `/mcp` resource audience.
 - Advertises and enforces the `mcp:full` OAuth scope in every MCP tool descriptor, with optional single-workspace session boundaries for API-token and OAuth-issued MCP clients.
+- Advertises a guaranteed read-only `query` boundary separately from mutation-capable `execute`, and enforces the catalog classification server-side before operation dispatch.
 - Adds Apps SDK-friendly `_meta["openai/toolInvocation/invoking"]`, `_meta["openai/toolInvocation/invoked"]`, and `outputSchema` metadata to every tool descriptor.
 - Exposes a ChatGPT Apps-compatible scheduler widget resource at `ui://widget/openpost-scheduler-v1.html`.
 - Keeps data tools reusable across MCP clients and attaches widget UI metadata only to `render_scheduler_widget`.

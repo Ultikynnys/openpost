@@ -36,6 +36,7 @@ import (
 const (
 	mcpProtocolVersion   = "2025-06-18"
 	mcpToolSearch        = "search"
+	mcpToolQuery         = "query"
 	mcpToolExecute       = "execute"
 	mcpToolWorkspaces    = "list_workspaces"
 	mcpToolProviders     = "list_provider_catalog"
@@ -342,7 +343,7 @@ func (h *MCPHandler) dispatch(ctx context.Context, principal *middleware.Princip
 				"name":    "openpost",
 				"version": h.serverVersion,
 			},
-			"instructions": "OpenPost schedules social posts and format-first publications through a compact tool surface. Call search with a plain-language task to discover relevant operation names and schemas, then call execute with one returned operation and its arguments. Search again when the required fields are unclear. Use render_scheduler_widget directly when a visual summary helps. Operations that change state still use the same OpenPost authorization, validation, quota, and audit controls.",
+			"instructions": "OpenPost schedules social posts and format-first publications through a compact safety-aware tool surface. Call search with a plain-language task to discover relevant operation names, schemas, and the required execution tool. Call query for guaranteed read-only operations and execute for operations that change state or interact with external systems. Search again when the required fields are unclear. Use render_scheduler_widget directly when a visual summary helps. All delegated operations retain the same OpenPost authorization, workspace scoping, validation, quota, and audit controls.",
 			"capabilities": map[string]any{
 				"tools":     map[string]any{"listChanged": false},
 				"prompts":   map[string]any{"listChanged": false},
@@ -660,9 +661,9 @@ Source idea:
 
 Workflow:
 1. Use search to load the schemas for list_workspaces, list_provider_catalog, list_accounts, list_media, upload_media_from_url, and create_draft as needed.
-2. If workspace_id is missing, execute list_workspaces and ask which workspace to use.
-3. Execute list_provider_catalog and list_accounts to choose available destinations matching these platform hints: %s.
-4. Execute list_media if the idea needs existing media, or upload_media_from_url if the user supplied a public media URL.
+2. If workspace_id is missing, query list_workspaces and ask which workspace to use.
+3. Query list_provider_catalog and list_accounts to choose available destinations matching these platform hints: %s.
+4. Query list_media if the idea needs existing media, or execute upload_media_from_url if the user supplied a public media URL.
 5. Execute create_draft with one concise draft and relevant media_ids. Do not schedule it until the user approves timing and destinations.
 6. Explain what you created and suggest the next scheduling step.
 
@@ -680,7 +681,7 @@ goal: %s
 
 Workflow:
 1. Use search to load the get_post_status and set_post_renditions schemas.
-2. Execute get_post_status to inspect destinations and current state.
+2. Query get_post_status to inspect destinations and current state.
 3. Write concise, platform-native copy for each destination account.
 4. Execute set_post_renditions with one rendition per destination account.
 5. Summarize what changed and mention any platforms that need media, hashtags, or shorter copy.
@@ -696,9 +697,9 @@ window: %s
 
 Workflow:
 1. Use search to load the list_scheduled_posts and suggest_next_slot schemas.
-2. Execute list_scheduled_posts for the workspace and requested window.
+2. Query list_scheduled_posts for the workspace and requested window.
 3. Look for collisions, empty stretches, missing platform coverage, and posts that need destination-specific renditions.
-4. Execute suggest_next_slot if a useful new slot is needed.
+4. Query suggest_next_slot if a useful new slot is needed.
 5. Recommend concrete actions without canceling or scheduling anything unless the user explicitly asks.
 `, promptArg(args, "workspace_id", "(required)"), promptArg(args, "window", "upcoming queue")))
 }
@@ -717,13 +718,26 @@ func promptArg(args map[string]string, name, fallback string) string {
 func mcpAdvertisedTools() []map[string]any {
 	return []map[string]any{
 		mcpSearchTool(),
+		mcpQueryTool(),
 		mcpExecuteTool(),
 		mcpRenderSchedulerWidgetTool(),
 	}
 }
 
-func mcpOperationCatalog() []map[string]any {
-	return []map[string]any{
+type mcpOperationMode string
+
+const (
+	mcpOperationQuery   mcpOperationMode = mcpToolQuery
+	mcpOperationExecute mcpOperationMode = mcpToolExecute
+)
+
+type mcpOperationDefinition struct {
+	Descriptor map[string]any
+	Mode       mcpOperationMode
+}
+
+func mcpOperationCatalog() []mcpOperationDefinition {
+	return []mcpOperationDefinition{
 		mcpListWorkspacesTool(),
 		mcpListProviderCatalogTool(),
 		mcpListAccountsTool(),
@@ -747,7 +761,6 @@ func mcpOperationCatalog() []map[string]any {
 		mcpCancelPostTool(),
 		mcpSuggestNextSlotTool(),
 		mcpUploadMediaFromURLTool(),
-		mcpRenderSchedulerWidgetTool(),
 	}
 }
 
@@ -755,8 +768,8 @@ func mcpSearchTool() map[string]any {
 	return mcpToolDescriptor(map[string]any{
 		"name":  mcpToolSearch,
 		"title": "Search OpenPost operations",
-		"description": "Discover the OpenPost operations relevant to a task. Returns their exact names and input/output schemas on demand. " +
-			"Call this before execute when the operation or arguments are not already known.",
+		"description": "Discover the OpenPost operations relevant to a task. Returns their exact names, input/output schemas, safety annotations, and required execution tool on demand. " +
+			"Call this before query or execute when the operation or arguments are not already known.",
 		"inputSchema": map[string]any{
 			"type": "object",
 			"properties": map[string]any{
@@ -774,36 +787,54 @@ func mcpSearchTool() map[string]any {
 			"required":             []string{"query"},
 			"additionalProperties": false,
 		},
-	}, true, false)
+	}, mcpToolSafety{ReadOnly: true})
+}
+
+func mcpQueryTool() map[string]any {
+	return mcpToolDescriptor(map[string]any{
+		"name":        mcpToolQuery,
+		"title":       "Query OpenPost",
+		"description": "Run one guaranteed read-only operation returned by search. Query rejects every operation classified as state-changing, even if a caller supplies a valid mutation schema.",
+		"inputSchema": mcpDelegatedOperationInputSchema(
+			"Exact read-only operation name returned by search.",
+			"Arguments matching the read-only operation input schema returned by search.",
+		),
+	}, mcpToolSafety{ReadOnly: true, OpenWorld: true})
 }
 
 func mcpExecuteTool() map[string]any {
 	return mcpToolDescriptor(map[string]any{
-		"name":  mcpToolExecute,
-		"title": "Execute OpenPost operation",
-		"description": "Execute one operation returned by search. Pass the operation name verbatim and arguments matching its discovered schema. " +
-			"State-changing operations retain their normal authorization, validation, quota, and audit checks.",
-		"inputSchema": map[string]any{
-			"type": "object",
-			"properties": map[string]any{
-				"operation": map[string]any{
-					"type":        "string",
-					"description": "Exact operation name returned by search.",
-				},
-				"arguments": map[string]any{
-					"type":                 "object",
-					"description":          "Arguments matching the operation input schema returned by search.",
-					"additionalProperties": true,
-				},
-			},
-			"required":             []string{"operation", "arguments"},
-			"additionalProperties": false,
-		},
-	}, false, true)
+		"name":        mcpToolExecute,
+		"title":       "Execute OpenPost mutation",
+		"description": "Run one state-changing or external-action operation returned by search. Execute rejects guaranteed read-only operations so clients can apply a hard approval boundary. Mutations retain their normal authorization, validation, quota, and audit checks.",
+		"inputSchema": mcpDelegatedOperationInputSchema(
+			"Exact state-changing operation name returned by search.",
+			"Arguments matching the mutation input schema returned by search.",
+		),
+	}, mcpToolSafety{Destructive: true, OpenWorld: true})
 }
 
-func mcpListWorkspacesTool() map[string]any {
-	return mcpToolDescriptor(map[string]any{
+func mcpDelegatedOperationInputSchema(operationDescription, argumentsDescription string) map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"operation": map[string]any{
+				"type":        "string",
+				"description": operationDescription,
+			},
+			"arguments": map[string]any{
+				"type":                 "object",
+				"description":          argumentsDescription,
+				"additionalProperties": true,
+			},
+		},
+		"required":             []string{"operation", "arguments"},
+		"additionalProperties": false,
+	}
+}
+
+func mcpListWorkspacesTool() mcpOperationDefinition {
+	return mcpOperationDescriptor(map[string]any{
 		"name":        mcpToolWorkspaces,
 		"title":       "List workspaces",
 		"description": "List OpenPost workspaces available to the authenticated user.",
@@ -812,11 +843,11 @@ func mcpListWorkspacesTool() map[string]any {
 			"properties":           map[string]any{},
 			"additionalProperties": false,
 		},
-	}, true, false)
+	}, mcpOperationQuery, false, false)
 }
 
-func mcpListProviderCatalogTool() map[string]any {
-	return mcpToolDescriptor(map[string]any{
+func mcpListProviderCatalogTool() mcpOperationDefinition {
+	return mcpOperationDescriptor(map[string]any{
 		"name":        mcpToolProviders,
 		"title":       "List provider catalog",
 		"description": "List OpenPost provider launch status so assistants know which platforms are connectable, unconfigured, or planned.",
@@ -825,11 +856,11 @@ func mcpListProviderCatalogTool() map[string]any {
 			"properties":           map[string]any{},
 			"additionalProperties": false,
 		},
-	}, true, false)
+	}, mcpOperationQuery, false, false)
 }
 
-func mcpListAccountsTool() map[string]any {
-	return mcpToolDescriptor(map[string]any{
+func mcpListAccountsTool() mcpOperationDefinition {
+	return mcpOperationDescriptor(map[string]any{
 		"name":        mcpToolAccounts,
 		"title":       "List social accounts",
 		"description": "List active social accounts connected to an OpenPost workspace.",
@@ -844,11 +875,11 @@ func mcpListAccountsTool() map[string]any {
 			"required":             []string{"workspace_id"},
 			"additionalProperties": false,
 		},
-	}, true, false)
+	}, mcpOperationQuery, false, false)
 }
 
-func mcpListMediaTool() map[string]any {
-	return mcpToolDescriptor(map[string]any{
+func mcpListMediaTool() mcpOperationDefinition {
+	return mcpOperationDescriptor(map[string]any{
 		"name":        mcpToolListMedia,
 		"title":       "List media",
 		"description": "List recent media attachments in an OpenPost workspace so assistants can reuse existing assets.",
@@ -874,11 +905,11 @@ func mcpListMediaTool() map[string]any {
 			"required":             []string{"workspace_id"},
 			"additionalProperties": false,
 		},
-	}, true, false)
+	}, mcpOperationQuery, false, false)
 }
 
-func mcpProviderReadinessTool() map[string]any {
-	return mcpToolDescriptor(map[string]any{
+func mcpProviderReadinessTool() mcpOperationDefinition {
+	return mcpOperationDescriptor(map[string]any{
 		"name":        mcpToolReadiness,
 		"title":       "Get provider readiness",
 		"description": "Inspect provider app, account scope, public media, quota, and audit readiness for an OpenPost workspace.",
@@ -893,11 +924,11 @@ func mcpProviderReadinessTool() map[string]any {
 			"required":             []string{"workspace_id"},
 			"additionalProperties": false,
 		},
-	}, true, false)
+	}, mcpOperationQuery, false, false)
 }
 
-func mcpCreateDraftTool() map[string]any {
-	return mcpToolDescriptor(map[string]any{
+func mcpCreateDraftTool() mcpOperationDefinition {
+	return mcpOperationDescriptor(map[string]any{
 		"name":        mcpToolCreateDraft,
 		"title":       "Create draft",
 		"description": "Create an OpenPost draft in a workspace, optionally assigning destination social accounts and media.",
@@ -926,10 +957,10 @@ func mcpCreateDraftTool() map[string]any {
 			"required":             []string{"workspace_id", "content"},
 			"additionalProperties": false,
 		},
-	}, false, false)
+	}, mcpOperationExecute, false, false)
 }
 
-func mcpCreatePublicationTool() map[string]any {
+func mcpCreatePublicationTool() mcpOperationDefinition {
 	mediaSchema := map[string]any{
 		"type": "object",
 		"properties": map[string]any{
@@ -941,7 +972,7 @@ func mcpCreatePublicationTool() map[string]any {
 		"required":             []string{"media_id"},
 		"additionalProperties": false,
 	}
-	return mcpToolDescriptor(map[string]any{
+	return mcpOperationDescriptor(map[string]any{
 		"name":        mcpToolCreatePub,
 		"title":       "Create publication",
 		"description": "Create a format-first publication. Use explicit renditions when selected accounts need different output roles, for example YouTube title/description plus TikTok caption for the same short video.",
@@ -1007,11 +1038,11 @@ func mcpCreatePublicationTool() map[string]any {
 			"required":             []string{"workspace_id", "content_profile", "source_text"},
 			"additionalProperties": false,
 		},
-	}, false, false)
+	}, mcpOperationExecute, false, false)
 }
 
-func mcpListPublicationsTool() map[string]any {
-	return mcpToolDescriptor(map[string]any{
+func mcpListPublicationsTool() mcpOperationDefinition {
+	return mcpOperationDescriptor(map[string]any{
 		"name":        mcpToolListPubs,
 		"title":       "List publications",
 		"description": "List format-first publications in a workspace.",
@@ -1026,11 +1057,11 @@ func mcpListPublicationsTool() map[string]any {
 			"required":             []string{"workspace_id"},
 			"additionalProperties": false,
 		},
-	}, true, false)
+	}, mcpOperationQuery, false, false)
 }
 
-func mcpValidatePublicationTool() map[string]any {
-	return mcpToolDescriptor(map[string]any{
+func mcpValidatePublicationTool() mcpOperationDefinition {
+	return mcpOperationDescriptor(map[string]any{
 		"name":        mcpToolValidatePub,
 		"title":       "Validate publication",
 		"description": "Run provider capability, media readiness, account scope, and native processing validation for a publication.",
@@ -1042,11 +1073,11 @@ func mcpValidatePublicationTool() map[string]any {
 			"required":             []string{"publication_id"},
 			"additionalProperties": false,
 		},
-	}, true, false)
+	}, mcpOperationQuery, false, false)
 }
 
-func mcpSchedulePublicationTool() map[string]any {
-	return mcpToolDescriptor(map[string]any{
+func mcpSchedulePublicationTool() mcpOperationDefinition {
+	return mcpOperationDescriptor(map[string]any{
 		"name":        mcpToolSchedulePub,
 		"title":       "Schedule publication",
 		"description": "Validate and enqueue a publication whose scheduled_at is already set.",
@@ -1058,11 +1089,11 @@ func mcpSchedulePublicationTool() map[string]any {
 			"required":             []string{"publication_id"},
 			"additionalProperties": false,
 		},
-	}, false, true)
+	}, mcpOperationExecute, false, true)
 }
 
-func mcpPublishPublicationNowTool() map[string]any {
-	return mcpToolDescriptor(map[string]any{
+func mcpPublishPublicationNowTool() mcpOperationDefinition {
+	return mcpOperationDescriptor(map[string]any{
 		"name":        mcpToolPublishPubNow,
 		"title":       "Publish publication now",
 		"description": "Validate and queue a publication for immediate publishing.",
@@ -1074,11 +1105,11 @@ func mcpPublishPublicationNowTool() map[string]any {
 			"required":             []string{"publication_id"},
 			"additionalProperties": false,
 		},
-	}, false, true)
+	}, mcpOperationExecute, false, true)
 }
 
-func mcpListPublicationEventsTool() map[string]any {
-	return mcpToolDescriptor(map[string]any{
+func mcpListPublicationEventsTool() mcpOperationDefinition {
+	return mcpOperationDescriptor(map[string]any{
 		"name":        mcpToolPubEvents,
 		"title":       "List publication events",
 		"description": "List lifecycle events recorded while an OpenPost publication is prepared, published, retried, or moderated.",
@@ -1091,11 +1122,11 @@ func mcpListPublicationEventsTool() map[string]any {
 			"required":             []string{"publication_id"},
 			"additionalProperties": false,
 		},
-	}, true, false)
+	}, mcpOperationQuery, false, false)
 }
 
-func mcpListRenditionCommentsTool() map[string]any {
-	return mcpToolDescriptor(map[string]any{
+func mcpListRenditionCommentsTool() mcpOperationDefinition {
+	return mcpOperationDescriptor(map[string]any{
 		"name":        mcpToolComments,
 		"title":       "List rendition comments",
 		"description": "List live provider comments for a published rendition when the platform supports comment retrieval.",
@@ -1107,11 +1138,11 @@ func mcpListRenditionCommentsTool() map[string]any {
 			"required":             []string{"rendition_id"},
 			"additionalProperties": false,
 		},
-	}, true, false)
+	}, mcpOperationQuery, false, true)
 }
 
-func mcpListDraftsTool() map[string]any {
-	return mcpToolDescriptor(map[string]any{
+func mcpListDraftsTool() mcpOperationDefinition {
+	return mcpOperationDescriptor(map[string]any{
 		"name":        mcpToolListDrafts,
 		"title":       "List drafts",
 		"description": "List editable draft posts in a workspace so an assistant can inspect unfinished work before creating duplicates.",
@@ -1132,11 +1163,11 @@ func mcpListDraftsTool() map[string]any {
 			"required":             []string{"workspace_id"},
 			"additionalProperties": false,
 		},
-	}, true, false)
+	}, mcpOperationQuery, false, false)
 }
 
-func mcpUpdateDraftTool() map[string]any {
-	return mcpToolDescriptor(map[string]any{
+func mcpUpdateDraftTool() mcpOperationDefinition {
+	return mcpOperationDescriptor(map[string]any{
 		"name":        mcpToolUpdateDraft,
 		"title":       "Update draft",
 		"description": "Update an editable draft's source content, destination accounts, or attached media.",
@@ -1169,11 +1200,11 @@ func mcpUpdateDraftTool() map[string]any {
 			"required":             []string{"workspace_id", "post_id"},
 			"additionalProperties": false,
 		},
-	}, false, false)
+	}, mcpOperationExecute, true, false)
 }
 
-func mcpSetPostRenditionsTool() map[string]any {
-	return mcpToolDescriptor(map[string]any{
+func mcpSetPostRenditionsTool() mcpOperationDefinition {
+	return mcpOperationDescriptor(map[string]any{
 		"name":        mcpToolRenditions,
 		"title":       "Set post renditions",
 		"description": "Create or update destination-specific post copy for accounts already assigned to an OpenPost draft or scheduled post.",
@@ -1217,11 +1248,11 @@ func mcpSetPostRenditionsTool() map[string]any {
 			"required":             []string{"workspace_id", "post_id", "renditions"},
 			"additionalProperties": false,
 		},
-	}, false, false)
+	}, mcpOperationExecute, true, false)
 }
 
-func mcpSchedulePostTool() map[string]any {
-	return mcpToolDescriptor(map[string]any{
+func mcpSchedulePostTool() mcpOperationDefinition {
+	return mcpOperationDescriptor(map[string]any{
 		"name":        mcpToolSchedulePost,
 		"title":       "Schedule post",
 		"description": "Create a scheduled OpenPost post and queue it for publishing.",
@@ -1256,11 +1287,11 @@ func mcpSchedulePostTool() map[string]any {
 			"required":             []string{"workspace_id", "content", "scheduled_at", "social_account_ids"},
 			"additionalProperties": false,
 		},
-	}, false, true)
+	}, mcpOperationExecute, false, true)
 }
 
-func mcpScheduleDraftTool() map[string]any {
-	return mcpToolDescriptor(map[string]any{
+func mcpScheduleDraftTool() mcpOperationDefinition {
+	return mcpOperationDescriptor(map[string]any{
 		"name":        mcpToolScheduleDraft,
 		"title":       "Schedule draft",
 		"description": "Schedule an existing draft post and queue it for publishing without creating a duplicate post.",
@@ -1300,11 +1331,11 @@ func mcpScheduleDraftTool() map[string]any {
 			"required":             []string{"workspace_id", "post_id", "scheduled_at"},
 			"additionalProperties": false,
 		},
-	}, false, true)
+	}, mcpOperationExecute, true, true)
 }
 
-func mcpGetPostStatusTool() map[string]any {
-	return mcpToolDescriptor(map[string]any{
+func mcpGetPostStatusTool() mcpOperationDefinition {
+	return mcpOperationDescriptor(map[string]any{
 		"name":        mcpToolGetPost,
 		"title":       "Get post status",
 		"description": "Read the current OpenPost status and destination status for a post.",
@@ -1323,11 +1354,11 @@ func mcpGetPostStatusTool() map[string]any {
 			"required":             []string{"workspace_id", "post_id"},
 			"additionalProperties": false,
 		},
-	}, true, false)
+	}, mcpOperationQuery, false, false)
 }
 
-func mcpListScheduledPostsTool() map[string]any {
-	return mcpToolDescriptor(map[string]any{
+func mcpListScheduledPostsTool() mcpOperationDefinition {
+	return mcpOperationDescriptor(map[string]any{
 		"name":        mcpToolListPosts,
 		"title":       "List scheduled posts",
 		"description": "List upcoming scheduled posts in a workspace so an assistant can inspect the publishing queue.",
@@ -1358,11 +1389,11 @@ func mcpListScheduledPostsTool() map[string]any {
 			"required":             []string{"workspace_id"},
 			"additionalProperties": false,
 		},
-	}, true, false)
+	}, mcpOperationQuery, false, false)
 }
 
-func mcpCancelPostTool() map[string]any {
-	return mcpToolDescriptor(map[string]any{
+func mcpCancelPostTool() mcpOperationDefinition {
+	return mcpOperationDescriptor(map[string]any{
 		"name":        mcpToolCancelPost,
 		"title":       "Cancel scheduled post",
 		"description": "Cancel a queued scheduled post and leave it as an editable draft.",
@@ -1381,11 +1412,11 @@ func mcpCancelPostTool() map[string]any {
 			"required":             []string{"workspace_id", "post_id"},
 			"additionalProperties": false,
 		},
-	}, false, true)
+	}, mcpOperationExecute, true, false)
 }
 
-func mcpSuggestNextSlotTool() map[string]any {
-	return mcpToolDescriptor(map[string]any{
+func mcpSuggestNextSlotTool() mcpOperationDefinition {
+	return mcpOperationDescriptor(map[string]any{
 		"name":        mcpToolSuggestSlot,
 		"title":       "Suggest next slot",
 		"description": "Suggest the next free configured posting slot for a workspace.",
@@ -1405,11 +1436,11 @@ func mcpSuggestNextSlotTool() map[string]any {
 			"required":             []string{"workspace_id"},
 			"additionalProperties": false,
 		},
-	}, true, false)
+	}, mcpOperationQuery, false, false)
 }
 
-func mcpUploadMediaFromURLTool() map[string]any {
-	return mcpToolDescriptor(map[string]any{
+func mcpUploadMediaFromURLTool() mcpOperationDefinition {
+	return mcpOperationDescriptor(map[string]any{
 		"name":        mcpToolUploadURL,
 		"title":       "Upload media from URL",
 		"description": "Fetch a public media URL and store it in an OpenPost workspace.",
@@ -1437,7 +1468,7 @@ func mcpUploadMediaFromURLTool() map[string]any {
 			"required":             []string{"workspace_id", "url"},
 			"additionalProperties": false,
 		},
-	}, false, true)
+	}, mcpOperationExecute, false, true)
 }
 
 func mcpRenderSchedulerWidgetTool() map[string]any {
@@ -1470,18 +1501,44 @@ func mcpRenderSchedulerWidgetTool() map[string]any {
 			"required":             []string{"data"},
 			"additionalProperties": false,
 		},
-	}, true, false)
+	}, mcpToolSafety{ReadOnly: true})
 }
 
-func mcpToolDescriptor(tool map[string]any, readOnly, openWorld bool) map[string]any {
+type mcpToolSafety struct {
+	ReadOnly    bool
+	Destructive bool
+	OpenWorld   bool
+}
+
+func mcpOperationDescriptor(tool map[string]any, mode mcpOperationMode, destructive, openWorld bool) mcpOperationDefinition {
+	switch mode {
+	case mcpOperationQuery:
+		if destructive {
+			panic("read-only MCP operations cannot be destructive")
+		}
+	case mcpOperationExecute:
+	default:
+		panic("invalid MCP operation mode: " + mode)
+	}
+	return mcpOperationDefinition{
+		Descriptor: mcpToolDescriptor(tool, mcpToolSafety{
+			ReadOnly:    mode == mcpOperationQuery,
+			Destructive: destructive,
+			OpenWorld:   openWorld,
+		}),
+		Mode: mode,
+	}
+}
+
+func mcpToolDescriptor(tool map[string]any, safety mcpToolSafety) map[string]any {
 	securitySchemes := []map[string]any{mcpOAuthSecurityScheme()}
 	toolName, _ := tool["name"].(string)
 	tool["securitySchemes"] = securitySchemes
 	tool["outputSchema"] = mcpToolOutputSchema(toolName)
 	tool["annotations"] = map[string]any{
-		"readOnlyHint":    readOnly,
-		"destructiveHint": false,
-		"openWorldHint":   openWorld,
+		"readOnlyHint":    safety.ReadOnly,
+		"destructiveHint": safety.Destructive,
+		"openWorldHint":   safety.OpenWorld,
 	}
 	status := mcpToolInvocationStatus(toolName)
 	meta := map[string]any{
@@ -1512,7 +1569,8 @@ type mcpToolStatus struct {
 
 var mcpToolStatuses = map[string]mcpToolStatus{
 	mcpToolSearch:        {Invoking: "Searching operations", Invoked: "Operations found"},
-	mcpToolExecute:       {Invoking: "Running OpenPost operation", Invoked: "OpenPost operation complete"},
+	mcpToolQuery:         {Invoking: "Querying OpenPost", Invoked: "OpenPost query complete"},
+	mcpToolExecute:       {Invoking: "Running OpenPost mutation", Invoked: "OpenPost mutation complete"},
 	mcpToolWorkspaces:    {Invoking: "Loading workspaces", Invoked: "Workspaces loaded"},
 	mcpToolProviders:     {Invoking: "Loading providers", Invoked: "Providers loaded"},
 	mcpToolAccounts:      {Invoking: "Loading accounts", Invoked: "Accounts loaded"},
@@ -1591,7 +1649,7 @@ func mcpToolOutputSchema(toolName string) map[string]any {
 			"workspace_id": map[string]any{"type": "string"},
 			"data":         mcpOpenObjectSchema(),
 		}, "view", "data")
-	case mcpToolExecute:
+	case mcpToolQuery, mcpToolExecute:
 		return mcpOpenObjectSchema()
 	default:
 		return mcpStructuredOutputSchema(map[string]any{})
@@ -1681,8 +1739,8 @@ func searchMCPOperations(args map[string]any) (any, *mcpError) {
 	query := strings.ToLower(input.Query)
 	terms := mcpSearchTerms(query)
 	matches := make([]mcpOperationMatch, 0, input.Limit)
-	for index, tool := range mcpOperationCatalog() {
-		doc := mcpOperationDocument(tool)
+	for index, operation := range mcpOperationCatalog() {
+		doc := mcpOperationDocument(operation)
 		name, _ := doc["name"].(string)
 		title, _ := doc["title"].(string)
 		description, _ := doc["description"].(string)
@@ -1720,14 +1778,16 @@ func searchMCPOperations(args map[string]any) (any, *mcpError) {
 	}, nil
 }
 
-func mcpOperationDocument(tool map[string]any) map[string]any {
+func mcpOperationDocument(operation mcpOperationDefinition) map[string]any {
+	tool := operation.Descriptor
 	return map[string]any{
-		"name":         tool["name"],
-		"title":        tool["title"],
-		"description":  tool["description"],
-		"inputSchema":  tool["inputSchema"],
-		"outputSchema": tool["outputSchema"],
-		"annotations":  tool["annotations"],
+		"name":          tool["name"],
+		"title":         tool["title"],
+		"description":   tool["description"],
+		"inputSchema":   tool["inputSchema"],
+		"outputSchema":  tool["outputSchema"],
+		"annotations":   tool["annotations"],
+		"executionTool": string(operation.Mode),
 	}
 }
 
@@ -1798,10 +1858,10 @@ func (h *MCPHandler) callTool(ctx context.Context, principal *middleware.Princip
 	switch params.Name {
 	case mcpToolSearch:
 		result, rpcErr = searchMCPOperations(params.Arguments)
-	case mcpToolExecute:
-		var input mcpExecuteInput
+	case mcpToolQuery, mcpToolExecute:
+		var input mcpDelegatedOperationInput
 		if err := decodeMCPArguments(params.Arguments, &input); err != nil || strings.TrimSpace(input.Operation) == "" {
-			rpcErr = &mcpError{Code: -32602, Message: "invalid execute arguments"}
+			rpcErr = &mcpError{Code: -32602, Message: fmt.Sprintf("invalid %s arguments", params.Name)}
 			break
 		}
 		input.Operation = strings.TrimSpace(input.Operation)
@@ -1810,7 +1870,7 @@ func (h *MCPHandler) callTool(ctx context.Context, principal *middleware.Princip
 		}
 		auditToolName = input.Operation
 		auditArgs = input.Arguments
-		result, rpcErr = h.callMCPOperation(ctx, principal.UserID, input.Operation, input.Arguments)
+		result, rpcErr = h.callDiscoveredMCPOperation(ctx, principal.UserID, mcpOperationMode(params.Name), input.Operation, input.Arguments)
 	default:
 		// Keep previously advertised operation names callable for clients that
 		// cached the legacy tool catalog before progressive discovery shipped.
@@ -1820,9 +1880,33 @@ func (h *MCPHandler) callTool(ctx context.Context, principal *middleware.Princip
 	return result, rpcErr
 }
 
-type mcpExecuteInput struct {
+type mcpDelegatedOperationInput struct {
 	Operation string         `json:"operation"`
 	Arguments map[string]any `json:"arguments"`
+}
+
+func mcpOperationByName(name string) (mcpOperationDefinition, bool) {
+	for _, operation := range mcpOperationCatalog() {
+		operationName, _ := operation.Descriptor["name"].(string)
+		if operationName == name {
+			return operation, true
+		}
+	}
+	return mcpOperationDefinition{}, false
+}
+
+func (h *MCPHandler) callDiscoveredMCPOperation(ctx context.Context, userID string, mode mcpOperationMode, operationName string, args map[string]any) (any, *mcpError) {
+	operation, ok := mcpOperationByName(operationName)
+	if !ok {
+		return nil, &mcpError{Code: -32602, Message: "unknown operation; call search to discover supported operations"}
+	}
+	if operation.Mode != mode {
+		if operation.Mode == mcpOperationQuery {
+			return nil, &mcpError{Code: -32602, Message: fmt.Sprintf("%s is read-only; call query with this operation", operationName)}
+		}
+		return nil, &mcpError{Code: -32602, Message: fmt.Sprintf("%s changes state or performs an external action; call execute with this operation", operationName)}
+	}
+	return h.callMCPOperation(ctx, userID, operationName, args)
 }
 
 func (h *MCPHandler) callMCPOperation(ctx context.Context, userID, operation string, args map[string]any) (any, *mcpError) {

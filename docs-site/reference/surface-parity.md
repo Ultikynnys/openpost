@@ -22,6 +22,6 @@ The CLI command reference is generated from Cobra, and the HTTP reference is gen
 ## Intentional differences
 
 - Provider OAuth belongs in a browser because providers require redirects, consent, and sometimes account selection.
-- MCP advertises a compact `search` and `execute` catalog so assistants discover operation schemas on demand instead of loading every tool descriptor up front.
+- MCP advertises compact `search`, read-only `query`, and mutation-only `execute` tools so assistants discover operation schemas on demand while hosts retain a hard approval boundary.
 - The CLI favors stable IDs, slugs, JSON output, and explicit confirmation suitable for terminals and automation.
 - The web app owns visual editing, previews, drag-and-drop media, security ceremonies, and provider consent UX.
