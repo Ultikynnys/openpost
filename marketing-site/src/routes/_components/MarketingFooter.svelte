@@ -61,7 +61,7 @@
 			</a>
 			<p class="mt-4 max-w-sm text-sm leading-6 text-muted-foreground">
 				Social publishing for creators, small teams, and technical operators who want a focused
-				scheduler with source-open trust.
+				scheduler with open-source trust.
 			</p>
 			<a
 				href={githubUrl}
@@ -97,6 +97,6 @@
 		</div>
 	</div>
 	<div class="border-t px-4 py-5 text-center text-xs text-muted-foreground">
-		Copyright 2026 OpenPost. Source open, ready to use, lightweight to self-host.
+		Copyright 2026 OpenPost Contributors. Open source, ready to use, lightweight to self-host.
 	</div>
 </footer>

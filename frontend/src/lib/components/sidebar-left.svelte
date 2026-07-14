@@ -21,6 +21,7 @@
 	import TrashIcon from 'lucide-svelte/icons/trash-2';
 	import ScrollTextIcon from 'lucide-svelte/icons/scroll-text';
 	import Maximize2Icon from 'lucide-svelte/icons/maximize-2';
+	import GithubIcon from 'lucide-svelte/icons/github';
 	import { auth } from '$lib/stores/auth';
 	import { goto } from '$app/navigation';
 	import { toggleMode } from 'mode-watcher';
@@ -648,6 +649,30 @@
 							<LogOutIcon class="mr-2 size-4 text-muted-foreground" />
 							<span>{m.sidebar_log_out()}</span>
 						</DropdownMenu.Item>
+
+						<DropdownMenu.Separator />
+						<div class="px-2 py-1.5 text-xs leading-5 text-muted-foreground">
+							<p>{m.sidebar_source_notice()}</p>
+							<div class="mt-1 flex items-center gap-3">
+								<a
+									href="https://github.com/rodrgds/openpost"
+									target="_blank"
+									rel="noreferrer"
+									class="inline-flex items-center gap-1 font-medium text-foreground hover:underline"
+								>
+									<GithubIcon class="size-3" />
+									{m.sidebar_view_source()}
+								</a>
+								<a
+									href="https://github.com/rodrgds/openpost/blob/main/LICENSE"
+									target="_blank"
+									rel="noreferrer"
+									class="font-medium text-foreground hover:underline"
+								>
+									{m.sidebar_view_license()}
+								</a>
+							</div>
+						</div>
 					</DropdownMenu.Content>
 				</DropdownMenu.Root>
 			</Sidebar.MenuItem>

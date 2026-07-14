@@ -187,8 +187,8 @@ export default defineConfig({
 			text: 'Edit this page on GitHub',
 		},
 		footer: {
-			message: 'Released under the MIT License.',
-			copyright: 'Copyright © Rodrigo Dias',
+			message: 'Open source under AGPL-3.0-only.',
+			copyright: 'Copyright © 2026 OpenPost Contributors',
 		},
 		sidebar: {
 			'/installation/android': userDocsSidebar,

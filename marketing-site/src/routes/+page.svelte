@@ -55,7 +55,7 @@
 	<meta name="twitter:title" content="OpenPost - Social publishing workspace" />
 	<meta
 		name="twitter:description"
-		content="Source-open social publishing for creators and small teams."
+		content="Open-source social publishing for creators and small teams."
 	/>
 </svelte:head>
 
@@ -65,7 +65,7 @@
 		<div class="grid items-center gap-12 lg:grid-cols-[0.88fr_1.12fr]">
 			<div>
 				<Badge class="border-primary/25 bg-primary/10 text-primary">
-					Source-open publishing, ready to use
+					Open-source publishing, ready to use
 				</Badge>
 				<h1
 					class="mt-6 max-w-3xl text-4xl leading-[1.02] font-semibold tracking-tight text-balance sm:text-5xl xl:text-6xl"
@@ -137,7 +137,6 @@
 		</div>
 	</div>
 </section>
-
 <VideoDemo />
 
 <section class="section-pad">
@@ -275,7 +274,7 @@
 		<div>
 			<h2 class="text-3xl font-semibold text-balance">Prefer to run it yourself?</h2>
 			<p class="mt-3 max-w-2xl text-base leading-7 text-primary-foreground/75">
-				OpenPost is source open, self-hostable, and intentionally lightweight: one binary or
+				OpenPost is open source, self-hostable, and intentionally lightweight: one binary or
 				container, SQLite by default, local media by default, and no Redis queue requirement.
 			</p>
 		</div>

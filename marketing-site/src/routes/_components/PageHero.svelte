@@ -6,6 +6,8 @@
 		eyebrow: string;
 		title: string;
 		description: string;
+		primaryHref?: string;
+		primaryLabel?: string;
 		secondaryHref?: string;
 		secondaryLabel?: string;
 	}
@@ -14,6 +16,8 @@
 		eyebrow,
 		title,
 		description,
+		primaryHref = appUrl,
+		primaryLabel = 'Open app',
 		secondaryHref = '/#pricing',
 		secondaryLabel = 'See pricing'
 	}: Props = $props();
@@ -28,7 +32,7 @@
 			</h1>
 			<p class="mt-5 max-w-2xl text-lg leading-8 text-muted-foreground">{description}</p>
 			<div class="mt-8 flex flex-wrap gap-3">
-				<Button href={appUrl} size="lg">Open app</Button>
+				<Button href={primaryHref} size="lg">{primaryLabel}</Button>
 				<Button href={secondaryHref} variant="outline" size="lg">{secondaryLabel}</Button>
 			</div>
 		</div>

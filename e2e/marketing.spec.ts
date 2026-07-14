@@ -12,7 +12,7 @@ test("marketing index links to the app and documentation", async ({ page }) => {
     }),
   ).toBeVisible();
   await expect(
-    page.getByText("Source-open publishing, ready to use"),
+    page.getByText("Open-source publishing, ready to use"),
   ).toBeVisible();
   await expect(
     page.getByRole("link", { name: "Start publishing" }).first(),

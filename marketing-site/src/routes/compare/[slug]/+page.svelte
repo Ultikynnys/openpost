@@ -55,7 +55,7 @@
 		},
 		{
 			feature: 'Trust model',
-			openpost: 'Source-open implementation, encrypted provider tokens, and a lightweight self-host path.',
+			openpost: 'Open-source implementation, encrypted provider tokens, and a lightweight self-host path.',
 			other: 'Hosted-only suites can still be excellent, but the implementation is usually closed.',
 			icon: ShieldCheck
 		}
@@ -115,7 +115,6 @@
 		</div>
 	</div>
 </section>
-
 <section class="section-pad">
 	<div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
 		<div class="max-w-3xl">

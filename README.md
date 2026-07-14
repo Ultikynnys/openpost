@@ -15,7 +15,7 @@
     <img src="https://img.shields.io/github/actions/workflow/status/rodrgds/openpost/ci.yml?label=CI" alt="CI Status">
   </a>
   <a href="LICENSE">
-    <img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT">
+    <img src="https://img.shields.io/badge/License-AGPL--3.0--only-blue.svg" alt="License: AGPL-3.0-only">
   </a>
   <a href="SECURITY.md">
     <img src="https://img.shields.io/badge/Security-Security%20Policy-blue" alt="Security Policy">
@@ -26,7 +26,7 @@
   <strong>
     <h2>Self-hosted social media scheduling, without another monthly subscription.</h2>
   </strong>
-  OpenPost is a self-hosted Typefully-like social media scheduler for people who want to write, customize, and schedule posts across platforms from their own server.
+  OpenPost is an open-source, self-hosted Typefully-like social media scheduler for people who want to write, customize, and schedule posts across platforms from their own server.
 </div>
 
 <div align="center">
@@ -164,4 +164,6 @@ Report security issues through [SECURITY.md](SECURITY.md).
 
 ## License
 
-MIT
+OpenPost is open source under the [GNU Affero General Public License v3.0 only](LICENSE)
+(`AGPL-3.0-only`). You may inspect, run, modify, and self-host it. If you offer a modified
+version over a network, you must make the corresponding source code available to its users.

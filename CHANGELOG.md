@@ -6,6 +6,7 @@ All notable changes to this project are documented in this file.
 
 ### Changed
 
+- Relicensed OpenPost from MIT to AGPL-3.0-only and restored clear open-source positioning across the project, marketing site, documentation, and authenticated app.
 - Made the project-owned Devenv/direnv workflow durable across NAS/Hermes reboots with a committed environment lock, repo-local caches, frozen installs, non-destructive dotenv setup, explicit command gates, a tracked fast pre-push lint gate, and no shell execution of dotenv data.
 - Documented the intended web, CLI, MCP, and HTTP API surface boundaries, corrected stale marketing automation examples, scoped heavy uploader styles to the uploader itself, and lazy-loaded the documentation API explorer outside its dedicated route.
 - Added mixed-media carousel publishing for Threads and aligned public-media constraints with the publishing modes supported by Threads, Facebook, Instagram, and TikTok.

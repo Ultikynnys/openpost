@@ -35,7 +35,6 @@ export const navItems = [
 	{ label: 'Security', href: '/security' },
 	{ label: 'Docs', href: docsUrl }
 ] as const;
-
 export const planIDs = ['starter', 'creator', 'pro', 'team', 'agency'] as const;
 
 export const plans = [
@@ -366,11 +365,11 @@ export const comparisons = [
 		slug: 'buffer',
 		name: 'Buffer',
 		bestFor: 'Teams that want a mature hosted suite with analytics.',
-		openPostAngle: 'OpenPost focuses on a cleaner composer, source-open trust, automation, and lower app plans.',
+		openPostAngle: 'OpenPost focuses on a cleaner composer, open-source trust, automation, and lower app plans.',
 		pricing: 'Buffer commonly scales by channel and team needs; OpenPost plans scale by workspaces, accounts, scheduled posts, and media.',
 		chooseOpenPost: [
 			'You want a focused scheduler without a broad engagement suite.',
-			'You care about source-open implementation and self-hosting as a fallback.',
+			'You care about an open-source implementation and self-hosting as a fallback.',
 			'You want CLI, MCP, and API workflows beside the web app.'
 		],
 		chooseThem: [
@@ -430,8 +429,8 @@ export const comparisons = [
 		slug: 'post-bridge',
 		name: 'Post Bridge',
 		bestFor: 'Users who want an all-in-one hosted scheduler with many growth tools.',
-		openPostAngle: 'OpenPost keeps the core scheduler honest, technical, and source-open, with self-hosting as a trust signal.',
-		pricing: 'Post Bridge leans into hosted growth utilities. OpenPost leans into scheduling, workspaces, automation, and source-open trust.',
+		openPostAngle: 'OpenPost keeps the core scheduler honest, technical, and open source, with self-hosting as a trust signal.',
+		pricing: 'Post Bridge leans into hosted growth utilities. OpenPost leans into scheduling, workspaces, automation, and open-source trust.',
 		chooseOpenPost: [
 			'You want to inspect or self-host the implementation if needed.',
 			'You want CLI/MCP workflows for technical operators.',
@@ -439,7 +438,7 @@ export const comparisons = [
 		],
 		chooseThem: [
 			'You want a larger hosted marketing-tool bundle.',
-			'You value growth utilities more than source-open operation.'
+			'You value growth utilities more than open-source operation.'
 		]
 	},
 	{
@@ -527,7 +526,7 @@ export const faqs = [
 	{
 		question: 'Is using OpenPost different from self-hosting?',
 		answer:
-			'The app at app.openpost.social is the managed version. The project is still source-open and self-hostable, but the landing page focuses on the ready-to-use workflow.'
+			'The app at app.openpost.social is the managed version. The project is open source and self-hostable, while the landing page focuses on the ready-to-use workflow.'
 	},
 	{
 		question: 'Does OpenPost include analytics?',

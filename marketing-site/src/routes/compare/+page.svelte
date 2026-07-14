@@ -43,7 +43,7 @@
 			icon: Command
 		},
 		{
-			title: 'Source-open trust',
+			title: 'Open-source trust',
 			description:
 				'Inspect the implementation, use the managed app, or self-host the lightweight single-service stack.',
 			icon: ShieldCheck
@@ -63,7 +63,7 @@
 <PageHero
 	eyebrow="Compare"
 	title="A comparison hub that does not hide the tradeoffs."
-	description="OpenPost is not the biggest social suite. It is the focused, source-open publishing workspace for people who care about queue visibility, automation, and lightweight operation."
+	description="OpenPost is not the biggest social suite. It is the focused, open-source publishing workspace for people who care about queue visibility, automation, and lightweight operation."
 	secondaryHref="/#pricing"
 	secondaryLabel="See pricing"
 />
@@ -77,7 +77,7 @@
 			</h2>
 			<p class="mt-5 text-lg leading-8 text-muted-foreground">
 				The comparison pages start from the real product surface: composer, variants, queue,
-				media, automation, and source-open operation.
+				media, automation, and open-source operation.
 			</p>
 		</div>
 
