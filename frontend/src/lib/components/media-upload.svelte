@@ -110,6 +110,7 @@
 			const token = getToken();
 			const resp = await fetch(`${getApiBase()}/media/${item.id}`, {
 				method: 'PATCH',
+				credentials: 'include',
 				headers: {
 					'Content-Type': 'application/json',
 					...(token ? { Authorization: `Bearer ${token}` } : {})

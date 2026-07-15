@@ -53,6 +53,26 @@ When `OPENPOST_EDITION=cloud`, OpenPost refuses to start unless:
 
 The S3-compatible storage driver supports server-side uploads and direct browser-to-S3 upload sessions.
 
+For direct browser uploads, the bucket must allow CORS requests from the OpenPost app origin. For Cloudflare R2, apply a bucket CORS rule like this, replacing the origin with your `OPENPOST_APP_URL`:
+
+```json
+{
+  "rules": [
+    {
+      "allowed": {
+        "origins": ["https://app.openpost.example"],
+        "methods": ["PUT"],
+        "headers": ["Content-Type"]
+      },
+      "exposeHeaders": ["ETag"],
+      "maxAgeSeconds": 3600
+    }
+  ]
+}
+```
+
+Save the policy as `cors.json`, apply it with `wrangler r2 bucket cors set <bucket> --file cors.json`, and verify it with `wrangler r2 bucket cors list <bucket>`. Without this bucket policy, the browser rejects the presigned `PUT` during its preflight request and reports `Failed to fetch`.
+
 Direct upload flow:
 
 1. Call `POST /api/v1/media/upload-session` with `workspace_id`, `filename`, `mime_type`, and `size`.

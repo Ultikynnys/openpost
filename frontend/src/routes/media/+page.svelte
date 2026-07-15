@@ -196,7 +196,7 @@
 
 	async function downloadMedia(media: MediaItem) {
 		try {
-			const response = await fetch(getAuthenticatedMediaURL(media.url));
+			const response = await fetch(getAuthenticatedMediaURL(media.url), { credentials: 'include' });
 			if (!response.ok) throw new Error('Failed to download media');
 
 			const blob = await response.blob();

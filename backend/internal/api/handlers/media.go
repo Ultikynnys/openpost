@@ -10,6 +10,7 @@ import (
 	"errors"
 	"image"
 	"io"
+	"log"
 	"mime/multipart"
 	"net/http"
 	"os"
@@ -327,14 +328,31 @@ func (h *MediaHandler) RegisterRoutes(api huma.API) {
 
 		query := h.db.NewSelect().Model(&models.MediaAttachment{}).
 			Where("workspace_id = ?", input.WorkspaceID)
+		variantMediaIDs := []string{}
+		if input.Filter == "used" || input.Filter == "unused" {
+			ids, usageErr := h.variantMediaIDsForWorkspace(ctx, input.WorkspaceID)
+			if usageErr != nil {
+				return nil, huma.Error500InternalServerError("failed to check media usage")
+			}
+			variantMediaIDs = ids
+		}
 
 		switch input.Filter {
 		case "favorites":
 			query = query.Where("is_favorite = ?", true)
 		case "used":
-			query = query.Where("id IN (SELECT media_id FROM post_media) OR id IN (SELECT media_id FROM rendition_media)")
+			query = query.WhereGroup(" AND ", func(group *bun.SelectQuery) *bun.SelectQuery {
+				group = group.Where("id IN (SELECT media_id FROM post_media) OR id IN (SELECT media_id FROM rendition_media)")
+				if len(variantMediaIDs) > 0 {
+					group = group.WhereOr("id IN (?)", bun.List(variantMediaIDs))
+				}
+				return group
+			})
 		case "unused":
 			query = query.Where("id NOT IN (SELECT media_id FROM post_media) AND id NOT IN (SELECT media_id FROM rendition_media)")
+			if len(variantMediaIDs) > 0 {
+				query = query.Where("id NOT IN (?)", bun.List(variantMediaIDs))
+			}
 		}
 
 		var total int
@@ -358,12 +376,18 @@ func (h *MediaHandler) RegisterRoutes(api huma.API) {
 			return nil, huma.Error500InternalServerError("failed to fetch media")
 		}
 
+		mediaIDs := make([]string, len(media))
+		for i := range media {
+			mediaIDs[i] = media[i].ID
+		}
+		usageByMedia, err := h.mediaUsageSummaries(ctx, input.WorkspaceID, mediaIDs)
+		if err != nil {
+			return nil, huma.Error500InternalServerError("failed to check media usage")
+		}
+
 		result := make([]MediaListItem, len(media))
 		for i, m := range media {
-			usage, usageErr := h.mediaUsageSummary(ctx, m.WorkspaceID, m.ID)
-			if usageErr != nil {
-				return nil, huma.Error500InternalServerError("failed to check media usage")
-			}
+			usage := usageByMedia[m.ID]
 
 			var thumbs Thumbnails
 			if m.ThumbnailsJSON != "" {
@@ -493,16 +517,7 @@ func (h *MediaHandler) RegisterRoutes(api huma.API) {
 			return nil, huma.Error400BadRequest("cannot delete media attached to posts that have not been published yet")
 		}
 
-		if err := h.deleteMediaFiles(&media); err != nil {
-			return nil, huma.Error500InternalServerError("failed to delete media files")
-		}
-
-		if err := h.removeMediaReferences(ctx, media.WorkspaceID, input.PathID); err != nil {
-			return nil, huma.Error500InternalServerError("failed to remove media references")
-		}
-
-		_, err = h.db.NewDelete().Model(&media).Where("id = ?", input.PathID).Exec(ctx)
-		if err != nil {
+		if err := h.deleteMedia(ctx, &media); err != nil {
 			return nil, huma.Error500InternalServerError("failed to delete media record")
 		}
 
@@ -552,19 +567,7 @@ func (h *MediaHandler) RegisterRoutes(api huma.API) {
 				continue
 			}
 
-			err = h.deleteMediaFiles(&media)
-			if err != nil {
-				failedIDs = append(failedIDs, mediaID)
-				continue
-			}
-
-			if err := h.removeMediaReferences(ctx, media.WorkspaceID, mediaID); err != nil {
-				failedIDs = append(failedIDs, mediaID)
-				continue
-			}
-
-			_, err = h.db.NewDelete().Model(&media).Where("id = ?", mediaID).Exec(ctx)
-			if err != nil {
+			if err := h.deleteMedia(ctx, &media); err != nil {
 				failedIDs = append(failedIDs, mediaID)
 				continue
 			}
@@ -1103,51 +1106,161 @@ func mediaUploadResultFromAttachment(media models.MediaAttachment, deduped bool)
 }
 
 func (h *MediaHandler) mediaUsageSummary(ctx context.Context, workspaceID, mediaID string) (mediaUsageSummary, error) {
-	var summary mediaUsageSummary
-
-	posts, err := h.postsUsingMedia(ctx, workspaceID, mediaID)
-	if err != nil {
-		return summary, err
-	}
-
-	summary.Total = len(posts)
-	for _, post := range posts {
-		if post.Status != models.PostStatusPublished {
-			summary.Blocking++
-		}
-	}
-	renditionTotal, renditionBlocking, err := h.renditionMediaUsage(ctx, workspaceID, mediaID)
-	if err != nil {
-		return summary, err
-	}
-	summary.Total += renditionTotal
-	summary.Blocking += renditionBlocking
-
-	return summary, nil
+	summaries, err := h.mediaUsageSummaries(ctx, workspaceID, []string{mediaID})
+	return summaries[mediaID], err
 }
 
-func (h *MediaHandler) renditionMediaUsage(ctx context.Context, workspaceID, mediaID string) (int, int, error) {
-	var renditions []models.Rendition
+func (h *MediaHandler) variantMediaIDsForWorkspace(ctx context.Context, workspaceID string) ([]string, error) {
+	var rows []mediaVariantUsageRow
 	if err := h.db.NewSelect().
+		TableExpr("post_variants AS pv").
+		ColumnExpr("pv.media_ids").
+		Join("JOIN posts AS p ON p.id = pv.post_id").
+		Where("p.workspace_id = ?", workspaceID).
+		Where("pv.media_ids != ''").
+		Scan(ctx, &rows); err != nil {
+		return nil, err
+	}
+	unique := make(map[string]struct{})
+	for _, row := range rows {
+		var ids []string
+		if json.Unmarshal([]byte(row.MediaIDs), &ids) != nil {
+			continue
+		}
+		for _, id := range ids {
+			if strings.TrimSpace(id) != "" {
+				unique[id] = struct{}{}
+			}
+		}
+	}
+	ids := make([]string, 0, len(unique))
+	for id := range unique {
+		ids = append(ids, id)
+	}
+	return ids, nil
+}
+
+type mediaPostUsageRow struct {
+	MediaID string `bun:"media_id"`
+	PostID  string `bun:"post_id"`
+	Status  string `bun:"status"`
+}
+
+type mediaVariantUsageRow struct {
+	MediaIDs string `bun:"media_ids"`
+	PostID   string `bun:"post_id"`
+	Status   string `bun:"status"`
+}
+
+type mediaRenditionUsageRow struct {
+	MediaID     string `bun:"media_id"`
+	RenditionID string `bun:"rendition_id"`
+	Status      string `bun:"status"`
+}
+
+func (h *MediaHandler) mediaUsageSummaries(ctx context.Context, workspaceID string, mediaIDs []string) (map[string]mediaUsageSummary, error) {
+	summaries := make(map[string]mediaUsageSummary, len(mediaIDs))
+	targets := make(map[string]struct{}, len(mediaIDs))
+	postUsage := make(map[string]map[string]string, len(mediaIDs))
+	for _, mediaID := range mediaIDs {
+		summaries[mediaID] = mediaUsageSummary{}
+		targets[mediaID] = struct{}{}
+		postUsage[mediaID] = make(map[string]string)
+	}
+	if len(mediaIDs) == 0 {
+		return summaries, nil
+	}
+	postUsage, err := h.mediaPostUsage(ctx, workspaceID, mediaIDs, targets, postUsage)
+	if err != nil {
+		return nil, err
+	}
+	for mediaID, posts := range postUsage {
+		summary := summaries[mediaID]
+		for _, status := range posts {
+			summary.Total++
+			if status != models.PostStatusPublished {
+				summary.Blocking++
+			}
+		}
+		summaries[mediaID] = summary
+	}
+
+	renditionRows, err := h.mediaRenditionUsageRows(ctx, workspaceID, mediaIDs)
+	if err != nil {
+		return nil, err
+	}
+	for _, row := range renditionRows {
+		summary := summaries[row.MediaID]
+		summary.Total++
+		if row.Status != models.RenditionStatusPublished {
+			summary.Blocking++
+		}
+		summaries[row.MediaID] = summary
+	}
+
+	return summaries, nil
+}
+
+func (h *MediaHandler) mediaPostUsage(ctx context.Context, workspaceID string, mediaIDs []string, targets map[string]struct{}, postUsage map[string]map[string]string) (map[string]map[string]string, error) {
+	var directRows []mediaPostUsageRow
+	if err := h.db.NewSelect().
+		TableExpr("post_media AS pm").
+		ColumnExpr("pm.media_id").
+		ColumnExpr("p.id AS post_id").
+		ColumnExpr("p.status").
+		Join("JOIN posts AS p ON p.id = pm.post_id").
+		Where("p.workspace_id = ?", workspaceID).
+		Where("pm.media_id IN (?)", bun.List(mediaIDs)).
+		Scan(ctx, &directRows); err != nil {
+		return nil, err
+	}
+	for _, row := range directRows {
+		postUsage[row.MediaID][row.PostID] = row.Status
+	}
+
+	var variantRows []mediaVariantUsageRow
+	if err := h.db.NewSelect().
+		TableExpr("post_variants AS pv").
+		ColumnExpr("pv.media_ids").
+		ColumnExpr("p.id AS post_id").
+		ColumnExpr("p.status").
+		Join("JOIN posts AS p ON p.id = pv.post_id").
+		Where("p.workspace_id = ?", workspaceID).
+		Where("pv.media_ids != ''").
+		Scan(ctx, &variantRows); err != nil {
+		return nil, err
+	}
+	for _, row := range variantRows {
+		var ids []string
+		if json.Unmarshal([]byte(row.MediaIDs), &ids) != nil {
+			continue
+		}
+		for _, mediaID := range ids {
+			if _, ok := targets[mediaID]; ok {
+				postUsage[mediaID][row.PostID] = row.Status
+			}
+		}
+	}
+
+	return postUsage, nil
+}
+
+func (h *MediaHandler) mediaRenditionUsageRows(ctx context.Context, workspaceID string, mediaIDs []string) ([]mediaRenditionUsageRow, error) {
+	var renditionRows []mediaRenditionUsageRow
+	err := h.db.NewSelect().
 		TableExpr("rendition_media AS rm").
-		ColumnExpr("r.*").
+		ColumnExpr("rm.media_id").
+		ColumnExpr("r.id AS rendition_id").
+		ColumnExpr("r.status").
 		Join("JOIN renditions AS r ON r.id = rm.rendition_id").
 		Join("JOIN publications AS p ON p.id = r.publication_id").
 		Where("p.workspace_id = ?", workspaceID).
-		Where("rm.media_id = ?", mediaID).
-		Scan(ctx, &renditions); err != nil {
-		if isMissingRenditionMediaTable(err) {
-			return 0, 0, nil
-		}
-		return 0, 0, err
+		Where("rm.media_id IN (?)", bun.List(mediaIDs)).
+		Scan(ctx, &renditionRows)
+	if err != nil && !isMissingRenditionMediaTable(err) {
+		return nil, err
 	}
-	blocking := 0
-	for _, rendition := range renditions {
-		if rendition.Status != models.RenditionStatusPublished {
-			blocking++
-		}
-	}
-	return len(renditions), blocking, nil
+	return renditionRows, nil
 }
 
 func isMissingRenditionMediaTable(err error) bool {
@@ -1171,11 +1284,16 @@ func (h *MediaHandler) postsUsingMedia(ctx context.Context, workspaceID, mediaID
 		return nil, err
 	}
 
-	var variants []models.PostVariant
+	var variants []mediaVariantUsageRow
 	if err := h.db.NewSelect().
-		Model(&variants).
-		Where("media_ids != ''").
-		Scan(ctx); err != nil {
+		TableExpr("post_variants AS pv").
+		ColumnExpr("pv.media_ids").
+		ColumnExpr("p.id AS post_id").
+		ColumnExpr("p.status").
+		Join("JOIN posts AS p ON p.id = pv.post_id").
+		Where("p.workspace_id = ?", workspaceID).
+		Where("pv.media_ids != ''").
+		Scan(ctx, &variants); err != nil {
 		return nil, err
 	}
 
@@ -1183,18 +1301,24 @@ func (h *MediaHandler) postsUsingMedia(ctx context.Context, workspaceID, mediaID
 	for _, post := range postRows {
 		postsByID[post.ID] = post
 	}
+	variantPostIDs := make([]string, 0, len(variants))
 	for _, variant := range variants {
 		if !variantContainsMedia(variant.MediaIDs, mediaID) {
 			continue
 		}
-		var post models.Post
-		if err := h.db.NewSelect().Model(&post).Where("id = ?", variant.PostID).Scan(ctx); err != nil {
-			continue
+		variantPostIDs = append(variantPostIDs, variant.PostID)
+	}
+	if len(variantPostIDs) > 0 {
+		var variantPosts []models.Post
+		if err := h.db.NewSelect().Model(&variantPosts).
+			Where("workspace_id = ?", workspaceID).
+			Where("id IN (?)", bun.List(variantPostIDs)).
+			Scan(ctx); err != nil {
+			return nil, err
 		}
-		if post.WorkspaceID != workspaceID {
-			continue
+		for _, post := range variantPosts {
+			postsByID[post.ID] = post
 		}
-		postsByID[post.ID] = post
 	}
 
 	posts := make([]models.Post, 0, len(postsByID))
@@ -1204,14 +1328,14 @@ func (h *MediaHandler) postsUsingMedia(ctx context.Context, workspaceID, mediaID
 	return posts, nil
 }
 
-func (h *MediaHandler) removeMediaReferences(ctx context.Context, workspaceID, mediaID string) error {
-	if _, err := h.db.NewDelete().
+func (h *MediaHandler) removeMediaReferences(ctx context.Context, db bun.IDB, workspaceID, mediaID string) error {
+	if _, err := db.NewDelete().
 		Model((*models.PostMedia)(nil)).
 		Where("media_id = ?", mediaID).
 		Exec(ctx); err != nil {
 		return err
 	}
-	if _, err := h.db.NewDelete().
+	if _, err := db.NewDelete().
 		Model((*models.RenditionMedia)(nil)).
 		Where("media_id = ?", mediaID).
 		Exec(ctx); err != nil {
@@ -1219,22 +1343,26 @@ func (h *MediaHandler) removeMediaReferences(ctx context.Context, workspaceID, m
 	}
 
 	var variants []models.PostVariant
-	if err := h.db.NewSelect().
+	var workspacePostIDs []string
+	if err := db.NewSelect().
+		Model((*models.Post)(nil)).
+		Column("id").
+		Where("workspace_id = ?", workspaceID).
+		Scan(ctx, &workspacePostIDs); err != nil {
+		return err
+	}
+	if len(workspacePostIDs) == 0 {
+		return nil
+	}
+	if err := db.NewSelect().
 		Model(&variants).
+		Where("post_id IN (?)", bun.List(workspacePostIDs)).
 		Where("media_ids != ''").
 		Scan(ctx); err != nil {
 		return err
 	}
 
 	for _, variant := range variants {
-		var post models.Post
-		if err := h.db.NewSelect().Model(&post).Where("id = ?", variant.PostID).Scan(ctx); err != nil {
-			continue
-		}
-		if post.WorkspaceID != workspaceID {
-			continue
-		}
-
 		var ids []string
 		if err := json.Unmarshal([]byte(variant.MediaIDs), &ids); err != nil {
 			continue
@@ -1257,7 +1385,7 @@ func (h *MediaHandler) removeMediaReferences(ctx context.Context, workspaceID, m
 		if err != nil {
 			return err
 		}
-		if _, err := h.db.NewUpdate().
+		if _, err := db.NewUpdate().
 			Model(&variant).
 			Column("media_ids").
 			Set("media_ids = ?", string(encoded)).
@@ -1365,6 +1493,39 @@ func (h *MediaHandler) deleteMediaFiles(media *models.MediaAttachment) error {
 		h.storage.Delete(thumbs.MD) //nolint:errcheck
 	}
 
+	return nil
+}
+
+func (h *MediaHandler) deleteMedia(ctx context.Context, media *models.MediaAttachment) error {
+	if err := h.db.RunInTx(ctx, &sql.TxOptions{}, func(txCtx context.Context, tx bun.Tx) error {
+		if err := h.removeMediaReferences(txCtx, tx, media.WorkspaceID, media.ID); err != nil {
+			return err
+		}
+		result, err := tx.NewDelete().Model((*models.MediaAttachment)(nil)).
+			Where("id = ? AND workspace_id = ?", media.ID, media.WorkspaceID).
+			Exec(txCtx)
+		if err != nil {
+			return err
+		}
+		rows, err := result.RowsAffected()
+		if err != nil {
+			return err
+		}
+		if rows != 1 {
+			return sql.ErrNoRows
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+
+	// Blob storage cannot participate in the database transaction. Removing the
+	// record first guarantees APIs never retain references to a missing blob;
+	// a storage failure leaves only an unreferenced object that can be retried or
+	// garbage-collected safely.
+	if err := h.deleteMediaFiles(media); err != nil {
+		log.Printf("failed to delete unreferenced media files for %s: %v", media.ID, err)
+	}
 	return nil
 }
 
@@ -1779,7 +1940,8 @@ func (h *MediaHandler) optionalMediaAuth() echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
 			authHeader := c.Request().Header.Get("Authorization")
-			if authHeader != "" && h.authn != nil {
+			_, cookieErr := c.Cookie("openpost_session")
+			if (authHeader != "" || cookieErr == nil) && h.authn != nil {
 				return middleware.BearerMiddleware(h.authn)(next)(c)
 			}
 			if authHeader != "" && h.auth != nil {

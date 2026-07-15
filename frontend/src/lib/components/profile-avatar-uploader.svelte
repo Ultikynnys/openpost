@@ -52,6 +52,7 @@
 		})
 		.use(XHRUpload, {
 			endpoint: () => `${getApiBase()}/auth/profile/avatar`,
+			withCredentials: true,
 			fieldName: 'file',
 			formData: true,
 			limit: 1,

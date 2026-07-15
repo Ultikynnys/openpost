@@ -718,10 +718,11 @@
 		try {
 			const token = getToken();
 			const resp = await fetch(
-				`${getApiBase()}/api/v1/media/metadata?workspace_id=${encodeURIComponent(
+				`${getApiBase()}/media/metadata?workspace_id=${encodeURIComponent(
 					workspaceId
 				)}&media_ids=${encodeURIComponent(missingIds.join(','))}`,
 				{
+					credentials: 'include',
 					headers: token ? { Authorization: `Bearer ${token}` } : {}
 				}
 			);

@@ -87,6 +87,7 @@ async function uploadViaDirectSession(
 ): Promise<MediaUploadResult> {
 	const sessionResp = await fetch(apiURL('/media/upload-session'), {
 		method: 'POST',
+		credentials: 'include',
 		headers: apiHeaders(true),
 		body: JSON.stringify({
 			workspace_id: workspaceId,
@@ -117,6 +118,7 @@ async function uploadViaDirectSession(
 
 	const completeResp = await fetch(apiURL(session.complete_url), {
 		method: 'POST',
+		credentials: 'include',
 		headers: apiHeaders(true),
 		body: JSON.stringify({ workspace_id: workspaceId })
 	});
@@ -140,6 +142,7 @@ async function uploadViaMultipart(
 
 	const response = await fetch(apiURL('/media/upload'), {
 		method: 'POST',
+		credentials: 'include',
 		headers: apiHeaders(false),
 		body: formData
 	});
