@@ -22,8 +22,17 @@ export interface ComposerMode {
 	key: ComposerModeKey;
 	label: string;
 	description: string;
+	group: ComposerModeGroupKey;
 	flow: 'legacy' | 'publication';
 	mediaFirst: boolean;
+}
+
+export type ComposerModeGroupKey = 'write' | 'media';
+
+export interface ComposerModeGroup {
+	key: ComposerModeGroupKey;
+	label: string;
+	modes: ComposerMode[];
 }
 
 export interface ComposerAccountTarget {
@@ -84,72 +93,83 @@ export const COMPOSER_MODES: ComposerMode[] = [
 	{
 		key: 'short_text',
 		label: 'Post',
-		description:
-			'Fast text-first posts for timelines and feeds. Add another post to make a thread.',
+		description: 'A text-first post for timelines and feeds.',
+		group: 'write',
 		flow: 'legacy',
 		mediaFirst: false
 	},
 	{
 		key: 'thread',
 		label: 'Thread',
-		description: 'Use the existing add-post flow for ordered replies.',
+		description: 'A sequence of posts published as ordered replies.',
+		group: 'write',
 		flow: 'legacy',
 		mediaFirst: false
 	},
 	{
 		key: 'link_share',
 		label: 'Link',
-		description: 'A URL-led post with clear post text.',
+		description: 'Share a URL with supporting post text.',
+		group: 'write',
 		flow: 'publication',
 		mediaFirst: false
 	},
 	{
 		key: 'image_post',
 		label: 'Image',
-		description: 'Single image or simple media feed post.',
+		description: 'One image with an optional caption.',
+		group: 'media',
 		flow: 'publication',
 		mediaFirst: true
 	},
 	{
 		key: 'carousel',
 		label: 'Carousel',
-		description: 'Multiple images or document-style swipes.',
+		description: 'Multiple images or a document people can swipe through.',
+		group: 'media',
 		flow: 'publication',
 		mediaFirst: true
 	},
 	{
 		key: 'story',
 		label: 'Story',
-		description: 'Ephemeral vertical story media.',
+		description: 'Vertical image or video for ephemeral Stories.',
+		group: 'media',
 		flow: 'publication',
 		mediaFirst: true
 	},
 	{
 		key: 'short_video',
 		label: 'Short video',
-		description: 'Reels, Shorts, TikTok, and short-form video.',
+		description: 'Reels, Shorts, TikTok, and other short-form video.',
+		group: 'media',
 		flow: 'publication',
 		mediaFirst: true
 	},
 	{
 		key: 'long_video',
 		label: 'Video',
-		description: 'YouTube and feed video uploads with metadata.',
+		description: 'Long-form video with title and description metadata.',
+		group: 'media',
 		flow: 'publication',
 		mediaFirst: false
 	}
 ];
 
-const PRIMARY_COMPOSER_MODE_KEYS: ComposerModeKey[] = [
-	'short_text',
-	'thread',
-	'short_video',
-	'long_video'
-];
+export const SELECTABLE_COMPOSER_MODES = COMPOSER_MODES;
 
-export const SELECTABLE_COMPOSER_MODES = COMPOSER_MODES.filter((mode) =>
-	PRIMARY_COMPOSER_MODE_KEYS.includes(mode.key)
-);
+export const COMPOSER_MODE_GROUPS: ComposerModeGroup[] = [
+	{
+		key: 'write',
+		label: 'Write',
+		modes: SELECTABLE_COMPOSER_MODES.filter((mode) => mode.group === 'write')
+	},
+	{
+		key: 'media',
+		label: 'Media',
+		modes: SELECTABLE_COMPOSER_MODES.filter((mode) => mode.group === 'media')
+	}
+];
 
 export function composerMode(key: ComposerModeKey): ComposerMode {
 	return COMPOSER_MODES.find((mode) => mode.key === key) ?? COMPOSER_MODES[0];

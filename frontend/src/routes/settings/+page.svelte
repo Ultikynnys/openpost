@@ -36,7 +36,6 @@
 	import MonitorIcon from 'lucide-svelte/icons/monitor';
 	import LogOutIcon from 'lucide-svelte/icons/log-out';
 	import CameraIcon from 'lucide-svelte/icons/camera';
-	import UserIcon from 'lucide-svelte/icons/user';
 	import AlertCircleIcon from 'lucide-svelte/icons/alert-circle';
 	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
 	import { client } from '$lib/api/client';
@@ -187,7 +186,7 @@
 		if (activeSettingsTab === 'plan') return 'Plan & usage';
 		if (activeSettingsTab === 'schedule') return 'Posting schedule';
 		if (activeSettingsTab === 'media') return 'Media retention';
-		return 'Workspace settings';
+		return 'General';
 	});
 	const activeSettingsDescription = $derived.by(() => {
 		if (activeSettingsTab === 'profile') return 'Your name and avatar across OpenPost.';
@@ -198,7 +197,7 @@
 		if (activeSettingsTab === 'schedule')
 			return 'Reusable publishing times and scheduling defaults.';
 		if (activeSettingsTab === 'media') return 'Control how long unused media is kept.';
-		return `Identity, timezone, and calendar preferences for ${workspaceCtx.currentWorkspace?.name || 'this workspace'}.`;
+		return `Workspace identity, timezone, and calendar preferences for ${workspaceCtx.currentWorkspace?.name || 'this workspace'}.`;
 	});
 	const requestedBillingPlan = $derived.by(() => {
 		const planID = hostedPlanFromSearchParams(page.url.searchParams);
@@ -1033,6 +1032,21 @@
 		draftGapInput = String(workspaceCtx.settings.draft_gap_minutes);
 	});
 
+	function keepActiveSettingsTabVisible(settingsNavigation: HTMLElement) {
+		const activeTab = activeSettingsTab;
+		const activeButton = settingsNavigation.querySelector<HTMLElement>(
+			`[data-settings-tab="${activeTab}"]`
+		);
+		if (!activeButton) return;
+		const navigationRect = settingsNavigation.getBoundingClientRect();
+		const activeButtonRect = activeButton.getBoundingClientRect();
+		const centeredOffset =
+			activeButtonRect.left -
+			navigationRect.left -
+			(navigationRect.width - activeButtonRect.width) / 2;
+		settingsNavigation.scrollLeft += centeredOffset;
+	}
+
 	function handleTimezoneChange(value: string) {
 		workspaceCtx.settings.timezone = value;
 	}
@@ -1054,10 +1068,16 @@
 	<div
 		class="pointer-events-auto fixed right-4 bottom-4 z-50 mb-4 flex items-center gap-2 rounded-lg border bg-background px-4 py-3 shadow-lg"
 	>
-		<span class="text-sm">{toastMessage}</span>
-		<button onclick={() => (toastMessage = '')}>
+		<span class="text-sm" role="status" aria-live="polite">{toastMessage}</span>
+		<Button
+			variant="ghost"
+			size="icon-sm"
+			class="-my-1 -mr-2"
+			onclick={() => (toastMessage = '')}
+			aria-label="Dismiss notification"
+		>
 			<XIcon class="size-4" />
-		</button>
+		</Button>
 	</div>
 {/if}
 
@@ -1071,6 +1091,7 @@
 	<div class="grid min-w-0 items-start gap-8 lg:grid-cols-[13rem_minmax(0,1fr)]">
 		<aside class="min-w-0 lg:sticky lg:top-6">
 			<nav
+				{@attach keepActiveSettingsTabVisible}
 				class="flex max-w-full gap-2 overflow-x-auto pb-2 lg:flex-col lg:overflow-visible lg:pb-0"
 				aria-label="Settings"
 			>
@@ -1082,6 +1103,7 @@
 				{#each settingsTabs.slice(0, 3) as tab (tab.id)}
 					<button
 						type="button"
+						data-settings-tab={tab.id}
 						class={[
 							'min-h-10 shrink-0 rounded-md px-3 py-2 text-left text-sm font-medium transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none lg:w-full',
 							activeSettingsTab === tab.id
@@ -1102,6 +1124,7 @@
 				{#each settingsTabs.slice(3, 6) as tab (tab.id)}
 					<button
 						type="button"
+						data-settings-tab={tab.id}
 						class={[
 							'min-h-10 shrink-0 rounded-md px-3 py-2 text-left text-sm font-medium transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none lg:w-full',
 							activeSettingsTab === tab.id
@@ -1129,6 +1152,7 @@
 				{#each settingsTabs.slice(6) as tab (tab.id)}
 					<button
 						type="button"
+						data-settings-tab={tab.id}
 						class={[
 							'min-h-10 shrink-0 rounded-md px-3 py-2 text-left text-sm font-medium transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none lg:w-full',
 							activeSettingsTab === tab.id
@@ -1146,18 +1170,6 @@
 
 		<div class="min-w-0 space-y-10">
 			<section id="profile" class:hidden={activeSettingsTab !== 'profile'} class="scroll-mt-24">
-				<div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-					<div>
-						<h2 class="flex items-center gap-2 text-lg font-semibold">
-							<UserIcon class="h-5 w-5 text-muted-foreground" />
-							Profile
-						</h2>
-						<p class="mt-2 text-sm text-muted-foreground">
-							Your name and avatar follow your user account across every workspace.
-						</p>
-					</div>
-				</div>
-
 				{#if avatarUploaderOpen}
 					<ProfileAvatarUploader
 						bind:open={avatarUploaderOpen}
@@ -1250,7 +1262,6 @@
 				class:hidden={activeSettingsTab !== 'general'}
 				class="scroll-mt-24 space-y-4"
 			>
-				<h2 class="mb-4 text-lg font-semibold">General</h2>
 				<div class="rounded-lg border bg-muted/20 p-4">
 					<div class="flex flex-col gap-4 sm:flex-row sm:items-center">
 						<div

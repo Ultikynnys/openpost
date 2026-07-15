@@ -108,6 +108,37 @@ test("settings account tab updates the user profile", async ({
   expect(meBody.display_name).toBe("Profile E2E User");
 });
 
+test("settings keeps the active mobile tab visible and exposes dismissible status feedback", async ({
+  page,
+  request,
+}) => {
+  const unique = Date.now().toString(36);
+  const email = `settings-mobile-${unique}@example.com`;
+
+  const auth = await registerUser(request, email);
+  await createWorkspace(request, auth.token, "Mobile Settings E2E");
+
+  await authenticatePage(page, auth.token);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/settings?tab=plan");
+
+  const settingsNavigation = page.getByRole("navigation", {
+    name: "Settings",
+  });
+  const activeTab = settingsNavigation.getByRole("button", {
+    name: "Plan & usage",
+  });
+  await expect(activeTab).toBeInViewport();
+
+  await page.goto("/settings?tab=profile");
+  await page.getByRole("button", { name: "Save Profile" }).click();
+  await expect(page.getByRole("status")).toHaveText("Profile updated");
+  const dismiss = page.getByRole("button", { name: "Dismiss notification" });
+  await expect(dismiss).toBeVisible();
+  await dismiss.click();
+  await expect(page.getByRole("status")).toHaveCount(0);
+});
+
 test("settings lists and revokes active web sessions", async ({
   page,
   request,

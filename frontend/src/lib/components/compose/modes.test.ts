@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
 	buildFocusedPublicationPayload,
+	COMPOSER_MODE_GROUPS,
 	roleFieldsForMode,
 	SELECTABLE_COMPOSER_MODES
 } from './modes';
@@ -14,9 +15,29 @@ describe('composer mode role mapping', () => {
 		expect(SELECTABLE_COMPOSER_MODES.map((mode) => mode.label)).toEqual([
 			'Post',
 			'Thread',
+			'Link',
+			'Image',
+			'Carousel',
+			'Story',
 			'Short video',
 			'Video'
 		]);
+	});
+
+	it('groups every selectable format once without hiding secondary types', () => {
+		expect(
+			COMPOSER_MODE_GROUPS.map((group) => ({
+				label: group.label,
+				modes: group.modes.map((mode) => mode.key)
+			}))
+		).toEqual([
+			{ label: 'Write', modes: ['short_text', 'thread', 'link_share'] },
+			{
+				label: 'Media',
+				modes: ['image_post', 'carousel', 'story', 'short_video', 'long_video']
+			}
+		]);
+		expect(COMPOSER_MODE_GROUPS.flatMap((group) => group.modes)).toEqual(SELECTABLE_COMPOSER_MODES);
 	});
 
 	it('uses post text for short text', () => {
