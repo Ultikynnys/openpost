@@ -100,17 +100,20 @@ test("composer renders account-specific renditions", async ({
   await page.goto("/");
   await page.getByTestId("composer-mode-select").click();
   await page.getByRole("option", { name: "Short video" }).click();
-  await expect(page.getByRole("heading", { name: "Accounts" })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Target accounts" }),
+  ).toBeVisible();
+  await expect(page.getByLabel("Composer workspace")).toHaveCount(0);
   await page.getByLabel("Caption").fill("Launch update");
 
   await expect(page.locator('[data-testid="instagram-preview"]')).toHaveCount(
     0,
   );
   await expect(
-    page.getByRole("button", { name: /openpost_main\s+Bluesky/ }),
+    page.getByLabel("Remove @openpost_main from targets"),
   ).toBeVisible();
   await expect(
-    page.getByRole("button", { name: /openpost_studio\s+Bluesky/ }),
+    page.getByLabel("Remove @openpost_studio from targets"),
   ).toBeVisible();
   await page.getByRole("button", { name: "Save draft" }).click();
   await expect(page.getByText("Draft saved")).toBeVisible();

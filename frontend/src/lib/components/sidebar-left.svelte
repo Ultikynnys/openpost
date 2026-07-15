@@ -113,13 +113,13 @@
 </script>
 
 <Sidebar.Root collapsible="icon">
-	<Sidebar.Header class="gap-2 border-b border-sidebar-border p-2">
+	<Sidebar.Header class="gap-2 border-b border-sidebar-border p-2" data-testid="app-sidebar">
 		<a
 			href={resolve('/')}
-			class="flex h-10 items-center gap-2 rounded-md px-2 focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-none"
+			class="flex h-10 items-center gap-2 rounded-md px-2 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0 focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-none"
 			aria-label="OpenPost home"
 		>
-			<Logo width={26} height={26} showText={true} />
+			<Logo width={26} height={26} showText={sidebar.state !== 'collapsed'} />
 		</a>
 
 		<DropdownMenu.Root>

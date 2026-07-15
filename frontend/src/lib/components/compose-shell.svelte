@@ -35,10 +35,11 @@
 		</div>
 	{:else}
 		{#key selectedMode}
-			<div class="border-b bg-background/95 px-3 py-2 md:px-4">
-				<ComposeModeSelect {selectedMode} onModeChange={(mode) => (selectedMode = mode)} />
-			</div>
-			<ComposeFocusedPublication mode={selectedMode} />
+			<ComposeFocusedPublication mode={selectedMode}>
+				{#snippet modeControl()}
+					<ComposeModeSelect {selectedMode} onModeChange={(mode) => (selectedMode = mode)} />
+				{/snippet}
+			</ComposeFocusedPublication>
 		{/key}
 	{/if}
 </div>

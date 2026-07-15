@@ -184,11 +184,6 @@
 	const totalChars = $derived(posts.reduce((sum, p) => sum + p.content.length, 0));
 	const isThread = $derived(posts.length > 1);
 	const hasUnsavedChanges = $derived(isEditMode && getSaveSnapshot() !== lastSavedSnapshot);
-	const selectedWorkspaceName = $derived(
-		workspaces.find((workspace) => workspace.id === selectedWorkspaceId)?.name ??
-			m.compose_workspace()
-	);
-
 	const selectedAccounts = $derived(accounts.filter((a) => selectedAccountIds.includes(a.id)));
 	const syncedLinkedInThreadAccounts = $derived.by(() => {
 		if (!isThread) return [];
@@ -664,6 +659,19 @@
 		const workspaceParam = initialWorkspaceId;
 		if (!loadingWorkspaces && !isEditMode) {
 			void applyInitialComposerContext(dateParam, workspaceParam);
+		}
+	});
+
+	$effect(() => {
+		const workspaceId = workspaceCtx.currentWorkspace?.id ?? '';
+		if (
+			!loadingWorkspaces &&
+			!isEditMode &&
+			!initialWorkspaceId &&
+			workspaceId &&
+			workspaceId !== selectedWorkspaceId
+		) {
+			void handleWorkspaceChange(workspaceId);
 		}
 	});
 
@@ -1663,52 +1671,7 @@
 				</div>
 			{/if}
 
-			<!-- Workspace selector -->
-			{#if isEditMode}
-				<span class="text-xs text-muted-foreground">{selectedWorkspaceName}</span>
-			{:else if workspaces.length > 1}
-				<DropdownMenu.Root>
-					<DropdownMenu.Trigger>
-						{#snippet child({ props })}
-							<Button {...props} variant="ghost" size="sm" class="gap-1 text-xs">
-								<span class="hidden text-muted-foreground sm:inline">
-									{workspaces.find((w) => w.id === selectedWorkspaceId)?.name ??
-										m.compose_workspace()}
-								</span>
-								<span class="text-muted-foreground sm:hidden">
-									{workspaces
-										.find((w) => w.id === selectedWorkspaceId)
-										?.name?.slice(0, 2)
-										.toUpperCase() ?? 'WS'}
-								</span>
-								<ChevronDownIcon class="h-3 w-3" />
-							</Button>
-						{/snippet}
-					</DropdownMenu.Trigger>
-					<DropdownMenu.Content class="w-52" align="start">
-						<DropdownMenu.Label class="text-xs tracking-wider text-muted-foreground uppercase"
-							>{m.compose_workspace()}</DropdownMenu.Label
-						>
-						<DropdownMenu.Separator />
-						{#each workspaces as ws (ws.id)}
-							<DropdownMenu.Item
-								onclick={() => handleWorkspaceChange(ws.id)}
-								class="gap-2 {selectedWorkspaceId === ws.id ? 'bg-muted' : ''}"
-							>
-								<div
-									class="flex h-6 w-6 items-center justify-center rounded-md bg-primary/10 text-xs font-bold text-primary"
-								>
-									{ws.name.slice(0, 2).toUpperCase()}
-								</div>
-								<span class="text-sm">{ws.name}</span>
-							</DropdownMenu.Item>
-						{/each}
-					</DropdownMenu.Content>
-				</DropdownMenu.Root>
-			{/if}
-
 			{#if modeControl}
-				<div class="hidden h-4 w-px bg-border sm:block"></div>
 				{@render modeControl()}
 			{/if}
 

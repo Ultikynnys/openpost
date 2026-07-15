@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { SvelteMap } from 'svelte/reactivity';
 	import { auth } from '$lib/stores/auth';
 	import { workspaceCtx } from '$lib/stores/workspace.svelte';
 	import { client, type Workspace, type SocialAccount, type ProviderInfo } from '$lib/api/client';
@@ -618,16 +617,6 @@
 				break;
 		}
 	}
-
-	const accountsByPlatform = $derived.by(() => {
-		const grouped = new SvelteMap<string, SocialAccount[]>();
-		for (const acc of accounts) {
-			const key = acc.platform;
-			if (!grouped.has(key)) grouped.set(key, []);
-			grouped.get(key)!.push(acc);
-		}
-		return grouped;
-	});
 </script>
 
 <svelte:head>
@@ -638,12 +627,15 @@
 	<div
 		class="pointer-events-auto fixed right-4 bottom-4 z-50 mb-4 flex max-w-md items-center gap-3 rounded-lg border bg-background px-4 py-3 shadow-lg"
 	>
-		<span class="text-sm">{toastMessage}</span>
+		<span class="text-sm" role="status" aria-live="polite">{toastMessage}</span>
 		{#if toastActionHref && toastActionLabel}
 			<Button href={toastActionHref} variant="outline" size="sm">{toastActionLabel}</Button>
 		{/if}
-		<button onclick={clearToast} class="text-muted-foreground hover:text-foreground">
-			<span class="sr-only">Close</span>
+		<button
+			onclick={clearToast}
+			class="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+			aria-label="Dismiss notification"
+		>
 			<XIcon class="size-4" />
 		</button>
 	</div>
@@ -692,10 +684,15 @@
 		{/if}
 
 		<!-- Connected Accounts -->
-		<div class="mb-8">
-			<div class="mb-4 flex items-baseline justify-between gap-3">
-				<h2 class="text-base font-semibold">Connected channels</h2>
-				<span class="text-sm text-muted-foreground">{selectedWorkspaceName}</span>
+		<div class="mb-10">
+			<div class="mb-4 flex flex-wrap items-end justify-between gap-3">
+				<div>
+					<h2 class="text-base font-semibold">Connected channels</h2>
+					<p class="mt-1 text-sm text-muted-foreground">
+						{accounts.length} connection{accounts.length === 1 ? '' : 's'} in {selectedWorkspaceName}
+					</p>
+				</div>
+				<Button href="/" size="sm">Create a post</Button>
 			</div>
 
 			{#if accountsLoading}
@@ -713,64 +710,64 @@
 					size="md"
 				/>
 			{:else}
-				<div class="divide-y border-y">
-					{#each [...accountsByPlatform.entries()] as [platform, platformAccounts] (platform)}
-						<section class="py-3">
-							<div class="flex items-center gap-3 px-1 py-2">
+				<div
+					class="grid gap-px overflow-hidden rounded-lg border bg-border sm:grid-cols-2 xl:grid-cols-3"
+				>
+					{#each accounts as account (account.id)}
+						<article class="flex min-h-32 flex-col justify-between gap-5 bg-background p-4">
+							<div class="flex items-start gap-3">
 								<div
-									class="flex size-8 items-center justify-center rounded-md {getPlatformColor(
-										platform
+									class="flex size-10 shrink-0 items-center justify-center rounded-lg {getPlatformColor(
+										account.platform
 									)}"
 								>
-									<PlatformIcon {platform} class="h-4 w-4 text-white" />
+									<PlatformIcon platform={account.platform} class="size-5 text-white" />
 								</div>
 								<div class="min-w-0 flex-1">
-									<h3 class="text-sm font-medium">{getPlatformName(platform)}</h3>
-									<p class="text-xs text-muted-foreground">
-										{platformAccounts.length} account{platformAccounts.length !== 1 ? 's' : ''}
+									<div class="flex items-center gap-2">
+										<h3 class="truncate text-sm font-semibold">
+											{getPlatformName(account.platform)}
+										</h3>
+										<span
+											class={account.is_active
+												? 'size-1.5 rounded-full bg-emerald-500'
+												: 'size-1.5 rounded-full bg-muted-foreground/40'}
+											aria-label={account.is_active ? 'Ready to publish' : 'Connection paused'}
+										></span>
+									</div>
+									<p class="mt-1 truncate text-sm text-muted-foreground">
+										{accountDisplayName(account)}
 									</p>
 								</div>
+								<DropdownMenu.Root>
+									<DropdownMenu.Trigger>
+										{#snippet child({ props })}
+											<Button
+												{...props}
+												variant="ghost"
+												size="icon-sm"
+												aria-label={`Actions for ${accountDisplayName(account)}`}
+											>
+												<MoreHorizontalIcon class="size-4" />
+											</Button>
+										{/snippet}
+									</DropdownMenu.Trigger>
+									<DropdownMenu.Content align="end" class="w-48">
+										<DropdownMenu.Item onclick={() => openEditAccount(account)}
+											>Account details</DropdownMenu.Item
+										>
+										<DropdownMenu.Separator />
+										<DropdownMenu.Item
+											class="text-destructive"
+											onclick={() => disconnectAccount(account.id)}>Disconnect</DropdownMenu.Item
+										>
+									</DropdownMenu.Content>
+								</DropdownMenu.Root>
 							</div>
-							<div class="divide-y pl-11">
-								{#each platformAccounts as account (account.id)}
-									<div class="flex min-h-14 items-center justify-between gap-3 py-2 pr-1">
-										<div class="min-w-0">
-											<p class="text-sm font-medium">
-												{accountDisplayName(account)}
-											</p>
-											<p class="text-xs text-muted-foreground">
-												{account.is_active ? 'Ready to publish' : 'Connection paused'}
-											</p>
-										</div>
-										<DropdownMenu.Root>
-											<DropdownMenu.Trigger>
-												{#snippet child({ props })}
-													<Button
-														{...props}
-														variant="ghost"
-														size="icon"
-														aria-label={`Actions for ${accountDisplayName(account)}`}
-													>
-														<MoreHorizontalIcon class="size-4" />
-													</Button>
-												{/snippet}
-											</DropdownMenu.Trigger>
-											<DropdownMenu.Content align="end" class="w-48">
-												<DropdownMenu.Item onclick={() => openEditAccount(account)}
-													>Account details</DropdownMenu.Item
-												>
-												<DropdownMenu.Separator />
-												<DropdownMenu.Item
-													class="text-destructive"
-													onclick={() => disconnectAccount(account.id)}
-													>Disconnect</DropdownMenu.Item
-												>
-											</DropdownMenu.Content>
-										</DropdownMenu.Root>
-									</div>
-								{/each}
-							</div>
-						</section>
+							<p class="font-mono text-[0.6875rem] tracking-wide text-muted-foreground uppercase">
+								{account.is_active ? 'Ready to publish' : 'Connection paused'}
+							</p>
+						</article>
 					{/each}
 				</div>
 			{/if}
@@ -783,7 +780,7 @@
 				Choose a platform to connect to this workspace.
 			</p>
 
-			<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+			<div class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
 				{#if providersLoading}
 					<Skeleton class="h-20 rounded-lg" />
 					<Skeleton class="h-20 rounded-lg" />

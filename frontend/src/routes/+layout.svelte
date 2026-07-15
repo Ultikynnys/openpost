@@ -138,8 +138,10 @@
 			return;
 		}
 
+		const shouldRecheckAfterOnboarding =
+			needsOnboarding && currentPath !== '/onboarding' && onboardingCheckedPath !== currentPath;
 		if (
-			(!onboardingChecked || onboardingCheckedPath !== currentPath) &&
+			(!onboardingChecked || shouldRecheckAfterOnboarding) &&
 			onboardingCheckInFlightForPath !== currentPath
 		) {
 			onboardingChecked = false;

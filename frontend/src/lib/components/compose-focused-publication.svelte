@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
-	import { client, type SocialAccount, type Workspace } from '$lib/api/client';
+	import { onMount, type Snippet } from 'svelte';
+	import { client, type SocialAccount } from '$lib/api/client';
 	import type { components } from '$lib/api/types';
 	import { getAuthenticatedMediaByID } from '$lib/media-url';
 	import { isSupportedMediaFile, uploadMediaFile } from '$lib/media-upload-client';
@@ -9,7 +9,9 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Calendar } from '$lib/components/ui/calendar';
 	import { Input } from '$lib/components/ui/input';
+	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
 	import * as Popover from '$lib/components/ui/popover';
+	import { Skeleton } from '$lib/components/ui/skeleton';
 	import { Textarea } from '$lib/components/ui/textarea';
 	import PlatformIcon from './platform-icon.svelte';
 	import { getPlatformKey, getPlatformName } from '$lib/utils';
@@ -54,13 +56,13 @@
 		initialPublication?: Publication | null;
 		onSuccess?: () => void;
 		onCancel?: () => void;
+		modeControl?: Snippet;
 	}
 
-	let { mode, initialPublication = null, onSuccess, onCancel }: Props = $props();
+	let { mode, initialPublication = null, onSuccess, onCancel, modeControl }: Props = $props();
 
 	let publicationId = $state('');
 	let hydratedPublicationId = $state('');
-	let workspaces = $state<Workspace[]>([]);
 	let selectedWorkspaceId = $state('');
 	let accounts = $state<SocialAccount[]>([]);
 	let selectedAccountIds = $state<string[]>([]);
@@ -85,9 +87,15 @@
 	let success = $state('');
 
 	const modeMeta = $derived(composerMode(mode));
+	const compatibleAccounts = $derived(accounts.filter(isAccountCompatible));
 	const selectedAccounts = $derived(
 		accounts.filter((account) => selectedAccountIds.includes(account.id))
 	);
+	const selectedAccountSummary = $derived.by(() => {
+		if (selectedAccountIds.length === 0) return 'No accounts';
+		if (selectedAccountIds.length === compatibleAccounts.length) return 'All accounts';
+		return `${selectedAccountIds.length} account${selectedAccountIds.length === 1 ? '' : 's'}`;
+	});
 	const roleFields = $derived(roleFieldsForMode(mode, selectedAccounts));
 	const selectedCapabilities = $derived(
 		selectedAccounts
@@ -140,20 +148,21 @@
 		}
 	});
 
+	$effect(() => {
+		const workspaceId = workspaceCtx.currentWorkspace?.id ?? '';
+		if (!loading && !isEditMode && workspaceId && workspaceId !== selectedWorkspaceId) {
+			void changeWorkspace(workspaceId);
+		}
+	});
+
 	async function loadInitialData() {
 		loading = true;
 		error = '';
 		try {
-			const [
-				{ data: workspaceData, error: workspaceError },
-				{ data: capabilityData, error: capError }
-			] = await Promise.all([client.GET('/workspaces', {}), client.GET('/capabilities', {})]);
-			if (workspaceError) throw new Error(workspaceError.detail || 'Failed to load workspaces');
+			const { data: capabilityData, error: capError } = await client.GET('/capabilities', {});
 			if (capError) throw new Error(capError.detail || 'Failed to load capabilities');
-			workspaces = workspaceData ?? [];
 			capabilities = capabilityData?.capabilities ?? [];
-			selectedWorkspaceId =
-				selectedWorkspaceId || workspaceCtx.currentWorkspace?.id || workspaces[0]?.id || '';
+			selectedWorkspaceId = selectedWorkspaceId || workspaceCtx.currentWorkspace?.id || '';
 			if (selectedWorkspaceId) {
 				await loadAccounts();
 				await loadProviderReadiness();
@@ -249,11 +258,24 @@
 			.padStart(2, '0')}`;
 	}
 
-	async function changeWorkspace() {
+	async function changeWorkspace(workspaceId: string) {
+		selectedWorkspaceId = workspaceId;
 		selectedAccountIds = [];
 		customizeAccountId = '';
 		await loadAccounts();
 		await loadProviderReadiness();
+	}
+
+	function selectAllAccounts() {
+		selectedAccountIds = compatibleAccounts.map((account) => account.id);
+		settingsByAccount = normalizeAllAccountSettings(settingsByAccount);
+		validationIssues = [];
+	}
+
+	function clearAllAccounts() {
+		selectedAccountIds = [];
+		customizeAccountId = '';
+		validationIssues = [];
 	}
 
 	function normalizeSelectedAccounts() {
@@ -309,13 +331,6 @@
 		return readinessBlockers(account)
 			.map((item) => item.replaceAll('_', ' '))
 			.join(', ');
-	}
-
-	function disabledReason(account: SocialAccount): string {
-		if (!isAccountCompatible(account)) {
-			return `${getPlatformName(account.platform)} does not support ${modeMeta.label}`;
-		}
-		return accountBlockerText(account);
 	}
 
 	function updateField(key: FocusedFieldKey, value: string) {
@@ -662,31 +677,84 @@
 </script>
 
 <div class="flex min-h-0 flex-1 flex-col bg-background" data-testid="focused-composer">
-	{#if loading}
-		<div class="flex flex-1 items-center justify-center text-sm text-muted-foreground">
-			<LoaderIcon class="mr-2 h-4 w-4 animate-spin" />
-			Loading composer
-		</div>
-	{:else}
-		<div class="border-b bg-background px-3 py-2 md:px-4">
-			<div class="flex flex-wrap items-center gap-2">
-				<select
-					class="h-8 max-w-52 rounded-md border bg-background px-2 text-xs"
-					bind:value={selectedWorkspaceId}
-					onchange={changeWorkspace}
-				>
-					{#each workspaces as workspace (workspace.id)}
-						<option value={workspace.id}>{workspace.name}</option>
-					{/each}
-				</select>
-				<div class="min-w-0 flex-1">
-					<p class="truncate text-sm font-medium">{modeMeta.label}</p>
-					<p class="truncate text-xs text-muted-foreground">{modeMeta.description}</p>
-				</div>
+	<div class="border-b bg-background px-3 py-2 md:px-4 md:py-3">
+		<div class="flex flex-wrap items-center justify-between gap-2">
+			<div class="flex min-w-0 flex-wrap items-center gap-2">
+				{#if modeControl}
+					{@render modeControl()}
+				{/if}
 				{#if onCancel}
 					<Button variant="ghost" size="sm" class="h-8" onclick={onCancel} disabled={saving}>
 						Cancel
 					</Button>
+				{/if}
+				<DropdownMenu.Root>
+					<DropdownMenu.Trigger>
+						{#snippet child({ props })}
+							<Button
+								{...props}
+								variant="ghost"
+								size="sm"
+								class="h-8 gap-1.5 px-2 text-xs text-muted-foreground"
+								aria-label="Target accounts"
+								disabled={loading || accountsLoading || accounts.length === 0}
+							>
+								<span class="max-w-28 truncate">{selectedAccountSummary}</span>
+							</Button>
+						{/snippet}
+					</DropdownMenu.Trigger>
+					<DropdownMenu.Content class="w-72" align="start">
+						<div class="flex items-center justify-between gap-3 px-2 py-1.5">
+							<div>
+								<p class="text-sm font-medium">Publish to</p>
+								<p class="text-xs text-muted-foreground">
+									Accounts compatible with {modeMeta.label}
+								</p>
+							</div>
+							<div class="flex gap-1">
+								<Button variant="ghost" size="xs" class="h-6 text-xs" onclick={selectAllAccounts}
+									>All</Button
+								>
+								<Button variant="ghost" size="xs" class="h-6 text-xs" onclick={clearAllAccounts}
+									>None</Button
+								>
+							</div>
+						</div>
+						<DropdownMenu.Separator />
+						{#each accounts as account (account.id)}
+							{@const compatible = isAccountCompatible(account)}
+							<DropdownMenu.CheckboxItem
+								checked={selectedAccountIds.includes(account.id)}
+								disabled={!compatible}
+								onCheckedChange={() => toggleAccount(account)}
+								class="gap-2"
+							>
+								<PlatformIcon platform={account.platform} class="size-4" />
+								<span class="min-w-0 flex-1 truncate">{accountLabel(account)}</span>
+								<span class="text-xs text-muted-foreground">
+									{getPlatformName(account.platform)}
+								</span>
+							</DropdownMenu.CheckboxItem>
+						{/each}
+					</DropdownMenu.Content>
+				</DropdownMenu.Root>
+			</div>
+
+			<div class="flex min-w-0 flex-wrap items-center justify-end gap-1.5 md:gap-2">
+				{#if selectedAccounts.length > 0}
+					<div class="hidden max-w-48 items-center gap-1 overflow-x-auto lg:flex">
+						{#each selectedAccounts as account (account.id)}
+							<button
+								type="button"
+								class="flex size-8 shrink-0 items-center justify-center rounded-full border bg-background text-foreground transition-colors hover:border-primary/60 hover:text-primary focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+								aria-label={`Remove @${accountLabel(account).replace(/^@/, '')} from targets`}
+								title={`${accountLabel(account)} · ${getPlatformName(account.platform)}`}
+								onclick={() => toggleAccount(account)}
+							>
+								<PlatformIcon platform={account.platform} class="size-4" />
+							</button>
+						{/each}
+					</div>
 				{/if}
 				<Button
 					variant="ghost"
@@ -774,7 +842,25 @@
 				</Button>
 			</div>
 		</div>
+	</div>
 
+	{#if loading}
+		<main class="min-h-0 flex-1 overflow-y-auto">
+			<div class="mx-auto w-full max-w-3xl space-y-6 px-4 py-5 md:px-6">
+				<div class="flex gap-2">
+					<Skeleton class="h-8 w-24 rounded-md" />
+					<Skeleton class="h-8 w-28 rounded-md" />
+					<Skeleton class="h-8 w-24 rounded-md" />
+				</div>
+				<Skeleton class="h-32 rounded-lg" />
+				<div class="space-y-2">
+					<Skeleton class="h-4 w-24 rounded" />
+					<Skeleton class="h-40 rounded-lg" />
+					<Skeleton class="h-3 w-52 rounded" />
+				</div>
+			</div>
+		</main>
+	{:else}
 		<main class="min-h-0 flex-1 overflow-y-auto">
 			<div class="mx-auto w-full max-w-3xl space-y-6 px-4 py-5 md:px-6">
 				{#if error}
@@ -792,42 +878,11 @@
 					</div>
 				{/if}
 
-				<section class="space-y-3">
-					<div class="flex items-center justify-between gap-3">
-						<div>
-							<h2 class="text-sm font-semibold">Accounts</h2>
-						</div>
-						{#if accountsLoading}
-							<LoaderIcon class="h-4 w-4 animate-spin text-muted-foreground" />
-						{/if}
+				{#if accounts.length === 0}
+					<div class="rounded-lg border bg-muted/20 px-4 py-3 text-sm text-muted-foreground">
+						Connect a compatible social account before publishing this format.
 					</div>
-					<div class="flex flex-wrap gap-2">
-						{#each accounts as account (account.id)}
-							{@const selected = selectedAccountIds.includes(account.id)}
-							{@const disabled = !isAccountCompatible(account)}
-							<button
-								type="button"
-								class="flex max-w-full items-center gap-2 rounded-md border px-2.5 py-2 text-left text-sm transition {selected
-									? 'border-primary bg-primary/5 text-foreground'
-									: 'bg-background text-muted-foreground'} {disabled
-									? 'cursor-not-allowed opacity-50'
-									: 'hover:border-primary/60 hover:text-foreground'}"
-								{disabled}
-								title={disabledReason(account)}
-								onclick={() => toggleAccount(account)}
-							>
-								<PlatformIcon platform={account.platform} class="h-4 w-4 shrink-0" />
-								<span class="min-w-0 truncate">{accountLabel(account)}</span>
-								<span class="shrink-0 text-xs text-muted-foreground">
-									{getPlatformName(account.platform)}
-								</span>
-							</button>
-						{/each}
-					</div>
-					{#if accounts.length === 0}
-						<p class="text-sm text-muted-foreground">Connect an account before using this mode.</p>
-					{/if}
-				</section>
+				{/if}
 
 				<section class="flex flex-col gap-5">
 					<div class="{modeMeta.mediaFirst ? 'order-1' : 'order-2'} space-y-3">

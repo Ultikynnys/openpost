@@ -22,6 +22,9 @@ All notable changes to this project are documented in this file.
 
 ### Fixed
 
+- Unified every composer format under the same compact publishing toolbar, removed duplicate workspace controls, kept the authenticated app shell mounted during navigation, restored the collapsed-sidebar logo, and tightened the Social accounts layout.
+- Kept the active Settings section visible in the mobile tab strip, removed repeated section headings, and made status notifications properly announced and dismissible.
+- Restored Link, Image, Carousel, and Story to the composer post-type picker, with grouped descriptions that keep all eight formats easy to distinguish on desktop and mobile.
 - Documented the required R2 bucket CORS policy for direct browser media uploads.
 - Bound MCP OAuth tokens to the MCP resource, protected remote client metadata fetches from SSRF, serialized first-admin bootstrap on PostgreSQL, and moved web sessions from persistent browser storage to revocable HttpOnly cookies.
 - Made multi-worker job claims race-safe, kept long-running job locks alive, rejected unknown job types, and indexed due-job polling.

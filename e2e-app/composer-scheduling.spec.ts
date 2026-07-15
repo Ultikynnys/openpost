@@ -153,7 +153,7 @@ test("composer schedules a publication from the selected time", async ({
   await page.goto("/");
   await page.getByTestId("composer-mode-select").click();
   await page.getByRole("option", { name: "Short video" }).click();
-  await expect(page.getByRole("heading", { name: "Accounts" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Target accounts" })).toBeVisible();
   await page.getByLabel("Caption").fill(postContent);
   await page.getByRole("button", { name: "Schedule" }).first().click();
   await page.getByRole("button", { name: "10:30" }).click();
