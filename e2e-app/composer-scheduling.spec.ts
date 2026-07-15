@@ -1,9 +1,10 @@
 import { expect, test } from "@playwright/test";
-import { createWorkspace, registerUser } from "./helpers";
+import { authenticatePage, createWorkspace, registerUser } from "./helpers";
 
 type PostPayload = {
   workspace_id?: string;
   source_text?: string;
+  source_url?: string;
   content_profile?: string;
   scheduled_at?: string;
   renditions?: Array<{
@@ -33,9 +34,34 @@ test("composer schedules a publication from the selected time", async ({
     "Composer Scheduling E2E",
   );
 
-  await page.addInitScript((token) => {
-    window.localStorage.setItem("token", token);
-  }, auth.token);
+  await authenticatePage(page, auth.token);
+  await page.route("**/api/v1/capabilities", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        profiles: [],
+        capabilities: [
+          {
+            provider: "bluesky",
+            profile: "short_video",
+            label: "Short video",
+            media: {
+              min_count: 0,
+              max_count: 4,
+              allowed_mimes: [],
+              requires_public_url: false,
+              requires_https_fetchable: false,
+            },
+            native_scheduling: false,
+            openpost_queued: true,
+            requires_app_review: false,
+            requires_public_media: false,
+            settings: [],
+          },
+        ],
+      },
+    });
+  });
   await page.route("**/api/v1/accounts?**", async (route) => {
     await route.fulfill({
       contentType: "application/json",
@@ -126,10 +152,9 @@ test("composer schedules a publication from the selected time", async ({
 
   await page.goto("/");
   await page.getByTestId("composer-mode-select").click();
-  await page.getByRole("option", { name: "Link" }).click();
+  await page.getByRole("option", { name: "Short video" }).click();
   await expect(page.getByRole("heading", { name: "Accounts" })).toBeVisible();
-  await page.getByLabel("Link URL").fill("https://openpost.social/launch");
-  await page.getByLabel("Post text").fill(postContent);
+  await page.getByLabel("Caption").fill(postContent);
   await page.getByRole("button", { name: "Schedule" }).first().click();
   await page.getByRole("button", { name: "10:30" }).click();
   await expect(page.getByRole("button", { name: "Schedule" })).toBeEnabled();
@@ -141,22 +166,20 @@ test("composer schedules a publication from the selected time", async ({
 
   expect(publicationPayload).toMatchObject({
     workspace_id: workspaceBody.id,
-    content_profile: "link_share",
+    content_profile: "short_video",
     source_text: postContent,
-    source_url: "https://openpost.social/launch",
     media: [],
     renditions: [
       expect.objectContaining({
         social_account_id: "bluesky-main",
-        profile: "link_share",
+        profile: "short_video",
         body: postContent,
-        settings: expect.objectContaining({
-          url: "https://openpost.social/launch",
-        }),
+        settings: {},
         media: [],
       }),
     ],
   });
+  expect(publicationPayload?.source_url).toBeUndefined();
   expect(publicationPayload?.scheduled_at).toBeTruthy();
   expect(new Date(publicationPayload?.scheduled_at ?? "").toString()).not.toBe(
     "Invalid Date",

@@ -44,6 +44,19 @@ export async function createWorkspace(
   return workspace.json();
 }
 
+export async function authenticatePage(page: Page, token: string) {
+  await page.context().addCookies([
+    {
+      name: "openpost_session",
+      value: token,
+      domain: "127.0.0.1",
+      path: "/",
+      httpOnly: true,
+      sameSite: "Lax",
+    },
+  ]);
+}
+
 export async function routeBrowserRegistration(page: Page, seed: string) {
   await page.route("**/api/v1/auth/register", async (route) => {
     await route.continue({

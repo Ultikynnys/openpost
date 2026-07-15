@@ -109,8 +109,7 @@
 						<p class="font-medium">Workspace joined</p>
 						<p class="mt-1 font-mono text-xs text-muted-foreground">{workspaceID}</p>
 					</div>
-					<Button class="w-full" onclick={() => goto('/settings?tab=organization')}
-						>Open Settings</Button
+					<Button class="w-full" onclick={() => goto('/settings?tab=members')}>Open Settings</Button
 					>
 				</div>
 			{:else if !error}

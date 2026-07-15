@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { createWorkspace, registerUser } from "./helpers";
+import { authenticatePage, createWorkspace, registerUser } from "./helpers";
 
 test("sidebar footer switches between workspaces", async ({
   page,
@@ -14,9 +14,7 @@ test("sidebar footer switches between workspaces", async ({
   await createWorkspace(request, auth.token, firstName);
   await createWorkspace(request, auth.token, secondName);
 
-  await page.addInitScript((token) => {
-    window.localStorage.setItem("token", token);
-  }, auth.token);
+  await authenticatePage(page, auth.token);
   await page.goto("/");
 
   const workspaceNames = [firstName, secondName];
@@ -30,8 +28,7 @@ test("sidebar footer switches between workspaces", async ({
     buttonText.includes(name),
   );
   expect(activeWorkspace).toBeTruthy();
-  const nextWorkspace =
-    activeWorkspace === firstName ? secondName : firstName;
+  const nextWorkspace = activeWorkspace === firstName ? secondName : firstName;
 
   await workspaceButton.click();
   await expect(page.getByText("Switch workspace")).toBeVisible();

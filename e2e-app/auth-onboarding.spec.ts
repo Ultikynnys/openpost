@@ -31,12 +31,11 @@ test("registration routes first-time users through onboarding", async ({
   await expect(page).toHaveURL(/\/$/);
   await expect(page.locator("textarea").first()).toBeVisible();
 
-  const token = await page.evaluate(() => window.localStorage.getItem("token"));
-  if (!token) throw new Error("missing auth token after onboarding");
+  expect(
+    await page.evaluate(() => window.localStorage.getItem("token")),
+  ).toBeNull();
 
-  const workspaces = await request.get("/api/v1/workspaces", {
-    headers: { Authorization: `Bearer ${token}` },
-  });
+  const workspaces = await page.context().request.get("/api/v1/workspaces");
   expect(workspaces.ok()).toBeTruthy();
   const workspaceBody = await workspaces.json();
   expect(workspaceBody).toEqual(
@@ -55,12 +54,12 @@ test("login honors same-origin redirects for existing workspaces", async ({
   await createWorkspace(request, auth.token, "Login Redirect E2E");
 
   await page.goto(
-    `/login?redirect=${encodeURIComponent("/settings?tab=organization")}`,
+    `/login?redirect=${encodeURIComponent("/settings?tab=plan")}`,
   );
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password").fill(password);
   await page.getByRole("button", { name: "Sign In" }).click();
 
-  await expect(page).toHaveURL(/\/settings\?tab=organization$/);
+  await expect(page).toHaveURL(/\/settings\?tab=plan$/);
   await expect(page.getByRole("heading", { name: "Billing" })).toBeVisible();
 });

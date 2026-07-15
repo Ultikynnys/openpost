@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { createWorkspace, registerUser } from "./helpers";
+import { authenticatePage, createWorkspace, registerUser } from "./helpers";
 
 const tinyPNG = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
@@ -20,9 +20,7 @@ test("media library uploads and lists a local media file", async ({
     "Media Library E2E",
   );
 
-  await page.addInitScript((token) => {
-    window.localStorage.setItem("token", token);
-  }, auth.token);
+  await authenticatePage(page, auth.token);
   await page.goto("/media");
 
   await expect(

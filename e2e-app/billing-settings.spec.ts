@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import {
+  authenticatePage,
   createWorkspace,
   password,
   registerUser,
@@ -16,13 +17,11 @@ test("settings shows billing plan controls for an authenticated workspace", asyn
   const auth = await registerUser(request, email);
   await createWorkspace(request, auth.token, "Billing E2E");
 
-  await page.addInitScript((token) => {
-    window.localStorage.setItem("token", token);
-  }, auth.token);
-  await page.goto("/settings?tab=organization");
+  await authenticatePage(page, auth.token);
+  await page.goto("/settings?tab=plan");
 
   await expect(
-    page.getByRole("heading", { name: "Billing E2E settings" }),
+    page.getByRole("heading", { name: "Plan & usage" }),
   ).toBeVisible();
   await expect(
     page.getByRole("heading", { name: "Billing", exact: true }),
@@ -31,9 +30,7 @@ test("settings shows billing plan controls for an authenticated workspace", asyn
   await expect(
     page.getByRole("button", { name: "Customer Portal" }),
   ).toBeVisible();
-  await expect(
-    page.getByRole("button", { name: "Start Checkout" }),
-  ).toHaveCount(5);
+  await expect(page.getByRole("button", { name: /^Choose / })).toHaveCount(5);
   await expect(page.getByRole("heading", { name: "Starter" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Creator" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Pro" })).toBeVisible();
@@ -71,10 +68,8 @@ test("settings shows recent MCP activity for an authenticated user", async ({
   const mcpBody = await mcpCall.json();
   expect(mcpBody.error).toBeFalsy();
 
-  await page.addInitScript((token) => {
-    window.localStorage.setItem("token", token);
-  }, auth.token);
-  await page.goto("/settings?tab=account");
+  await authenticatePage(page, auth.token);
+  await page.goto("/settings?tab=developer");
 
   await expect(
     page.getByRole("heading", { name: "Recent MCP Activity" }),
@@ -95,12 +90,12 @@ test("settings account tab updates the user profile", async ({
   const auth = await registerUser(request, email);
   await createWorkspace(request, auth.token, "Profile E2E");
 
-  await page.addInitScript((token) => {
-    window.localStorage.setItem("token", token);
-  }, auth.token);
-  await page.goto("/settings?tab=account");
+  await authenticatePage(page, auth.token);
+  await page.goto("/settings?tab=profile");
 
-  await expect(page.getByRole("heading", { name: "Profile" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Profile", level: 1 }),
+  ).toBeVisible();
   await page.getByLabel("Display name").fill("Profile E2E User");
   await page.getByRole("button", { name: "Save Profile" }).click();
   await expect(page.getByText("Profile updated")).toBeVisible();
@@ -129,10 +124,8 @@ test("settings lists and revokes active web sessions", async ({
   });
   expect(secondLogin.ok()).toBeTruthy();
 
-  await page.addInitScript((token) => {
-    window.localStorage.setItem("token", token);
-  }, auth.token);
-  await page.goto("/settings?tab=account");
+  await authenticatePage(page, auth.token);
+  await page.goto("/settings?tab=security");
 
   await expect(
     page.getByRole("heading", { name: "Active Sessions" }),
@@ -162,10 +155,8 @@ test("settings creates MCP-scoped API tokens", async ({ page, request }) => {
   const auth = await registerUser(request, email);
   await createWorkspace(request, auth.token, "MCP Token E2E");
 
-  await page.addInitScript((token) => {
-    window.localStorage.setItem("token", token);
-  }, auth.token);
-  await page.goto("/settings?tab=account");
+  await authenticatePage(page, auth.token);
+  await page.goto("/settings?tab=developer");
 
   await expect(page.getByTestId("api-token-scope")).toContainText(
     "MCP / ChatGPT App",
@@ -192,10 +183,8 @@ test("settings creates and accepts workspace invitations", async ({
   const adminAuth = await registerUser(request, adminEmail);
   await createWorkspace(request, adminAuth.token, "Team E2E");
 
-  await page.addInitScript((token) => {
-    window.localStorage.setItem("token", token);
-  }, adminAuth.token);
-  await page.goto("/settings?tab=organization");
+  await authenticatePage(page, adminAuth.token);
+  await page.goto("/settings?tab=members");
 
   await expect(
     page.locator("#team").getByRole("heading", { name: "Team" }),
@@ -222,9 +211,7 @@ test("settings creates and accepts workspace invitations", async ({
   const invitedAuth = await registerUser(request, inviteEmail);
   const invitedContext = await browser.newContext({ baseURL });
   const invitedPage = await invitedContext.newPage();
-  await invitedPage.addInitScript((token) => {
-    window.localStorage.setItem("token", token);
-  }, invitedAuth.token);
+  await authenticatePage(invitedPage, invitedAuth.token);
 
   const parsedInviteURL = new URL(inviteURL!);
   await invitedPage.goto(
@@ -237,7 +224,7 @@ test("settings creates and accepts workspace invitations", async ({
   await expect(invitedPage.getByText("editor access")).toBeVisible();
 
   await invitedPage.getByRole("button", { name: "Open Settings" }).click();
-  await expect(invitedPage).toHaveURL(/\/settings\?tab=organization$/);
+  await expect(invitedPage).toHaveURL(/\/settings\?tab=members$/);
   await expect(
     invitedPage.locator("#team").getByRole("heading", { name: "Team" }),
   ).toBeVisible();

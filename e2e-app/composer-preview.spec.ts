@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { createWorkspace, registerUser } from "./helpers";
+import { authenticatePage, createWorkspace, registerUser } from "./helpers";
 
 type PostPayload = {
   workspace_id?: string;
@@ -26,9 +26,7 @@ test("composer renders account-specific renditions", async ({
   const auth = await registerUser(request, email);
   await createWorkspace(request, auth.token, "Composer Preview E2E");
 
-  await page.addInitScript((token) => {
-    window.localStorage.setItem("token", token);
-  }, auth.token);
+  await authenticatePage(page, auth.token);
   await page.route("**/api/v1/accounts?**", async (route) => {
     await route.fulfill({
       contentType: "application/json",
@@ -101,10 +99,9 @@ test("composer renders account-specific renditions", async ({
 
   await page.goto("/");
   await page.getByTestId("composer-mode-select").click();
-  await page.getByRole("option", { name: "Link" }).click();
+  await page.getByRole("option", { name: "Short video" }).click();
   await expect(page.getByRole("heading", { name: "Accounts" })).toBeVisible();
-  await page.getByLabel("Link URL").fill("https://openpost.social/launch");
-  await page.getByLabel("Post text").fill("Launch update");
+  await page.getByLabel("Caption").fill("Launch update");
 
   await expect(page.locator('[data-testid="instagram-preview"]')).toHaveCount(
     0,
@@ -120,26 +117,24 @@ test("composer renders account-specific renditions", async ({
   await expect.poll(() => publicationPayload).toBeTruthy();
 
   expect(publicationPayload).toMatchObject({
-    content_profile: "link_share",
+    content_profile: "short_video",
     source_text: "Launch update",
-    source_url: "https://openpost.social/launch",
     renditions: [
       expect.objectContaining({
         social_account_id: "bluesky-main",
-        profile: "link_share",
+        profile: "short_video",
         body: "Launch update",
-        settings: expect.objectContaining({
-          url: "https://openpost.social/launch",
-        }),
       }),
       expect.objectContaining({
         social_account_id: "bluesky-studio",
-        profile: "link_share",
+        profile: "short_video",
         body: "Launch update",
-        settings: expect.objectContaining({
-          url: "https://openpost.social/launch",
-        }),
       }),
     ],
   });
+  expect(publicationPayload?.source_url).toBeUndefined();
+  for (const rendition of publicationPayload?.renditions ?? []) {
+    expect(rendition.settings).not.toHaveProperty("url");
+    expect(rendition.settings?.link_url ?? "").toBe("");
+  }
 });

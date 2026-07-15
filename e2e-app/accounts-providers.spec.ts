@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { createWorkspace, registerUser } from "./helpers";
+import { authenticatePage, createWorkspace, registerUser } from "./helpers";
 
 test("accounts page shows configured and unavailable providers", async ({
   page,
@@ -11,9 +11,7 @@ test("accounts page shows configured and unavailable providers", async ({
   const auth = await registerUser(request, email);
   await createWorkspace(request, auth.token, "Provider Availability E2E");
 
-  await page.addInitScript((token) => {
-    window.localStorage.setItem("token", token);
-  }, auth.token);
+  await authenticatePage(page, auth.token);
   await page.route("**/api/v1/accounts/providers", async (route) => {
     await route.fulfill({
       contentType: "application/json",
@@ -111,12 +109,12 @@ test("accounts page shows configured and unavailable providers", async ({
   await page.goto("/accounts");
 
   await expect(
-    page.getByRole("heading", { name: "Connect a Platform" }),
+    page.getByRole("heading", { name: "Add a channel" }),
   ).toBeVisible();
   await expect(page.getByTestId("provider-card-bluesky")).toContainText(
     "Handle and app-password connection.",
   );
-  await expect(page.getByTestId("provider-card-bluesky")).toContainText(
+  await expect(page.getByTestId("provider-card-bluesky")).not.toContainText(
     "MCP workflows",
   );
   await expect(
@@ -136,12 +134,12 @@ test("accounts page shows configured and unavailable providers", async ({
     "tiktok",
   ]) {
     await expect(page.getByTestId(`provider-card-${platform}`)).toContainText(
-      "Needs app config",
+      "Admin setup required",
     );
     await expect(
       page
         .getByTestId(`provider-card-${platform}`)
-        .getByRole("button", { name: "Unavailable" }),
+        .getByRole("button", { name: "Ask admin" }),
     ).toBeDisabled();
   }
 });
@@ -156,9 +154,7 @@ test("accounts page starts custom Mastodon instance connection", async ({
   const auth = await registerUser(request, email);
   await createWorkspace(request, auth.token, "Custom Mastodon E2E");
 
-  await page.addInitScript((token) => {
-    window.localStorage.setItem("token", token);
-  }, auth.token);
+  await authenticatePage(page, auth.token);
   await page.route("**/api/v1/accounts/providers", async (route) => {
     await route.fulfill({
       contentType: "application/json",
