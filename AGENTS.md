@@ -24,6 +24,8 @@ Treat this as a living file: add concise repo learnings when they would save fut
 **Deployment:**
 - **Strategy:** Single Go binary. SvelteKit's static output is embedded directly into the Go executable using `go:embed`.
 - **Hosted app:** `app.openpost.social` runs from the Docker image published by the GitHub `Build and Release` workflow and is pinned in `~/.config/home/hosts/rgo-vps/default.nix`.
+- **Push-to-deploy:** Production releases are tag-driven. `pnpm release:prod` pushes `main` and the next patch tag; `.github/workflows/release.yml` verifies the release, publishes the GHCR image, and calls the signed `deploy-openpost` VPS hook. The NixOS deploy script and readiness checks live in `~/.config/home/modules/hosting/deployments/default.nix`, while the container declaration lives in `~/.config/home/modules/services/openpost/default.nix`.
+- **Keep delivery fast and reproducible:** Preserve Devenv/Cachix and dependency caches in CI and the per-image BuildKit cache in the release workflow. Cache keys must track the relevant Devenv, pnpm, Go, frontend, and Docker inputs. Do not restore `no-cache` Docker builds unless investigating cache correctness; BuildKit invalidates changed layers. Validate workflow edits and confirm the tag run reaches `app.openpost.social/api/v1/ready` before considering a release delivered.
 
 ## 2. Platform Adapter Architecture
 
