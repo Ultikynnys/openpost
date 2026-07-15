@@ -20,6 +20,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/openpost/backend/internal/models"
+	"github.com/openpost/backend/internal/netguard"
 	"github.com/openpost/backend/internal/services/apitokens"
 	"github.com/uptrace/bun"
 )
@@ -40,6 +41,12 @@ var (
 	ErrUnsupportedResource = errors.New("unsupported oauth resource")
 	ErrWorkspaceNotAllowed = errors.New("workspace not accessible")
 )
+
+var clientMetadataURLPolicy = netguard.URLPolicy{
+	Label:            "oauth client metadata URL",
+	AllowedSchemes:   []string{"https"},
+	AllowCustomPorts: true,
+}
 
 type Service struct {
 	db         *bun.DB
@@ -96,11 +103,9 @@ type clientMetadata struct {
 
 func NewService(db *bun.DB, tokens *apitokens.Service) *Service {
 	return &Service{
-		db:     db,
-		tokens: tokens,
-		httpClient: &http.Client{
-			Timeout: 5 * time.Second,
-		},
+		db:         db,
+		tokens:     tokens,
+		httpClient: netguard.NewHTTPClient(5*time.Second, clientMetadataURLPolicy),
 		now: func() time.Time {
 			return time.Now().UTC()
 		},
@@ -468,7 +473,7 @@ func validateClientMetadataURL(raw string) (*url.URL, error) {
 	if err != nil || parsed.Scheme == "" || parsed.Host == "" || parsed.Fragment != "" || parsed.User != nil {
 		return nil, ErrInvalidClient
 	}
-	if !oauthURLSchemeAllowed(parsed.Scheme, parsed.Hostname()) {
+	if parsed.Scheme != "https" {
 		return nil, ErrInvalidClient
 	}
 	return parsed, nil

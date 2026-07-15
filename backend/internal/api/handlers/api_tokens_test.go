@@ -142,15 +142,8 @@ func TestAPITokenHandlerScopedCallerCannotMintUnscopedToken(t *testing.T) {
 		"name":  "Child token",
 		"scope": "mcp:full",
 	})
-	require.Equal(t, http.StatusCreated, resp.Code, resp.Body.String())
-
-	var out struct {
-		Item struct {
-			WorkspaceID string `json:"workspace_id"`
-		} `json:"item"`
-	}
-	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &out))
-	require.Equal(t, "ws-1", out.Item.WorkspaceID)
+	require.Equal(t, http.StatusForbidden, resp.Code, resp.Body.String())
+	require.Contains(t, resp.Body.String(), "not authorized for this API resource")
 }
 
 func apiTokenRequest(t *testing.T, e *echo.Echo, body map[string]any) *httptest.ResponseRecorder {

@@ -2029,6 +2029,23 @@
 				"required": ["email", "password"],
 				"type": "object"
 			},
+			"LogoutOutputBody": {
+				"additionalProperties": false,
+				"properties": {
+					"$schema": {
+						"description": "A URL to the JSON Schema for this object.",
+						"examples": ["https://example.com/schemas/LogoutOutputBody.json"],
+						"format": "uri",
+						"readOnly": true,
+						"type": "string"
+					},
+					"message": {
+						"type": "string"
+					}
+				},
+				"required": ["message"],
+				"type": "object"
+			},
 			"MCPActivityItem": {
 				"additionalProperties": false,
 				"properties": {
@@ -5739,7 +5756,14 @@
 								}
 							}
 						},
-						"description": "OK"
+						"description": "OK",
+						"headers": {
+							"Set-Cookie": {
+								"schema": {
+									"type": "string"
+								}
+							}
+						}
 					},
 					"401": {
 						"content": {
@@ -5867,7 +5891,14 @@
 								}
 							}
 						},
-						"description": "OK"
+						"description": "OK",
+						"headers": {
+							"Set-Cookie": {
+								"schema": {
+									"type": "string"
+								}
+							}
+						}
 					},
 					"400": {
 						"content": {
@@ -5936,7 +5967,14 @@
 								}
 							}
 						},
-						"description": "OK"
+						"description": "OK",
+						"headers": {
+							"Set-Cookie": {
+								"schema": {
+									"type": "string"
+								}
+							}
+						}
 					},
 					"400": {
 						"content": {
@@ -5980,6 +6018,52 @@
 					}
 				},
 				"summary": "Complete MFA login with a TOTP code",
+				"tags": ["Auth"]
+			}
+		},
+		"/auth/logout": {
+			"post": {
+				"operationId": "logout",
+				"responses": {
+					"200": {
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/LogoutOutputBody"
+								}
+							}
+						},
+						"description": "OK",
+						"headers": {
+							"Set-Cookie": {
+								"schema": {
+									"type": "string"
+								}
+							}
+						}
+					},
+					"401": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Unauthorized"
+					},
+					"500": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Internal Server Error"
+					}
+				},
+				"summary": "Log out the current web session",
 				"tags": ["Auth"]
 			}
 		},
@@ -6152,7 +6236,14 @@
 								}
 							}
 						},
-						"description": "OK"
+						"description": "OK",
+						"headers": {
+							"Set-Cookie": {
+								"schema": {
+									"type": "string"
+								}
+							}
+						}
 					},
 					"400": {
 						"content": {

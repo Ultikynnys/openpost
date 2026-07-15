@@ -29,6 +29,7 @@ type mcpOAuthTestServer struct {
 	echo      *echo.Echo
 	db        *bun.DB
 	apiTokens *apitokens.Service
+	oauth     *mcpoauth.Service
 }
 
 type mcpOAuthTestAuthenticator struct {
@@ -97,7 +98,7 @@ func newMCPOAuthTestServer(t *testing.T) *mcpOAuthTestServer {
 	mcp.SetPublicURL("https://app.openpost.test")
 	mcp.RegisterRoutes(e)
 
-	return &mcpOAuthTestServer{echo: e, db: db, apiTokens: tokenService}
+	return &mcpOAuthTestServer{echo: e, db: db, apiTokens: tokenService, oauth: oauthService}
 }
 
 func TestMCPOAuthAuthorizationCodeFlowIssuesUsableMCPToken(t *testing.T) {
@@ -105,10 +106,11 @@ func TestMCPOAuthAuthorizationCodeFlowIssuesUsableMCPToken(t *testing.T) {
 
 	srv := newMCPOAuthTestServer(t)
 	redirectURI := "https://chatgpt.com/connector/oauth/callback/openpost"
-	client := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	client := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = fmt.Fprintf(w, `{"client_name":"ChatGPT OpenPost","redirect_uris":["%s"],"token_endpoint_auth_method":"none"}`, redirectURI)
 	}))
 	t.Cleanup(client.Close)
+	srv.oauth.SetHTTPClient(client.Client())
 
 	metadataResp := srv.request(t, http.MethodGet, "/.well-known/oauth-authorization-server", nil, "")
 	require.Equal(t, http.StatusOK, metadataResp.Code)

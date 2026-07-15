@@ -22,6 +22,7 @@ import (
 	"github.com/openpost/backend/internal/services/ratelimit"
 	"github.com/openpost/backend/internal/services/sessions"
 	"github.com/uptrace/bun"
+	"github.com/uptrace/bun/dialect"
 )
 
 const (
@@ -169,12 +170,20 @@ type UpdateProfileInput struct {
 }
 
 type AuthOutput struct {
-	Body struct {
+	SetCookie string `header:"Set-Cookie"`
+	Body      struct {
 		Token       string       `json:"token,omitempty" doc:"JWT authentication token"`
 		User        *UserProfile `json:"user,omitempty"`
 		RequiresMFA bool         `json:"requires_mfa" doc:"Whether the login requires a second factor"`
 		MFAToken    string       `json:"mfa_token,omitempty" doc:"Pending MFA token for follow-up verification"`
 		MFAMethods  []string     `json:"mfa_methods,omitempty" doc:"Enabled MFA methods for this account"`
+	}
+}
+
+type LogoutOutput struct {
+	SetCookie string `header:"Set-Cookie"`
+	Body      struct {
+		Message string `json:"message"`
 	}
 }
 
@@ -300,6 +309,13 @@ func (h *AuthHandler) registerUser(ctx context.Context, email, password string) 
 	}
 
 	err = h.db.RunInTx(ctx, &sql.TxOptions{}, func(txCtx context.Context, tx bun.Tx) error {
+		// PostgreSQL does not lock an empty users table for COUNT. A transaction-
+		// scoped advisory lock serializes only the one-time administrator bootstrap.
+		if h.db.Dialect().Name() == dialect.PG {
+			if _, err := tx.ExecContext(txCtx, "SELECT pg_advisory_xact_lock(?)", int64(0x4f50454e504f5354)); err != nil {
+				return err
+			}
+		}
 		userCount, err := tx.NewSelect().Model((*models.User)(nil)).Count(txCtx)
 		if err != nil {
 			return err
@@ -379,6 +395,30 @@ func (h *AuthHandler) Login(api huma.API) {
 		resp.Body.MFAToken = challengeID
 		resp.Body.MFAMethods = methods
 		return resp, nil
+	})
+}
+
+func (h *AuthHandler) Logout(api huma.API) {
+	huma.Register(api, huma.Operation{
+		OperationID: "logout",
+		Method:      http.MethodPost,
+		Path:        "/auth/logout",
+		Summary:     "Log out the current web session",
+		Tags:        []string{tagAuth},
+		Middlewares: huma.Middlewares{middleware.RequestMetadataMiddleware(), middleware.AuthMiddleware(api, h.authenticator)},
+		Errors:      []int{401},
+	}, func(ctx context.Context, _ *struct{}) (*LogoutOutput, error) {
+		if h.sessions != nil {
+			if sessionID := middleware.GetSessionID(ctx); sessionID != "" {
+				if err := h.sessions.RevokeSession(ctx, middleware.GetUserID(ctx), sessionID); err != nil && !errors.Is(err, sql.ErrNoRows) {
+					return nil, huma.Error500InternalServerError("failed to revoke session")
+				}
+			}
+		}
+		out := &LogoutOutput{}
+		out.SetCookie = expiredSessionCookie(middleware.IsSecureRequest(ctx)).String()
+		out.Body.Message = "logged out"
+		return out, nil
 	})
 }
 
@@ -1066,7 +1106,27 @@ func (h *AuthHandler) issueAuthResponse(ctx context.Context, user *models.User) 
 	resp := &AuthOutput{}
 	resp.Body.Token = token
 	resp.Body.User = toUserProfile(user)
+	resp.SetCookie = sessionCookie(token, expiresAt, middleware.IsSecureRequest(ctx)).String()
 	return resp, nil
+}
+
+func sessionCookie(token string, expiresAt time.Time, secure bool) *http.Cookie {
+	return &http.Cookie{
+		Name:     "openpost_session",
+		Value:    token,
+		Path:     "/",
+		Expires:  expiresAt.UTC(),
+		MaxAge:   int(time.Until(expiresAt).Seconds()),
+		HttpOnly: true,
+		Secure:   secure,
+		SameSite: http.SameSiteLaxMode,
+	}
+}
+
+func expiredSessionCookie(secure bool) *http.Cookie {
+	cookie := sessionCookie("", time.Unix(1, 0), secure)
+	cookie.MaxAge = -1
+	return cookie
 }
 
 func (h *AuthHandler) enabledMFAMethods(ctx context.Context, user *models.User) ([]string, error) {

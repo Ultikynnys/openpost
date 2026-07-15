@@ -83,6 +83,7 @@ func RegisterHumaRoutes(api huma.API, deps RouteDeps) {
 	authHandler.SetSessionService(deps.SessionService)
 	authHandler.Register(api)
 	authHandler.Login(api)
+	authHandler.Logout(api)
 	authHandler.VerifyTOTPLogin(api)
 	authHandler.BeginPasskeyLogin(api)
 	authHandler.FinishPasskeyLogin(api)

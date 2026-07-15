@@ -4,8 +4,10 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"net"
 	"net/http"
 	"net/netip"
+	"net/url"
 	"strings"
 
 	"github.com/danielgtaylor/huma/v2"
@@ -25,13 +27,15 @@ const (
 	SessionIDKey   contextKey = "session_id"
 	UserAgentKey   contextKey = "user_agent"
 	ClientIPKey    contextKey = "client_ip"
+	SecureKey      contextKey = "secure_request"
 	errorKey       contextKey = "error"
 
 	// bearerPrefix is the canonical HTTP Authorization scheme this
 	// middleware accepts. Centralised as a const to satisfy
 	// golangci-lint's goconst rule across all three middleware
 	// implementations (AuthMiddleware, JWTMiddleware, BearerMiddleware).
-	bearerPrefix = "Bearer"
+	bearerPrefix      = "Bearer"
+	sessionCookieName = "openpost_session"
 )
 
 type Principal struct {
@@ -48,6 +52,18 @@ type Principal struct {
 
 type Authenticator interface {
 	AuthenticateBearer(ctx context.Context, token string) (*Principal, error)
+}
+
+func principalCanAccessREST(principal *Principal) bool {
+	if principal == nil || strings.TrimSpace(principal.Audience) != "" {
+		return false
+	}
+	switch strings.TrimSpace(principal.Scope) {
+	case "", apitokens.ScopeCLI:
+		return true
+	default:
+		return false
+	}
 }
 
 type SessionValidator interface {
@@ -128,20 +144,22 @@ func (s *CompositeService) AuthenticateBearer(ctx context.Context, token string)
 func AuthMiddleware(api huma.API, authenticator Authenticator) func(ctx huma.Context, next func(huma.Context)) {
 	return func(ctx huma.Context, next func(huma.Context)) {
 		authHeader := ctx.Header("Authorization")
-		if authHeader == "" {
+		token, cookieAuth := requestAuthToken(authHeader, ctx.Header("Cookie"))
+		if token == "" {
 			_ = huma.WriteErr(api, ctx, http.StatusUnauthorized, "missing authorization header")
 			return
 		}
-
-		tokenParts := strings.Split(authHeader, " ")
-		if len(tokenParts) != 2 || tokenParts[0] != bearerPrefix {
-			_ = huma.WriteErr(api, ctx, http.StatusUnauthorized, "invalid authorization header format")
+		if cookieAuth && !cookieRequestAllowed(ctx.Method(), ctx.Header("Origin"), ctx.Host()) {
+			_ = huma.WriteErr(api, ctx, http.StatusForbidden, "cross-site session request rejected")
 			return
 		}
-
-		principal, err := authenticator.AuthenticateBearer(ctx.Context(), tokenParts[1])
+		principal, err := authenticator.AuthenticateBearer(ctx.Context(), token)
 		if err != nil {
 			_ = huma.WriteErr(api, ctx, http.StatusUnauthorized, "invalid or expired token")
+			return
+		}
+		if !principalCanAccessREST(principal) {
+			_ = huma.WriteErr(api, ctx, http.StatusForbidden, "token is not authorized for this API resource")
 			return
 		}
 
@@ -203,8 +221,14 @@ func RequestMetadataMiddleware() func(ctx huma.Context, next func(huma.Context))
 	return func(ctx huma.Context, next func(huma.Context)) {
 		ctx = huma.WithValue(ctx, ClientIPKey, requestClientIP(ctx))
 		ctx = huma.WithValue(ctx, UserAgentKey, strings.TrimSpace(ctx.Header("User-Agent")))
+		ctx = huma.WithValue(ctx, SecureKey, ctx.TLS() != nil || strings.EqualFold(strings.TrimSpace(ctx.Header("X-Forwarded-Proto")), "https"))
 		next(ctx)
 	}
+}
+
+func IsSecureRequest(ctx context.Context) bool {
+	secure, _ := ctx.Value(SecureKey).(bool)
+	return secure
 }
 
 // WorkspaceAccessMiddleware validates that the user has access to the workspace specified in the request.
@@ -315,18 +339,20 @@ func BearerMiddleware(authenticator Authenticator) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
 			authHeader := c.Request().Header.Get("Authorization")
-			if authHeader == "" {
+			token, cookieAuth := requestAuthToken(authHeader, c.Request().Header.Get("Cookie"))
+			if token == "" {
 				return c.JSON(http.StatusUnauthorized, map[string]string{string(errorKey): "missing authorization header"})
 			}
-
-			tokenParts := strings.Split(authHeader, " ")
-			if len(tokenParts) != 2 || tokenParts[0] != bearerPrefix {
-				return c.JSON(http.StatusUnauthorized, map[string]string{string(errorKey): "invalid authorization header format"})
+			if cookieAuth && !cookieRequestAllowed(c.Request().Method, c.Request().Header.Get("Origin"), c.Request().Host) {
+				return c.JSON(http.StatusForbidden, map[string]string{string(errorKey): "cross-site session request rejected"})
 			}
 
-			principal, err := authenticator.AuthenticateBearer(c.Request().Context(), tokenParts[1])
+			principal, err := authenticator.AuthenticateBearer(c.Request().Context(), token)
 			if err != nil {
 				return c.JSON(http.StatusUnauthorized, map[string]string{string(errorKey): "invalid or expired token"})
+			}
+			if !principalCanAccessREST(principal) {
+				return c.JSON(http.StatusForbidden, map[string]string{string(errorKey): "token is not authorized for this API resource"})
 			}
 
 			c.Set(string(UserIDKey), principal.UserID)
@@ -346,6 +372,38 @@ func BearerMiddleware(authenticator Authenticator) echo.MiddlewareFunc {
 			return next(c)
 		}
 	}
+}
+
+func requestAuthToken(authHeader, cookieHeader string) (string, bool) {
+	if authHeader != "" {
+		parts := strings.Fields(authHeader)
+		if len(parts) == 2 && parts[0] == bearerPrefix {
+			return parts[1], false
+		}
+		return "", false
+	}
+	req := &http.Request{Header: http.Header{"Cookie": []string{cookieHeader}}}
+	cookie, err := req.Cookie(sessionCookieName)
+	if err != nil || strings.TrimSpace(cookie.Value) == "" {
+		return "", false
+	}
+	return strings.TrimSpace(cookie.Value), true
+}
+
+func cookieRequestAllowed(method, origin, host string) bool {
+	switch method {
+	case http.MethodGet, http.MethodHead, http.MethodOptions:
+		return true
+	}
+	originURL, err := url.Parse(strings.TrimSpace(origin))
+	if err != nil || originURL.Hostname() == "" {
+		return false
+	}
+	hostname := strings.TrimSpace(host)
+	if parsedHost, _, splitErr := net.SplitHostPort(hostname); splitErr == nil {
+		hostname = parsedHost
+	}
+	return strings.EqualFold(originURL.Hostname(), strings.Trim(hostname, "[]"))
 }
 
 func requestClientIP(ctx huma.Context) string {

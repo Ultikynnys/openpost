@@ -127,6 +127,9 @@ func TestIssueAuthResponseCreatesTrackedSession(t *testing.T) {
 	resp, err := handler.issueAuthResponse(reqCtx, user)
 	require.NoError(t, err)
 	require.NotEmpty(t, resp.Body.Token)
+	require.Contains(t, resp.SetCookie, "openpost_session=")
+	require.Contains(t, resp.SetCookie, "HttpOnly")
+	require.Contains(t, resp.SetCookie, "SameSite=Lax")
 
 	claims, err := authService.ValidateToken(resp.Body.Token)
 	require.NoError(t, err)

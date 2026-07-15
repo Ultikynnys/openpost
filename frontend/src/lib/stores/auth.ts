@@ -1,7 +1,8 @@
 import { browser } from '$app/environment';
 import { writable } from 'svelte/store';
-import { client, getToken, setToken, recreateClient, type User } from '$lib/api/client';
+import { client, setToken, recreateClient, type User } from '$lib/api/client';
 import { getPasskeyAssertion } from '$lib/auth/webauthn';
+import { IS_CAPACITOR } from '$lib/env';
 
 interface AuthState {
 	user: User | null;
@@ -32,13 +33,6 @@ function createAuthStore() {
 			// Recreate client in case instance URL was just set
 			recreateClient();
 
-			const storedToken = getToken();
-			if (!storedToken) {
-				set({ user: null, isLoading: false, isAuthenticated: false });
-				return;
-			}
-
-			setToken(storedToken);
 			try {
 				const { data, error } = await client.GET('/auth/me');
 				if (error || !data) throw new Error('Failed to fetch user');
@@ -63,7 +57,7 @@ function createAuthStore() {
 						mfaMethods: data.mfa_methods ?? []
 					};
 				}
-				setToken(data.token);
+				setToken(IS_CAPACITOR ? data.token : null);
 				set({ user: data.user ?? null, isLoading: false, isAuthenticated: true });
 				return { success: true };
 			} catch (e) {
@@ -76,7 +70,7 @@ function createAuthStore() {
 					body: { email, password }
 				});
 				if (error || !data) throw new Error(error?.detail || 'Registration failed');
-				setToken(data.token);
+				setToken(IS_CAPACITOR ? data.token : null);
 				set({ user: data.user ?? null, isLoading: false, isAuthenticated: true });
 				return { success: true };
 			} catch (e) {
@@ -89,7 +83,7 @@ function createAuthStore() {
 					body: { mfa_token: mfaToken, code }
 				});
 				if (error || !data) throw new Error(error?.detail ?? 'Authenticator verification failed');
-				setToken(data.token);
+				setToken(IS_CAPACITOR ? data.token : null);
 				set({ user: data.user ?? null, isLoading: false, isAuthenticated: true });
 				return { success: true };
 			} catch (e) {
@@ -117,14 +111,19 @@ function createAuthStore() {
 				});
 				if (error || !data) throw new Error(error?.detail ?? 'Passkey verification failed');
 
-				setToken(data.token);
+				setToken(IS_CAPACITOR ? data.token : null);
 				set({ user: data.user ?? null, isLoading: false, isAuthenticated: true });
 				return { success: true };
 			} catch (e) {
 				return { success: false, error: (e as Error).message };
 			}
 		},
-		logout() {
+		async logout() {
+			try {
+				await client.POST('/auth/logout');
+			} catch {
+				// Local state must still be cleared if the server is unavailable.
+			}
 			setToken(null);
 			set({ user: null, isLoading: false, isAuthenticated: false });
 		},

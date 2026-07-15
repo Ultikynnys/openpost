@@ -1,4 +1,3 @@
-import { browser } from '$app/environment';
 import createClient from 'openapi-fetch';
 import type { paths, components } from './types';
 import { getApiBase } from '$lib/stores/instance.svelte';
@@ -14,19 +13,8 @@ export type AuthResponse = components['schemas']['AuthOutputBody'];
 
 let token: string | null = null;
 
-if (browser) {
-	token = localStorage.getItem('token');
-}
-
 export function setToken(newToken: string | null | undefined) {
 	token = newToken ?? null;
-	if (browser) {
-		if (newToken) {
-			localStorage.setItem('token', newToken);
-		} else {
-			localStorage.removeItem('token');
-		}
-	}
 }
 
 export function getToken(): string | null {
@@ -34,7 +22,7 @@ export function getToken(): string | null {
 }
 
 function createApiClient() {
-	const c = createClient<paths>({ baseUrl: getApiBase() });
+	const c = createClient<paths>({ baseUrl: getApiBase(), credentials: 'include' });
 	c.use({
 		async onRequest({ request }) {
 			if (token) {

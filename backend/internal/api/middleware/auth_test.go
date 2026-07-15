@@ -108,6 +108,43 @@ func TestBearerMiddleware_InvalidToken_Returns401(t *testing.T) {
 	}
 }
 
+func TestBearerMiddlewareRejectsMCPResourceToken(t *testing.T) {
+	auth := &fakeAuthenticator{principal: &Principal{
+		UserID:   "u",
+		Scope:    apitokens.ScopeMCP,
+		Audience: "https://app.openpost.test/mcp",
+	}}
+	e := newEchoAuthed(auth)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/x", nil)
+	req.Header.Set("Authorization", "Bearer op_cli_mcp_secret")
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusForbidden, rec.Code)
+	require.Contains(t, rec.Body.String(), "not authorized")
+}
+
+func TestPrincipalCanAccessREST(t *testing.T) {
+	require.True(t, principalCanAccessREST(&Principal{Scope: apitokens.ScopeCLI}))
+	require.True(t, principalCanAccessREST(&Principal{}))
+	require.False(t, principalCanAccessREST(&Principal{Scope: apitokens.ScopeMCP}))
+	require.False(t, principalCanAccessREST(&Principal{Scope: apitokens.ScopeCLI, Audience: "https://example.test/mcp"}))
+}
+
+func TestRequestAuthTokenAcceptsSessionCookie(t *testing.T) {
+	token, cookieAuth := requestAuthToken("", "theme=dark; openpost_session=session-token")
+	require.Equal(t, "session-token", token)
+	require.True(t, cookieAuth)
+}
+
+func TestCookieRequestOriginProtection(t *testing.T) {
+	require.True(t, cookieRequestAllowed(http.MethodGet, "", "app.openpost.test"))
+	require.True(t, cookieRequestAllowed(http.MethodPost, "https://app.openpost.test", "app.openpost.test"))
+	require.True(t, cookieRequestAllowed(http.MethodPost, "http://localhost:5173", "localhost:8080"))
+	require.False(t, cookieRequestAllowed(http.MethodPost, "https://evil.example", "app.openpost.test"))
+	require.False(t, cookieRequestAllowed(http.MethodPost, "", "app.openpost.test"))
+}
+
 type rejectingAuthenticator struct{}
 
 func (rejectingAuthenticator) AuthenticateBearer(_ context.Context, _ string) (*Principal, error) {

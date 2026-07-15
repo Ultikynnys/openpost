@@ -29,7 +29,7 @@ func TestCreateAndExchangeCodeWithClientMetadata(t *testing.T) {
 	seedMCPOAuthUser(ctx, t, db)
 	seedMCPOAuthWorkspace(ctx, t, db, "ws-1", "user-1")
 	redirectURI := "https://chatgpt.com/connector/oauth/callback/openpost"
-	client := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	client := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		require.Equal(t, "/client.json", r.URL.Path)
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = fmt.Fprintf(w, `{
@@ -45,6 +45,7 @@ func TestCreateAndExchangeCodeWithClientMetadata(t *testing.T) {
 
 	verifier := strings.Repeat("a", 43)
 	service := NewService(db, apitokens.NewService(db))
+	service.SetHTTPClient(client.Client())
 	created, err := service.CreateAuthorizationCode(ctx, AuthorizationRequest{
 		UserID:              "user-1",
 		WorkspaceID:         "ws-1",
@@ -131,12 +132,14 @@ func TestCreateAuthorizationCodeRejectsRedirectOutsideClientMetadata(t *testing.
 	ctx := context.Background()
 	db := newMCPOAuthTestDB(t)
 	seedMCPOAuthUser(ctx, t, db)
-	client := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	client := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(`{"redirect_uris":["https://chatgpt.com/connector/oauth/callback/openpost"],"token_endpoint_auth_method":"none"}`))
 	}))
 	t.Cleanup(client.Close)
 
-	_, err := NewService(db, apitokens.NewService(db)).CreateAuthorizationCode(ctx, AuthorizationRequest{
+	service := NewService(db, apitokens.NewService(db))
+	service.SetHTTPClient(client.Client())
+	_, err := service.CreateAuthorizationCode(ctx, AuthorizationRequest{
 		UserID:              "user-1",
 		ResponseType:        "code",
 		ClientID:            client.URL,
@@ -146,6 +149,23 @@ func TestCreateAuthorizationCodeRejectsRedirectOutsideClientMetadata(t *testing.
 		ExpectedResource:    "https://app.openpost.test/mcp",
 	})
 	require.ErrorIs(t, err, ErrInvalidClient)
+}
+
+func TestClientMetadataRejectsHTTPAndPrivateNetworks(t *testing.T) {
+	t.Parallel()
+
+	_, err := validateClientMetadataURL("http://client.example/metadata.json")
+	require.ErrorIs(t, err, ErrInvalidClient)
+
+	service := NewService(nil, nil)
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "https://127.0.0.1/client.json", nil)
+	require.NoError(t, err)
+	resp, err := service.httpClient.Do(req)
+	if resp != nil {
+		defer resp.Body.Close()
+	}
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "private or local address")
 }
 
 func TestExchangeCodeRejectsWrongVerifierAndResource(t *testing.T) {
