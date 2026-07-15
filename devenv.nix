@@ -47,7 +47,7 @@
 
     build.exec = ''
       cd "${config.git.root}"
-      frontend-build && backend-build
+      frontend-build && backend-build && (cd cli && go build ./...)
     '';
 
     docs-build.exec = ''
@@ -66,12 +66,13 @@
       cd "${config.git.root}"
       backend-format-check &&
       backend-lint &&
-      frontend-lint
+      frontend-lint &&
+      (cd cli && golangci-lint run)
     '';
 
     test.exec = ''
       cd "${config.git.root}"
-      backend-test && frontend-test
+      backend-test && frontend-test && (cd cli && go test ./...)
     '';
 
     verify.exec = ''
@@ -93,7 +94,7 @@
 
     # Compatibility alias for existing local workflows.
     test-all.exec = ''
-      backend-test && frontend-test
+      backend-test && frontend-test && (cd cli && go test ./...)
     '';
 
     clean.exec = ''

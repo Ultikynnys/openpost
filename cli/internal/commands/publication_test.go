@@ -81,7 +81,7 @@ func TestPublicationScheduleCommandUpdatesAndEnqueues(t *testing.T) {
 			if err := json.NewDecoder(r.Body).Decode(&updateBody); err != nil {
 				t.Fatalf("decode update body: %v", err)
 			}
-			_, _ = w.Write([]byte(fmt.Sprintf(`{"id":"pub_1","workspace_id":"ws-1","created_by":"u-1","title":"Draft","content_profile":"short_video","source_text":"Demo","status":"draft","scheduled_at":%q,"created_at":"2026-07-06T09:00:00Z","renditions":[]}`, scheduleAt)))
+			_, _ = fmt.Fprintf(w, `{"id":"pub_1","workspace_id":"ws-1","created_by":"u-1","title":"Draft","content_profile":"short_video","source_text":"Demo","status":"draft","scheduled_at":%q,"created_at":"2026-07-06T09:00:00Z","renditions":[]}`, scheduleAt)
 		case "/api/v1/publications/pub_1/schedule":
 			if r.Method != http.MethodPost {
 				t.Fatalf("publication schedule method = %s, want POST", r.Method)
