@@ -6,6 +6,7 @@ All notable changes to this project are documented in this file.
 
 ### Changed
 
+- Reworked the authenticated app around persistent primary navigation, a focused Posts area, intent-based composer formats, clearer content customization language, compact social accounts, day drawers, and task-specific settings pages on desktop and mobile.
 - Relicensed OpenPost from MIT to AGPL-3.0-only and restored clear open-source positioning across the project, marketing site, documentation, and authenticated app.
 - Made the project-owned Devenv/direnv workflow durable across NAS/Hermes reboots with a committed environment lock, repo-local caches, frozen installs, non-destructive dotenv setup, explicit command gates, a tracked fast pre-push lint gate, and no shell execution of dotenv data.
 - Documented the intended web, CLI, MCP, and HTTP API surface boundaries, corrected stale marketing automation examples, scoped heavy uploader styles to the uploader itself, and lazy-loaded the documentation API explorer outside its dedicated route.
@@ -17,9 +18,14 @@ All notable changes to this project are documented in this file.
 - Added Windows amd64 server binary release support and documented Windows single-binary setup.
 - Removed social media sets from the app, API, CLI, MCP tools, and docs; posting schedules now resolve at the workspace/account level with a migration that drops the legacy set tables.
 - Updated CLI and MCP publication workflows for current post types, explicit account targeting, media roles, YouTube title/description/privacy, TikTok settings, and publication schedule/publish actions.
+- Included the CLI in the repository's normal build, lint, test, and verification gates.
 
 ### Fixed
 
+- Documented the required R2 bucket CORS policy for direct browser media uploads.
+- Bound MCP OAuth tokens to the MCP resource, protected remote client metadata fetches from SSRF, serialized first-admin bootstrap on PostgreSQL, and moved web sessions from persistent browser storage to revocable HttpOnly cookies.
+- Made multi-worker job claims race-safe, kept long-running job locks alive, rejected unknown job types, and indexed due-job polling.
+- Batched media-usage analysis and made reference deletion transactional before best-effort blob cleanup so media lists scale without leaving database records pointed at missing files.
 - Kept the project Devenv shell evaluable on macOS by only adding the declarative Chromium test runtime on Linux, restoring cross-platform CLI release builds.
 - Kept English and Portuguese message catalogs in lockstep with a build-time parity check, aligned PWA/browser colors with the product theme, and added global reduced-motion and coarse-pointer accessibility safeguards.
 - Restricted workspace-scoped checkout and billing-portal mutations to workspace administrators.

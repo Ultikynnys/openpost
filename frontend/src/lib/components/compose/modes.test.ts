@@ -1,11 +1,24 @@
 import { describe, expect, it } from 'vitest';
-import { buildFocusedPublicationPayload, roleFieldsForMode } from './modes';
+import {
+	buildFocusedPublicationPayload,
+	roleFieldsForMode,
+	SELECTABLE_COMPOSER_MODES
+} from './modes';
 
 const youtube = { id: 'yt-1', platform: 'youtube', account_username: 'OpenPost' };
 const tiktok = { id: 'tt-1', platform: 'tiktok', account_username: 'openpost' };
 const instagram = { id: 'ig-1', platform: 'instagram', account_username: 'openpost' };
 
 describe('composer mode role mapping', () => {
+	it('keeps the format picker aligned with user intent instead of media API shapes', () => {
+		expect(SELECTABLE_COMPOSER_MODES.map((mode) => mode.label)).toEqual([
+			'Post',
+			'Thread',
+			'Short video',
+			'Video'
+		]);
+	});
+
 	it('uses post text for short text', () => {
 		expect(roleFieldsForMode('short_text', [])).toEqual([
 			expect.objectContaining({ key: 'postText', label: 'Post text' })

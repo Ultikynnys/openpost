@@ -11,7 +11,7 @@
 	import VideoIcon from 'lucide-svelte/icons/video';
 	import {
 		COMPOSER_MODE_KEYS,
-		COMPOSER_MODES,
+		SELECTABLE_COMPOSER_MODES,
 		composerMode,
 		type ComposerModeKey
 	} from './compose/modes';
@@ -54,7 +54,7 @@
 	</Select.Trigger>
 	<Select.Content class="w-56">
 		<Select.Label>Post type</Select.Label>
-		{#each COMPOSER_MODES as mode (mode.key)}
+		{#each SELECTABLE_COMPOSER_MODES as mode (mode.key)}
 			{@const Icon = modeIcons[mode.key] ?? AlignLeftIcon}
 			<Select.Item value={mode.key}>
 				<Icon class="size-3.5 text-muted-foreground" />

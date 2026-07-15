@@ -24,7 +24,6 @@
 	} from './compose/modes';
 	import AlertCircleIcon from 'lucide-svelte/icons/alert-circle';
 	import CalendarClockIcon from 'lucide-svelte/icons/calendar-clock';
-	import CheckCircle2Icon from 'lucide-svelte/icons/check-circle-2';
 	import ImagePlusIcon from 'lucide-svelte/icons/image-plus';
 	import LoaderIcon from 'lucide-svelte/icons/loader-2';
 	import SaveIcon from 'lucide-svelte/icons/save';
@@ -690,7 +689,7 @@
 					</Button>
 				{/if}
 				<Button
-					variant="outline"
+					variant="ghost"
 					size="sm"
 					class="h-8 gap-1.5"
 					disabled={!canSaveDraft}
@@ -703,20 +702,10 @@
 					{/if}
 					{isEditMode ? 'Save changes' : 'Save draft'}
 				</Button>
-				<Button
-					variant="outline"
-					size="sm"
-					class="h-8 gap-1.5"
-					disabled={!canQueue}
-					onclick={() => runAction('validate')}
-				>
-					<CheckCircle2Icon class="h-3.5 w-3.5" />
-					Validate
-				</Button>
 				<Popover.Root bind:open={showSchedulePopover}>
 					<Popover.Trigger>
 						{#snippet child({ props })}
-							<Button {...props} variant="outline" size="sm" class="h-8 gap-1.5" disabled={saving}>
+							<Button {...props} size="sm" class="h-8 gap-1.5" disabled={saving}>
 								<CalendarClockIcon class="h-3.5 w-3.5" />
 								{scheduleLabel()}
 							</Button>
@@ -745,7 +734,6 @@
 													selectedDate = new CalendarDate(date.year, date.month, date.day);
 												}
 												selectedTime = time;
-												showSchedulePopover = false;
 											}}
 										>
 											{time}
@@ -754,9 +742,20 @@
 								</div>
 							</div>
 							{#if selectedDate || selectedTime}
-								<div class="mt-3 border-t pt-3">
-									<Button variant="ghost" size="sm" class="w-full text-xs" onclick={clearSchedule}>
-										Clear schedule
+								<div class="mt-3 flex gap-2 border-t pt-3">
+									<Button variant="ghost" size="sm" class="flex-1 text-xs" onclick={clearSchedule}
+										>Clear</Button
+									>
+									<Button
+										size="sm"
+										class="flex-1 text-xs"
+										disabled={!canQueue || !getScheduledAt()}
+										onclick={() => {
+											showSchedulePopover = false;
+											runAction('schedule');
+										}}
+									>
+										Schedule
 									</Button>
 								</div>
 							{/if}
@@ -767,19 +766,11 @@
 					variant="outline"
 					size="sm"
 					class="h-8 gap-1.5"
-					disabled={!canQueue || !getScheduledAt()}
-					onclick={() => runAction('schedule')}
-				>
-					Schedule
-				</Button>
-				<Button
-					size="sm"
-					class="h-8 gap-1.5"
 					disabled={!canQueue}
 					onclick={() => runAction('publish')}
 				>
 					<SendIcon class="h-3.5 w-3.5" />
-					Publish
+					Publish now
 				</Button>
 			</div>
 		</div>
@@ -1093,69 +1084,26 @@
 					{/if}
 				</section>
 
-				<section class="grid gap-3 border-t pt-5 md:grid-cols-2">
-					<div class="rounded-md border bg-background p-4">
-						<h2 class="text-sm font-semibold">Validation</h2>
-						<div class="mt-3 space-y-2 text-sm">
-							{#if localBlockers.length > 0}
-								{#each localBlockers as blocker (blocker)}
-									<div class="flex gap-2 text-destructive">
-										<AlertCircleIcon class="mt-0.5 h-4 w-4 shrink-0" />
-										<span>{blocker}</span>
-									</div>
-								{/each}
-							{:else if validationIssues.length === 0}
-								<p class="text-muted-foreground">Ready for validation.</p>
-							{/if}
-							{#each blockingIssues as issue (`error-${issue.code}-${issue.field}-${issue.media_id}`)}
-								<div class="flex gap-2 text-destructive">
-									<AlertCircleIcon class="mt-0.5 h-4 w-4 shrink-0" />
-									<span>{issue.message}</span>
-								</div>
-							{/each}
-							{#each warningIssues as issue (`warning-${issue.code}-${issue.field}-${issue.media_id}`)}
-								<div class="flex gap-2 text-amber-700 dark:text-amber-300">
-									<AlertCircleIcon class="mt-0.5 h-4 w-4 shrink-0" />
-									<span>{issue.message}</span>
-								</div>
-							{/each}
-							{#if validationIssues.length > 0 && blockingIssues.length === 0}
-								<div class="flex gap-2 text-emerald-700 dark:text-emerald-300">
-									<CheckCircle2Icon class="mt-0.5 h-4 w-4 shrink-0" />
-									<span>No blocking issues.</span>
-								</div>
-							{/if}
-						</div>
-					</div>
-
-					<div class="rounded-md border bg-background p-4">
-						<h2 class="text-sm font-semibold">Output roles</h2>
-						<div class="mt-3 space-y-3 text-sm">
-							{#each selectedAccounts as account (account.id)}
-								<div>
-									<div class="flex items-center gap-2">
-										<PlatformIcon platform={account.platform} class="h-4 w-4" />
-										<span class="font-medium">{accountLabel(account)}</span>
-									</div>
-									<p class="mt-1 text-xs text-muted-foreground">
-										{#if getPlatformKey(account.platform) === 'youtube'}
-											Video title, description, media, and thumbnail go to YouTube.
-										{:else if mode === 'link_share'}
-											Post text and Link URL go to {getPlatformName(account.platform)}.
-										{:else if mode === 'short_video' || mode === 'long_video'}
-											Caption and media go to {getPlatformName(account.platform)}.
-										{:else}
-											Caption and media go to {getPlatformName(account.platform)}.
-										{/if}
-									</p>
-								</div>
-							{/each}
-							{#if selectedAccounts.length === 0}
-								<p class="text-muted-foreground">Choose accounts to see the output map.</p>
-							{/if}
-						</div>
-					</div>
-				</section>
+				{#if localBlockers.length > 0 || blockingIssues.length > 0 || warningIssues.length > 0}
+					<section class="space-y-2 border-t pt-5 text-sm" aria-label="Publishing issues">
+						<h2 class="font-semibold">Check before publishing</h2>
+						{#each localBlockers as blocker (blocker)}
+							<div class="flex gap-2 text-destructive">
+								<AlertCircleIcon class="mt-0.5 size-4 shrink-0" /><span>{blocker}</span>
+							</div>
+						{/each}
+						{#each blockingIssues as issue (`error-${issue.code}-${issue.field}-${issue.media_id}`)}
+							<div class="flex gap-2 text-destructive">
+								<AlertCircleIcon class="mt-0.5 size-4 shrink-0" /><span>{issue.message}</span>
+							</div>
+						{/each}
+						{#each warningIssues as issue (`warning-${issue.code}-${issue.field}-${issue.media_id}`)}
+							<div class="flex gap-2 text-amber-700 dark:text-amber-300">
+								<AlertCircleIcon class="mt-0.5 size-4 shrink-0" /><span>{issue.message}</span>
+							</div>
+						{/each}
+					</section>
+				{/if}
 			</div>
 		</main>
 	{/if}

@@ -133,12 +133,23 @@ export const COMPOSER_MODES: ComposerMode[] = [
 	},
 	{
 		key: 'long_video',
-		label: 'Long video',
+		label: 'Video',
 		description: 'YouTube and feed video uploads with metadata.',
 		flow: 'publication',
 		mediaFirst: false
 	}
 ];
+
+const PRIMARY_COMPOSER_MODE_KEYS: ComposerModeKey[] = [
+	'short_text',
+	'thread',
+	'short_video',
+	'long_video'
+];
+
+export const SELECTABLE_COMPOSER_MODES = COMPOSER_MODES.filter((mode) =>
+	PRIMARY_COMPOSER_MODE_KEYS.includes(mode.key)
+);
 
 export function composerMode(key: ComposerModeKey): ComposerMode {
 	return COMPOSER_MODES.find((mode) => mode.key === key) ?? COMPOSER_MODES[0];
