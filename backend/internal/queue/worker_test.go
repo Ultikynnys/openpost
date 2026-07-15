@@ -135,3 +135,27 @@ func TestWorkerProcessesRefreshTokenJob(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "refreshed-access-token", accessToken)
 }
+
+func TestWorkerFailsUnknownJobTypes(t *testing.T) {
+	t.Parallel()
+
+	db := createTestDB(t)
+	job := &models.Job{
+		ID:          "job-unknown",
+		Type:        "unknown_job",
+		Payload:     `{}`,
+		Status:      jobStatusPending,
+		RunAt:       time.Now().UTC().Add(-time.Second),
+		MaxAttempts: 1,
+	}
+	_, err := db.NewInsert().Model(job).Exec(t.Context())
+	require.NoError(t, err)
+
+	worker := NewWorker(db, "worker-test", time.Second, nil, nil, stubStorage{})
+	require.True(t, worker.processNextJobIfAvailable(t.Context()))
+
+	stored := new(models.Job)
+	require.NoError(t, db.NewSelect().Model(stored).Where("id = ?", job.ID).Scan(t.Context()))
+	require.Equal(t, jobStatusFailed, stored.Status)
+	require.Contains(t, stored.LastError, "unsupported job type")
+}

@@ -120,6 +120,14 @@ func CreateSchema(db *bun.DB) error {
 	if err := migrations.RunMigrations(db); err != nil {
 		return fmt.Errorf("failed to run migrations: %w", err)
 	}
+	if _, err := db.NewCreateIndex().
+		Index("jobs_status_run_at_idx").
+		Table("jobs").
+		Column("status", "run_at").
+		IfNotExists().
+		Exec(ctx); err != nil {
+		return fmt.Errorf("failed to create jobs polling index: %w", err)
+	}
 
 	return nil
 }

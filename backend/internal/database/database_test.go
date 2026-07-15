@@ -75,4 +75,12 @@ func TestCreateSchemaRunsPublicationMigration(t *testing.T) {
 	var postSchema string
 	require.NoError(t, row.Scan(&postSchema))
 	require.Contains(t, postSchema, "publication_id")
+
+	var jobIndexCount int
+	require.NoError(t, db.NewSelect().
+		ColumnExpr("COUNT(*)").
+		TableExpr("sqlite_master").
+		Where("type = 'index' AND name = ?", "jobs_status_run_at_idx").
+		Scan(ctx, &jobIndexCount))
+	require.Equal(t, 1, jobIndexCount)
 }

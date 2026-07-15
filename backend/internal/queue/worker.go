@@ -3,6 +3,7 @@ package queue
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"path/filepath"
 	"time"
@@ -25,6 +26,7 @@ const (
 	jobStatusFailed           = "failed"
 	jobStatusCompleted        = "completed"
 	staleProcessingJobAge     = 15 * time.Minute
+	processingHeartbeat       = staleProcessingJobAge / 3
 )
 
 // BackgroundWorker polls the configured database for pending jobs.
@@ -110,14 +112,14 @@ func (w *BackgroundWorker) processNextJobIfAvailable(ctx context.Context) bool {
 	err := w.db.NewRaw(`
 		UPDATE jobs
 		SET status = ?, locked_at = CURRENT_TIMESTAMP, locked_by = ?
-		WHERE id = (
+		WHERE status = ? AND id = (
 			SELECT id FROM jobs 
 			WHERE status = ? AND run_at <= CURRENT_TIMESTAMP
 			ORDER BY run_at ASC 
 			LIMIT 1
 		)
 		RETURNING *
-	`, jobStatusProcessing, w.workerID, jobStatusPending).Scan(ctx, job)
+	`, jobStatusProcessing, w.workerID, jobStatusPending, jobStatusPending).Scan(ctx, job)
 
 	if err != nil {
 		if err.Error() != "sql: no rows in result set" {
@@ -133,7 +135,15 @@ func (w *BackgroundWorker) processNextJobIfAvailable(ctx context.Context) bool {
 func (w *BackgroundWorker) handleLockedJob(ctx context.Context, job *models.Job) {
 	log.Printf("[Worker %s] processing job: %s (Type: %s)\n", w.workerID, job.ID, job.Type)
 
+	heartbeatCtx, cancelHeartbeat := context.WithCancel(ctx)
+	heartbeatDone := make(chan struct{})
+	go func() {
+		defer close(heartbeatDone)
+		w.heartbeatJobLock(heartbeatCtx, job.ID)
+	}()
 	processErr := w.executeJob(ctx, job)
+	cancelHeartbeat()
+	<-heartbeatDone
 
 	if processErr != nil {
 		log.Printf("[Worker %s] job %s failed: %v\n", w.workerID, job.ID, processErr)
@@ -147,8 +157,13 @@ func (w *BackgroundWorker) handleLockedJob(ctx context.Context, job *models.Job)
 		}
 		job.LastError = processErr.Error()
 
-		if _, dbErr := w.db.NewUpdate().Model(job).
-			Column("status", "attempts", "last_error", "run_at").
+		if _, dbErr := w.db.NewUpdate().Model((*models.Job)(nil)).
+			Set("status = ?", job.Status).
+			Set("attempts = ?", job.Attempts).
+			Set("last_error = ?", job.LastError).
+			Set("run_at = ?", job.RunAt).
+			Set("locked_at = NULL").
+			Set("locked_by = ''").
 			Where("id = ?", job.ID).
 			Exec(ctx); dbErr != nil {
 			log.Printf("[Worker %s] failed to update job %s status: %v\n", w.workerID, job.ID, dbErr)
@@ -158,12 +173,33 @@ func (w *BackgroundWorker) handleLockedJob(ctx context.Context, job *models.Job)
 
 	if _, dbErr := w.db.NewUpdate().Model(job).
 		Set("status = ?", jobStatusCompleted).
+		Set("locked_at = NULL").
+		Set("locked_by = ''").
 		Where("id = ?", job.ID).
 		Exec(ctx); dbErr != nil {
 		log.Printf("[Worker %s] failed to mark job %s as completed: %v\n", w.workerID, job.ID, dbErr)
 	}
 
 	log.Printf("[Worker %s] job %s completed successfully\n", w.workerID, job.ID)
+}
+
+func (w *BackgroundWorker) heartbeatJobLock(ctx context.Context, jobID string) {
+	ticker := time.NewTicker(processingHeartbeat)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if _, err := w.db.NewUpdate().
+				Model((*models.Job)(nil)).
+				Set("locked_at = ?", time.Now().UTC()).
+				Where("id = ? AND status = ? AND locked_by = ?", jobID, jobStatusProcessing, w.workerID).
+				Exec(ctx); err != nil && ctx.Err() == nil {
+				log.Printf("[Worker %s] failed to heartbeat job %s: %v\n", w.workerID, jobID, err)
+			}
+		}
+	}
 }
 
 func (w *BackgroundWorker) executeJob(ctx context.Context, job *models.Job) error {
@@ -178,7 +214,7 @@ func (w *BackgroundWorker) executeJob(ctx context.Context, job *models.Job) erro
 	case jobTypeMediaCleanup:
 		return w.handleMediaCleanup(ctx, job.Payload)
 	default:
-		return nil
+		return fmt.Errorf("unsupported job type %q", job.Type)
 	}
 }
 
