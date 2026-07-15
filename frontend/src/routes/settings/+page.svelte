@@ -9,6 +9,7 @@
 	import PageContainer from '$lib/components/page-container.svelte';
 	import ProfileAvatarUploader from '$lib/components/profile-avatar-uploader.svelte';
 	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import { auth } from '$lib/stores/auth';
 	import { getApiBase } from '$lib/stores/instance.svelte';
 	import { createPasskeyCredential } from '$lib/auth/webauthn';
@@ -37,8 +38,6 @@
 	import CameraIcon from 'lucide-svelte/icons/camera';
 	import UserIcon from 'lucide-svelte/icons/user';
 	import AlertCircleIcon from 'lucide-svelte/icons/alert-circle';
-	import RefreshCwIcon from 'lucide-svelte/icons/refresh-cw';
-	import CheckCircle2Icon from 'lucide-svelte/icons/check-circle-2';
 	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
 	import { client } from '$lib/api/client';
 	import { getLocaleTag } from '$lib/i18n';
@@ -63,24 +62,6 @@
 		type WorkspaceInvitation,
 		type WorkspaceTeam
 	} from './settings-data';
-
-	type ProviderReadinessItem = {
-		provider: string;
-		configured_app_state: string;
-		connected_accounts: number;
-		required_scopes: string[] | null;
-		app_review_warnings?: string[] | null;
-		blocking_issues?: string[] | null;
-		next_actions?: string[] | null;
-		supported_profiles: string[] | null;
-		public_media_health: {
-			status: string;
-			checked_count: number;
-			failing_count: number;
-			last_failure?: string;
-			last_status_code?: number;
-		};
-	};
 
 	const groupedTimezones = $derived.by(() => {
 		const groups: Record<string, typeof timezones> = {};
@@ -135,9 +116,6 @@
 	let inviteEmail = $state('');
 	let inviteRole = $state<'viewer' | 'editor' | 'admin'>('editor');
 	let createdInviteURL = $state('');
-	let providerReadiness = $state.raw<ProviderReadinessItem[]>([]);
-	let providerReadinessLoading = $state(false);
-	let providerReadinessError = $state('');
 
 	const authState = $derived($auth);
 	const currentOrganizationID = $derived(workspaceCtx.currentWorkspace?.organization_id ?? '');
@@ -167,11 +145,16 @@
 		apiTokenWorkspaceOptions.find((option) => option.value === apiTokenWorkspaceScope) ??
 			apiTokenWorkspaceOptions[0]
 	);
-	const settingsTabs = $derived([
-		{ id: 'workspace', label: 'Workspace' },
-		{ id: 'account', label: 'Account' },
-		{ id: 'organization', label: 'Organization' }
-	]);
+	const settingsTabs = [
+		{ id: 'profile', label: 'Profile' },
+		{ id: 'security', label: 'Security' },
+		{ id: 'developer', label: 'Developer access' },
+		{ id: 'general', label: 'General' },
+		{ id: 'schedule', label: 'Posting schedule' },
+		{ id: 'media', label: 'Media retention' },
+		{ id: 'members', label: 'Members' },
+		{ id: 'plan', label: 'Plan & usage' }
+	] as const;
 	const activeSettingsTab = $derived.by(() =>
 		normalizeSettingsTab(
 			page.url.searchParams.get('tab') || page.url.hash.replace(/^#/, '') || null
@@ -197,20 +180,25 @@
 		)
 	);
 	const activeSettingsTitle = $derived.by(() => {
-		if (activeSettingsTab === 'account') return 'Account settings';
-		if (activeSettingsTab === 'organization') {
-			return `${workspaceCtx.currentWorkspace?.organization_name || 'Organization'} settings`;
-		}
-		return `${workspaceCtx.currentWorkspace?.name || 'Workspace'} - workspace settings`;
+		if (activeSettingsTab === 'profile') return 'Profile';
+		if (activeSettingsTab === 'security') return 'Security';
+		if (activeSettingsTab === 'developer') return 'Developer access';
+		if (activeSettingsTab === 'members') return 'Team members';
+		if (activeSettingsTab === 'plan') return 'Plan & usage';
+		if (activeSettingsTab === 'schedule') return 'Posting schedule';
+		if (activeSettingsTab === 'media') return 'Media retention';
+		return 'Workspace settings';
 	});
 	const activeSettingsDescription = $derived.by(() => {
-		if (activeSettingsTab === 'account') {
-			return 'Your profile, login security, sessions, API tokens, and developer activity.';
-		}
-		if (activeSettingsTab === 'organization') {
-			return 'Team access, billing, seats, and limits for the organization that owns this workspace.';
-		}
-		return 'Settings for the currently selected workspace, including timezone, cleanup, and posting schedule.';
+		if (activeSettingsTab === 'profile') return 'Your name and avatar across OpenPost.';
+		if (activeSettingsTab === 'security') return 'Sign-in methods, passkeys, and active sessions.';
+		if (activeSettingsTab === 'developer') return 'API tokens, CLI devices, and tool activity.';
+		if (activeSettingsTab === 'members') return 'People who can publish from this workspace.';
+		if (activeSettingsTab === 'plan') return 'Current plan, usage, and billing.';
+		if (activeSettingsTab === 'schedule')
+			return 'Reusable publishing times and scheduling defaults.';
+		if (activeSettingsTab === 'media') return 'Control how long unused media is kept.';
+		return `Identity, timezone, and calendar preferences for ${workspaceCtx.currentWorkspace?.name || 'this workspace'}.`;
 	});
 	const requestedBillingPlan = $derived.by(() => {
 		const planID = hostedPlanFromSearchParams(page.url.searchParams);
@@ -227,22 +215,21 @@
 				limit
 			}));
 	});
-	const providerReadinessIssues = $derived(
-		providerReadiness.reduce(
-			(count, provider) => count + (provider.blocking_issues?.length ?? 0),
-			0
-		)
-	);
-
-	function isSettingsTab(value: string) {
+	function isSettingsTab(value: string): value is (typeof settingsTabs)[number]['id'] {
 		return settingsTabs.some((tab) => tab.id === value);
 	}
 
 	function normalizeSettingsTab(value: string | null) {
-		if (value === 'billing' || value === 'team') return 'organization';
-		if (value === 'security' || value === 'tokens' || value === 'profile') return 'account';
-		if (value === 'social-accounts') return 'workspace';
-		return value && isSettingsTab(value) ? value : 'workspace';
+		if (value === 'billing' || value === 'organization') return 'plan';
+		if (value === 'team') return 'members';
+		if (value === 'tokens' || value === 'account')
+			return value === 'tokens' ? 'developer' : 'profile';
+		if (value === 'workspace' || value === 'social-accounts') return 'general';
+		return value && isSettingsTab(value) ? value : 'general';
+	}
+
+	function openSettingsTab(tab: (typeof settingsTabs)[number]['id']) {
+		goto(resolve(`/settings?tab=${tab}` as '/settings'));
 	}
 
 	async function saveProfile(event: SubmitEvent) {
@@ -368,25 +355,6 @@
 		}
 	}
 
-	async function loadProviderReadiness() {
-		const workspaceID = workspaceCtx.currentWorkspace?.id;
-		if (!workspaceID) return;
-		providerReadinessLoading = true;
-		providerReadinessError = '';
-		try {
-			const { data, error: err } = await client.GET('/provider-readiness', {
-				params: { query: { workspace_id: workspaceID } }
-			});
-			if (err || !data) throw new Error(err?.detail || 'Failed to load provider readiness');
-			providerReadiness = data.providers ?? [];
-		} catch (e) {
-			providerReadiness = [];
-			providerReadinessError = (e as Error).message;
-		} finally {
-			providerReadinessLoading = false;
-		}
-	}
-
 	async function createWorkspaceInvitation(event: SubmitEvent) {
 		event.preventDefault();
 		const workspaceID = workspaceCtx.currentWorkspace?.id;
@@ -483,8 +451,8 @@
 			});
 			if (err) throw new Error(err.detail || 'Failed to revoke session');
 			if (data?.revoked_current || session.current) {
-				auth.logout();
-				await goto('/login');
+				await auth.logout();
+				await goto(resolve('/login'));
 				return;
 			}
 			await loadAuthSessions();
@@ -1022,31 +990,6 @@
 		return new Date(value).toLocaleString();
 	}
 
-	function readinessProviderLabel(provider: string): string {
-		const labels: Record<string, string> = {
-			facebook: 'Facebook Pages',
-			instagram: 'Instagram',
-			youtube: 'YouTube',
-			tiktok: 'TikTok',
-			x: 'X',
-			bluesky: 'Bluesky',
-			mastodon: 'Mastodon',
-			threads: 'Threads',
-			linkedin: 'LinkedIn'
-		};
-		return labels[provider] ?? provider;
-	}
-
-	function readinessStateLabel(state: string): string {
-		if (state === 'built_in') return 'Built in';
-		if (state === 'configured') return 'Configured';
-		return 'Needs app keys';
-	}
-
-	function readinessIsBlocked(provider: ProviderReadinessItem): boolean {
-		return (provider.blocking_issues?.length ?? 0) > 0;
-	}
-
 	let lastProfileUserID = $state('');
 	$effect(() => {
 		const user = authState.user;
@@ -1061,7 +1004,6 @@
 			loadBillingStatus();
 			loadWorkspaceTeam();
 			loadSchedules();
-			loadProviderReadiness();
 		}
 	});
 
@@ -1126,1487 +1068,1461 @@
 	loading={!workspaceCtx.currentWorkspace}
 	loadingMessage="Loading workspace..."
 >
-	<div class="space-y-8">
-		<section
-			id="profile"
-			class:hidden={activeSettingsTab !== 'account'}
-			class="scroll-mt-24 rounded-lg border p-6"
-		>
-			<div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-				<div>
-					<h2 class="flex items-center gap-2 text-lg font-semibold">
-						<UserIcon class="h-5 w-5 text-muted-foreground" />
-						Profile
-					</h2>
-					<p class="mt-2 text-sm text-muted-foreground">
-						Your name and avatar follow your user account across every workspace.
-					</p>
-				</div>
-			</div>
-
-			{#if avatarUploaderOpen}
-				<ProfileAvatarUploader
-					bind:open={avatarUploaderOpen}
-					onComplete={handleAvatarUploaded}
-					onError={(message) => (profileError = message)}
-				/>
-			{/if}
-
-			<form onsubmit={saveProfile} class="space-y-6">
-				<div class="flex flex-col gap-6 sm:flex-row sm:items-center">
-					<div class="group relative h-24 w-24 shrink-0">
-						{#if profileAvatarURL}
-							<img
-								src={profileAvatarURL}
-								alt="Profile avatar"
-								class="h-24 w-24 rounded-full border bg-muted object-cover"
-							/>
-						{:else}
-							<div
-								class="flex h-24 w-24 items-center justify-center rounded-full border border-dashed bg-muted text-xl font-semibold text-muted-foreground"
-							>
-								{profileInitials}
-							</div>
-						{/if}
-						<button
-							type="button"
-							onclick={() => (avatarUploaderOpen = true)}
-							class="absolute inset-0 flex items-center justify-center rounded-full bg-black/45 text-white opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-							aria-label="Change profile picture"
-						>
-							<CameraIcon class="h-6 w-6" />
-						</button>
-					</div>
-
-					<div class="min-w-0 flex-1 space-y-3">
-						<div class="space-y-2">
-							<Label for="profile-display-name">Display name</Label>
-							<Input
-								id="profile-display-name"
-								bind:value={profileDisplayName}
-								placeholder="Your name"
-								maxlength={120}
-							/>
-						</div>
-						<p class="text-sm text-muted-foreground">{profileEmail}</p>
-						<div class="flex flex-wrap gap-2">
-							<Button type="button" variant="outline" onclick={() => (avatarUploaderOpen = true)}>
-								<CameraIcon class="mr-2 h-4 w-4" />
-								Change Picture
-							</Button>
-							{#if profileAvatarURL}
-								<Button
-									type="button"
-									variant="ghost"
-									class="text-destructive hover:text-destructive"
-									onclick={removeAvatar}
-									disabled={profileBusy}
-								>
-									<TrashIcon class="mr-2 h-4 w-4" />
-									Remove
-								</Button>
-							{/if}
-						</div>
-					</div>
-				</div>
-
-				{#if profileError}
-					<div
-						class="rounded-md border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive"
-					>
-						{profileError}
-					</div>
-				{/if}
-
-				<div class="flex justify-end">
-					<Button type="submit" disabled={profileBusy}>
-						{#if profileBusy}
-							<LoaderIcon class="mr-2 h-4 w-4 animate-spin" />
-						{:else}
-							<SaveIcon class="mr-2 h-4 w-4" />
-						{/if}
-						Save Profile
-					</Button>
-				</div>
-			</form>
-		</section>
-
-		<section
-			id="workspace"
-			class:hidden={activeSettingsTab !== 'workspace'}
-			class="scroll-mt-24 space-y-4"
-		>
-			<h2 class="mb-4 text-lg font-semibold">General</h2>
-			<div class="rounded-lg border bg-muted/20 p-4">
-				<div class="flex flex-col gap-4 sm:flex-row sm:items-center">
-					<div
-						class="flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-muted text-lg font-semibold text-muted-foreground"
-					>
-						{#if workspaceCtx.settings.avatar_url}
-							<img
-								src={workspaceCtx.settings.avatar_url}
-								alt={workspaceCtx.currentWorkspace?.name || 'Workspace'}
-								class="h-full w-full object-cover"
-							/>
-						{:else}
-							{(workspaceCtx.currentWorkspace?.name?.[0] ?? 'W').toUpperCase()}
-						{/if}
-					</div>
-					<div class="min-w-0 flex-1 space-y-3">
-						<div class="flex flex-col gap-1">
-							<span class="text-sm font-medium">{workspaceCtx.currentWorkspace?.name}</span>
-							<span class="text-sm text-muted-foreground">
-								{workspaceCtx.currentWorkspace?.organization_name || 'Personal workspace'}
-							</span>
-						</div>
-						<div class="space-y-2">
-							<Label for="workspace-avatar-url">Workspace image URL</Label>
-							<Input
-								id="workspace-avatar-url"
-								type="url"
-								bind:value={workspaceCtx.settings.avatar_url}
-								placeholder="https://example.com/app-icon.png"
-								maxlength={1000}
-							/>
-						</div>
-					</div>
-				</div>
-			</div>
-			<div class="rounded-lg border bg-muted/20 p-4">
-				<div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-					<div>
-						<p class="text-sm font-medium">Social accounts are workspace settings</p>
-						<p class="text-sm text-muted-foreground">
-							Connected platforms, posting schedule, timezone, and media cleanup all belong to the
-							selected workspace. User login security stays under Account.
-						</p>
-					</div>
-					<Button variant="outline" onclick={() => goto('/accounts')}>Manage Social Accounts</Button
-					>
-				</div>
-			</div>
-			<div class="rounded-lg border p-4">
-				<div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-					<div>
-						<h2 class="flex items-center gap-2 text-base font-semibold">
-							<ActivityIcon class="h-4 w-4 text-muted-foreground" />
-							Provider readiness
-						</h2>
-						<p class="mt-1 text-sm text-muted-foreground">
-							Configuration, account, app-review, and public media checks for publishing.
-						</p>
-					</div>
-					<div class="flex items-center gap-2">
-						{#if providerReadinessIssues > 0}
-							<span class="text-sm text-destructive">{providerReadinessIssues} blockers</span>
-						{/if}
-						<Button
-							type="button"
-							variant="outline"
-							size="sm"
-							disabled={providerReadinessLoading}
-							onclick={loadProviderReadiness}
-						>
-							{#if providerReadinessLoading}
-								<LoaderIcon class="mr-2 h-4 w-4 animate-spin" />
-							{:else}
-								<RefreshCwIcon class="mr-2 h-4 w-4" />
-							{/if}
-							Refresh
-						</Button>
-					</div>
-				</div>
-				{#if providerReadinessError}
-					<div
-						class="mb-3 rounded-md border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive"
-					>
-						{providerReadinessError}
-					</div>
-				{/if}
-				<div class="grid gap-2 lg:grid-cols-2">
-					{#each providerReadiness as provider (provider.provider)}
-						<div class="rounded-md border bg-muted/20 p-3">
-							<div class="flex items-start justify-between gap-3">
-								<div class="min-w-0">
-									<p class="truncate text-sm font-medium">
-										{readinessProviderLabel(provider.provider)}
-									</p>
-									<p class="text-xs text-muted-foreground">
-										{readinessStateLabel(provider.configured_app_state)} · {provider.connected_accounts}
-										account{provider.connected_accounts === 1 ? '' : 's'} ·
-										{provider.public_media_health.status} media
-									</p>
-								</div>
-								{#if readinessIsBlocked(provider)}
-									<AlertCircleIcon class="h-4 w-4 shrink-0 text-destructive" />
-								{:else}
-									<CheckCircle2Icon class="h-4 w-4 shrink-0 text-emerald-600" />
-								{/if}
-							</div>
-							{#if provider.blocking_issues?.length}
-								<div class="mt-2 flex flex-wrap gap-1">
-									{#each provider.blocking_issues as issue (issue)}
-										<span
-											class="rounded-sm border border-destructive/30 bg-destructive/10 px-1.5 py-0.5 text-xs text-destructive"
-										>
-											{issue.replaceAll('_', ' ')}
-										</span>
-									{/each}
-								</div>
-							{/if}
-							{#if provider.app_review_warnings?.length}
-								<p class="mt-2 text-xs text-amber-700 dark:text-amber-300">
-									{provider.app_review_warnings[0]}
-								</p>
-							{/if}
-							{#if provider.next_actions?.length}
-								<p class="mt-2 text-xs text-muted-foreground">{provider.next_actions[0]}</p>
-							{/if}
-						</div>
-					{/each}
-				</div>
-			</div>
-			<div class="rounded-lg border bg-muted/20 p-4">
-				<div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-					<div>
-						<p class="text-sm font-medium">Organization settings sit above this workspace</p>
-						<p class="text-sm text-muted-foreground">
-							Use organization settings for team access, billing, seats, and plan limits.
-						</p>
-					</div>
-					<Button variant="outline" onclick={() => goto('/settings?tab=organization')}
-						>Organization Settings</Button
-					>
-				</div>
-			</div>
-		</section>
-
-		<section
-			id="team"
-			class:hidden={activeSettingsTab !== 'organization'}
-			class="scroll-mt-24 rounded-lg border p-6"
-		>
-			<div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-				<div>
-					<h2 class="flex items-center gap-2 text-lg font-semibold">
-						<UsersIcon class="h-5 w-5 text-muted-foreground" />
-						Team
-					</h2>
-					<p class="mt-2 text-sm text-muted-foreground">
-						Invite collaborators into the selected workspace. Organization billing owns the seat
-						limits; workspace roles decide what each collaborator can do here.
-					</p>
-				</div>
-				<div class="rounded-md border bg-muted/20 px-3 py-2 text-sm">
-					<span class="font-medium">{currentTeamSeats}</span>
-					<span class="text-muted-foreground"> seats reserved</span>
-				</div>
-			</div>
-
-			{#if teamError}
-				<div
-					data-testid="team-error"
-					class="mb-4 rounded-md border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive"
-				>
-					{teamError}
-				</div>
-			{/if}
-
-			<form
-				onsubmit={createWorkspaceInvitation}
-				class="mb-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_220px_auto]"
+	<div class="grid min-w-0 items-start gap-8 lg:grid-cols-[13rem_minmax(0,1fr)]">
+		<aside class="min-w-0 lg:sticky lg:top-6">
+			<nav
+				class="flex max-w-full gap-2 overflow-x-auto pb-2 lg:flex-col lg:overflow-visible lg:pb-0"
+				aria-label="Settings"
 			>
-				<div class="space-y-2">
-					<Label for="team-invite-email">Invite email</Label>
-					<Input
-						id="team-invite-email"
-						data-testid="team-invite-email"
-						type="email"
-						bind:value={inviteEmail}
-						placeholder="teammate@example.com"
-						autocomplete="email"
-						required
-					/>
-				</div>
-				<div class="space-y-2">
-					<Label for="team-invite-role">Role</Label>
-					<Select.Root
-						type="single"
-						value={inviteRole}
-						onValueChange={(value) => {
-							if (value === 'viewer' || value === 'editor' || value === 'admin') {
-								inviteRole = value;
-							}
-						}}
-					>
-						<Select.Trigger id="team-invite-role" data-testid="team-invite-role" class="w-full">
-							{selectedInviteRole.label}
-						</Select.Trigger>
-						<Select.Content>
-							{#each inviteRoleOptions as option (option.value)}
-								<Select.Item value={option.value}>
-									<div class="flex flex-col gap-0.5 text-left">
-										<span>{option.label}</span>
-										<span class="text-xs text-muted-foreground">{option.description}</span>
-									</div>
-								</Select.Item>
-							{/each}
-						</Select.Content>
-					</Select.Root>
-				</div>
-				<div class="flex items-end">
-					<Button type="submit" disabled={teamBusy || !inviteEmail.trim()}>
-						{#if teamBusy}
-							<LoaderIcon class="mr-2 h-4 w-4 animate-spin" />
-						{:else}
-							<UserPlusIcon class="mr-2 h-4 w-4" />
-						{/if}
-						Send Invite
-					</Button>
-				</div>
-			</form>
-
-			{#if createdInviteURL}
-				<div
-					data-testid="team-invite-link"
-					class="mb-4 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-4"
+				<p
+					class="hidden px-2 text-[11px] font-medium tracking-[0.12em] text-muted-foreground uppercase lg:block"
 				>
-					<p class="text-sm font-medium text-emerald-900">Invite link created</p>
-					<div class="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
-						<p
-							class="min-w-0 flex-1 rounded-md bg-background px-3 py-2 font-mono text-xs break-all"
-						>
-							{createdInviteURL}
+					Personal
+				</p>
+				{#each settingsTabs.slice(0, 3) as tab (tab.id)}
+					<button
+						type="button"
+						class={[
+							'min-h-10 shrink-0 rounded-md px-3 py-2 text-left text-sm font-medium transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none lg:w-full',
+							activeSettingsTab === tab.id
+								? 'bg-accent text-foreground'
+								: 'text-muted-foreground hover:bg-accent/60 hover:text-foreground'
+						]}
+						onclick={() => openSettingsTab(tab.id)}
+						aria-current={activeSettingsTab === tab.id ? 'page' : undefined}
+					>
+						{tab.label}
+					</button>
+				{/each}
+				<p
+					class="hidden px-2 pt-4 text-[11px] font-medium tracking-[0.12em] text-muted-foreground uppercase lg:block"
+				>
+					Workspace
+				</p>
+				{#each settingsTabs.slice(3, 6) as tab (tab.id)}
+					<button
+						type="button"
+						class={[
+							'min-h-10 shrink-0 rounded-md px-3 py-2 text-left text-sm font-medium transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none lg:w-full',
+							activeSettingsTab === tab.id
+								? 'bg-accent text-foreground'
+								: 'text-muted-foreground hover:bg-accent/60 hover:text-foreground'
+						]}
+						onclick={() => openSettingsTab(tab.id)}
+						aria-current={activeSettingsTab === tab.id ? 'page' : undefined}
+					>
+						{tab.label}
+					</button>
+				{/each}
+				<button
+					type="button"
+					class="min-h-10 shrink-0 rounded-md px-3 py-2 text-left text-sm font-medium text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none lg:w-full"
+					onclick={() => goto(resolve('/accounts'))}
+				>
+					Social accounts
+				</button>
+				<p
+					class="hidden px-2 pt-4 text-[11px] font-medium tracking-[0.12em] text-muted-foreground uppercase lg:block"
+				>
+					Team & billing
+				</p>
+				{#each settingsTabs.slice(6) as tab (tab.id)}
+					<button
+						type="button"
+						class={[
+							'min-h-10 shrink-0 rounded-md px-3 py-2 text-left text-sm font-medium transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none lg:w-full',
+							activeSettingsTab === tab.id
+								? 'bg-accent text-foreground'
+								: 'text-muted-foreground hover:bg-accent/60 hover:text-foreground'
+						]}
+						onclick={() => openSettingsTab(tab.id)}
+						aria-current={activeSettingsTab === tab.id ? 'page' : undefined}
+					>
+						{tab.label}
+					</button>
+				{/each}
+			</nav>
+		</aside>
+
+		<div class="min-w-0 space-y-10">
+			<section id="profile" class:hidden={activeSettingsTab !== 'profile'} class="scroll-mt-24">
+				<div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+					<div>
+						<h2 class="flex items-center gap-2 text-lg font-semibold">
+							<UserIcon class="h-5 w-5 text-muted-foreground" />
+							Profile
+						</h2>
+						<p class="mt-2 text-sm text-muted-foreground">
+							Your name and avatar follow your user account across every workspace.
 						</p>
-						<Button type="button" variant="outline" size="sm" onclick={copyCreatedInviteURL}>
-							<CopyIcon class="mr-2 h-4 w-4" />
-							Copy
-						</Button>
 					</div>
 				</div>
-			{/if}
 
-			{#if teamLoading}
-				<div class="grid gap-3 lg:grid-cols-2">
-					<Skeleton class="h-28 rounded-lg" />
-					<Skeleton class="h-28 rounded-lg" />
-				</div>
-			{:else}
-				<div class="grid gap-4 lg:grid-cols-2">
-					<div>
-						<h3 class="mb-2 text-sm font-semibold">Members</h3>
-						<div data-testid="team-members-list" class="space-y-2">
-							{#each teamMembers as member (member.user_id)}
-								<div
-									class="flex flex-col gap-2 rounded-md border px-3 py-3 sm:flex-row sm:items-center sm:justify-between"
-								>
-									<div class="min-w-0">
-										<p class="truncate text-sm font-medium">{member.email}</p>
-										<p class="text-xs text-muted-foreground">User {member.user_id}</p>
-									</div>
-									<span
-										class="inline-flex w-fit items-center rounded-full border px-2 py-0.5 text-xs font-medium capitalize"
-									>
-										{member.role}
-									</span>
-								</div>
+				{#if avatarUploaderOpen}
+					<ProfileAvatarUploader
+						bind:open={avatarUploaderOpen}
+						onComplete={handleAvatarUploaded}
+						onError={(message) => (profileError = message)}
+					/>
+				{/if}
+
+				<form onsubmit={saveProfile} class="space-y-6">
+					<div class="flex flex-col gap-6 sm:flex-row sm:items-center">
+						<div class="group relative h-24 w-24 shrink-0">
+							{#if profileAvatarURL}
+								<img
+									src={profileAvatarURL}
+									alt="Profile avatar"
+									class="h-24 w-24 rounded-full border bg-muted object-cover"
+								/>
 							{:else}
-								<p class="rounded-md border bg-muted/20 p-4 text-sm text-muted-foreground">
-									No members found for this workspace.
-								</p>
-							{/each}
-						</div>
-					</div>
-
-					<div>
-						<h3 class="mb-2 text-sm font-semibold">Pending Invitations</h3>
-						<div data-testid="team-invitations-list" class="space-y-2">
-							{#each pendingInvitations as invitation (invitation.id)}
 								<div
-									class="flex flex-col gap-2 rounded-md border px-3 py-3 sm:flex-row sm:items-center sm:justify-between"
+									class="flex h-24 w-24 items-center justify-center rounded-full border border-dashed bg-muted text-xl font-semibold text-muted-foreground"
 								>
-									<div class="min-w-0">
-										<p class="truncate text-sm font-medium">{invitation.email}</p>
-										<p class="text-xs text-muted-foreground">
-											{invitation.role} · expires
-											{new Date(invitation.expires_at).toLocaleDateString()}
-										</p>
-									</div>
+									{profileInitials}
+								</div>
+							{/if}
+							<button
+								type="button"
+								onclick={() => (avatarUploaderOpen = true)}
+								class="absolute inset-0 flex items-center justify-center rounded-full bg-black/45 text-white opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+								aria-label="Change profile picture"
+							>
+								<CameraIcon class="h-6 w-6" />
+							</button>
+						</div>
+
+						<div class="min-w-0 flex-1 space-y-3">
+							<div class="space-y-2">
+								<Label for="profile-display-name">Display name</Label>
+								<Input
+									id="profile-display-name"
+									bind:value={profileDisplayName}
+									placeholder="Your name"
+									maxlength={120}
+								/>
+							</div>
+							<p class="text-sm text-muted-foreground">{profileEmail}</p>
+							<div class="flex flex-wrap gap-2">
+								<Button type="button" variant="outline" onclick={() => (avatarUploaderOpen = true)}>
+									<CameraIcon class="mr-2 h-4 w-4" />
+									Change Picture
+								</Button>
+								{#if profileAvatarURL}
 									<Button
 										type="button"
 										variant="ghost"
-										size="sm"
 										class="text-destructive hover:text-destructive"
-										onclick={() => revokeWorkspaceInvitation(invitation.id)}
-										disabled={teamBusy}
+										onclick={removeAvatar}
+										disabled={profileBusy}
 									>
-										Revoke
+										<TrashIcon class="mr-2 h-4 w-4" />
+										Remove
 									</Button>
-								</div>
-							{:else}
-								<p class="rounded-md border bg-muted/20 p-4 text-sm text-muted-foreground">
-									No pending invitations.
-								</p>
-							{/each}
-						</div>
-					</div>
-				</div>
-			{/if}
-		</section>
-
-		<section
-			id="billing"
-			class:hidden={activeSettingsTab !== 'organization'}
-			class="scroll-mt-24 rounded-lg border p-6"
-		>
-			<div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-				<div>
-					<h2 class="flex items-center gap-2 text-lg font-semibold">
-						<CreditCardIcon class="h-5 w-5 text-muted-foreground" />
-						Billing
-					</h2>
-					<p class="mt-2 text-sm text-muted-foreground">
-						Manage the OpenPost Cloud plan for this organization. Seats and workspace limits apply
-						across every workspace in the organization.
-					</p>
-				</div>
-				<Button variant="outline" onclick={openBillingPortal} disabled={billingPortalBusy}>
-					{#if billingPortalBusy}
-						<LoaderIcon class="mr-2 h-4 w-4 animate-spin" />
-					{:else}
-						<ExternalLinkIcon class="mr-2 h-4 w-4" />
-					{/if}
-					Customer Portal
-				</Button>
-			</div>
-
-			{#if billingStatusLoading}
-				<div class="mb-4 grid gap-3 lg:grid-cols-2">
-					<Skeleton class="h-24 rounded-lg" />
-					<Skeleton class="h-24 rounded-lg" />
-				</div>
-			{:else if billingStatus}
-				<div class="mb-4 grid gap-3 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
-					<div class="rounded-lg border bg-muted/20 p-4">
-						<p class="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-							Current plan
-						</p>
-						<div class="mt-2 flex flex-wrap items-end gap-x-3 gap-y-1">
-							<p class="text-2xl font-semibold">
-								{currentBillingPlan?.name ?? (billingStatus.plan_id || 'No active plan')}
-							</p>
-							<p class="pb-1 text-sm text-muted-foreground capitalize">{billingStatus.status}</p>
-						</div>
-						{#if billingStatus.current_period_end}
-							<p class="mt-2 text-sm text-muted-foreground">
-								Period ends {new Date(billingStatus.current_period_end).toLocaleDateString()}
-								{#if billingStatus.cancel_at_period_end}
-									· cancels after this period
 								{/if}
-							</p>
-						{:else if hasActiveBillingPlan}
-							<p class="mt-2 text-sm text-muted-foreground">
-								This organization has an active hosted plan.
-							</p>
-						{:else}
-							<p class="mt-2 text-sm text-muted-foreground">
-								Start checkout to activate hosted billing for this organization.
-							</p>
-						{/if}
-					</div>
-
-					<div class="rounded-lg border bg-muted/20 p-4">
-						<p class="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-							Usage this month
-						</p>
-						{#if monthlyBillingUsageRows.length}
-							<div class="mt-3 grid gap-3 sm:grid-cols-2">
-								{#each monthlyBillingUsageRows as row (row.metric)}
-									<div>
-										<div class="mb-1 flex items-center justify-between gap-2 text-sm">
-											<span>{row.label}</span>
-											<span class="text-muted-foreground">
-												{formatBillingValue(row.metric, row.current)} / {formatBillingValue(
-													row.metric,
-													row.limit
-												)}
-											</span>
-										</div>
-										<div class="h-2 overflow-hidden rounded-full bg-muted">
-											<div
-												class="h-full rounded-full bg-primary"
-												style:width={`${Math.min(100, Math.round((row.current / Math.max(row.limit, 1)) * 100))}%`}
-											></div>
-										</div>
-									</div>
-								{/each}
-							</div>
-						{:else}
-							<p class="mt-2 text-sm text-muted-foreground">
-								Usage counters appear here after an active subscription snapshot is received.
-							</p>
-						{/if}
-					</div>
-				</div>
-			{/if}
-
-			<div class="grid gap-3 lg:grid-cols-3">
-				{#each billingPlans as plan (plan.id)}
-					<article
-						class={`rounded-lg border p-4 ${plan.featured ? 'border-primary bg-primary/5 shadow-sm' : 'bg-background'}`}
-					>
-						<div class="mb-3 flex items-start justify-between gap-3">
-							<div>
-								<h3 class="font-semibold">{plan.name}</h3>
-								<p class="text-sm text-muted-foreground">{plan.description}</p>
-							</div>
-							<div class="text-right">
-								<div class="text-xl font-semibold">{formatPlanPrice(plan.monthlyPriceEur)}</div>
-								<div class="text-xs text-muted-foreground">/mo</div>
 							</div>
 						</div>
-						<ul class="mb-4 space-y-1 text-sm text-muted-foreground">
-							{#each plan.limits as limit (limit)}
-								<li>{limit}</li>
-							{/each}
-						</ul>
-						<Button
-							class="w-full"
-							variant={plan.featured ? 'default' : 'outline'}
-							onclick={() => startCheckout(plan.id)}
-							disabled={Boolean(billingBusyPlan) || hasActiveBillingPlan}
+					</div>
+
+					{#if profileError}
+						<div
+							class="rounded-md border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive"
 						>
-							{#if billingBusyPlan === plan.id}
+							{profileError}
+						</div>
+					{/if}
+
+					<div class="flex justify-end">
+						<Button type="submit" disabled={profileBusy}>
+							{#if profileBusy}
 								<LoaderIcon class="mr-2 h-4 w-4 animate-spin" />
-							{/if}
-							{#if hasActiveBillingPlan && billingStatus?.plan_id === plan.id}
-								Current Plan
-							{:else if hasActiveBillingPlan}
-								Unavailable While Active
 							{:else}
-								Start Checkout
+								<SaveIcon class="mr-2 h-4 w-4" />
 							{/if}
+							Save Profile
 						</Button>
-					</article>
-				{/each}
-			</div>
+					</div>
+				</form>
+			</section>
 
-			{#if billingError}
-				<div
-					class="mt-4 rounded-md border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive"
-				>
-					{billingError}
-				</div>
-			{/if}
-		</section>
-
-		<section
-			id="security"
-			class:hidden={activeSettingsTab !== 'account'}
-			class="scroll-mt-24 rounded-lg border p-6"
-		>
-			<h2 class="mb-4 flex items-center gap-2 text-lg font-semibold">
-				<ShieldCheckIcon class="h-5 w-5 text-muted-foreground" />
-				Account Security
-			</h2>
-			<p class="mb-4 text-sm text-muted-foreground">
-				Turn on two-factor authentication for your user account with an authenticator app and
-				optional passkeys. These protections follow your login, not your workspace.
-			</p>
-
-			{#if loadingSecurity}
-				<div class="space-y-3">
-					<Skeleton class="h-24 rounded-lg" />
-					<Skeleton class="h-40 rounded-lg" />
-				</div>
-			{:else}
-				<div class="space-y-4">
-					<div class="rounded-lg border bg-muted/20 p-4">
-						<div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-							<div>
-								<p class="text-sm font-medium">{securityStatus?.user.email}</p>
-								<p class="text-sm text-muted-foreground">
-									Active methods:
-									{securityStatus?.methods?.length
-										? (securityStatus.methods ?? []).join(', ')
-										: 'none configured'}
-								</p>
+			<section
+				id="workspace"
+				class:hidden={activeSettingsTab !== 'general'}
+				class="scroll-mt-24 space-y-4"
+			>
+				<h2 class="mb-4 text-lg font-semibold">General</h2>
+				<div class="rounded-lg border bg-muted/20 p-4">
+					<div class="flex flex-col gap-4 sm:flex-row sm:items-center">
+						<div
+							class="flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-muted text-lg font-semibold text-muted-foreground"
+						>
+							{#if workspaceCtx.settings.avatar_url}
+								<img
+									src={workspaceCtx.settings.avatar_url}
+									alt={workspaceCtx.currentWorkspace?.name || 'Workspace'}
+									class="h-full w-full object-cover"
+								/>
+							{:else}
+								{(workspaceCtx.currentWorkspace?.name?.[0] ?? 'W').toUpperCase()}
+							{/if}
+						</div>
+						<div class="min-w-0 flex-1 space-y-3">
+							<div class="flex flex-col gap-1">
+								<span class="text-sm font-medium">{workspaceCtx.currentWorkspace?.name}</span>
+								<span class="text-sm text-muted-foreground">
+									{workspaceCtx.currentWorkspace?.organization_name || 'Personal workspace'}
+								</span>
 							</div>
-							<p class="text-sm text-muted-foreground">
-								Passkeys: {passkeyCount}
-							</p>
+							<div class="space-y-2">
+								<Label for="workspace-avatar-url">Workspace image URL</Label>
+								<Input
+									id="workspace-avatar-url"
+									type="url"
+									bind:value={workspaceCtx.settings.avatar_url}
+									placeholder="https://example.com/app-icon.png"
+									maxlength={1000}
+								/>
+							</div>
 						</div>
 					</div>
+				</div>
+				<div
+					class="flex flex-col gap-3 border-t pt-5 sm:flex-row sm:items-center sm:justify-between"
+				>
+					<div>
+						<p class="text-sm font-medium">Connected channels</p>
+						<p class="text-sm text-muted-foreground">Choose where this workspace can publish.</p>
+					</div>
+					<Button variant="outline" onclick={() => goto(resolve('/accounts'))}
+						>Manage social accounts</Button
+					>
+				</div>
+			</section>
 
-					<div class="rounded-lg border p-4">
-						<div class="mb-4 flex items-center justify-between gap-3">
-							<div>
-								<h3 class="flex items-center gap-2 font-medium">
-									<MonitorIcon class="h-4 w-4 text-muted-foreground" />
-									Active Sessions
-								</h3>
-								<p class="mt-1 text-sm text-muted-foreground">
-									Review signed-in browsers and revoke access without changing your password.
-								</p>
-							</div>
-							<Button
-								variant="outline"
-								size="sm"
-								onclick={loadAuthSessions}
-								disabled={authSessionsLoading}
+			<section id="team" class:hidden={activeSettingsTab !== 'members'} class="scroll-mt-24">
+				<div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+					<div>
+						<h2 class="flex items-center gap-2 text-lg font-semibold">
+							<UsersIcon class="h-5 w-5 text-muted-foreground" />
+							Team
+						</h2>
+						<p class="mt-2 text-sm text-muted-foreground">
+							Invite collaborators and choose what they can do in this workspace.
+						</p>
+					</div>
+					<div class="rounded-md border bg-muted/20 px-3 py-2 text-sm">
+						<span class="font-medium">{currentTeamSeats}</span>
+						<span class="text-muted-foreground"> seats reserved</span>
+					</div>
+				</div>
+
+				{#if teamError}
+					<div
+						data-testid="team-error"
+						class="mb-4 rounded-md border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive"
+					>
+						{teamError}
+					</div>
+				{/if}
+
+				<form
+					onsubmit={createWorkspaceInvitation}
+					class="mb-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_220px_auto]"
+				>
+					<div class="space-y-2">
+						<Label for="team-invite-email">Invite email</Label>
+						<Input
+							id="team-invite-email"
+							data-testid="team-invite-email"
+							type="email"
+							bind:value={inviteEmail}
+							placeholder="teammate@example.com"
+							autocomplete="email"
+							required
+						/>
+					</div>
+					<div class="space-y-2">
+						<Label for="team-invite-role">Role</Label>
+						<Select.Root
+							type="single"
+							value={inviteRole}
+							onValueChange={(value) => {
+								if (value === 'viewer' || value === 'editor' || value === 'admin') {
+									inviteRole = value;
+								}
+							}}
+						>
+							<Select.Trigger id="team-invite-role" data-testid="team-invite-role" class="w-full">
+								{selectedInviteRole.label}
+							</Select.Trigger>
+							<Select.Content>
+								{#each inviteRoleOptions as option (option.value)}
+									<Select.Item value={option.value}>
+										<div class="flex flex-col gap-0.5 text-left">
+											<span>{option.label}</span>
+											<span class="text-xs text-muted-foreground">{option.description}</span>
+										</div>
+									</Select.Item>
+								{/each}
+							</Select.Content>
+						</Select.Root>
+					</div>
+					<div class="flex items-end">
+						<Button type="submit" disabled={teamBusy || !inviteEmail.trim()}>
+							{#if teamBusy}
+								<LoaderIcon class="mr-2 h-4 w-4 animate-spin" />
+							{:else}
+								<UserPlusIcon class="mr-2 h-4 w-4" />
+							{/if}
+							Send Invite
+						</Button>
+					</div>
+				</form>
+
+				{#if createdInviteURL}
+					<div
+						data-testid="team-invite-link"
+						class="mb-4 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-4"
+					>
+						<p class="text-sm font-medium text-emerald-900">Invite link created</p>
+						<div class="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
+							<p
+								class="min-w-0 flex-1 rounded-md bg-background px-3 py-2 font-mono text-xs break-all"
 							>
-								{#if authSessionsLoading}
-									<LoaderIcon class="mr-2 h-4 w-4 animate-spin" />
-								{/if}
-								Refresh
+								{createdInviteURL}
+							</p>
+							<Button type="button" variant="outline" size="sm" onclick={copyCreatedInviteURL}>
+								<CopyIcon class="mr-2 h-4 w-4" />
+								Copy
 							</Button>
 						</div>
+					</div>
+				{/if}
 
-						{#if authSessionsError}
-							<div
-								class="mb-3 rounded-md border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive"
-							>
-								{authSessionsError}
-							</div>
-						{/if}
-
-						{#if authSessionsLoading}
-							<div class="space-y-2">
-								<Skeleton class="h-16 rounded-md" />
-								<Skeleton class="h-16 rounded-md" />
-							</div>
-						{:else if authSessions.length === 0}
-							<p class="rounded-md border bg-muted/20 p-4 text-sm text-muted-foreground">
-								No active web sessions found.
-							</p>
-						{:else}
-							<div class="space-y-2" data-testid="auth-session-list">
-								{#each authSessions as session (session.id)}
+				{#if teamLoading}
+					<div class="grid gap-3 lg:grid-cols-2">
+						<Skeleton class="h-28 rounded-lg" />
+						<Skeleton class="h-28 rounded-lg" />
+					</div>
+				{:else}
+					<div class="grid gap-4 lg:grid-cols-2">
+						<div>
+							<h3 class="mb-2 text-sm font-semibold">Members</h3>
+							<div data-testid="team-members-list" class="space-y-2">
+								{#each teamMembers as member (member.user_id)}
 									<div
-										class="flex flex-col gap-3 rounded-md border px-3 py-3 sm:flex-row sm:items-center sm:justify-between"
-										data-testid="auth-session-row"
+										class="flex flex-col gap-2 rounded-md border px-3 py-3 sm:flex-row sm:items-center sm:justify-between"
 									>
 										<div class="min-w-0">
-											<div class="flex flex-wrap items-center gap-2">
-												<p class="truncate text-sm font-medium" title={session.user_agent}>
-													{session.device_name || formatSessionUserAgent(session.user_agent)}
-												</p>
-												{#if session.current}
-													<span class="rounded-full bg-primary/10 px-2 py-0.5 text-xs text-primary">
-														Current
-													</span>
-												{/if}
-											</div>
-											<p class="mt-1 text-xs text-muted-foreground">
-												{session.ip_address || 'Unknown IP'} · Last used
-												{formatSessionTime(session.last_used_at)} · Expires
-												{formatSessionTime(session.expires_at)}
+											<p class="truncate text-sm font-medium">{member.email}</p>
+										</div>
+										<span
+											class="inline-flex w-fit items-center rounded-full border px-2 py-0.5 text-xs font-medium capitalize"
+										>
+											{member.role}
+										</span>
+									</div>
+								{:else}
+									<p class="rounded-md border bg-muted/20 p-4 text-sm text-muted-foreground">
+										No members found for this workspace.
+									</p>
+								{/each}
+							</div>
+						</div>
+
+						<div>
+							<h3 class="mb-2 text-sm font-semibold">Pending Invitations</h3>
+							<div data-testid="team-invitations-list" class="space-y-2">
+								{#each pendingInvitations as invitation (invitation.id)}
+									<div
+										class="flex flex-col gap-2 rounded-md border px-3 py-3 sm:flex-row sm:items-center sm:justify-between"
+									>
+										<div class="min-w-0">
+											<p class="truncate text-sm font-medium">{invitation.email}</p>
+											<p class="text-xs text-muted-foreground">
+												{invitation.role} · expires
+												{new Date(invitation.expires_at).toLocaleDateString()}
 											</p>
 										</div>
 										<Button
+											type="button"
 											variant="ghost"
 											size="sm"
-											class="self-start text-destructive hover:text-destructive sm:self-center"
-											onclick={() => revokeAuthSession(session)}
-											disabled={Boolean(authSessionBusyID)}
+											class="text-destructive hover:text-destructive"
+											onclick={() => revokeWorkspaceInvitation(invitation.id)}
+											disabled={teamBusy}
 										>
-											{#if authSessionBusyID === session.id}
-												<LoaderIcon class="mr-2 h-4 w-4 animate-spin" />
-											{:else}
-												<LogOutIcon class="mr-2 h-4 w-4" />
-											{/if}
-											{session.current ? 'Sign out' : 'Revoke'}
+											Revoke
 										</Button>
 									</div>
+								{:else}
+									<p class="rounded-md border bg-muted/20 p-4 text-sm text-muted-foreground">
+										No pending invitations.
+									</p>
 								{/each}
 							</div>
-						{/if}
+						</div>
 					</div>
+				{/if}
+			</section>
 
-					<div class="grid gap-4 lg:grid-cols-2">
-						<div class="rounded-lg border p-4">
-							<div class="mb-3 flex items-center gap-2">
-								<SmartphoneIcon class="h-4 w-4 text-muted-foreground" />
-								<h3 class="font-medium">Authenticator App</h3>
-							</div>
-							<p class="mb-4 text-sm text-muted-foreground">
-								Scan a QR code in Authy, 1Password, Google Authenticator, or any standard TOTP app.
+			<section id="billing" class:hidden={activeSettingsTab !== 'plan'} class="scroll-mt-24">
+				<div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+					<div>
+						<h2 class="flex items-center gap-2 text-lg font-semibold">
+							<CreditCardIcon class="h-5 w-5 text-muted-foreground" />
+							Billing
+						</h2>
+						<p class="mt-2 text-sm text-muted-foreground">
+							Review the current plan and usage for your team.
+						</p>
+					</div>
+					<Button variant="outline" onclick={openBillingPortal} disabled={billingPortalBusy}>
+						{#if billingPortalBusy}
+							<LoaderIcon class="mr-2 h-4 w-4 animate-spin" />
+						{:else}
+							<ExternalLinkIcon class="mr-2 h-4 w-4" />
+						{/if}
+						Customer Portal
+					</Button>
+				</div>
+
+				{#if billingStatusLoading}
+					<div class="mb-4 grid gap-3 lg:grid-cols-2">
+						<Skeleton class="h-24 rounded-lg" />
+						<Skeleton class="h-24 rounded-lg" />
+					</div>
+				{:else if billingStatus}
+					<div class="mb-4 grid gap-3 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
+						<div class="rounded-lg border bg-muted/20 p-4">
+							<p class="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+								Current plan
 							</p>
-
-							{#if securityStatus?.totp_enabled}
-								<div class="space-y-3">
-									<div class="rounded-md bg-emerald-500/10 px-3 py-2 text-sm text-emerald-700">
-										Authenticator app is enabled.
-									</div>
-									<div class="space-y-2">
-										<Label for="disable-password">Current password</Label>
-										<Input
-											id="disable-password"
-											type="password"
-											bind:value={currentPassword}
-											placeholder="Required to disable"
-										/>
-									</div>
-									<Button
-										variant="outline"
-										onclick={disableTOTP}
-										disabled={securityBusy || !currentPassword.trim()}
-									>
-										Disable Authenticator App
-									</Button>
-								</div>
-							{:else}
-								<div class="space-y-3">
-									<div class="space-y-2">
-										<Label for="totp-password">Current password</Label>
-										<Input
-											id="totp-password"
-											type="password"
-											bind:value={currentPassword}
-											placeholder="Required to start setup"
-										/>
-									</div>
-									<Button
-										onclick={startTOTPSetup}
-										disabled={securityBusy || !currentPassword.trim()}
-									>
-										Start Authenticator Setup
-									</Button>
-
-									{#if totpSetupChallengeId}
-										<div class="space-y-3 rounded-lg border bg-muted/20 p-4">
-											<img
-												src={totpQRCodeDataURL}
-												alt="TOTP QR code"
-												class="mx-auto h-48 w-48 rounded-lg border bg-white p-2"
-											/>
-											<div class="space-y-1">
-												<p class="text-sm font-medium">Manual entry key</p>
-												<p class="font-mono text-xs break-all text-muted-foreground">
-													{totpManualEntryKey}
-												</p>
-											</div>
-											<div class="space-y-2">
-												<Label for="totp-code">Enter the 6-digit code from your app</Label>
-												<Input
-													id="totp-code"
-													bind:value={totpCode}
-													inputmode="numeric"
-													autocomplete="one-time-code"
-													maxlength={6}
-													placeholder="123456"
-												/>
-											</div>
-											<Button
-												onclick={confirmTOTPSetup}
-												disabled={securityBusy || totpCode.trim().length !== 6}
-											>
-												Confirm Authenticator App
-											</Button>
-										</div>
+							<div class="mt-2 flex flex-wrap items-end gap-x-3 gap-y-1">
+								<p class="text-2xl font-semibold">
+									{currentBillingPlan?.name ?? (billingStatus.plan_id || 'No active plan')}
+								</p>
+								<p class="pb-1 text-sm text-muted-foreground capitalize">{billingStatus.status}</p>
+							</div>
+							{#if billingStatus.current_period_end}
+								<p class="mt-2 text-sm text-muted-foreground">
+									Period ends {new Date(billingStatus.current_period_end).toLocaleDateString()}
+									{#if billingStatus.cancel_at_period_end}
+										· cancels after this period
 									{/if}
-								</div>
+								</p>
+							{:else if hasActiveBillingPlan}
+								<p class="mt-2 text-sm text-muted-foreground">
+									This organization has an active hosted plan.
+								</p>
+							{:else}
+								<p class="mt-2 text-sm text-muted-foreground">
+									Start checkout to activate hosted billing for this organization.
+								</p>
 							{/if}
 						</div>
 
-						<div class="rounded-lg border p-4">
-							<div class="mb-3 flex items-center gap-2">
-								<KeyRoundIcon class="h-4 w-4 text-muted-foreground" />
-								<h3 class="font-medium">Passkeys</h3>
-							</div>
-							<p class="mb-4 text-sm text-muted-foreground">
-								Add device-backed passkeys as a second factor for faster sign-ins.
+						<div class="rounded-lg border bg-muted/20 p-4">
+							<p class="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+								Usage this month
 							</p>
+							{#if monthlyBillingUsageRows.length}
+								<div class="mt-3 grid gap-3 sm:grid-cols-2">
+									{#each monthlyBillingUsageRows as row (row.metric)}
+										<div>
+											<div class="mb-1 flex items-center justify-between gap-2 text-sm">
+												<span>{row.label}</span>
+												<span class="text-muted-foreground">
+													{formatBillingValue(row.metric, row.current)} / {formatBillingValue(
+														row.metric,
+														row.limit
+													)}
+												</span>
+											</div>
+											<div class="h-2 overflow-hidden rounded-full bg-muted">
+												<div
+													class="h-full rounded-full bg-primary"
+													style:width={`${Math.min(100, Math.round((row.current / Math.max(row.limit, 1)) * 100))}%`}
+												></div>
+											</div>
+										</div>
+									{/each}
+								</div>
+							{:else}
+								<p class="mt-2 text-sm text-muted-foreground">
+									Usage counters appear here after an active subscription snapshot is received.
+								</p>
+							{/if}
+						</div>
+					</div>
+				{/if}
 
-							<div class="space-y-3">
-								<div class="space-y-2">
-									<Label for="passkey-password">Current password</Label>
-									<Input
-										id="passkey-password"
-										type="password"
-										bind:value={currentPassword}
-										placeholder="Required to add or remove passkeys"
-									/>
+				<details class="border-t pt-4" open={!hasActiveBillingPlan}>
+					<summary
+						class="cursor-pointer text-sm font-medium focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+					>
+						{hasActiveBillingPlan ? 'Compare or change plan' : 'Choose a plan'}
+					</summary>
+					<div class="mt-4 grid gap-3 lg:grid-cols-3">
+						{#each billingPlans as plan (plan.id)}
+							<article
+								class={`rounded-lg border p-4 ${plan.featured ? 'border-primary bg-primary/5 shadow-sm' : 'bg-background'}`}
+							>
+								<div class="mb-3 flex items-start justify-between gap-3">
+									<div>
+										<h3 class="font-semibold">{plan.name}</h3>
+										<p class="text-sm text-muted-foreground">{plan.description}</p>
+									</div>
+									<div class="text-right">
+										<div class="text-xl font-semibold">{formatPlanPrice(plan.monthlyPriceEur)}</div>
+										<div class="text-xs text-muted-foreground">/mo</div>
+									</div>
 								</div>
-								<div class="space-y-2">
-									<Label for="passkey-name">Passkey name</Label>
-									<Input
-										id="passkey-name"
-										bind:value={newPasskeyName}
-										placeholder="MacBook, iPhone, YubiKey"
-									/>
+								<ul class="mb-4 space-y-1 text-sm text-muted-foreground">
+									{#each plan.limits as limit (limit)}
+										<li>{limit}</li>
+									{/each}
+								</ul>
+								<Button
+									class="w-full"
+									variant={plan.featured ? 'default' : 'outline'}
+									onclick={() => startCheckout(plan.id)}
+									disabled={Boolean(billingBusyPlan) || hasActiveBillingPlan}
+								>
+									{#if billingBusyPlan === plan.id}
+										<LoaderIcon class="mr-2 h-4 w-4 animate-spin" />
+									{/if}
+									{#if hasActiveBillingPlan && billingStatus?.plan_id === plan.id}
+										Current Plan
+									{:else if hasActiveBillingPlan}
+										Use customer portal
+									{:else}
+										Choose {plan.name}
+									{/if}
+								</Button>
+							</article>
+						{/each}
+					</div>
+				</details>
+
+				{#if billingError}
+					<div
+						class="mt-4 rounded-md border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive"
+					>
+						{billingError}
+					</div>
+				{/if}
+			</section>
+
+			<section id="security" class:hidden={activeSettingsTab !== 'security'} class="scroll-mt-24">
+				<h2 class="mb-4 flex items-center gap-2 text-lg font-semibold">
+					<ShieldCheckIcon class="h-5 w-5 text-muted-foreground" />
+					Account Security
+				</h2>
+				<p class="mb-4 text-sm text-muted-foreground">
+					Turn on two-factor authentication for your user account with an authenticator app and
+					optional passkeys. These protections follow your login, not your workspace.
+				</p>
+
+				{#if loadingSecurity}
+					<div class="space-y-3">
+						<Skeleton class="h-24 rounded-lg" />
+						<Skeleton class="h-40 rounded-lg" />
+					</div>
+				{:else}
+					<div class="space-y-4">
+						<div class="rounded-lg border bg-muted/20 p-4">
+							<div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+								<div>
+									<p class="text-sm font-medium">{securityStatus?.user.email}</p>
+									<p class="text-sm text-muted-foreground">
+										Active methods:
+										{securityStatus?.methods?.length
+											? (securityStatus.methods ?? []).join(', ')
+											: 'none configured'}
+									</p>
 								</div>
-								<Button onclick={addPasskey} disabled={securityBusy || !currentPassword.trim()}>
-									Add Passkey
+								<p class="text-sm text-muted-foreground">
+									Passkeys: {passkeyCount}
+								</p>
+							</div>
+						</div>
+
+						<div class="rounded-lg border p-4">
+							<div class="mb-4 flex items-center justify-between gap-3">
+								<div>
+									<h3 class="flex items-center gap-2 font-medium">
+										<MonitorIcon class="h-4 w-4 text-muted-foreground" />
+										Active Sessions
+									</h3>
+									<p class="mt-1 text-sm text-muted-foreground">
+										Review signed-in browsers and revoke access without changing your password.
+									</p>
+								</div>
+								<Button
+									variant="outline"
+									size="sm"
+									onclick={loadAuthSessions}
+									disabled={authSessionsLoading}
+								>
+									{#if authSessionsLoading}
+										<LoaderIcon class="mr-2 h-4 w-4 animate-spin" />
+									{/if}
+									Refresh
 								</Button>
 							</div>
 
-							<div class="mt-4 space-y-2">
-								{#if (securityStatus?.passkeys ?? []).length}
-									{#each securityStatus?.passkeys ?? [] as passkey (passkey.id)}
-										<div class="flex items-center justify-between rounded-md border px-3 py-2">
-											<div>
-												<p class="text-sm font-medium">{passkey.name}</p>
-												<p class="text-xs text-muted-foreground">
-													{#if passkey.last_used_at && passkey.last_used_at !== '0001-01-01T00:00:00Z'}
-														Last used {new Date(passkey.last_used_at).toLocaleString()}
-													{:else}
-														Added {new Date(passkey.created_at).toLocaleString()}
+							{#if authSessionsError}
+								<div
+									class="mb-3 rounded-md border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive"
+								>
+									{authSessionsError}
+								</div>
+							{/if}
+
+							{#if authSessionsLoading}
+								<div class="space-y-2">
+									<Skeleton class="h-16 rounded-md" />
+									<Skeleton class="h-16 rounded-md" />
+								</div>
+							{:else if authSessions.length === 0}
+								<p class="rounded-md border bg-muted/20 p-4 text-sm text-muted-foreground">
+									No active web sessions found.
+								</p>
+							{:else}
+								<div class="space-y-2" data-testid="auth-session-list">
+									{#each authSessions as session (session.id)}
+										<div
+											class="flex flex-col gap-3 rounded-md border px-3 py-3 sm:flex-row sm:items-center sm:justify-between"
+											data-testid="auth-session-row"
+										>
+											<div class="min-w-0">
+												<div class="flex flex-wrap items-center gap-2">
+													<p class="truncate text-sm font-medium" title={session.user_agent}>
+														{session.device_name || formatSessionUserAgent(session.user_agent)}
+													</p>
+													{#if session.current}
+														<span
+															class="rounded-full bg-primary/10 px-2 py-0.5 text-xs text-primary"
+														>
+															Current
+														</span>
 													{/if}
+												</div>
+												<p class="mt-1 text-xs text-muted-foreground">
+													{session.ip_address || 'Unknown IP'} · Last used
+													{formatSessionTime(session.last_used_at)} · Expires
+													{formatSessionTime(session.expires_at)}
 												</p>
 											</div>
 											<Button
 												variant="ghost"
 												size="sm"
-												class="text-destructive hover:text-destructive"
-												onclick={() => removePasskey(passkey.id)}
-												disabled={securityBusy || !currentPassword.trim()}
+												class="self-start text-destructive hover:text-destructive sm:self-center"
+												onclick={() => revokeAuthSession(session)}
+												disabled={Boolean(authSessionBusyID)}
 											>
-												Remove
+												{#if authSessionBusyID === session.id}
+													<LoaderIcon class="mr-2 h-4 w-4 animate-spin" />
+												{:else}
+													<LogOutIcon class="mr-2 h-4 w-4" />
+												{/if}
+												{session.current ? 'Sign out' : 'Revoke'}
 											</Button>
 										</div>
 									{/each}
-								{:else}
-									<p class="text-sm text-muted-foreground">No passkeys added yet.</p>
-								{/if}
-							</div>
+								</div>
+							{/if}
 						</div>
-					</div>
 
-					{#if securityError}
-						<div
-							class="rounded-md border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive"
-						>
-							{securityError}
-						</div>
-					{/if}
-				</div>
-			{/if}
-		</section>
-
-		<section
-			id="tokens"
-			class:hidden={activeSettingsTab !== 'account'}
-			class="scroll-mt-24 rounded-lg border p-6"
-		>
-			<h2 class="mb-4 flex items-center gap-2 text-lg font-semibold">
-				<TerminalIcon class="h-5 w-5 text-muted-foreground" />
-				CLI Devices & API Tokens
-			</h2>
-			<p class="mb-4 text-sm text-muted-foreground">
-				Create dedicated tokens for ChatGPT, Claude, the MCP server, the OpenPost CLI, CI, cron, and
-				other automation. Revoke any token here without changing your password.
-			</p>
-
-			<div class="mb-4 grid gap-3 lg:grid-cols-[1fr_240px_240px_auto]">
-				<div class="space-y-2">
-					<Label for="api-token-name">New token name</Label>
-					<Input
-						id="api-token-name"
-						bind:value={apiTokenName}
-						placeholder="ChatGPT App, MacBook CLI, GitHub CI"
-					/>
-				</div>
-				<div class="space-y-2">
-					<Label for="api-token-scope">Token scope</Label>
-					<Select.Root
-						type="single"
-						value={apiTokenScope}
-						onValueChange={(value) => value && (apiTokenScope = value)}
-					>
-						<Select.Trigger id="api-token-scope" data-testid="api-token-scope" class="w-full">
-							{selectedAPITokenScope.label}
-						</Select.Trigger>
-						<Select.Content>
-							{#each apiTokenScopeOptions as option (option.value)}
-								<Select.Item value={option.value}>
-									<div class="flex flex-col gap-0.5 text-left">
-										<span>{option.label}</span>
-										<span class="text-xs text-muted-foreground">{option.description}</span>
-									</div>
-								</Select.Item>
-							{/each}
-						</Select.Content>
-					</Select.Root>
-				</div>
-				<div class="space-y-2">
-					<Label for="api-token-workspace">Access boundary</Label>
-					<Select.Root
-						type="single"
-						value={apiTokenWorkspaceScope}
-						onValueChange={(value) => value && (apiTokenWorkspaceScope = value)}
-					>
-						<Select.Trigger id="api-token-workspace" class="w-full">
-							{selectedAPITokenWorkspaceScope.label}
-						</Select.Trigger>
-						<Select.Content>
-							{#each apiTokenWorkspaceOptions as option (option.value)}
-								<Select.Item value={option.value}>
-									<div class="flex flex-col gap-0.5 text-left">
-										<span>{option.label}</span>
-										<span class="text-xs text-muted-foreground">{option.description}</span>
-									</div>
-								</Select.Item>
-							{/each}
-						</Select.Content>
-					</Select.Root>
-				</div>
-				<div class="flex items-end">
-					<Button
-						onclick={createAPIToken}
-						disabled={apiTokenBusy ||
-							(apiTokenWorkspaceScope === 'current' && !workspaceCtx.currentWorkspace)}
-					>
-						{#if apiTokenBusy}
-							<LoaderIcon class="mr-2 h-4 w-4 animate-spin" />
-						{/if}
-						Create Token
-					</Button>
-				</div>
-			</div>
-
-			{#if createdAPIToken}
-				<div
-					class="mb-4 rounded-lg border border-amber-300/50 bg-amber-50 p-4 text-sm text-amber-950"
-				>
-					<p class="font-medium">Copy this token now. It will not be shown again.</p>
-					<p class="mt-2 font-mono text-xs break-all">{createdAPIToken}</p>
-				</div>
-			{/if}
-
-			{#if apiTokensLoading}
-				<div class="space-y-2">
-					<Skeleton class="h-14 rounded-md" />
-					<Skeleton class="h-14 rounded-md" />
-				</div>
-			{:else if apiTokens.length === 0}
-				<p class="rounded-md border bg-muted/20 p-4 text-sm text-muted-foreground">
-					No API tokens or CLI devices are currently authorized.
-				</p>
-			{:else}
-				<div class="space-y-2">
-					{#each apiTokens as token (token.id)}
-						<div
-							class="flex flex-col gap-3 rounded-md border px-3 py-3 sm:flex-row sm:items-center sm:justify-between"
-						>
-							<div>
-								<p class="text-sm font-medium">{token.name}</p>
-								<p class="text-xs text-muted-foreground">
-									Prefix <span class="font-mono">{token.token_prefix}</span> · {token.scope} · Created
-									{new Date(token.created_at).toLocaleString()}
-									{#if token.workspace_id}
-										· Workspace <span class="font-mono">{token.workspace_id}</span>
-									{:else}
-										· All workspaces
-									{/if}
-									{#if token.last_used_at}
-										· Last used {new Date(token.last_used_at).toLocaleString()}
-									{/if}
+						<div class="grid gap-4 lg:grid-cols-2">
+							<div class="rounded-lg border p-4">
+								<div class="mb-3 flex items-center gap-2">
+									<SmartphoneIcon class="h-4 w-4 text-muted-foreground" />
+									<h3 class="font-medium">Authenticator App</h3>
+								</div>
+								<p class="mb-4 text-sm text-muted-foreground">
+									Scan a QR code in Authy, 1Password, Google Authenticator, or any standard TOTP
+									app.
 								</p>
-							</div>
-							<Button
-								variant="ghost"
-								size="sm"
-								class="text-destructive hover:text-destructive"
-								onclick={() => revokeAPIToken(token.id)}
-								disabled={apiTokenBusy}
-							>
-								Revoke
-							</Button>
-						</div>
-					{/each}
-				</div>
-			{/if}
 
-			<div class="mt-6 border-t pt-6">
-				<div class="mb-4 flex items-center justify-between gap-3">
-					<div>
-						<h3 class="flex items-center gap-2 text-sm font-semibold">
-							<ActivityIcon class="h-4 w-4 text-muted-foreground" />
-							Recent MCP Activity
-						</h3>
-						<p class="mt-1 text-sm text-muted-foreground">
-							Recent tool calls from ChatGPT, Claude, the CLI proxy, and other MCP clients.
-						</p>
-					</div>
-					<Button
-						variant="outline"
-						size="sm"
-						onclick={loadMCPActivity}
-						disabled={mcpActivityLoading}
-					>
-						{#if mcpActivityLoading}
-							<LoaderIcon class="mr-2 h-4 w-4 animate-spin" />
-						{/if}
-						Refresh
-					</Button>
-				</div>
+								{#if securityStatus?.totp_enabled}
+									<div class="space-y-3">
+										<div class="rounded-md bg-emerald-500/10 px-3 py-2 text-sm text-emerald-700">
+											Authenticator app is enabled.
+										</div>
+										<div class="space-y-2">
+											<Label for="disable-password">Current password</Label>
+											<Input
+												id="disable-password"
+												type="password"
+												bind:value={currentPassword}
+												placeholder="Required to disable"
+											/>
+										</div>
+										<Button
+											variant="outline"
+											onclick={disableTOTP}
+											disabled={securityBusy || !currentPassword.trim()}
+										>
+											Disable Authenticator App
+										</Button>
+									</div>
+								{:else}
+									<div class="space-y-3">
+										<div class="space-y-2">
+											<Label for="totp-password">Current password</Label>
+											<Input
+												id="totp-password"
+												type="password"
+												bind:value={currentPassword}
+												placeholder="Required to start setup"
+											/>
+										</div>
+										<Button
+											onclick={startTOTPSetup}
+											disabled={securityBusy || !currentPassword.trim()}
+										>
+											Start Authenticator Setup
+										</Button>
 
-				{#if mcpActivityError}
-					<div
-						data-testid="mcp-activity-error"
-						class="mb-3 rounded-md border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive"
-					>
-						{mcpActivityError}
-					</div>
-				{/if}
-
-				{#if mcpActivityLoading}
-					<div class="space-y-2">
-						<Skeleton class="h-16 rounded-md" />
-						<Skeleton class="h-16 rounded-md" />
-					</div>
-				{:else if mcpActivity.length === 0}
-					<p
-						data-testid="mcp-activity-empty"
-						class="rounded-md border bg-muted/20 p-4 text-sm text-muted-foreground"
-					>
-						No MCP tool calls have been recorded yet.
-					</p>
-				{:else}
-					<div data-testid="mcp-activity-list" class="space-y-2">
-						{#each mcpActivity as call (call.id)}
-							<div class="rounded-md border px-3 py-3">
-								<div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-									<div class="min-w-0">
-										<p class="truncate text-sm font-medium">{call.tool_name}</p>
-										<p class="mt-1 text-xs text-muted-foreground">
-											{new Date(call.created_at).toLocaleString()} · {call.duration_ms} ms
-											{#if call.workspace_id}
-												· Workspace <span class="font-mono">{call.workspace_id}</span>
-											{/if}
-										</p>
-										{#if call.client_name || call.client_scope}
-											<p class="mt-1 truncate text-xs text-muted-foreground">
-												Client {call.client_name || call.client_scope}
-												{#if call.client_token_prefix}
-													· <span class="font-mono">{call.client_token_prefix}</span>
-												{/if}
-											</p>
+										{#if totpSetupChallengeId}
+											<div class="space-y-3 rounded-lg border bg-muted/20 p-4">
+												<img
+													src={totpQRCodeDataURL}
+													alt="TOTP QR code"
+													class="mx-auto h-48 w-48 rounded-lg border bg-white p-2"
+												/>
+												<div class="space-y-1">
+													<p class="text-sm font-medium">Manual entry key</p>
+													<p class="font-mono text-xs break-all text-muted-foreground">
+														{totpManualEntryKey}
+													</p>
+												</div>
+												<div class="space-y-2">
+													<Label for="totp-code">Enter the 6-digit code from your app</Label>
+													<Input
+														id="totp-code"
+														bind:value={totpCode}
+														inputmode="numeric"
+														autocomplete="one-time-code"
+														maxlength={6}
+														placeholder="123456"
+													/>
+												</div>
+												<Button
+													onclick={confirmTOTPSetup}
+													disabled={securityBusy || totpCode.trim().length !== 6}
+												>
+													Confirm Authenticator App
+												</Button>
+											</div>
 										{/if}
 									</div>
-									<span
-										class={[
-											'inline-flex w-fit items-center rounded-full border px-2 py-0.5 text-xs font-medium',
-											call.status === 'success'
-												? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700'
-												: 'border-destructive/30 bg-destructive/10 text-destructive'
-										]}
-									>
-										{call.status}
-									</span>
-								</div>
-								{#if call.error_message}
-									<p class="mt-2 text-xs text-destructive">{call.error_message}</p>
 								{/if}
 							</div>
-						{/each}
+
+							<div class="rounded-lg border p-4">
+								<div class="mb-3 flex items-center gap-2">
+									<KeyRoundIcon class="h-4 w-4 text-muted-foreground" />
+									<h3 class="font-medium">Passkeys</h3>
+								</div>
+								<p class="mb-4 text-sm text-muted-foreground">
+									Add device-backed passkeys as a second factor for faster sign-ins.
+								</p>
+
+								<div class="space-y-3">
+									<div class="space-y-2">
+										<Label for="passkey-password">Current password</Label>
+										<Input
+											id="passkey-password"
+											type="password"
+											bind:value={currentPassword}
+											placeholder="Required to add or remove passkeys"
+										/>
+									</div>
+									<div class="space-y-2">
+										<Label for="passkey-name">Passkey name</Label>
+										<Input
+											id="passkey-name"
+											bind:value={newPasskeyName}
+											placeholder="MacBook, iPhone, YubiKey"
+										/>
+									</div>
+									<Button onclick={addPasskey} disabled={securityBusy || !currentPassword.trim()}>
+										Add Passkey
+									</Button>
+								</div>
+
+								<div class="mt-4 space-y-2">
+									{#if (securityStatus?.passkeys ?? []).length}
+										{#each securityStatus?.passkeys ?? [] as passkey (passkey.id)}
+											<div class="flex items-center justify-between rounded-md border px-3 py-2">
+												<div>
+													<p class="text-sm font-medium">{passkey.name}</p>
+													<p class="text-xs text-muted-foreground">
+														{#if passkey.last_used_at && passkey.last_used_at !== '0001-01-01T00:00:00Z'}
+															Last used {new Date(passkey.last_used_at).toLocaleString()}
+														{:else}
+															Added {new Date(passkey.created_at).toLocaleString()}
+														{/if}
+													</p>
+												</div>
+												<Button
+													variant="ghost"
+													size="sm"
+													class="text-destructive hover:text-destructive"
+													onclick={() => removePasskey(passkey.id)}
+													disabled={securityBusy || !currentPassword.trim()}
+												>
+													Remove
+												</Button>
+											</div>
+										{/each}
+									{:else}
+										<p class="text-sm text-muted-foreground">No passkeys added yet.</p>
+									{/if}
+								</div>
+							</div>
+						</div>
+
+						{#if securityError}
+							<div
+								class="rounded-md border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive"
+							>
+								{securityError}
+							</div>
+						{/if}
 					</div>
 				{/if}
-			</div>
-		</section>
+			</section>
 
-		<section
-			id="date-time"
-			class:hidden={activeSettingsTab !== 'workspace'}
-			class="scroll-mt-24 space-y-4"
-		>
-			<h2 class="mb-4 flex items-center gap-2 text-lg font-semibold">
-				<ClockIcon class="h-5 w-5 text-muted-foreground" />
-				Date & Time
-			</h2>
-			<div class="grid gap-4 sm:grid-cols-2">
-				<div class="space-y-2">
-					<label class="text-sm font-medium" for="timezone-select">Timezone</label>
-					<Select.Root
-						type="single"
-						value={workspaceCtx.settings.timezone}
-						onValueChange={handleTimezoneChange}
-					>
-						<Select.Trigger id="timezone-select" class="w-full">
-							{getTimezoneLabel(workspaceCtx.settings.timezone)}
-						</Select.Trigger>
-						<Select.Content class="max-h-80 overflow-y-auto">
-							{#each Object.entries(groupedTimezones) as [group, tzs] (group)}
-								<Select.Group>
-									<Select.GroupHeading class="text-xs">{group}</Select.GroupHeading>
-									{#each tzs as tz (tz.value)}
-										<Select.Item value={tz.value}>{tz.label}</Select.Item>
-									{/each}
-								</Select.Group>
-							{/each}
-						</Select.Content>
-					</Select.Root>
-					<p class="text-sm text-muted-foreground">
-						Detected from your browser the first time a workspace loads, then saved here.
-					</p>
-				</div>
-
-				<div class="space-y-2">
-					<label class="text-sm font-medium" for="week-start-select">Week Starts On</label>
-					<Select.Root
-						type="single"
-						value={String(workspaceCtx.settings.week_start)}
-						onValueChange={(v) => handleWeekStartChange(Number(v))}
-					>
-						<Select.Trigger id="week-start-select" class="w-full">
-							{workspaceCtx.settings.week_start === 0 ? 'Sunday' : 'Monday'}
-						</Select.Trigger>
-						<Select.Content>
-							<Select.Item value="0">Sunday</Select.Item>
-							<Select.Item value="1">Monday</Select.Item>
-						</Select.Content>
-					</Select.Root>
-					<p class="text-sm text-muted-foreground">
-						Defaulted from your locale on first load and used for calendar layout.
-					</p>
-				</div>
-			</div>
-		</section>
-
-		<section
-			id="media-cleanup"
-			class:hidden={activeSettingsTab !== 'workspace'}
-			class="scroll-mt-24 space-y-4"
-		>
-			<h2 class="mb-4 flex items-center gap-2 text-lg font-semibold">
-				<ImageIcon class="h-5 w-5 text-muted-foreground" />
-				Media Cleanup
-			</h2>
-			<div class="space-y-2">
-				<label class="text-sm font-medium" for="cleanup-select">Auto-delete unused media</label>
-				<Select.Root
-					type="single"
-					value={String(workspaceCtx.settings.media_cleanup_days)}
-					onValueChange={(v) => handleCleanupDaysChange(Number(v))}
-				>
-					<Select.Trigger id="cleanup-select" class="w-full">
-						{cleanupDaysOptions.find((o) => o.value === workspaceCtx.settings.media_cleanup_days)
-							?.label || 'Disabled'}
-					</Select.Trigger>
-					<Select.Content>
-						{#each cleanupDaysOptions as option (option.value)}
-							<Select.Item value={String(option.value)}>{option.label}</Select.Item>
-						{/each}
-					</Select.Content>
-				</Select.Root>
-				<p class="text-sm text-muted-foreground">
-					Automatically delete unused, non-favorited media after this period. Favorited media is
-					always kept.
-				</p>
-			</div>
-		</section>
-
-		<section
-			id="posting-schedule"
-			class:hidden={activeSettingsTab !== 'workspace'}
-			class="scroll-mt-24 rounded-lg border p-6"
-		>
-			<div class="mb-4 flex items-center justify-between">
-				<h2 class="flex items-center gap-2 text-lg font-semibold">
-					<CalendarIcon class="h-5 w-5 text-muted-foreground" />
-					Posting Schedule
+			<section id="tokens" class:hidden={activeSettingsTab !== 'developer'} class="scroll-mt-24">
+				<h2 class="mb-4 flex items-center gap-2 text-lg font-semibold">
+					<TerminalIcon class="h-5 w-5 text-muted-foreground" />
+					CLI Devices & API Tokens
 				</h2>
-				<Button
-					onclick={() => (showSuggestSchedule = !showSuggestSchedule)}
-					variant="outline"
-					size="sm"
-				>
-					<SparklesIcon class="mr-2 h-4 w-4" />
-					Suggest Weekly Pattern
-				</Button>
-			</div>
-			<p class="mb-4 text-sm text-muted-foreground">
-				Define reusable posting times in your workspace timezone. Toggle each weekday checkbox to
-				decide when that time is active. The "Suggest Time" action will use these slots first.
-			</p>
+				<p class="mb-4 text-sm text-muted-foreground">
+					Create dedicated tokens for ChatGPT, Claude, the MCP server, the OpenPost CLI, CI, cron,
+					and other automation. Revoke any token here without changing your password.
+				</p>
 
-			<div class="mb-4 rounded-xl border bg-muted/20 p-4">
-				<div class="grid gap-4 lg:grid-cols-[180px_1fr_auto]">
+				<div class="mb-4 grid gap-3 lg:grid-cols-[1fr_240px_240px_auto]">
 					<div class="space-y-2">
-						<label class="text-sm font-medium" for="new-time">Add time row</label>
-						<Input id="new-time" bind:value={newTimeInput} type="time" step="900" />
+						<Label for="api-token-name">New token name</Label>
+						<Input
+							id="api-token-name"
+							bind:value={apiTokenName}
+							placeholder="ChatGPT App, MacBook CLI, GitHub CI"
+						/>
 					</div>
 					<div class="space-y-2">
-						<span class="text-sm font-medium">Active days</span>
-						<div class="flex flex-wrap gap-3">
-							{#each dayOrder as dayIndex (dayIndex)}
-								<label
-									class="flex items-center gap-2 rounded-md border bg-background px-3 py-2 text-sm"
-								>
-									<Checkbox
-										checked={newTimeDays.includes(dayIndex)}
-										onCheckedChange={() => toggleNewDay(dayIndex)}
-									/>
-									<span>{dayShortNames[dayIndex]}</span>
-								</label>
-							{/each}
-						</div>
+						<Label for="api-token-scope">Token scope</Label>
+						<Select.Root
+							type="single"
+							value={apiTokenScope}
+							onValueChange={(value) => value && (apiTokenScope = value)}
+						>
+							<Select.Trigger id="api-token-scope" data-testid="api-token-scope" class="w-full">
+								{selectedAPITokenScope.label}
+							</Select.Trigger>
+							<Select.Content>
+								{#each apiTokenScopeOptions as option (option.value)}
+									<Select.Item value={option.value}>
+										<div class="flex flex-col gap-0.5 text-left">
+											<span>{option.label}</span>
+											<span class="text-xs text-muted-foreground">{option.description}</span>
+										</div>
+									</Select.Item>
+								{/each}
+							</Select.Content>
+						</Select.Root>
+					</div>
+					<div class="space-y-2">
+						<Label for="api-token-workspace">Access boundary</Label>
+						<Select.Root
+							type="single"
+							value={apiTokenWorkspaceScope}
+							onValueChange={(value) => value && (apiTokenWorkspaceScope = value)}
+						>
+							<Select.Trigger id="api-token-workspace" class="w-full">
+								{selectedAPITokenWorkspaceScope.label}
+							</Select.Trigger>
+							<Select.Content>
+								{#each apiTokenWorkspaceOptions as option (option.value)}
+									<Select.Item value={option.value}>
+										<div class="flex flex-col gap-0.5 text-left">
+											<span>{option.label}</span>
+											<span class="text-xs text-muted-foreground">{option.description}</span>
+										</div>
+									</Select.Item>
+								{/each}
+							</Select.Content>
+						</Select.Root>
 					</div>
 					<div class="flex items-end">
-						<Button onclick={addTimeRow} class="w-full lg:w-auto">
-							<PlusIcon class="mr-2 h-4 w-4" />
-							Add Time
+						<Button
+							onclick={createAPIToken}
+							disabled={apiTokenBusy ||
+								(apiTokenWorkspaceScope === 'current' && !workspaceCtx.currentWorkspace)}
+						>
+							{#if apiTokenBusy}
+								<LoaderIcon class="mr-2 h-4 w-4 animate-spin" />
+							{/if}
+							Create Token
 						</Button>
 					</div>
 				</div>
-				{#if newTimeError}
-					<p class="mt-3 text-xs text-destructive">{newTimeError}</p>
-				{:else}
-					<p class="mt-3 text-xs text-muted-foreground">
-						New rows are created in {getTimezoneLabel(workspaceCtx.settings.timezone)}.
-					</p>
-				{/if}
-			</div>
 
-			{#if showSuggestSchedule}
-				<div class="mb-4 rounded-xl border bg-background p-4">
-					<div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-						<div class="space-y-2">
-							<label class="text-sm font-medium" for="posts-per-day">Suggested posts per day</label>
-							<Select.Root
-								type="single"
-								value={String(suggestedPostsPerDay)}
-								onValueChange={(v) => (suggestedPostsPerDay = Number(v))}
+				{#if createdAPIToken}
+					<div
+						class="mb-4 rounded-lg border border-amber-300/50 bg-amber-50 p-4 text-sm text-amber-950"
+					>
+						<p class="font-medium">Copy this token now. It will not be shown again.</p>
+						<p class="mt-2 font-mono text-xs break-all">{createdAPIToken}</p>
+					</div>
+				{/if}
+
+				{#if apiTokensLoading}
+					<div class="space-y-2">
+						<Skeleton class="h-14 rounded-md" />
+						<Skeleton class="h-14 rounded-md" />
+					</div>
+				{:else if apiTokens.length === 0}
+					<p class="rounded-md border bg-muted/20 p-4 text-sm text-muted-foreground">
+						No API tokens or CLI devices are currently authorized.
+					</p>
+				{:else}
+					<div class="space-y-2">
+						{#each apiTokens as token (token.id)}
+							<div
+								class="flex flex-col gap-3 rounded-md border px-3 py-3 sm:flex-row sm:items-center sm:justify-between"
 							>
-								<Select.Trigger id="posts-per-day" class="w-28">
-									{suggestedPostsPerDay}
-								</Select.Trigger>
-								<Select.Content class="max-h-60 overflow-y-auto">
-									{#each Array.from({ length: 10 }, (_, i) => i + 1) as n (n)}
-										<Select.Item value={String(n)}>{n}</Select.Item>
-									{/each}
-								</Select.Content>
-							</Select.Root>
+								<div>
+									<p class="text-sm font-medium">{token.name}</p>
+									<p class="text-xs text-muted-foreground">
+										Prefix <span class="font-mono">{token.token_prefix}</span> · {token.scope} · Created
+										{new Date(token.created_at).toLocaleString()}
+										{#if token.workspace_id}
+											· Workspace <span class="font-mono">{token.workspace_id}</span>
+										{:else}
+											· All workspaces
+										{/if}
+										{#if token.last_used_at}
+											· Last used {new Date(token.last_used_at).toLocaleString()}
+										{/if}
+									</p>
+								</div>
+								<Button
+									variant="ghost"
+									size="sm"
+									class="text-destructive hover:text-destructive"
+									onclick={() => revokeAPIToken(token.id)}
+									disabled={apiTokenBusy}
+								>
+									Revoke
+								</Button>
+							</div>
+						{/each}
+					</div>
+				{/if}
+
+				<div class="mt-6 border-t pt-6">
+					<div class="mb-4 flex items-center justify-between gap-3">
+						<div>
+							<h3 class="flex items-center gap-2 text-sm font-semibold">
+								<ActivityIcon class="h-4 w-4 text-muted-foreground" />
+								Recent MCP Activity
+							</h3>
+							<p class="mt-1 text-sm text-muted-foreground">
+								Recent tool calls from ChatGPT, Claude, the CLI proxy, and other MCP clients.
+							</p>
 						</div>
-						<div class="flex gap-2">
-							<Button onclick={() => (showSuggestSchedule = false)} variant="outline" size="sm"
-								>Cancel</Button
-							>
-							<Button onclick={generateSuggestedSchedule} size="sm" disabled={generatingSchedule}>
-								{#if generatingSchedule}
-									<LoaderIcon class="mr-2 h-4 w-4 animate-spin" />
-								{/if}
-								Generate
+						<Button
+							variant="outline"
+							size="sm"
+							onclick={loadMCPActivity}
+							disabled={mcpActivityLoading}
+						>
+							{#if mcpActivityLoading}
+								<LoaderIcon class="mr-2 h-4 w-4 animate-spin" />
+							{/if}
+							Refresh
+						</Button>
+					</div>
+
+					{#if mcpActivityError}
+						<div
+							data-testid="mcp-activity-error"
+							class="mb-3 rounded-md border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive"
+						>
+							{mcpActivityError}
+						</div>
+					{/if}
+
+					{#if mcpActivityLoading}
+						<div class="space-y-2">
+							<Skeleton class="h-16 rounded-md" />
+							<Skeleton class="h-16 rounded-md" />
+						</div>
+					{:else if mcpActivity.length === 0}
+						<p
+							data-testid="mcp-activity-empty"
+							class="rounded-md border bg-muted/20 p-4 text-sm text-muted-foreground"
+						>
+							No MCP tool calls have been recorded yet.
+						</p>
+					{:else}
+						<div data-testid="mcp-activity-list" class="space-y-2">
+							{#each mcpActivity as call (call.id)}
+								<div class="rounded-md border px-3 py-3">
+									<div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+										<div class="min-w-0">
+											<p class="truncate text-sm font-medium">{call.tool_name}</p>
+											<p class="mt-1 text-xs text-muted-foreground">
+												{new Date(call.created_at).toLocaleString()} · {call.duration_ms} ms
+												{#if call.workspace_id}
+													· Workspace <span class="font-mono">{call.workspace_id}</span>
+												{/if}
+											</p>
+											{#if call.client_name || call.client_scope}
+												<p class="mt-1 truncate text-xs text-muted-foreground">
+													Client {call.client_name || call.client_scope}
+													{#if call.client_token_prefix}
+														· <span class="font-mono">{call.client_token_prefix}</span>
+													{/if}
+												</p>
+											{/if}
+										</div>
+										<span
+											class={[
+												'inline-flex w-fit items-center rounded-full border px-2 py-0.5 text-xs font-medium',
+												call.status === 'success'
+													? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700'
+													: 'border-destructive/30 bg-destructive/10 text-destructive'
+											]}
+										>
+											{call.status}
+										</span>
+									</div>
+									{#if call.error_message}
+										<p class="mt-2 text-xs text-destructive">{call.error_message}</p>
+									{/if}
+								</div>
+							{/each}
+						</div>
+					{/if}
+				</div>
+			</section>
+
+			<section
+				id="date-time"
+				class:hidden={activeSettingsTab !== 'general'}
+				class="scroll-mt-24 space-y-4"
+			>
+				<h2 class="mb-4 flex items-center gap-2 text-lg font-semibold">
+					<ClockIcon class="h-5 w-5 text-muted-foreground" />
+					Date & Time
+				</h2>
+				<div class="grid gap-4 sm:grid-cols-2">
+					<div class="space-y-2">
+						<label class="text-sm font-medium" for="timezone-select">Timezone</label>
+						<Select.Root
+							type="single"
+							value={workspaceCtx.settings.timezone}
+							onValueChange={handleTimezoneChange}
+						>
+							<Select.Trigger id="timezone-select" class="w-full">
+								{getTimezoneLabel(workspaceCtx.settings.timezone)}
+							</Select.Trigger>
+							<Select.Content class="max-h-80 overflow-y-auto">
+								{#each Object.entries(groupedTimezones) as [group, tzs] (group)}
+									<Select.Group>
+										<Select.GroupHeading class="text-xs">{group}</Select.GroupHeading>
+										{#each tzs as tz (tz.value)}
+											<Select.Item value={tz.value}>{tz.label}</Select.Item>
+										{/each}
+									</Select.Group>
+								{/each}
+							</Select.Content>
+						</Select.Root>
+						<p class="text-sm text-muted-foreground">
+							Detected from your browser the first time a workspace loads, then saved here.
+						</p>
+					</div>
+
+					<div class="space-y-2">
+						<label class="text-sm font-medium" for="week-start-select">Week Starts On</label>
+						<Select.Root
+							type="single"
+							value={String(workspaceCtx.settings.week_start)}
+							onValueChange={(v) => handleWeekStartChange(Number(v))}
+						>
+							<Select.Trigger id="week-start-select" class="w-full">
+								{workspaceCtx.settings.week_start === 0 ? 'Sunday' : 'Monday'}
+							</Select.Trigger>
+							<Select.Content>
+								<Select.Item value="0">Sunday</Select.Item>
+								<Select.Item value="1">Monday</Select.Item>
+							</Select.Content>
+						</Select.Root>
+						<p class="text-sm text-muted-foreground">
+							Defaulted from your locale on first load and used for calendar layout.
+						</p>
+					</div>
+				</div>
+			</section>
+
+			<section
+				id="media-cleanup"
+				class:hidden={activeSettingsTab !== 'media'}
+				class="scroll-mt-24 space-y-4"
+			>
+				<h2 class="mb-4 flex items-center gap-2 text-lg font-semibold">
+					<ImageIcon class="h-5 w-5 text-muted-foreground" />
+					Media Cleanup
+				</h2>
+				<div class="space-y-2">
+					<label class="text-sm font-medium" for="cleanup-select">Auto-delete unused media</label>
+					<Select.Root
+						type="single"
+						value={String(workspaceCtx.settings.media_cleanup_days)}
+						onValueChange={(v) => handleCleanupDaysChange(Number(v))}
+					>
+						<Select.Trigger id="cleanup-select" class="w-full">
+							{cleanupDaysOptions.find((o) => o.value === workspaceCtx.settings.media_cleanup_days)
+								?.label || 'Disabled'}
+						</Select.Trigger>
+						<Select.Content>
+							{#each cleanupDaysOptions as option (option.value)}
+								<Select.Item value={String(option.value)}>{option.label}</Select.Item>
+							{/each}
+						</Select.Content>
+					</Select.Root>
+					<p class="text-sm text-muted-foreground">
+						Automatically delete unused, non-favorited media after this period. Favorited media is
+						always kept.
+					</p>
+				</div>
+			</section>
+
+			<section
+				id="posting-schedule"
+				class:hidden={activeSettingsTab !== 'schedule'}
+				class="scroll-mt-24"
+			>
+				<div class="mb-4 flex items-center justify-between">
+					<h2 class="flex items-center gap-2 text-lg font-semibold">
+						<CalendarIcon class="h-5 w-5 text-muted-foreground" />
+						Posting Schedule
+					</h2>
+					<Button
+						onclick={() => (showSuggestSchedule = !showSuggestSchedule)}
+						variant="outline"
+						size="sm"
+					>
+						<SparklesIcon class="mr-2 h-4 w-4" />
+						Suggest Weekly Pattern
+					</Button>
+				</div>
+				<p class="mb-4 text-sm text-muted-foreground">
+					Define reusable posting times in your workspace timezone. Toggle each weekday checkbox to
+					decide when that time is active. The "Suggest Time" action will use these slots first.
+				</p>
+
+				<div class="mb-4 rounded-xl border bg-muted/20 p-4">
+					<div class="grid gap-4 lg:grid-cols-[180px_1fr_auto]">
+						<div class="space-y-2">
+							<label class="text-sm font-medium" for="new-time">Add time row</label>
+							<Input id="new-time" bind:value={newTimeInput} type="time" step="900" />
+						</div>
+						<div class="space-y-2">
+							<span class="text-sm font-medium">Active days</span>
+							<div class="flex flex-wrap gap-3">
+								{#each dayOrder as dayIndex (dayIndex)}
+									<label
+										class="flex items-center gap-2 rounded-md border bg-background px-3 py-2 text-sm"
+									>
+										<Checkbox
+											checked={newTimeDays.includes(dayIndex)}
+											onCheckedChange={() => toggleNewDay(dayIndex)}
+										/>
+										<span>{dayShortNames[dayIndex]}</span>
+									</label>
+								{/each}
+							</div>
+						</div>
+						<div class="flex items-end">
+							<Button onclick={addTimeRow} class="w-full lg:w-auto">
+								<PlusIcon class="mr-2 h-4 w-4" />
+								Add Time
 							</Button>
 						</div>
 					</div>
-				</div>
-			{/if}
-
-			{#if loadingSchedules}
-				<div class="space-y-2">
-					<Skeleton class="h-14 rounded-md" />
-					<Skeleton class="h-14 rounded-md" />
-					<Skeleton class="h-14 rounded-md" />
-				</div>
-			{:else}
-				<div class="overflow-hidden rounded-xl border">
-					<div class="grid grid-cols-[120px_repeat(7,minmax(56px,1fr))_52px] border-b bg-muted/30">
-						<div
-							class="px-4 py-3 text-xs font-semibold tracking-wide text-muted-foreground uppercase"
-						>
-							Time
-						</div>
-						{#each dayOrder as dayIndex (dayIndex)}
-							<div
-								class="px-2 py-3 text-center text-xs font-semibold tracking-wide text-muted-foreground uppercase"
-							>
-								{dayShortNames[dayIndex]}
-							</div>
-						{/each}
-						<div class="px-2 py-3"></div>
-					</div>
-
-					{#if scheduleRows.length === 0}
-						<div class="px-4 py-10 text-center text-sm text-muted-foreground">
-							No posting times yet. Add a row above or generate a suggested weekly pattern.
-						</div>
+					{#if newTimeError}
+						<p class="mt-3 text-xs text-destructive">{newTimeError}</p>
 					{:else}
-						{#each scheduleRows as row (row.key)}
-							<div
-								class="grid grid-cols-[120px_repeat(7,minmax(56px,1fr))_52px] border-b last:border-b-0"
-							>
-								<div class="px-4 py-3">
-									<div class="font-medium">{formatTime(row.local_hour, row.local_minute)}</div>
-									{#if row.label}
-										<div class="text-xs text-muted-foreground">{row.label}</div>
-									{/if}
-								</div>
-								{#each dayOrder as dayIndex (`${row.key}-${dayIndex}`)}
-									<div class="flex items-center justify-center px-2 py-3">
-										<Checkbox
-											checked={Boolean(row.days[dayIndex])}
-											onCheckedChange={() => toggleScheduleCell(row, dayIndex)}
-											aria-label={`Toggle ${dayNames[dayIndex]} ${formatTime(row.local_hour, row.local_minute)}`}
-										/>
-									</div>
-								{/each}
-								<div class="flex items-center justify-center px-2 py-3">
-									<Button
-										variant="ghost"
-										size="icon"
-										class="h-8 w-8"
-										onclick={() => removeTimeRow(row)}
-										aria-label={`Remove ${formatTime(row.local_hour, row.local_minute)} row`}
-									>
-										<TrashIcon class="h-4 w-4" />
-									</Button>
-								</div>
-							</div>
-						{/each}
-					{/if}
-				</div>
-			{/if}
-		</section>
-
-		<section
-			id="natural-posting"
-			class:hidden={activeSettingsTab !== 'workspace'}
-			class="scroll-mt-24 space-y-4"
-		>
-			<h2 class="mb-4 flex items-center gap-2 text-lg font-semibold">
-				<ClockIcon class="h-5 w-5 text-muted-foreground" />
-				Natural Posting
-			</h2>
-			<div class="space-y-4">
-				<p class="text-sm text-muted-foreground">
-					Add a small random delay to scheduled posts so they don't all go out at exactly the same
-					minute. This makes your posting pattern look more natural.
-				</p>
-				<div class="space-y-2">
-					<label class="text-sm font-medium" for="random-delay">Random delay range</label>
-					<Select.Root
-						type="single"
-						value={String(workspaceCtx.settings.random_delay_minutes)}
-						onValueChange={(v) => (workspaceCtx.settings.random_delay_minutes = Number(v))}
-					>
-						<Select.Trigger id="random-delay" class="w-full sm:w-64">
-							{#if workspaceCtx.settings.random_delay_minutes === 0}
-								No delay (exact time)
-							{:else}
-								±{workspaceCtx.settings.random_delay_minutes} minutes
-							{/if}
-						</Select.Trigger>
-						<Select.Content>
-							<Select.Item value="0">No delay (exact time)</Select.Item>
-							<Select.Item value="5">±5 minutes</Select.Item>
-							<Select.Item value="10">±10 minutes</Select.Item>
-							<Select.Item value="15">±15 minutes</Select.Item>
-							<Select.Item value="30">±30 minutes</Select.Item>
-							<Select.Item value="45">±45 minutes</Select.Item>
-							<Select.Item value="60">±1 hour</Select.Item>
-						</Select.Content>
-					</Select.Root>
-				</div>
-				<div class="space-y-2">
-					<label class="text-sm font-medium" for="draft-gap">Draft spillover gap</label>
-					<Input
-						id="draft-gap"
-						type="text"
-						value={draftGapInput}
-						oninput={(e) => handleDraftGapChange((e.target as HTMLInputElement).value)}
-						placeholder="e.g. 45m, 2h, 0"
-						class={draftGapError ? 'border-destructive' : ''}
-					/>
-					{#if draftGapError}
-						<p class="text-xs text-destructive">{draftGapError}</p>
-					{:else}
-						<p class="text-xs text-muted-foreground">
-							When a day has no unused schedule slots left, "Suggest Time" will place the next post
-							at least {workspaceCtx.settings.draft_gap_minutes} minutes after the latest scheduled post
-							that day. Use `0` to disable the spillover rule.
+						<p class="mt-3 text-xs text-muted-foreground">
+							New rows are created in {getTimezoneLabel(workspaceCtx.settings.timezone)}.
 						</p>
 					{/if}
 				</div>
-			</div>
-		</section>
 
-		<section
-			id="slot-defaults"
-			class:hidden={activeSettingsTab !== 'workspace'}
-			class="scroll-mt-24 space-y-4"
-		>
-			<h2 class="mb-4 flex items-center gap-2 text-lg font-semibold">
-				<ClockIcon class="h-5 w-5 text-muted-foreground" />
-				Time Slot Defaults
-			</h2>
-			<div class="space-y-4">
-				<p class="text-sm text-muted-foreground">
-					Configure the default time range and interval shown in the compose page scheduler.
-				</p>
-				<div class="grid gap-4 sm:grid-cols-3">
+				{#if showSuggestSchedule}
+					<div class="mb-4 rounded-xl border bg-background p-4">
+						<div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+							<div class="space-y-2">
+								<label class="text-sm font-medium" for="posts-per-day"
+									>Suggested posts per day</label
+								>
+								<Select.Root
+									type="single"
+									value={String(suggestedPostsPerDay)}
+									onValueChange={(v) => (suggestedPostsPerDay = Number(v))}
+								>
+									<Select.Trigger id="posts-per-day" class="w-28">
+										{suggestedPostsPerDay}
+									</Select.Trigger>
+									<Select.Content class="max-h-60 overflow-y-auto">
+										{#each Array.from({ length: 10 }, (_, i) => i + 1) as n (n)}
+											<Select.Item value={String(n)}>{n}</Select.Item>
+										{/each}
+									</Select.Content>
+								</Select.Root>
+							</div>
+							<div class="flex gap-2">
+								<Button onclick={() => (showSuggestSchedule = false)} variant="outline" size="sm"
+									>Cancel</Button
+								>
+								<Button onclick={generateSuggestedSchedule} size="sm" disabled={generatingSchedule}>
+									{#if generatingSchedule}
+										<LoaderIcon class="mr-2 h-4 w-4 animate-spin" />
+									{/if}
+									Generate
+								</Button>
+							</div>
+						</div>
+					</div>
+				{/if}
+
+				{#if loadingSchedules}
 					<div class="space-y-2">
-						<label class="text-sm font-medium" for="start-time">Start time</label>
+						<Skeleton class="h-14 rounded-md" />
+						<Skeleton class="h-14 rounded-md" />
+						<Skeleton class="h-14 rounded-md" />
+					</div>
+				{:else}
+					<div class="overflow-hidden rounded-xl border">
+						<div
+							class="grid grid-cols-[120px_repeat(7,minmax(56px,1fr))_52px] border-b bg-muted/30"
+						>
+							<div
+								class="px-4 py-3 text-xs font-semibold tracking-wide text-muted-foreground uppercase"
+							>
+								Time
+							</div>
+							{#each dayOrder as dayIndex (dayIndex)}
+								<div
+									class="px-2 py-3 text-center text-xs font-semibold tracking-wide text-muted-foreground uppercase"
+								>
+									{dayShortNames[dayIndex]}
+								</div>
+							{/each}
+							<div class="px-2 py-3"></div>
+						</div>
+
+						{#if scheduleRows.length === 0}
+							<div class="px-4 py-10 text-center text-sm text-muted-foreground">
+								No posting times yet. Add a row above or generate a suggested weekly pattern.
+							</div>
+						{:else}
+							{#each scheduleRows as row (row.key)}
+								<div
+									class="grid grid-cols-[120px_repeat(7,minmax(56px,1fr))_52px] border-b last:border-b-0"
+								>
+									<div class="px-4 py-3">
+										<div class="font-medium">{formatTime(row.local_hour, row.local_minute)}</div>
+										{#if row.label}
+											<div class="text-xs text-muted-foreground">{row.label}</div>
+										{/if}
+									</div>
+									{#each dayOrder as dayIndex (`${row.key}-${dayIndex}`)}
+										<div class="flex items-center justify-center px-2 py-3">
+											<Checkbox
+												checked={Boolean(row.days[dayIndex])}
+												onCheckedChange={() => toggleScheduleCell(row, dayIndex)}
+												aria-label={`Toggle ${dayNames[dayIndex]} ${formatTime(row.local_hour, row.local_minute)}`}
+											/>
+										</div>
+									{/each}
+									<div class="flex items-center justify-center px-2 py-3">
+										<Button
+											variant="ghost"
+											size="icon"
+											class="h-8 w-8"
+											onclick={() => removeTimeRow(row)}
+											aria-label={`Remove ${formatTime(row.local_hour, row.local_minute)} row`}
+										>
+											<TrashIcon class="h-4 w-4" />
+										</Button>
+									</div>
+								</div>
+							{/each}
+						{/if}
+					</div>
+				{/if}
+			</section>
+
+			<section
+				id="natural-posting"
+				class:hidden={activeSettingsTab !== 'schedule'}
+				class="scroll-mt-24 space-y-4"
+			>
+				<h2 class="mb-4 flex items-center gap-2 text-lg font-semibold">
+					<ClockIcon class="h-5 w-5 text-muted-foreground" />
+					Advanced scheduling
+				</h2>
+				<div class="space-y-4">
+					<p class="text-sm text-muted-foreground">
+						Optional timing rules for teams that need variation or queue spillover.
+					</p>
+					<div class="space-y-2">
+						<label class="text-sm font-medium" for="random-delay">Time variation</label>
 						<Select.Root
 							type="single"
-							value={String(workspaceCtx.settings.slot_start_hour)}
-							onValueChange={(v) => (workspaceCtx.settings.slot_start_hour = Number(v))}
+							value={String(workspaceCtx.settings.random_delay_minutes)}
+							onValueChange={(v) => (workspaceCtx.settings.random_delay_minutes = Number(v))}
 						>
-							<Select.Trigger id="start-time" class="w-full">
-								{workspaceCtx.settings.slot_start_hour.toString().padStart(2, '0')}:00
+							<Select.Trigger id="random-delay" class="w-full sm:w-64">
+								{#if workspaceCtx.settings.random_delay_minutes === 0}
+									No delay (exact time)
+								{:else}
+									±{workspaceCtx.settings.random_delay_minutes} minutes
+								{/if}
 							</Select.Trigger>
-							<Select.Content class="max-h-60 overflow-y-auto">
-								{#each Array.from({ length: 24 }, (_, i) => i) as hour (hour)}
-									<Select.Item value={String(hour)}
-										>{hour.toString().padStart(2, '0')}:00</Select.Item
-									>
-								{/each}
+							<Select.Content>
+								<Select.Item value="0">No delay (exact time)</Select.Item>
+								<Select.Item value="5">±5 minutes</Select.Item>
+								<Select.Item value="10">±10 minutes</Select.Item>
+								<Select.Item value="15">±15 minutes</Select.Item>
+								<Select.Item value="30">±30 minutes</Select.Item>
+								<Select.Item value="45">±45 minutes</Select.Item>
+								<Select.Item value="60">±1 hour</Select.Item>
 							</Select.Content>
 						</Select.Root>
 					</div>
 					<div class="space-y-2">
-						<label class="text-sm font-medium" for="end-time">End time</label>
-						<Select.Root
-							type="single"
-							value={String(workspaceCtx.settings.slot_end_hour)}
-							onValueChange={(v) => (workspaceCtx.settings.slot_end_hour = Number(v))}
-						>
-							<Select.Trigger id="end-time" class="w-full">
-								{workspaceCtx.settings.slot_end_hour.toString().padStart(2, '0')}:00
-							</Select.Trigger>
-							<Select.Content class="max-h-60 overflow-y-auto">
-								{#each Array.from({ length: 24 }, (_, i) => i) as hour (hour)}
-									<Select.Item value={String(hour)}
-										>{hour.toString().padStart(2, '0')}:00</Select.Item
-									>
-								{/each}
-							</Select.Content>
-						</Select.Root>
-					</div>
-					<div class="space-y-2">
-						<label class="text-sm font-medium" for="interval">Interval</label>
-						<input
-							id="interval"
+						<label class="text-sm font-medium" for="draft-gap">When today's queue is full</label>
+						<Input
+							id="draft-gap"
 							type="text"
-							value={intervalInput}
-							oninput={(e) => handleIntervalChange((e.target as HTMLInputElement).value)}
-							placeholder="e.g. 15m, 30 min, 1h"
-							class="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm {intervalError
-								? 'border-destructive'
-								: ''}"
+							value={draftGapInput}
+							oninput={(e) => handleDraftGapChange((e.target as HTMLInputElement).value)}
+							placeholder="e.g. 45m, 2h, 0"
+							class={draftGapError ? 'border-destructive' : ''}
 						/>
-						{#if intervalError}
-							<p class="text-xs text-destructive">{intervalError}</p>
+						{#if draftGapError}
+							<p class="text-xs text-destructive">{draftGapError}</p>
 						{:else}
 							<p class="text-xs text-muted-foreground">
-								Current: {workspaceCtx.settings.slot_interval_minutes} minutes
+								When a day has no unused schedule slots left, "Suggest Time" will place the next
+								post at least {workspaceCtx.settings.draft_gap_minutes} minutes after the latest scheduled
+								post that day. Use `0` to disable the spillover rule.
 							</p>
 						{/if}
 					</div>
 				</div>
-			</div>
-		</section>
+			</section>
 
-		<div class:hidden={activeSettingsTab !== 'workspace'} class="flex justify-end">
-			<Button onclick={saveSettings} disabled={saving}>
-				{#if saving}
-					<LoaderIcon class="mr-2 h-4 w-4 animate-spin" />
-				{:else}
-					<SaveIcon class="mr-2 h-4 w-4" />
-				{/if}
-				Save Changes
-			</Button>
+			<section
+				id="slot-defaults"
+				class:hidden={activeSettingsTab !== 'schedule'}
+				class="scroll-mt-24 space-y-4"
+			>
+				<h2 class="mb-4 flex items-center gap-2 text-lg font-semibold">
+					<ClockIcon class="h-5 w-5 text-muted-foreground" />
+					Time picker range
+				</h2>
+				<div class="space-y-4">
+					<p class="text-sm text-muted-foreground">
+						Choose the hours and interval shown in the composer time picker.
+					</p>
+					<div class="grid gap-4 sm:grid-cols-3">
+						<div class="space-y-2">
+							<label class="text-sm font-medium" for="start-time">Start time</label>
+							<Select.Root
+								type="single"
+								value={String(workspaceCtx.settings.slot_start_hour)}
+								onValueChange={(v) => (workspaceCtx.settings.slot_start_hour = Number(v))}
+							>
+								<Select.Trigger id="start-time" class="w-full">
+									{workspaceCtx.settings.slot_start_hour.toString().padStart(2, '0')}:00
+								</Select.Trigger>
+								<Select.Content class="max-h-60 overflow-y-auto">
+									{#each Array.from({ length: 24 }, (_, i) => i) as hour (hour)}
+										<Select.Item value={String(hour)}
+											>{hour.toString().padStart(2, '0')}:00</Select.Item
+										>
+									{/each}
+								</Select.Content>
+							</Select.Root>
+						</div>
+						<div class="space-y-2">
+							<label class="text-sm font-medium" for="end-time">End time</label>
+							<Select.Root
+								type="single"
+								value={String(workspaceCtx.settings.slot_end_hour)}
+								onValueChange={(v) => (workspaceCtx.settings.slot_end_hour = Number(v))}
+							>
+								<Select.Trigger id="end-time" class="w-full">
+									{workspaceCtx.settings.slot_end_hour.toString().padStart(2, '0')}:00
+								</Select.Trigger>
+								<Select.Content class="max-h-60 overflow-y-auto">
+									{#each Array.from({ length: 24 }, (_, i) => i) as hour (hour)}
+										<Select.Item value={String(hour)}
+											>{hour.toString().padStart(2, '0')}:00</Select.Item
+										>
+									{/each}
+								</Select.Content>
+							</Select.Root>
+						</div>
+						<div class="space-y-2">
+							<label class="text-sm font-medium" for="interval">Interval</label>
+							<input
+								id="interval"
+								type="text"
+								value={intervalInput}
+								oninput={(e) => handleIntervalChange((e.target as HTMLInputElement).value)}
+								placeholder="e.g. 15m, 30 min, 1h"
+								class="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm {intervalError
+									? 'border-destructive'
+									: ''}"
+							/>
+							{#if intervalError}
+								<p class="text-xs text-destructive">{intervalError}</p>
+							{:else}
+								<p class="text-xs text-muted-foreground">
+									Current: {workspaceCtx.settings.slot_interval_minutes} minutes
+								</p>
+							{/if}
+						</div>
+					</div>
+				</div>
+			</section>
+
+			<div
+				class:hidden={!['general', 'media', 'schedule'].includes(activeSettingsTab)}
+				class="sticky bottom-3 z-10 flex justify-end rounded-lg border bg-background/95 p-3 shadow-sm backdrop-blur"
+			>
+				<Button onclick={saveSettings} disabled={saving}>
+					{#if saving}
+						<LoaderIcon class="mr-2 h-4 w-4 animate-spin" />
+					{:else}
+						<SaveIcon class="mr-2 h-4 w-4" />
+					{/if}
+					Save Changes
+				</Button>
+			</div>
 		</div>
 	</div>
 </PageContainer>
