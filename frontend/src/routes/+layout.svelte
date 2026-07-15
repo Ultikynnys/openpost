@@ -5,9 +5,12 @@
 	import { onMount } from 'svelte';
 	import { auth } from '$lib/stores/auth';
 	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import { page } from '$app/stores';
 	import * as Sidebar from '$lib/components/ui/sidebar';
 	import SidebarLeft from '$lib/components/sidebar-left.svelte';
+	import MobileBottomNav from '$lib/components/mobile-bottom-nav.svelte';
+	import DayPostsModal from '$lib/components/day-posts-modal.svelte';
 	import Logo from '$lib/components/Logo.svelte';
 	import LanguageSwitcher from '$lib/components/language-switcher.svelte';
 	import { IS_CAPACITOR } from '$lib/env';
@@ -71,7 +74,7 @@
 		if (instance.isLoading) return;
 
 		if (IS_CAPACITOR && !isInstanceConfigured() && currentPath !== '/connect') {
-			goto('/connect');
+			goto(resolve('/connect'));
 			return;
 		}
 
@@ -81,7 +84,7 @@
 		const isOnboardingPage = currentPath === '/onboarding';
 
 		if (!authState.isAuthenticated && !isPublicRoute && !isOnboardingPage) {
-			goto('/login');
+			goto(resolve('/login'));
 		}
 
 		if (authState.isAuthenticated) {
@@ -90,10 +93,10 @@
 			if (needsOnboarding) {
 				if (!isOnboardingPage && currentPath !== '/invite') {
 					if (onboardingCheckedPath !== currentPath) return;
-					goto(onboardingPathForPlan($page.url.searchParams.get('plan')));
+					goto(resolve(onboardingPathForPlan($page.url.searchParams.get('plan')) as '/'));
 				}
 			} else if (currentPath === '/login' || currentPath === '/register') {
-				goto(authenticatedPublicTarget());
+				goto(resolve(authenticatedPublicTarget() as '/'));
 			}
 		}
 	});
@@ -169,12 +172,12 @@
 				<p class="mb-6 text-muted-foreground">{m.landing_tagline()}</p>
 				<div class="flex justify-center gap-4">
 					<a
-						href="/login"
+						href={resolve('/login')}
 						class="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
 						>{m.landing_sign_in()}</a
 					>
 					<a
-						href="/register"
+						href={resolve('/register')}
 						class="inline-flex items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground"
 						>{m.landing_create_account()}</a
 					>
@@ -192,7 +195,7 @@
 {:else}
 	<Sidebar.Provider>
 		<SidebarLeft />
-		<Sidebar.Inset>
+		<Sidebar.Inset class="pb-20 md:pb-0">
 			<!-- Mobile header -->
 			<div class="flex items-center gap-2 border-b px-3 py-2 md:hidden">
 				<Sidebar.Trigger />
@@ -201,6 +204,8 @@
 			<div class="flex flex-1 flex-col overflow-auto">
 				{@render children()}
 			</div>
+			<MobileBottomNav />
+			<DayPostsModal />
 		</Sidebar.Inset>
 	</Sidebar.Provider>
 {/if}

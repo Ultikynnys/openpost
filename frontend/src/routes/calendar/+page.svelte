@@ -140,6 +140,12 @@
 		}
 		return map;
 	});
+	const agendaDays = $derived.by(() =>
+		days
+			.filter((day) => !day.outsideMonth)
+			.map((day) => ({ day, items: itemsByDay.get(day.key) ?? [] }))
+			.filter((entry) => entry.items.length > 0)
+	);
 	const monthItems = $derived(
 		visibleItems.filter((item) => monthKey(new Date(item.scheduledAt)) === monthKey(currentMonth))
 	);
@@ -637,6 +643,14 @@
 		});
 	}
 
+	function formatAgendaDate(value: Date) {
+		return value.toLocaleDateString(getLocaleTag(), {
+			weekday: 'long',
+			month: 'short',
+			day: 'numeric'
+		});
+	}
+
 	function formatLongDateTime(value: string) {
 		return new Date(value).toLocaleString(getLocaleTag(), {
 			month: 'short',
@@ -655,9 +669,9 @@
 
 	function itemTone(item: CalendarItem) {
 		if (item.kind === 'publication') {
-			return 'border-l-violet-500 bg-violet-50/70 text-violet-950 hover:bg-violet-100 dark:bg-violet-950/30 dark:text-violet-100 dark:hover:bg-violet-950/45';
+			return 'border-violet-500/25 bg-violet-50/70 text-violet-950 hover:bg-violet-100 dark:bg-violet-950/30 dark:text-violet-100 dark:hover:bg-violet-950/45';
 		}
-		return 'border-l-sky-500 bg-sky-50/80 text-sky-950 hover:bg-sky-100 dark:bg-sky-950/30 dark:text-sky-100 dark:hover:bg-sky-950/45';
+		return 'border-sky-500/25 bg-sky-50/80 text-sky-950 hover:bg-sky-100 dark:bg-sky-950/30 dark:text-sky-100 dark:hover:bg-sky-950/45';
 	}
 
 	function activeWorkspaceButtonClass(workspace: Workspace) {
@@ -870,8 +884,64 @@
 	{/if}
 
 	<main class="min-h-0 flex-1 overflow-auto px-3 py-3 lg:px-6 lg:py-5">
+		<section class="space-y-5 md:hidden" aria-label={m.calendar_month_grid()}>
+			{#if loading}
+				{#each Array(4) as _, index (index)}
+					<div class="space-y-2">
+						<div class="h-5 w-32 animate-pulse rounded bg-muted"></div>
+						<div class="h-20 animate-pulse rounded-lg border bg-muted/45"></div>
+					</div>
+				{/each}
+			{:else}
+				{#each agendaDays as entry (entry.day.key)}
+					<section>
+						<div class="mb-2 flex items-center justify-between gap-3">
+							<h2 class="text-sm font-semibold">{formatAgendaDate(entry.day.date)}</h2>
+							<Button
+								variant="ghost"
+								size="icon-sm"
+								aria-label={`${m.calendar_create_post()} ${entry.day.key}`}
+								onclick={() => createPostOnDate(entry.day.date)}
+							>
+								<PlusIcon class="size-4" />
+							</Button>
+						</div>
+						<div class="divide-y overflow-hidden rounded-lg border bg-card">
+							{#each entry.items as item (item.key)}
+								<button
+									type="button"
+									class="flex w-full items-start gap-3 p-3 text-left transition-colors hover:bg-muted/45 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none focus-visible:ring-inset"
+									onclick={() => openItem(item)}
+								>
+									<div class="w-14 shrink-0 pt-0.5 text-sm font-medium text-muted-foreground">
+										{formatTime(item.scheduledAt)}
+									</div>
+									<div class="min-w-0 flex-1">
+										<p class="line-clamp-2 text-sm leading-snug font-medium">{item.title}</p>
+										<div
+											class="mt-2 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground"
+										>
+											<span>{item.workspaceName}</span>
+											{#each item.accounts.slice(0, 3) as account (account.id)}
+												<span
+													class="inline-flex max-w-28 items-center gap-1 rounded-full bg-muted px-2 py-0.5"
+												>
+													<PlatformIcon platform={account.platform} class="size-3" />
+													<span class="truncate">{account.label}</span>
+												</span>
+											{/each}
+										</div>
+									</div>
+								</button>
+							{/each}
+						</div>
+					</section>
+				{/each}
+			{/if}
+		</section>
+
 		<section
-			class="month-shell grid h-full min-h-[720px] min-w-[980px] grid-rows-[auto_minmax(0,1fr)] overflow-hidden rounded-lg border bg-card shadow-sm"
+			class="month-shell hidden h-full min-h-[720px] min-w-[980px] grid-rows-[auto_minmax(0,1fr)] overflow-hidden rounded-lg border bg-card shadow-sm md:grid"
 			aria-label={m.calendar_month_grid()}
 		>
 			<div class="grid grid-cols-7 border-b bg-muted/45">
@@ -955,11 +1025,7 @@
 									<div class="h-16 rounded-md border bg-muted/45"></div>
 								{/each}
 							{:else if dayItems.length === 0}
-								<div
-									class="flex h-full min-h-24 items-center justify-center rounded-md border border-dashed border-transparent text-xs text-muted-foreground/55 group-hover/day:border-border"
-								>
-									{m.calendar_empty_day()}
-								</div>
+								<div class="h-full min-h-24" aria-hidden="true"></div>
 							{:else}
 								{#each dayItems as item (item.key)}
 									<button
@@ -967,7 +1033,7 @@
 										draggable={true}
 										data-calendar-item
 										class={cn(
-											'w-full rounded-md border border-l-4 border-border/70 p-2 text-left shadow-xs transition-all hover:-translate-y-0.5 hover:shadow-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
+											'w-full rounded-md border p-2 text-left shadow-xs transition-all hover:-translate-y-0.5 hover:shadow-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
 											itemTone(item),
 											draggingKey === item.key && 'opacity-50',
 											reschedulingKey === item.key && 'pointer-events-none opacity-60'

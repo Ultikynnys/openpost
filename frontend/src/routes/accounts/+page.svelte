@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { SvelteMap } from 'svelte/reactivity';
 	import { auth } from '$lib/stores/auth';
+	import { workspaceCtx } from '$lib/stores/workspace.svelte';
 	import { client, type Workspace, type SocialAccount, type ProviderInfo } from '$lib/api/client';
 	import { Button } from '$lib/components/ui/button';
 	import * as Dialog from '$lib/components/ui/dialog';
@@ -12,7 +13,7 @@
 	import { resolve } from '$app/paths';
 	import PageContainer from '$lib/components/page-container.svelte';
 	import EmptyState from '$lib/components/empty-state.svelte';
-	import ChevronDownIcon from 'lucide-svelte/icons/chevron-down';
+	import MoreHorizontalIcon from 'lucide-svelte/icons/ellipsis';
 	import { getPlatformName, getPlatformColor } from '$lib/utils';
 	import PlatformIcon from '$lib/components/platform-icon.svelte';
 	import LoaderIcon from 'lucide-svelte/icons/loader-2';
@@ -163,7 +164,7 @@
 		const urlError = params.get('error');
 		if (urlError) {
 			error = urlError;
-			replaceState(window.location.pathname, {});
+			replaceState(resolve(window.location.pathname as '/'), {});
 		}
 
 		const unsubscribe = auth.subscribe(async (state) => {
@@ -171,10 +172,17 @@
 				goto(resolve('/login'));
 			} else if (!state.isLoading && state.isAuthenticated) {
 				try {
+					if (workspaceCtx.workspaces.length === 0) {
+						await workspaceCtx.initialize();
+					}
 					const { data, error: err } = await client.GET('/workspaces');
+					if (err) throw new Error(err.detail ?? 'Failed to load workspaces');
 					workspaces = data ?? [];
 					if (workspaces && workspaces.length > 0) {
-						selectedWorkspaceId = workspaces[0].id;
+						const currentWorkspace = workspaces.find(
+							(workspace) => workspace.id === workspaceCtx.currentWorkspace?.id
+						);
+						selectedWorkspaceId = (currentWorkspace ?? workspaces[0]).id;
 						await loadAccounts();
 					}
 					await loadProviders();
@@ -445,7 +453,7 @@
 
 	function providerDescription(provider: ProviderInfo): string {
 		if (provider.description) return provider.description;
-		if (!provider.configured) return 'Not configured';
+		if (!provider.configured) return 'Your instance administrator needs to enable this platform.';
 		if (isCustomMastodonProvider(provider)) {
 			return 'Connect any public Mastodon instance';
 		}
@@ -486,7 +494,7 @@
 			case 'planned':
 				return 'Planned';
 			case 'needs_configuration':
-				return 'Needs app config';
+				return 'Admin setup required';
 			default:
 				return provider.configured ? 'Available' : 'Unavailable';
 		}
@@ -511,11 +519,7 @@
 
 	function providerActionLabel(provider: ProviderInfo): string {
 		if (providerStatus(provider) === 'planned') return 'Planned';
-		return provider.configured ? 'Connect' : 'Unavailable';
-	}
-
-	function visibleProviderCapabilities(provider: ProviderInfo): string[] {
-		return (provider.capabilities ?? []).slice(0, 4);
+		return provider.configured ? 'Connect' : 'Ask admin';
 	}
 
 	function isCustomMastodonProvider(provider: ProviderInfo): boolean {
@@ -674,8 +678,8 @@
 	</div>
 {:else}
 	<PageContainer
-		title="Accounts"
-		description="Connect and manage your social accounts."
+		title="Social accounts"
+		description="Connect the channels this workspace publishes to."
 		icon={UsersIcon}
 	>
 		{#if error}
@@ -687,46 +691,12 @@
 			</div>
 		{/if}
 
-		<!-- Workspace Selector -->
-		<div class="mb-6">
-			<DropdownMenu.Root>
-				<DropdownMenu.Trigger>
-					{#snippet child({ props })}
-						<Button {...props} variant="outline" class="gap-2">
-							<span
-								class="flex h-6 w-6 items-center justify-center rounded-md bg-primary/10 text-xs font-bold text-primary"
-							>
-								{selectedWorkspaceName.slice(0, 2).toUpperCase()}
-							</span>
-							<span class="truncate">{selectedWorkspaceName}</span>
-							<ChevronDownIcon class="size-3.5 opacity-50" />
-						</Button>
-					{/snippet}
-				</DropdownMenu.Trigger>
-				<DropdownMenu.Content class="w-56 rounded-lg" align="start" side="bottom" sideOffset={6}>
-					<DropdownMenu.Label class="text-xs text-muted-foreground">Workspaces</DropdownMenu.Label>
-					{#each workspaces as workspace (workspace.id)}
-						<DropdownMenu.Item
-							onSelect={() => {
-								selectedWorkspaceId = workspace.id;
-							}}
-							class="gap-2 p-2"
-						>
-							<span
-								class="flex size-6 items-center justify-center rounded-md bg-primary/10 text-xs font-bold text-primary"
-							>
-								{workspace.name.slice(0, 2).toUpperCase()}
-							</span>
-							<span class="truncate">{workspace.name}</span>
-						</DropdownMenu.Item>
-					{/each}
-				</DropdownMenu.Content>
-			</DropdownMenu.Root>
-		</div>
-
 		<!-- Connected Accounts -->
 		<div class="mb-8">
-			<h2 class="mb-4 text-lg font-semibold">Connected Accounts</h2>
+			<div class="mb-4 flex items-baseline justify-between gap-3">
+				<h2 class="text-base font-semibold">Connected channels</h2>
+				<span class="text-sm text-muted-foreground">{selectedWorkspaceName}</span>
+			</div>
 
 			{#if accountsLoading}
 				<div class="space-y-3">
@@ -743,67 +713,64 @@
 					size="md"
 				/>
 			{:else}
-				<div class="space-y-3">
+				<div class="divide-y border-y">
 					{#each [...accountsByPlatform.entries()] as [platform, platformAccounts] (platform)}
-						<div class="rounded-lg border bg-card">
-							<div class="flex items-center gap-3 border-b px-4 py-3">
+						<section class="py-3">
+							<div class="flex items-center gap-3 px-1 py-2">
 								<div
-									class="flex h-9 w-9 items-center justify-center rounded-full {getPlatformColor(
+									class="flex size-8 items-center justify-center rounded-md {getPlatformColor(
 										platform
 									)}"
 								>
 									<PlatformIcon {platform} class="h-4 w-4 text-white" />
 								</div>
-								<div class="flex-1">
+								<div class="min-w-0 flex-1">
 									<h3 class="text-sm font-medium">{getPlatformName(platform)}</h3>
-									<p class="text-sm text-muted-foreground">
+									<p class="text-xs text-muted-foreground">
 										{platformAccounts.length} account{platformAccounts.length !== 1 ? 's' : ''}
 									</p>
 								</div>
 							</div>
-							<div class="divide-y">
+							<div class="divide-y pl-11">
 								{#each platformAccounts as account (account.id)}
-									<div class="flex items-center justify-between px-4 py-3">
-										<div class="flex items-center gap-3">
-											<div class="flex h-7 w-7 items-center justify-center rounded-full bg-muted">
-												<PlatformIcon platform={account.platform} class="h-3.5 w-3.5" />
-											</div>
-											<div>
-												<p class="text-sm font-medium">
-													{accountDisplayName(account)}
-												</p>
-												<p class="text-sm text-muted-foreground">
-													Slug:
-													<span class="font-mono"
-														>{(account as SocialAccount & { slug?: string }).slug ||
-															'not set'}</span
+									<div class="flex min-h-14 items-center justify-between gap-3 py-2 pr-1">
+										<div class="min-w-0">
+											<p class="text-sm font-medium">
+												{accountDisplayName(account)}
+											</p>
+											<p class="text-xs text-muted-foreground">
+												{account.is_active ? 'Ready to publish' : 'Connection paused'}
+											</p>
+										</div>
+										<DropdownMenu.Root>
+											<DropdownMenu.Trigger>
+												{#snippet child({ props })}
+													<Button
+														{...props}
+														variant="ghost"
+														size="icon"
+														aria-label={`Actions for ${accountDisplayName(account)}`}
 													>
-													· {account.is_active ? 'Connected' : 'Disconnected'}
-												</p>
-											</div>
-										</div>
-										<div class="flex items-center gap-2">
-											<Button
-												variant="outline"
-												size="sm"
-												onclick={() => openEditAccount(account)}
-												class="text-xs"
-											>
-												Edit Slug
-											</Button>
-											<Button
-												variant="ghost"
-												size="sm"
-												onclick={() => disconnectAccount(account.id)}
-												class="text-xs text-muted-foreground hover:text-destructive"
-											>
-												Disconnect
-											</Button>
-										</div>
+														<MoreHorizontalIcon class="size-4" />
+													</Button>
+												{/snippet}
+											</DropdownMenu.Trigger>
+											<DropdownMenu.Content align="end" class="w-48">
+												<DropdownMenu.Item onclick={() => openEditAccount(account)}
+													>Account details</DropdownMenu.Item
+												>
+												<DropdownMenu.Separator />
+												<DropdownMenu.Item
+													class="text-destructive"
+													onclick={() => disconnectAccount(account.id)}
+													>Disconnect</DropdownMenu.Item
+												>
+											</DropdownMenu.Content>
+										</DropdownMenu.Root>
 									</div>
 								{/each}
 							</div>
-						</div>
+						</section>
 					{/each}
 				</div>
 			{/if}
@@ -811,7 +778,10 @@
 
 		<!-- Connect a Platform -->
 		<div>
-			<h2 class="mb-4 text-lg font-semibold">Connect a Platform</h2>
+			<h2 class="mb-1 text-base font-semibold">Add a channel</h2>
+			<p class="mb-4 text-sm text-muted-foreground">
+				Choose a platform to connect to this workspace.
+			</p>
 
 			<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
 				{#if providersLoading}
@@ -872,17 +842,6 @@
 									</Button>
 								{/if}
 							</div>
-							{#if visibleProviderCapabilities(provider).length > 0}
-								<div class="mt-3 flex flex-wrap gap-1.5">
-									{#each visibleProviderCapabilities(provider) as capability (capability)}
-										<span
-											class="rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground"
-										>
-											{capability}
-										</span>
-									{/each}
-								</div>
-							{/if}
 							{#if isCustomMastodonProvider(provider)}
 								<form
 									class="mt-4 grid gap-2 sm:grid-cols-[1fr_auto_auto]"
@@ -977,12 +936,9 @@
 <Dialog.Root bind:open={editAccountDialogOpen}>
 	<Dialog.Content class="sm:max-w-md">
 		<Dialog.Header>
-			<Dialog.Title>Edit Account Slug</Dialog.Title>
+			<Dialog.Title>Account details</Dialog.Title>
 			<Dialog.Description>
-				Slugs are stable shortcuts for the CLI, for example
-				<code class="rounded bg-muted px-1 py-0.5"
-					>openpost post create --accounts {editAccountSlug || 'main-x'}</code
-				>.
+				Connection details and an optional shortcut for developer tools.
 			</Dialog.Description>
 		</Dialog.Header>
 		{#if editingAccount}
@@ -993,23 +949,37 @@
 					updateAccountSlug();
 				}}
 			>
-				<div class="rounded-md border bg-muted/30 p-3 text-sm">
+				<div class="rounded-md bg-muted/40 p-3 text-sm">
 					<div class="font-medium">{accountDisplayName(editingAccount)}</div>
 					<div class="text-muted-foreground">{getPlatformName(editingAccount.platform)}</div>
 				</div>
-				<div class="space-y-2">
-					<Label for="account-slug">Slug</Label>
-					<Input
-						id="account-slug"
-						bind:value={editAccountSlug}
-						placeholder="main-x"
-						pattern={accountSlugPattern}
-						required
-					/>
-					<p class="text-xs text-muted-foreground">
-						Use lowercase letters, numbers, and hyphens. Slugs must be unique within this workspace.
+				<details>
+					<summary
+						class="cursor-pointer text-sm font-medium focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+					>
+						Developer shortcut
+					</summary>
+					<p class="mt-2 text-xs text-muted-foreground">
+						Use this stable name with the CLI, for example
+						<code class="rounded bg-muted px-1 py-0.5"
+							>openpost post create --accounts {editAccountSlug || 'main-x'}</code
+						>.
 					</p>
-				</div>
+					<div class="mt-3 space-y-2">
+						<Label for="account-slug">Shortcut</Label>
+						<Input
+							id="account-slug"
+							bind:value={editAccountSlug}
+							placeholder="main-x"
+							pattern={accountSlugPattern}
+							required
+						/>
+						<p class="text-xs text-muted-foreground">
+							Use lowercase letters, numbers, and hyphens. Slugs must be unique within this
+							workspace.
+						</p>
+					</div>
+				</details>
 				{#if editAccountError}
 					<div
 						class="rounded-md border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive"
@@ -1022,7 +992,7 @@
 						<Button variant="outline" type="button">Cancel</Button>
 					</Dialog.Close>
 					<Button type="submit" disabled={editAccountLoading || !editAccountSlug.trim()}>
-						{editAccountLoading ? 'Saving...' : 'Save Slug'}
+						{editAccountLoading ? 'Saving...' : 'Save details'}
 					</Button>
 				</div>
 			</form>

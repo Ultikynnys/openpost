@@ -1,236 +1,77 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
-	import { SvelteMap } from 'svelte/reactivity';
-	import { client, type ScheduleOverview, type Post, type Workspace } from '$lib/api/client';
 	import { page } from '$app/state';
+	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
+	import { auth } from '$lib/stores/auth';
+	import { workspaceCtx } from '$lib/stores/workspace.svelte';
+	import { instanceStore } from '$lib/stores/instance.svelte';
+	import { recreateClient } from '$lib/api/client';
+	import { IS_CAPACITOR } from '$lib/env';
+	import { m } from '$lib/paraglide/messages';
+	import {
+		isNavigationItemActive,
+		primaryNavigation,
+		type PrimaryNavigationItem
+	} from '$lib/app-navigation';
 	import * as Sidebar from '$lib/components/ui/sidebar';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
 	import * as Avatar from '$lib/components/ui/avatar';
-	import * as CalendarUi from '$lib/components/ui/calendar';
 	import Logo from './Logo.svelte';
 	import LanguageSwitcher from './language-switcher.svelte';
-	import DayPostsModal from './day-posts-modal.svelte';
-	import FileTextIcon from 'lucide-svelte/icons/file-text';
+	import CalendarIcon from 'lucide-svelte/icons/calendar-days';
+	import ComposeIcon from 'lucide-svelte/icons/square-pen';
+	import PostsIcon from 'lucide-svelte/icons/files';
+	import MediaIcon from 'lucide-svelte/icons/images';
+	import AccountsIcon from 'lucide-svelte/icons/users';
+	import SettingsIcon from 'lucide-svelte/icons/settings';
+	import UserIcon from 'lucide-svelte/icons/user-round';
+	import PaletteIcon from 'lucide-svelte/icons/palette';
 	import LogOutIcon from 'lucide-svelte/icons/log-out';
 	import ChevronsUpDownIcon from 'lucide-svelte/icons/chevrons-up-down';
-	import CircleDotIcon from 'lucide-svelte/icons/circle-dot';
-	import LightbulbIcon from 'lucide-svelte/icons/lightbulb';
-	import UsersIcon from 'lucide-svelte/icons/users';
-	import ImageIcon from 'lucide-svelte/icons/image';
-	import SettingsIcon from 'lucide-svelte/icons/settings';
-	import TrashIcon from 'lucide-svelte/icons/trash-2';
-	import ScrollTextIcon from 'lucide-svelte/icons/scroll-text';
-	import Maximize2Icon from 'lucide-svelte/icons/maximize-2';
-	import GithubIcon from 'lucide-svelte/icons/github';
-	import { auth } from '$lib/stores/auth';
-	import { goto } from '$app/navigation';
-	import { toggleMode } from 'mode-watcher';
-	import SunIcon from 'lucide-svelte/icons/sun';
-	import MoonIcon from 'lucide-svelte/icons/moon';
 	import ServerIcon from 'lucide-svelte/icons/server';
-	import type { DateValue } from '@internationalized/date';
-	import { IS_CAPACITOR } from '$lib/env';
-	import { instanceStore } from '$lib/stores/instance.svelte';
-	import { recreateClient } from '$lib/api/client';
-	import { getLocalTimeZone, today } from '@internationalized/date';
-	import { ui } from '$lib/stores/ui.svelte';
-	import { workspaceCtx } from '$lib/stores/workspace.svelte';
-	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
-	import { m } from '$lib/paraglide/messages';
+	import CheckIcon from 'lucide-svelte/icons/check';
+	import { setMode, userPrefersMode } from 'mode-watcher';
+	import type { Workspace } from '$lib/api/client';
+	type AppearanceMode = 'system' | 'light' | 'dark';
 
 	let authState = $derived($auth);
 	const sidebar = Sidebar.useSidebar();
-
-	// Calendar state
-	let selectedDate = $state<DateValue | undefined>(undefined);
-	let calendarPlaceholder = $state<DateValue>(today(getLocalTimeZone()));
-	let overview = $state<ScheduleOverview | null>(null);
-	let loadingSchedule = $state(true);
-
-	// Drafts state
-	let drafts = $state<Post[]>([]);
-	let loadingDrafts = $state(false);
+	const currentPath = $derived(page.url.pathname);
 	const currentWorkspaceName = $derived(workspaceCtx.currentWorkspace?.name ?? 'Select workspace');
 	const currentWorkspaceAvatarURL = $derived(workspaceAvatarURL(workspaceCtx.currentWorkspace));
 	const currentWorkspaceInitials = $derived(workspaceInitials(workspaceCtx.currentWorkspace));
-	const currentWorkspaceOrganizationName = $derived(
-		workspaceSubtitle(workspaceCtx.currentWorkspace)
-	);
-	const currentPath = $derived(page.url.pathname);
 	const userDisplayName = $derived(
 		authState.user?.display_name || authState.user?.email?.split('@')[0] || m.common_untitled_user()
 	);
 	const userAvatarURL = $derived(authState.user?.avatar_url ?? '');
-	const userInitials = $derived.by(() => {
-		const source = userDisplayName || authState.user?.email || 'U';
-		const parts = source
+	const userInitials = $derived(initials(userDisplayName || authState.user?.email || 'User'));
+	const navigationItems = $derived(
+		primaryNavigation.map((item) => ({ ...item, icon: navigationIcon(item.id) }))
+	);
+
+	function navigationIcon(id: PrimaryNavigationItem['id']) {
+		switch (id) {
+			case 'new':
+				return ComposeIcon;
+			case 'calendar':
+				return CalendarIcon;
+			case 'posts':
+				return PostsIcon;
+			case 'media':
+				return MediaIcon;
+			case 'accounts':
+				return AccountsIcon;
+			default:
+				return SettingsIcon;
+		}
+	}
+
+	function initials(value: string) {
+		const parts = value
 			.replace(/@.*/, '')
 			.split(/[\s._-]+/)
 			.filter(Boolean);
-		return ((parts[0]?.[0] ?? 'U') + (parts[1]?.[0] ?? '')).toUpperCase();
-	});
-
-	const monthString = $derived.by(() => {
-		const jsDate = calendarPlaceholder.toDate(getLocalTimeZone());
-		const year = jsDate.getFullYear();
-		const month = String(jsDate.getMonth() + 1).padStart(2, '0');
-		return `${year}-${month}`;
-	});
-
-	const dayCounts = $derived.by(() => {
-		const map = new SvelteMap<string, number>();
-		if (!overview) return map;
-		for (const item of overview?.days ?? []) {
-			map.set(item.date, item.count);
-		}
-		return map;
-	});
-
-	const dayWorkspaceCounts = $derived.by(() => {
-		const map = new SvelteMap<string, { workspace_id: string; count: number }[]>();
-		if (!overview) return map;
-		for (const item of overview?.days ?? []) {
-			// @ts-ignore - added via backend change
-			map.set(item.date, item.workspaces || []);
-		}
-		return map;
-	});
-
-	const workspaceColors = [
-		'bg-blue-500',
-		'bg-emerald-500',
-		'bg-violet-500',
-		'bg-orange-500',
-		'bg-rose-500',
-		'bg-amber-500',
-		'bg-cyan-500',
-		'bg-indigo-500'
-	];
-
-	function getWorkspaceColor(workspaceId: string) {
-		let hash = 0;
-		for (let i = 0; i < workspaceId.length; i++) {
-			hash = workspaceId.charCodeAt(i) + ((hash << 5) - hash);
-		}
-		return workspaceColors[Math.abs(hash) % workspaceColors.length];
-	}
-
-	onMount(async () => {
-		loadOverview();
-		await workspaceCtx.initialize();
-		loadDrafts();
-	});
-
-	// Track previous month to detect actual changes
-	let previousMonth = $state('');
-	let previousWorkspaceId = $state('');
-
-	$effect(() => {
-		const currentMonth = monthString;
-		const currentWorkspaceId = workspaceCtx.currentWorkspace?.id ?? '';
-		if (
-			(previousMonth && previousMonth !== currentMonth) ||
-			(previousWorkspaceId && previousWorkspaceId !== currentWorkspaceId)
-		) {
-			loadOverview();
-		}
-		previousMonth = currentMonth;
-		previousWorkspaceId = currentWorkspaceId;
-	});
-
-	// Trigger day-posts modal on date selection
-	$effect(() => {
-		if (selectedDate) {
-			ui.openDayPosts(selectedDate);
-			// Reset selectedDate so clicking it again triggers the effect
-			setTimeout(() => {
-				selectedDate = undefined;
-			}, 100);
-		}
-	});
-
-	// Refresh drafts when ui.refreshCounter changes
-	$effect(() => {
-		if (ui.refreshCounter > 0) {
-			loadDrafts();
-			loadOverview();
-		}
-	});
-
-	async function loadOverview() {
-		loadingSchedule = true;
-		try {
-			const workspaceId = workspaceCtx.currentWorkspace?.id;
-			const { data, error: err } = await client.GET('/posts/schedule-overview', {
-				params: {
-					query: {
-						month: monthString,
-						...(workspaceId ? { workspace_id: workspaceId } : {})
-					}
-				}
-			});
-			if (err || !data) throw new Error('Failed to load');
-			overview = data;
-		} catch {
-			overview = null;
-		} finally {
-			loadingSchedule = false;
-		}
-	}
-
-	async function loadDrafts() {
-		loadingDrafts = true;
-		try {
-			const workspaceId = workspaceCtx.currentWorkspace?.id;
-			if (!workspaceId) {
-				drafts = [];
-				return;
-			}
-			const { data, error: err } = await client.GET('/posts', {
-				params: {
-					query: {
-						workspace_id: workspaceId,
-						status: 'draft',
-						limit: 20
-					}
-				}
-			});
-			if (err || !data) throw new Error('Failed to load drafts');
-			drafts = data;
-		} catch {
-			drafts = [];
-		} finally {
-			loadingDrafts = false;
-		}
-	}
-
-	async function deleteDraft(postId: string) {
-		if (!confirm(m.sidebar_delete_draft_confirm())) return;
-		try {
-			const { error: err } = await client.DELETE('/posts/{id}', {
-				params: { path: { id: postId } }
-			});
-			if (err) throw new Error((err as any)?.detail || 'Failed to delete');
-			loadDrafts();
-		} catch (e) {
-			console.error('Failed to delete draft:', e);
-		}
-	}
-
-	function handleLogout() {
-		auth.logout();
-		goto('/login');
-	}
-
-	function handleSwitchServer() {
-		auth.logout();
-		instanceStore().clearInstanceUrl();
-		recreateClient();
-		goto('/connect');
-	}
-
-	function workspaceMenuItemClass(path: string) {
-		return currentPath === path || currentPath.startsWith(`${path}/`) ? 'bg-muted' : '';
+		return ((parts[0]?.[0] ?? 'O') + (parts[1]?.[0] ?? '')).toUpperCase();
 	}
 
 	function workspaceAvatarURL(workspace: Workspace | null | undefined) {
@@ -239,208 +80,137 @@
 		).trim();
 	}
 
-	function workspaceSubtitle(workspace: Workspace | null | undefined) {
-		if (!workspace) return 'Choose a workspace';
-		const orgName = (workspace.organization_name ?? '').trim();
-		if (orgName && orgName !== workspace.name) return orgName;
-		return 'Current workspace';
-	}
-
 	function workspaceInitials(workspace: Workspace | null | undefined) {
-		const source = workspace?.name || 'Workspace';
-		const parts = source.split(/[\s._-]+/).filter(Boolean);
-		return ((parts[0]?.[0] ?? 'W') + (parts[1]?.[0] ?? '')).toUpperCase();
+		return initials(workspace?.name || 'Workspace');
 	}
 
 	async function switchWorkspace(workspace: Workspace) {
 		if (workspace.id === workspaceCtx.currentWorkspace?.id) return;
 		await workspaceCtx.setWorkspace(workspace);
-		await Promise.all([loadOverview(), loadDrafts()]);
+		sidebar.setOpenMobile(false);
 	}
 
-	type DayMarkerArgs = {
-		day: DateValue;
-		outsideMonth: boolean;
-	};
-
-	function truncate(text: string, max: number = 40): string {
-		if (text.startsWith('__openpost_thread__:')) {
-			try {
-				const data = JSON.parse(text.slice('__openpost_thread__:'.length));
-				const posts = Array.isArray(data) ? data : Array.isArray(data?.p) ? data.p : [];
-				const firstPost = posts.length > 0 ? posts[0] : null;
-				const content = firstPost?.c ?? '';
-				const suffix = posts.length > 1 ? ` (thread: ${posts.length} posts)` : '';
-				if (content.length + suffix.length <= max) return content + suffix;
-				return content.slice(0, max - suffix.length - 3).trim() + '...' + suffix;
-			} catch {
-				return m.sidebar_thread_draft();
-			}
-		}
-		if (text.length <= max) return text;
-		return text.slice(0, max).trim() + '...';
+	function navigate(href: string) {
+		sidebar.setOpenMobile(false);
+		goto(resolve(href as '/'));
 	}
 
-	function draftHasMedia(draft: Post): boolean {
-		// Check explicit media_ids first (populated by ListPosts)
-		if (draft.media_ids && draft.media_ids.length > 0) return true;
-		// Fallback: parse thread JSON for legacy/thread drafts
-		if (draft.content.startsWith('__openpost_thread__:')) {
-			try {
-				const data = JSON.parse(draft.content.slice('__openpost_thread__:'.length));
-				const posts = Array.isArray(data) ? data : Array.isArray(data?.p) ? data.p : [];
-				return posts.some((item: any) => (item.m ?? []).length > 0);
-			} catch {
-				return false;
-			}
-		}
-		return false;
+	async function handleLogout() {
+		await auth.logout();
+		await goto(resolve('/login' as '/'));
+	}
+
+	async function handleSwitchServer() {
+		await auth.logout();
+		instanceStore().clearInstanceUrl();
+		recreateClient();
+		await goto(resolve('/connect' as '/'));
+	}
+
+	function chooseAppearance(nextMode: AppearanceMode) {
+		setMode(nextMode);
 	}
 </script>
 
-{#snippet dayMarker({ day, outsideMonth }: DayMarkerArgs)}
-	{@const key = day.toString()}
-	{@const count = dayCounts.get(key) || 0}
-	{@const wsCounts = dayWorkspaceCounts.get(key) || []}
-	{@const dots = wsCounts.slice(0, 3)}
-	<div class="relative flex size-(--cell-size) items-center justify-center">
-		<CalendarUi.Day />
-		{#if !outsideMonth && count > 0}
-			<div class="pointer-events-none absolute bottom-0.5 flex items-center justify-center gap-0.5">
-				{#each dots as marker (`${key}-${marker.workspace_id}`)}
-					<span class={`h-1 w-1 rounded-full ${getWorkspaceColor(marker.workspace_id)}`}></span>
+<Sidebar.Root collapsible="icon">
+	<Sidebar.Header class="gap-2 border-b border-sidebar-border p-2">
+		<a
+			href={resolve('/')}
+			class="flex h-10 items-center gap-2 rounded-md px-2 focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-none"
+			aria-label="OpenPost home"
+		>
+			<Logo width={26} height={26} showText={true} />
+		</a>
+
+		<DropdownMenu.Root>
+			<DropdownMenu.Trigger>
+				{#snippet child({ props })}
+					<Sidebar.MenuButton
+						{...props}
+						size="lg"
+						class="border border-sidebar-border bg-sidebar-accent/35 data-[state=open]:bg-sidebar-accent"
+						tooltipContent="Switch workspace"
+					>
+						<Avatar.Root class="size-8 rounded-md">
+							{#if currentWorkspaceAvatarURL}
+								<Avatar.Image src={currentWorkspaceAvatarURL} alt={currentWorkspaceName} />
+							{/if}
+							<Avatar.Fallback class="rounded-md bg-primary/12 text-xs font-semibold text-primary">
+								{currentWorkspaceInitials}
+							</Avatar.Fallback>
+						</Avatar.Root>
+						<div class="grid min-w-0 flex-1 text-start leading-tight">
+							<span class="truncate text-sm font-medium">{currentWorkspaceName}</span>
+							<span class="truncate text-xs text-sidebar-foreground/62">Workspace</span>
+						</div>
+						<ChevronsUpDownIcon class="ms-auto size-4" />
+					</Sidebar.MenuButton>
+				{/snippet}
+			</DropdownMenu.Trigger>
+			<DropdownMenu.Content
+				class="w-64"
+				side={sidebar.isMobile ? 'bottom' : 'right'}
+				align="start"
+				sideOffset={6}
+			>
+				<DropdownMenu.Label>Switch workspace</DropdownMenu.Label>
+				{#each workspaceCtx.workspaces as workspace (workspace.id)}
+					<DropdownMenu.Item onclick={() => switchWorkspace(workspace)} class="gap-3 py-2">
+						<Avatar.Root class="size-8 rounded-md">
+							{@const avatarURL = workspaceAvatarURL(workspace)}
+							{#if avatarURL}<Avatar.Image src={avatarURL} alt={workspace.name} />{/if}
+							<Avatar.Fallback class="rounded-md bg-muted text-xs">
+								{workspaceInitials(workspace)}
+							</Avatar.Fallback>
+						</Avatar.Root>
+						<span class="min-w-0 flex-1 truncate">{workspace.name}</span>
+						{#if workspace.id === workspaceCtx.currentWorkspace?.id}
+							<CheckIcon class="size-4 text-primary" />
+						{/if}
+					</DropdownMenu.Item>
 				{/each}
-			</div>
-		{/if}
-	</div>
-{/snippet}
-
-<Sidebar.Root>
-	<Sidebar.Header>
-		<!-- Logo -->
-		<div class="flex items-center justify-center px-2 py-4">
-			<a href="/" class="transition-opacity hover:opacity-90">
-				<Logo width={28} height={28} showText={true} />
-			</a>
-		</div>
-
-		<Sidebar.Separator />
+				{#if workspaceCtx.workspaces.length === 0}
+					<DropdownMenu.Item disabled>No workspaces</DropdownMenu.Item>
+				{/if}
+				<DropdownMenu.Separator />
+				<DropdownMenu.Item onclick={() => navigate('/settings?tab=general')}>
+					<SettingsIcon class="mr-2 size-4 text-muted-foreground" />
+					Workspace settings
+				</DropdownMenu.Item>
+			</DropdownMenu.Content>
+		</DropdownMenu.Root>
 	</Sidebar.Header>
 
-	<Sidebar.Content>
-		<!-- Calendar Section -->
-		<Sidebar.Group class="px-0 pt-2">
+	<Sidebar.Content class="px-2 py-3">
+		<Sidebar.Group class="p-0">
+			<Sidebar.GroupLabel
+				class="px-2 text-[11px] tracking-[0.12em] text-sidebar-foreground/48 uppercase"
+			>
+				Publish
+			</Sidebar.GroupLabel>
 			<Sidebar.GroupContent>
-				<div class="relative mx-auto w-fit">
-					<button
-						type="button"
-						class="absolute top-2 right-9 z-20 flex size-7 items-center justify-center rounded-md text-sidebar-foreground/60 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-none"
-						onclick={() => goto('/calendar')}
-						title={m.sidebar_full_calendar()}
-						aria-label={m.sidebar_full_calendar()}
-					>
-						<Maximize2Icon class="size-3.5" />
-					</button>
-					<CalendarUi.Calendar
-						type="single"
-						bind:value={selectedDate}
-						bind:placeholder={calendarPlaceholder}
-						day={dayMarker}
-						weekStartsOn={workspaceCtx.settings.week_start as 0 | 1 | 2 | 3 | 4 | 5 | 6}
-						class="mx-auto bg-transparent p-2 select-none [--cell-size:--spacing(8)] [&_[role=gridcell]_[role=button][data-today]]:bg-sidebar-primary [&_[role=gridcell]_[role=button][data-today]]:text-sidebar-primary-foreground [&_tr]:justify-center"
-					/>
-				</div>
-			</Sidebar.GroupContent>
-		</Sidebar.Group>
-
-		{#if overview && overview.days && overview.days.some((d: { count: number }) => d.count > 0)}
-			<Sidebar.Group>
-				<Sidebar.GroupLabel
-					class="text-xs font-semibold tracking-wider text-sidebar-foreground/50 uppercase"
-					>{m.sidebar_upcoming()}</Sidebar.GroupLabel
-				>
-				<Sidebar.GroupContent>
-					<Sidebar.Menu>
+				<Sidebar.Menu class="gap-1">
+					{#each navigationItems as item (item.id)}
 						<Sidebar.MenuItem>
-							<Sidebar.MenuButton class="text-sidebar-foreground/80">
-								<CircleDotIcon class="size-3.5" />
-								<span
-									>{loadingSchedule
-										? ''
-										: m.sidebar_scheduled_posts({
-												count: overview.days.reduce(
-													(s: number, d: { count: number }) => s + d.count,
-													0
-												)
-											})}</span
-								>
+							<Sidebar.MenuButton
+								isActive={isNavigationItemActive(item, currentPath)}
+								class={item.id === 'new'
+									? 'h-10 bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground data-active:bg-primary data-active:text-primary-foreground'
+									: 'h-10 text-sm'}
+								tooltipContent={item.label}
+								onclick={() => navigate(item.href)}
+							>
+								<item.icon class="size-4" />
+								<span>{item.label}</span>
 							</Sidebar.MenuButton>
 						</Sidebar.MenuItem>
-					</Sidebar.Menu>
-				</Sidebar.GroupContent>
-			</Sidebar.Group>
-		{/if}
-
-		<Sidebar.Separator />
-
-		<!-- Drafts Section -->
-		<Sidebar.Group class="flex-1 overflow-hidden">
-			<Sidebar.GroupLabel
-				class="px-4 text-xs font-semibold tracking-wider text-sidebar-foreground/50 uppercase"
-			>
-				{m.sidebar_drafts()}
-				{#if drafts.length > 0}
-					<span class="ml-1 text-sidebar-foreground/40">({drafts.length})</span>
-				{/if}
-			</Sidebar.GroupLabel>
-			<Sidebar.GroupContent class="max-h-64 overflow-y-auto">
-				{#if loadingDrafts}
-					<div class="space-y-2 px-2 py-2">
-						{#each Array(4) as _, index (index)}
-							<div class="flex items-center gap-2 px-2 py-1.5">
-								<Skeleton class="h-3.5 w-3.5 rounded-sm" />
-								<Skeleton class="h-3.5 w-full" />
-							</div>
-						{/each}
-					</div>
-				{:else if drafts.length === 0}
-					<div class="px-4 py-3 text-sm text-sidebar-foreground/40">
-						{m.sidebar_drafts_empty()}
-					</div>
-				{:else}
-					<Sidebar.Menu>
-						{#each drafts as draft (draft.id)}
-							<Sidebar.MenuItem>
-								<Sidebar.MenuButton
-									class="group relative text-sidebar-foreground/80"
-									onclick={() => goto(`/posts/${draft.id}`)}
-								>
-									<FileTextIcon class="size-3.5 shrink-0" />
-									<span class="truncate text-sm">{truncate(draft.content)}</span>
-									{#if draftHasMedia(draft)}
-										<ImageIcon class="size-3 shrink-0 text-sidebar-foreground/40" />
-									{/if}
-								</Sidebar.MenuButton>
-								<Sidebar.MenuAction
-									showOnHover
-									onclick={(e) => {
-										e.stopPropagation();
-										deleteDraft(draft.id);
-									}}
-									class="text-sidebar-foreground/40 hover:text-destructive"
-								>
-									<TrashIcon class="size-3" />
-								</Sidebar.MenuAction>
-							</Sidebar.MenuItem>
-						{/each}
-					</Sidebar.Menu>
-				{/if}
+					{/each}
+				</Sidebar.Menu>
 			</Sidebar.GroupContent>
 		</Sidebar.Group>
 	</Sidebar.Content>
 
-	<Sidebar.Footer>
-		<Sidebar.Separator />
+	<Sidebar.Footer class="border-t border-sidebar-border p-2">
 		<Sidebar.Menu>
 			<Sidebar.MenuItem>
 				<DropdownMenu.Root>
@@ -449,230 +219,69 @@
 							<Sidebar.MenuButton
 								{...props}
 								size="lg"
-								class="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
+								class="data-[state=open]:bg-sidebar-accent"
+								tooltipContent="Profile and appearance"
 							>
-								<Avatar.Root class="size-8 rounded-lg">
-									{#if currentWorkspaceAvatarURL}
-										<Avatar.Image src={currentWorkspaceAvatarURL} alt={currentWorkspaceName} />
-									{/if}
-									<Avatar.Fallback class="rounded-lg bg-sidebar-accent text-sidebar-foreground">
-										{currentWorkspaceInitials}
-									</Avatar.Fallback>
-								</Avatar.Root>
-								<div class="grid flex-1 text-start text-sm leading-tight">
-									<span class="truncate font-medium text-sidebar-foreground">
-										{currentWorkspaceName}
-									</span>
-									<span class="truncate text-xs text-sidebar-foreground/70">
-										{currentWorkspaceOrganizationName}
-									</span>
-								</div>
-								<ChevronsUpDownIcon class="ms-auto size-4 text-sidebar-foreground" />
-							</Sidebar.MenuButton>
-						{/snippet}
-					</DropdownMenu.Trigger>
-					<DropdownMenu.Content
-						class="w-64 rounded-lg"
-						side={sidebar.isMobile ? 'bottom' : 'right'}
-						align="start"
-						sideOffset={4}
-					>
-						<DropdownMenu.Label>Current workspace</DropdownMenu.Label>
-						<DropdownMenu.Group>
-							<DropdownMenu.Item
-								onclick={() => goto('/accounts')}
-								class={`gap-2 ${workspaceMenuItemClass('/accounts')}`}
-							>
-								<UsersIcon class="size-4 text-muted-foreground" />
-								<span>{m.sidebar_accounts()}</span>
-							</DropdownMenu.Item>
-							<DropdownMenu.Item
-								onclick={() => goto('/media')}
-								class={`gap-2 ${workspaceMenuItemClass('/media')}`}
-							>
-								<ImageIcon class="size-4 text-muted-foreground" />
-								<span>{m.sidebar_media()}</span>
-							</DropdownMenu.Item>
-							<DropdownMenu.Item
-								onclick={() => goto('/prompts')}
-								class={`gap-2 ${workspaceMenuItemClass('/prompts')}`}
-							>
-								<LightbulbIcon class="size-4 text-muted-foreground" />
-								<span>{m.sidebar_prompts()}</span>
-							</DropdownMenu.Item>
-							<DropdownMenu.Item
-								onclick={() => goto('/activity')}
-								class={`gap-2 ${workspaceMenuItemClass('/activity')}`}
-							>
-								<ScrollTextIcon class="size-4 text-muted-foreground" />
-								<span>{m.sidebar_activity()}</span>
-							</DropdownMenu.Item>
-						</DropdownMenu.Group>
-						<DropdownMenu.Separator />
-						<DropdownMenu.Label>Switch workspace</DropdownMenu.Label>
-						<DropdownMenu.Group>
-							{#each workspaceCtx.workspaces as workspace (workspace.id)}
-								{@const avatarURL = workspaceAvatarURL(workspace)}
-								<DropdownMenu.Item
-									onclick={() => switchWorkspace(workspace)}
-									class="items-start gap-3 py-2"
-								>
-									<Avatar.Root class="mt-0.5 size-8 rounded-md">
-										{#if avatarURL}
-											<Avatar.Image src={avatarURL} alt={workspace.name} />
-										{/if}
-										<Avatar.Fallback
-											class={`rounded-md text-xs ${
-												workspace.id === workspaceCtx.currentWorkspace?.id
-													? 'bg-primary text-primary-foreground'
-													: 'bg-muted text-muted-foreground'
-											}`}
-										>
-											{workspaceInitials(workspace)}
-										</Avatar.Fallback>
-									</Avatar.Root>
-									<span class="min-w-0">
-										<span class="block truncate text-sm font-medium">{workspace.name}</span>
-										<span class="block truncate text-xs text-muted-foreground">
-											{workspaceSubtitle(workspace)}
-										</span>
-									</span>
-								</DropdownMenu.Item>
-							{/each}
-							{#if workspaceCtx.workspaces.length === 0}
-								<DropdownMenu.Item disabled>No workspaces</DropdownMenu.Item>
-							{/if}
-						</DropdownMenu.Group>
-						<DropdownMenu.Separator />
-						<DropdownMenu.Item onclick={() => goto('/settings?tab=workspace')}>
-							<SettingsIcon class="mr-2 size-4 text-muted-foreground" />
-							<span>Workspace settings</span>
-						</DropdownMenu.Item>
-						<DropdownMenu.Item onclick={() => goto('/settings?tab=organization')}>
-							<UsersIcon class="mr-2 size-4 text-muted-foreground" />
-							<span>Organization settings</span>
-						</DropdownMenu.Item>
-					</DropdownMenu.Content>
-				</DropdownMenu.Root>
-			</Sidebar.MenuItem>
-
-			<!-- User Menu -->
-			<Sidebar.MenuItem>
-				<DropdownMenu.Root>
-					<DropdownMenu.Trigger>
-						{#snippet child({ props })}
-							<Sidebar.MenuButton
-								{...props}
-								size="lg"
-								class="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
-							>
-								<Avatar.Root class="size-8 rounded-lg">
-									{#if userAvatarURL}
-										<Avatar.Image src={userAvatarURL} alt={userDisplayName} />
-									{/if}
+								<Avatar.Root class="size-8 rounded-full">
+									{#if userAvatarURL}<Avatar.Image src={userAvatarURL} alt={userDisplayName} />{/if}
 									<Avatar.Fallback
-										class="rounded-lg bg-sidebar-primary text-sidebar-primary-foreground"
+										class="bg-sidebar-primary text-xs text-sidebar-primary-foreground"
 									>
 										{userInitials}
 									</Avatar.Fallback>
 								</Avatar.Root>
-								<div class="grid flex-1 text-start text-sm leading-tight">
-									<span class="truncate font-medium text-sidebar-foreground">{userDisplayName}</span
-									>
-									<span class="truncate text-xs text-sidebar-foreground/70"
+								<div class="grid min-w-0 flex-1 text-start leading-tight">
+									<span class="truncate text-sm font-medium">{userDisplayName}</span>
+									<span class="truncate text-xs text-sidebar-foreground/62"
 										>{authState.user?.email}</span
 									>
 								</div>
-								<ChevronsUpDownIcon class="ms-auto size-4 text-sidebar-foreground" />
+								<ChevronsUpDownIcon class="ms-auto size-4" />
 							</Sidebar.MenuButton>
 						{/snippet}
 					</DropdownMenu.Trigger>
 					<DropdownMenu.Content
-						class="w-56 rounded-lg"
+						class="w-60"
 						side={sidebar.isMobile ? 'bottom' : 'right'}
-						align="start"
-						sideOffset={4}
+						align="end"
+						sideOffset={6}
 					>
-						<DropdownMenu.Label class="p-0 font-normal">
-							<div class="flex items-center gap-2 px-1 py-1.5 text-start text-sm">
-								<Avatar.Root class="size-8 rounded-lg">
-									{#if userAvatarURL}
-										<Avatar.Image src={userAvatarURL} alt={userDisplayName} />
-									{/if}
-									<Avatar.Fallback class="rounded-lg bg-primary text-primary-foreground">
-										{userInitials}
-									</Avatar.Fallback>
-								</Avatar.Root>
-								<div class="grid flex-1 text-start text-sm leading-tight">
-									<span class="truncate font-medium">{userDisplayName}</span>
-									<span class="truncate text-xs text-muted-foreground">{authState.user?.email}</span
-									>
-								</div>
-							</div>
-						</DropdownMenu.Label>
-						<DropdownMenu.Separator />
-
-						<!-- Navigation items moved here -->
-						<DropdownMenu.Group>
-							<DropdownMenu.Item onclick={() => goto('/settings?tab=account')}>
-								<SettingsIcon class="mr-2 size-4 text-muted-foreground" />
-								<span>Account settings</span>
-							</DropdownMenu.Item>
-						</DropdownMenu.Group>
-
-						<DropdownMenu.Separator />
-
-						<DropdownMenu.Group>
-							<LanguageSwitcher variant="menu" />
-							<DropdownMenu.Item onclick={toggleMode}>
-								<SunIcon
-									class="mr-2 size-4 scale-100 rotate-0 text-muted-foreground transition-all dark:scale-0 dark:-rotate-90"
-								/>
-								<MoonIcon
-									class="absolute mr-2 size-4 scale-0 rotate-90 text-muted-foreground transition-all dark:scale-100 dark:rotate-0"
-								/>
-								<span>{m.sidebar_toggle_theme()}</span>
-							</DropdownMenu.Item>
-						</DropdownMenu.Group>
-
-						<DropdownMenu.Separator />
-
+						<DropdownMenu.Item onclick={() => navigate('/settings?tab=profile')}>
+							<UserIcon class="mr-2 size-4 text-muted-foreground" />
+							Profile & security
+						</DropdownMenu.Item>
+						<DropdownMenu.Sub>
+							<DropdownMenu.SubTrigger>
+								<PaletteIcon class="mr-2 size-4 text-muted-foreground" />
+								Appearance
+								<span class="ml-auto text-muted-foreground capitalize"
+									>{userPrefersMode.current}</span
+								>
+							</DropdownMenu.SubTrigger>
+							<DropdownMenu.SubContent class="w-40">
+								{#each ['system', 'light', 'dark'] as appearance (appearance)}
+									<DropdownMenu.Item onclick={() => chooseAppearance(appearance as AppearanceMode)}>
+										<span class="capitalize">{appearance}</span>
+										{#if userPrefersMode.current === appearance}
+											<CheckIcon class="ml-auto size-4 text-primary" />
+										{/if}
+									</DropdownMenu.Item>
+								{/each}
+							</DropdownMenu.SubContent>
+						</DropdownMenu.Sub>
+						<LanguageSwitcher variant="menu" />
 						{#if IS_CAPACITOR}
+							<DropdownMenu.Separator />
 							<DropdownMenu.Item onclick={handleSwitchServer}>
 								<ServerIcon class="mr-2 size-4 text-muted-foreground" />
-								<span>{m.sidebar_change_server()}</span>
+								{m.sidebar_change_server()}
 							</DropdownMenu.Item>
-							<DropdownMenu.Separator />
 						{/if}
-
+						<DropdownMenu.Separator />
 						<DropdownMenu.Item onclick={handleLogout}>
 							<LogOutIcon class="mr-2 size-4 text-muted-foreground" />
-							<span>{m.sidebar_log_out()}</span>
+							{m.sidebar_log_out()}
 						</DropdownMenu.Item>
-
-						<DropdownMenu.Separator />
-						<div class="px-2 py-1.5 text-xs leading-5 text-muted-foreground">
-							<p>{m.sidebar_source_notice()}</p>
-							<div class="mt-1 flex items-center gap-3">
-								<a
-									href="https://github.com/rodrgds/openpost"
-									target="_blank"
-									rel="noreferrer"
-									class="inline-flex items-center gap-1 font-medium text-foreground hover:underline"
-								>
-									<GithubIcon class="size-3" />
-									{m.sidebar_view_source()}
-								</a>
-								<a
-									href="https://github.com/rodrgds/openpost/blob/main/LICENSE"
-									target="_blank"
-									rel="noreferrer"
-									class="font-medium text-foreground hover:underline"
-								>
-									{m.sidebar_view_license()}
-								</a>
-							</div>
-						</div>
 					</DropdownMenu.Content>
 				</DropdownMenu.Root>
 			</Sidebar.MenuItem>
@@ -680,5 +289,3 @@
 	</Sidebar.Footer>
 	<Sidebar.Rail />
 </Sidebar.Root>
-
-<DayPostsModal />
