@@ -6,6 +6,7 @@ import {
 	isThreadDraft,
 	hasAnyContent,
 	getDraftSnapshot,
+	getDraftPresentation,
 	THREAD_DRAFT_PREFIX
 } from './draft-utils';
 
@@ -141,6 +142,37 @@ describe('draft-utils', () => {
 		it('returns consistent snapshot for same posts', () => {
 			const posts = [{ key: 'a', content: 'Hello', mediaIds: ['m1'] }];
 			expect(getDraftSnapshot(posts)).toBe(getDraftSnapshot(posts));
+		});
+	});
+
+	describe('getDraftPresentation', () => {
+		it('uses the dedicated thread draft for its title, count, and media state', () => {
+			const threadDraft = encodeThreadDraft([
+				{ key: 'a', content: 'Launch notes', mediaIds: [] },
+				{ key: 'b', content: 'The follow-up', mediaIds: ['media-1'] }
+			]);
+
+			expect(
+				getDraftPresentation({
+					content: 'Launch notes',
+					thread_draft: threadDraft,
+					media_ids: []
+				})
+			).toEqual({
+				title: 'Launch notes',
+				postCount: 2,
+				isThread: true,
+				hasMedia: true
+			});
+		});
+
+		it('falls back to a useful title for an empty regular draft', () => {
+			expect(getDraftPresentation({ content: '', media_ids: [] })).toEqual({
+				title: 'Untitled post',
+				postCount: 1,
+				isThread: false,
+				hasMedia: false
+			});
 		});
 	});
 });

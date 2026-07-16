@@ -63,4 +63,63 @@ test("collapsed sidebar keeps the OpenPost mark without overflowing text", async
   const home = page.getByRole("link", { name: "OpenPost home" });
   await expect(home.locator("svg")).toBeVisible();
   await expect(home.getByText("OpenPost", { exact: true })).toHaveCount(0);
+  await expect(page.getByTestId("desktop-sidebar-planner")).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Posts", exact: true }),
+  ).toBeVisible();
+});
+
+test("desktop planning sidebar resumes drafts and stays out of mobile navigation", async ({
+  page,
+  request,
+}) => {
+  const unique = Date.now().toString(36);
+  const email = `sidebar-planner-${unique}@example.com`;
+  const auth = await registerUser(request, email);
+  const workspace = (await createWorkspace(
+    request,
+    auth.token,
+    "Planning Sidebar E2E",
+  )) as { id: string };
+  const draft = await request.post("/api/v1/posts", {
+    headers: { Authorization: `Bearer ${auth.token}` },
+    data: {
+      workspace_id: workspace.id,
+      content: "Resume the launch announcement",
+      social_account_ids: [],
+      media_ids: [],
+    },
+  });
+  expect(draft.ok()).toBeTruthy();
+  const draftBody = (await draft.json()) as { id: string };
+
+  await authenticatePage(page, auth.token);
+  await page.goto("/");
+
+  const planner = page.getByTestId("desktop-sidebar-planner");
+  await expect(planner).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Calendar", exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText("Resume the launch announcement")).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Media", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Accounts", exact: true }),
+  ).toBeVisible();
+
+  await page
+    .getByRole("button", {
+      name: "Resume draft: Resume the launch announcement",
+    })
+    .click();
+  await expect(page).toHaveURL(new RegExp(`/posts/${draftBody.id}$`));
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+  await expect(planner).toHaveCount(0);
+  await expect(
+    page.getByRole("navigation", { name: "Primary navigation" }),
+  ).toBeVisible();
 });

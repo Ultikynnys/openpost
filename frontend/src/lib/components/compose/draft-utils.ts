@@ -17,6 +17,19 @@ export interface DecodedThreadDraft {
 	variants: ThreadVariantMap;
 }
 
+export interface DraftLike {
+	content: string;
+	thread_draft?: string;
+	media_ids?: string[] | null;
+}
+
+export interface DraftPresentation {
+	title: string;
+	postCount: number;
+	isThread: boolean;
+	hasMedia: boolean;
+}
+
 export const THREAD_DRAFT_PREFIX = '__openpost_thread__:';
 
 export function generatePostKey(): string {
@@ -72,6 +85,25 @@ export function decodeThreadDraft(content: string): DecodedThreadDraft | null {
 	} catch {
 		return null;
 	}
+}
+
+export function getDraftPresentation(draft: DraftLike): DraftPresentation {
+	const serializedThread =
+		draft.thread_draft || (isThreadDraft(draft.content) ? draft.content : '');
+	const decodedThread = serializedThread ? decodeThreadDraft(serializedThread) : null;
+	const firstThreadPost = decodedThread?.posts[0]?.content.trim() ?? '';
+	const fallbackContent = isThreadDraft(draft.content) ? '' : draft.content.trim();
+	const postCount = decodedThread?.posts.length ?? 1;
+	const isThread = Boolean(serializedThread);
+
+	return {
+		title: firstThreadPost || fallbackContent || (isThread ? 'Untitled thread' : 'Untitled post'),
+		postCount,
+		isThread,
+		hasMedia:
+			Boolean(draft.media_ids?.length) ||
+			Boolean(decodedThread?.posts.some((post) => post.mediaIds.length > 0))
+	};
 }
 
 function normalizeVariantValue(value: unknown): Record<string, VariantPost> {

@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
+	import { page } from '$app/state';
 	import { client, type Post } from '$lib/api/client';
 	import { workspaceCtx } from '$lib/stores/workspace.svelte';
 	import { Button } from '$lib/components/ui/button';
@@ -21,6 +22,7 @@
 	import ClockIcon from 'lucide-svelte/icons/clock';
 	import { m } from '$lib/paraglide/messages';
 	import { getLocaleTag } from '$lib/i18n';
+	import { getDraftPresentation } from '$lib/components/compose/draft-utils';
 
 	type JobLog = {
 		id: string;
@@ -35,7 +37,7 @@
 	let failedJobs = $state.raw<JobLog[]>([]);
 	let loading = $state(true);
 	let error = $state('');
-	let activeTab = $state('scheduled');
+	let activeTab = $state(page.url.searchParams.get('tab') === 'drafts' ? 'drafts' : 'scheduled');
 
 	const scheduledPosts = $derived(
 		posts
@@ -102,15 +104,11 @@
 	}
 
 	function postText(post: Post) {
-		if (!post.content?.startsWith('__openpost_thread__:')) return post.content || 'Untitled post';
-		try {
-			const decoded = JSON.parse(post.content.slice('__openpost_thread__:'.length));
-			const thread = Array.isArray(decoded) ? decoded : decoded.p;
-			const first = thread?.[0]?.c || 'Untitled thread';
-			return `${first} · ${thread.length} posts`;
-		} catch {
-			return 'Thread draft';
-		}
+		if (post.status !== 'draft') return post.content || 'Untitled post';
+		const presentation = getDraftPresentation(post);
+		return presentation.isThread
+			? `${presentation.title} · ${presentation.postCount} posts`
+			: presentation.title;
 	}
 
 	function truncate(value: string, max = 180) {

@@ -6,6 +6,7 @@ All notable changes to this project are documented in this file.
 
 ### Changed
 
+- Restored a desktop planning sidebar with a compact schedule calendar, one-click autosaved draft resumption, and always-visible workspace navigation while preserving the mobile bottom navigation and collapsed icon rail.
 - Reworked the authenticated app around persistent primary navigation, a focused Posts area, intent-based composer formats, clearer content customization language, compact social accounts, day drawers, and task-specific settings pages on desktop and mobile.
 - Relicensed OpenPost from MIT to AGPL-3.0-only and restored clear open-source positioning across the project, marketing site, documentation, and authenticated app.
 - Made the project-owned Devenv/direnv workflow durable across NAS/Hermes reboots with a committed environment lock, repo-local caches, frozen installs, non-destructive dotenv setup, explicit command gates, a tracked fast pre-push lint gate, and no shell execution of dotenv data.

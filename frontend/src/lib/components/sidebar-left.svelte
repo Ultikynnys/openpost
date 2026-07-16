@@ -17,6 +17,7 @@
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
 	import * as Avatar from '$lib/components/ui/avatar';
 	import Logo from './Logo.svelte';
+	import SidebarPlanner from './sidebar-planner.svelte';
 	import LanguageSwitcher from './language-switcher.svelte';
 	import CalendarIcon from 'lucide-svelte/icons/calendar-days';
 	import ComposeIcon from 'lucide-svelte/icons/square-pen';
@@ -48,6 +49,11 @@
 	const navigationItems = $derived(
 		primaryNavigation.map((item) => ({ ...item, icon: navigationIcon(item.id) }))
 	);
+	const newPostItem = $derived(navigationItems.find((item) => item.id === 'new')!);
+	const workspaceNavigationItems = $derived(
+		navigationItems.filter((item) => ['posts', 'media', 'accounts', 'settings'].includes(item.id))
+	);
+	const showDesktopPlanner = $derived(!sidebar.isMobile && sidebar.state === 'expanded');
 
 	function navigationIcon(id: PrimaryNavigationItem['id']) {
 		switch (id) {
@@ -181,37 +187,83 @@
 		</DropdownMenu.Root>
 	</Sidebar.Header>
 
-	<Sidebar.Content class="px-2 py-3">
-		<Sidebar.Group class="p-0">
-			<Sidebar.GroupLabel
-				class="px-2 text-[11px] tracking-[0.12em] text-sidebar-foreground/48 uppercase"
-			>
-				Publish
-			</Sidebar.GroupLabel>
-			<Sidebar.GroupContent>
-				<Sidebar.Menu class="gap-1">
-					{#each navigationItems as item (item.id)}
+	<Sidebar.Content class={showDesktopPlanner ? 'py-2' : 'px-2 py-3'}>
+		{#if showDesktopPlanner}
+			<Sidebar.Group class="px-2 pt-0 pb-2">
+				<Sidebar.GroupContent>
+					<Sidebar.Menu>
+						<Sidebar.MenuItem>
+							<Sidebar.MenuButton
+								isActive={isNavigationItemActive(newPostItem, currentPath)}
+								class="h-10 bg-primary text-sm font-medium text-primary-foreground shadow-xs hover:bg-primary/90 hover:text-primary-foreground data-active:bg-primary data-active:text-primary-foreground"
+								tooltipContent={newPostItem.label}
+								onclick={() => navigate(newPostItem.href)}
+							>
+								<newPostItem.icon class="size-4" />
+								<span>{newPostItem.label}</span>
+							</Sidebar.MenuButton>
+						</Sidebar.MenuItem>
+					</Sidebar.Menu>
+				</Sidebar.GroupContent>
+			</Sidebar.Group>
+
+			<SidebarPlanner onNavigate={navigate} />
+		{:else}
+			<Sidebar.Group class="p-0">
+				<Sidebar.GroupLabel
+					class="px-2 text-[11px] tracking-[0.12em] text-sidebar-foreground/48 uppercase"
+				>
+					Publish
+				</Sidebar.GroupLabel>
+				<Sidebar.GroupContent>
+					<Sidebar.Menu class="gap-1">
+						{#each navigationItems as item (item.id)}
+							<Sidebar.MenuItem>
+								<Sidebar.MenuButton
+									isActive={isNavigationItemActive(item, currentPath)}
+									class={item.id === 'new'
+										? 'h-10 bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground data-active:bg-primary data-active:text-primary-foreground'
+										: 'h-10 text-sm'}
+									tooltipContent={item.label}
+									onclick={() => navigate(item.href)}
+								>
+									<item.icon class="size-4" />
+									<span>{item.label}</span>
+								</Sidebar.MenuButton>
+							</Sidebar.MenuItem>
+						{/each}
+					</Sidebar.Menu>
+				</Sidebar.GroupContent>
+			</Sidebar.Group>
+		{/if}
+	</Sidebar.Content>
+
+	<Sidebar.Footer class="border-t border-sidebar-border p-2">
+		{#if showDesktopPlanner}
+			<div class="pb-2">
+				<p
+					class="flex h-7 items-center px-2 text-[11px] tracking-[0.1em] text-sidebar-foreground/52 uppercase"
+				>
+					Workspace
+				</p>
+				<Sidebar.Menu class="grid grid-cols-2 gap-1">
+					{#each workspaceNavigationItems as item (item.id)}
 						<Sidebar.MenuItem>
 							<Sidebar.MenuButton
 								isActive={isNavigationItemActive(item, currentPath)}
-								class={item.id === 'new'
-									? 'h-10 bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground data-active:bg-primary data-active:text-primary-foreground'
-									: 'h-10 text-sm'}
+								class="h-9 gap-1.5 px-2 text-xs"
 								tooltipContent={item.label}
 								onclick={() => navigate(item.href)}
 							>
-								<item.icon class="size-4" />
-								<span>{item.label}</span>
+								<item.icon class="size-3.5" />
+								<span>{item.id === 'accounts' ? 'Accounts' : item.label}</span>
 							</Sidebar.MenuButton>
 						</Sidebar.MenuItem>
 					{/each}
 				</Sidebar.Menu>
-			</Sidebar.GroupContent>
-		</Sidebar.Group>
-	</Sidebar.Content>
-
-	<Sidebar.Footer class="border-t border-sidebar-border p-2">
-		<Sidebar.Menu>
+			</div>
+		{/if}
+		<Sidebar.Menu class={showDesktopPlanner ? 'border-t border-sidebar-border pt-2' : ''}>
 			<Sidebar.MenuItem>
 				<DropdownMenu.Root>
 					<DropdownMenu.Trigger>
