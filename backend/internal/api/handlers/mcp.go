@@ -34,41 +34,48 @@ import (
 )
 
 const (
-	mcpProtocolVersion   = "2025-06-18"
-	mcpToolSearch        = "search"
-	mcpToolQuery         = "query"
-	mcpToolExecute       = "execute"
-	mcpToolWorkspaces    = "list_workspaces"
-	mcpToolProviders     = "list_provider_catalog"
-	mcpToolAccounts      = "list_accounts"
-	mcpToolListMedia     = "list_media"
-	mcpToolReadiness     = "get_provider_readiness"
-	mcpToolCreateDraft   = "create_draft"
-	mcpToolCreatePub     = "create_publication"
-	mcpToolListPubs      = "list_publications"
-	mcpToolValidatePub   = "validate_publication"
-	mcpToolSchedulePub   = "schedule_publication"
-	mcpToolPublishPubNow = "publish_publication_now"
-	mcpToolPubEvents     = "list_publication_events"
-	mcpToolComments      = "list_rendition_comments"
-	mcpToolListDrafts    = "list_drafts"
-	mcpToolUpdateDraft   = "update_draft"
-	mcpToolRenditions    = "set_post_renditions"
-	mcpToolSchedulePost  = "schedule_post"
-	mcpToolScheduleDraft = "schedule_draft"
-	mcpToolGetPost       = "get_post_status"
-	mcpToolListPosts     = "list_scheduled_posts"
-	mcpToolCancelPost    = "cancel_post"
-	mcpToolSuggestSlot   = "suggest_next_slot"
-	mcpToolUploadURL     = "upload_media_from_url"
-	mcpToolRenderWidget  = "render_scheduler_widget"
-	mcpPromptPlanPost    = "plan_social_post"
-	mcpPromptRenditions  = "adapt_platform_renditions"
-	mcpPromptReviewQueue = "review_schedule"
-	mcpScopeFull         = apitokens.ScopeMCP
-	maxRemoteMediaBytes  = 50 * 1024 * 1024
-	mcpAppWidgetURI      = "ui://widget/openpost-scheduler-v1.html"
-	mcpAppWidgetMimeType = "text/html;profile=mcp-app"
+	mcpProtocolVersion    = "2025-06-18"
+	mcpToolSearch         = "search"
+	mcpToolQuery          = "query"
+	mcpToolExecute        = "execute"
+	mcpToolWorkspaces     = "list_workspaces"
+	mcpToolProviders      = "list_provider_catalog"
+	mcpToolAccounts       = "list_accounts"
+	mcpToolListMedia      = "list_media"
+	mcpToolReadiness      = "get_provider_readiness"
+	mcpToolCreateDraft    = "create_draft"
+	mcpToolCreatePub      = "create_publication"
+	mcpToolListPubs       = "list_publications"
+	mcpToolGetPub         = "get_publication"
+	mcpToolUpdatePub      = "update_publication"
+	mcpToolPubRenditions  = "set_publication_renditions"
+	mcpToolReplyRendition = "reply_to_rendition"
+	mcpToolValidatePub    = "validate_publication"
+	mcpToolSchedulePub    = "schedule_publication"
+	mcpToolPublishPubNow  = "publish_publication_now"
+	mcpToolPubEvents      = "list_publication_events"
+	mcpToolComments       = "list_rendition_comments"
+	mcpToolReplyComment   = "reply_to_comment"
+	mcpToolHideComment    = "hide_comment"
+	mcpToolDeleteComment  = "delete_comment"
+	mcpToolListDrafts     = "list_drafts"
+	mcpToolUpdateDraft    = "update_draft"
+	mcpToolRenditions     = "set_post_renditions"
+	mcpToolSchedulePost   = "schedule_post"
+	mcpToolScheduleDraft  = "schedule_draft"
+	mcpToolGetPost        = "get_post_status"
+	mcpToolListPosts      = "list_scheduled_posts"
+	mcpToolCancelPost     = "cancel_post"
+	mcpToolSuggestSlot    = "suggest_next_slot"
+	mcpToolUploadURL      = "upload_media_from_url"
+	mcpToolRenderWidget   = "render_scheduler_widget"
+	mcpPromptPlanPost     = "plan_social_post"
+	mcpPromptRenditions   = "adapt_platform_renditions"
+	mcpPromptReviewQueue  = "review_schedule"
+	mcpScopeFull          = apitokens.ScopeMCP
+	maxRemoteMediaBytes   = 50 * 1024 * 1024
+	mcpAppWidgetURI       = "ui://widget/openpost-scheduler-v1.html"
+	mcpAppWidgetMimeType  = "text/html;profile=mcp-app"
 )
 
 type MCPHandler struct {
@@ -745,11 +752,18 @@ func mcpOperationCatalog() []mcpOperationDefinition {
 		mcpProviderReadinessTool(),
 		mcpCreatePublicationTool(),
 		mcpListPublicationsTool(),
+		mcpGetPublicationTool(),
+		mcpUpdatePublicationTool(),
+		mcpSetPublicationRenditionsTool(),
+		mcpReplyToRenditionTool(),
 		mcpValidatePublicationTool(),
 		mcpSchedulePublicationTool(),
 		mcpPublishPublicationNowTool(),
 		mcpListPublicationEventsTool(),
 		mcpListRenditionCommentsTool(),
+		mcpReplyToCommentTool(),
+		mcpHideCommentTool(),
+		mcpDeleteCommentTool(),
 		mcpCreateDraftTool(),
 		mcpListDraftsTool(),
 		mcpUpdateDraftTool(),
@@ -1060,6 +1074,90 @@ func mcpListPublicationsTool() mcpOperationDefinition {
 	}, mcpOperationQuery, false, false)
 }
 
+func mcpGetPublicationTool() mcpOperationDefinition {
+	return mcpOperationDescriptor(map[string]any{
+		"name": mcpToolGetPub, "title": "Get publication",
+		"description": "Get a format-first publication with its destination renditions and delivery state.",
+		"inputSchema": mcpPublicationIDSchema(),
+	}, mcpOperationQuery, false, false)
+}
+
+func mcpUpdatePublicationTool() mcpOperationDefinition {
+	return mcpOperationDescriptor(map[string]any{
+		"name": mcpToolUpdatePub, "title": "Update publication",
+		"description": "Update editable publication source fields or schedule time. Existing fields are preserved when omitted.",
+		"inputSchema": map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"publication_id": map[string]any{"type": "string"},
+				"title":          map[string]any{"type": "string"}, "content_profile": map[string]any{"type": "string"},
+				"source_text": map[string]any{"type": "string"}, "source_url": map[string]any{"type": "string"},
+				"goal": map[string]any{"type": "string"}, "audience": map[string]any{"type": "string"},
+				"scheduled_at": map[string]any{"type": "string", "format": "date-time"},
+				"metadata":     map[string]any{"type": "object", "additionalProperties": true},
+			},
+			"required": []string{"publication_id"}, "additionalProperties": false,
+		},
+	}, mcpOperationExecute, false, false)
+}
+
+func mcpSetPublicationRenditionsTool() mcpOperationDefinition {
+	return mcpOperationDescriptor(map[string]any{
+		"name": mcpToolPubRenditions, "title": "Set publication renditions",
+		"description": "Replace a publication's destination-specific outputs. Use this after changing accounts, provider fields, media roles, or captions.",
+		"inputSchema": map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"publication_id": map[string]any{"type": "string"},
+				"renditions":     map[string]any{"type": "array", "minItems": 1, "items": mcpPublicationRenditionSchema()},
+			},
+			"required": []string{"publication_id", "renditions"}, "additionalProperties": false,
+		},
+	}, mcpOperationExecute, false, false)
+}
+
+func mcpReplyToRenditionTool() mcpOperationDefinition {
+	return mcpOperationDescriptor(map[string]any{
+		"name": mcpToolReplyRendition, "title": "Reply to rendition",
+		"description": "Queue an explicit reply to a published provider rendition, immediately or at a scheduled time.",
+		"inputSchema": map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"rendition_id": map[string]any{"type": "string"}, "body": map[string]any{"type": "string"},
+				"parent_id": map[string]any{"type": "string"}, "run_at": map[string]any{"type": "string", "format": "date-time"},
+				"settings": map[string]any{"type": "object", "additionalProperties": true},
+				"media":    map[string]any{"type": "array", "items": mcpPublicationMediaSchema()},
+			},
+			"required": []string{"rendition_id", "body"}, "additionalProperties": false,
+		},
+	}, mcpOperationExecute, false, true)
+}
+
+func mcpPublicationIDSchema() map[string]any {
+	return map[string]any{"type": "object", "properties": map[string]any{"publication_id": map[string]any{"type": "string"}}, "required": []string{"publication_id"}, "additionalProperties": false}
+}
+
+func mcpPublicationMediaSchema() map[string]any {
+	return map[string]any{
+		"type": "object", "properties": map[string]any{
+			"media_id": map[string]any{"type": "string"}, "role": map[string]any{"type": "string"},
+			"alt_text": map[string]any{"type": "string"}, "thumbnail_timestamp_ms": map[string]any{"type": "integer"},
+		}, "required": []string{"media_id"}, "additionalProperties": false,
+	}
+}
+
+func mcpPublicationRenditionSchema() map[string]any {
+	return map[string]any{
+		"type": "object", "properties": map[string]any{
+			"id": map[string]any{"type": "string"}, "social_account_id": map[string]any{"type": "string"},
+			"profile": map[string]any{"type": "string"}, "body": map[string]any{"type": "string"},
+			"title": map[string]any{"type": "string"}, "description": map[string]any{"type": "string"},
+			"settings": map[string]any{"type": "object", "additionalProperties": true},
+			"media":    map[string]any{"type": "array", "items": mcpPublicationMediaSchema()},
+		}, "required": []string{"social_account_id"}, "additionalProperties": false,
+	}
+}
+
 func mcpValidatePublicationTool() mcpOperationDefinition {
 	return mcpOperationDescriptor(map[string]any{
 		"name":        mcpToolValidatePub,
@@ -1139,6 +1237,31 @@ func mcpListRenditionCommentsTool() mcpOperationDefinition {
 			"additionalProperties": false,
 		},
 	}, mcpOperationQuery, false, true)
+}
+
+func mcpReplyToCommentTool() mcpOperationDefinition {
+	return mcpCommentActionTool(mcpToolReplyComment, "Reply to comment", "Reply to an opaque comment ID returned by list_rendition_comments.", true, false)
+}
+
+func mcpHideCommentTool() mcpOperationDefinition {
+	return mcpCommentActionTool(mcpToolHideComment, "Hide comment", "Hide a provider comment when the connected platform supports moderation.", false, true)
+}
+
+func mcpDeleteCommentTool() mcpOperationDefinition {
+	return mcpCommentActionTool(mcpToolDeleteComment, "Delete comment", "Permanently delete a provider comment when the connected platform supports moderation.", false, true)
+}
+
+func mcpCommentActionTool(name, title, description string, requiresBody, destructive bool) mcpOperationDefinition {
+	properties := map[string]any{"comment_id": map[string]any{"type": "string", "description": "Opaque comment ID returned by list_rendition_comments."}}
+	required := []string{"comment_id"}
+	if requiresBody {
+		properties["body"] = map[string]any{"type": "string"}
+		required = append(required, "body")
+	}
+	return mcpOperationDescriptor(map[string]any{
+		"name": name, "title": title, "description": description,
+		"inputSchema": map[string]any{"type": "object", "properties": properties, "required": required, "additionalProperties": false},
+	}, mcpOperationExecute, destructive, true)
 }
 
 func mcpListDraftsTool() mcpOperationDefinition {
@@ -1568,33 +1691,40 @@ type mcpToolStatus struct {
 }
 
 var mcpToolStatuses = map[string]mcpToolStatus{
-	mcpToolSearch:        {Invoking: "Searching operations", Invoked: "Operations found"},
-	mcpToolQuery:         {Invoking: "Querying OpenPost", Invoked: "OpenPost query complete"},
-	mcpToolExecute:       {Invoking: "Running OpenPost mutation", Invoked: "OpenPost mutation complete"},
-	mcpToolWorkspaces:    {Invoking: "Loading workspaces", Invoked: "Workspaces loaded"},
-	mcpToolProviders:     {Invoking: "Loading providers", Invoked: "Providers loaded"},
-	mcpToolAccounts:      {Invoking: "Loading accounts", Invoked: "Accounts loaded"},
-	mcpToolListMedia:     {Invoking: "Loading media", Invoked: "Media loaded"},
-	mcpToolReadiness:     {Invoking: "Checking provider readiness", Invoked: "Provider readiness loaded"},
-	mcpToolCreateDraft:   {Invoking: "Creating draft", Invoked: "Draft created"},
-	mcpToolCreatePub:     {Invoking: "Creating publication", Invoked: "Publication created"},
-	mcpToolListPubs:      {Invoking: "Loading publications", Invoked: "Publications loaded"},
-	mcpToolValidatePub:   {Invoking: "Validating publication", Invoked: "Publication validated"},
-	mcpToolSchedulePub:   {Invoking: "Scheduling publication", Invoked: "Publication scheduled"},
-	mcpToolPublishPubNow: {Invoking: "Queueing publication", Invoked: "Publication queued"},
-	mcpToolPubEvents:     {Invoking: "Loading publication events", Invoked: "Publication events loaded"},
-	mcpToolComments:      {Invoking: "Loading comments", Invoked: "Comments loaded"},
-	mcpToolListDrafts:    {Invoking: "Loading drafts", Invoked: "Drafts loaded"},
-	mcpToolUpdateDraft:   {Invoking: "Updating draft", Invoked: "Draft updated"},
-	mcpToolRenditions:    {Invoking: "Updating renditions", Invoked: "Renditions updated"},
-	mcpToolSchedulePost:  {Invoking: "Scheduling post", Invoked: "Post scheduled"},
-	mcpToolScheduleDraft: {Invoking: "Scheduling draft", Invoked: "Draft scheduled"},
-	mcpToolGetPost:       {Invoking: "Loading post status", Invoked: "Post status loaded"},
-	mcpToolListPosts:     {Invoking: "Loading queue", Invoked: "Queue loaded"},
-	mcpToolCancelPost:    {Invoking: "Canceling post", Invoked: "Post canceled"},
-	mcpToolSuggestSlot:   {Invoking: "Finding next slot", Invoked: "Next slot found"},
-	mcpToolUploadURL:     {Invoking: "Uploading media", Invoked: "Media uploaded"},
-	mcpToolRenderWidget:  {Invoking: "Rendering view", Invoked: "View rendered"},
+	mcpToolSearch:         {Invoking: "Searching operations", Invoked: "Operations found"},
+	mcpToolQuery:          {Invoking: "Querying OpenPost", Invoked: "OpenPost query complete"},
+	mcpToolExecute:        {Invoking: "Running OpenPost mutation", Invoked: "OpenPost mutation complete"},
+	mcpToolWorkspaces:     {Invoking: "Loading workspaces", Invoked: "Workspaces loaded"},
+	mcpToolProviders:      {Invoking: "Loading providers", Invoked: "Providers loaded"},
+	mcpToolAccounts:       {Invoking: "Loading accounts", Invoked: "Accounts loaded"},
+	mcpToolListMedia:      {Invoking: "Loading media", Invoked: "Media loaded"},
+	mcpToolReadiness:      {Invoking: "Checking provider readiness", Invoked: "Provider readiness loaded"},
+	mcpToolCreateDraft:    {Invoking: "Creating draft", Invoked: "Draft created"},
+	mcpToolCreatePub:      {Invoking: "Creating publication", Invoked: "Publication created"},
+	mcpToolListPubs:       {Invoking: "Loading publications", Invoked: "Publications loaded"},
+	mcpToolGetPub:         {Invoking: "Loading publication", Invoked: "Publication loaded"},
+	mcpToolUpdatePub:      {Invoking: "Updating publication", Invoked: "Publication updated"},
+	mcpToolPubRenditions:  {Invoking: "Updating publication outputs", Invoked: "Publication outputs updated"},
+	mcpToolReplyRendition: {Invoking: "Queueing reply", Invoked: "Reply queued"},
+	mcpToolValidatePub:    {Invoking: "Validating publication", Invoked: "Publication validated"},
+	mcpToolSchedulePub:    {Invoking: "Scheduling publication", Invoked: "Publication scheduled"},
+	mcpToolPublishPubNow:  {Invoking: "Queueing publication", Invoked: "Publication queued"},
+	mcpToolPubEvents:      {Invoking: "Loading publication events", Invoked: "Publication events loaded"},
+	mcpToolComments:       {Invoking: "Loading comments", Invoked: "Comments loaded"},
+	mcpToolReplyComment:   {Invoking: "Replying to comment", Invoked: "Comment reply sent"},
+	mcpToolHideComment:    {Invoking: "Hiding comment", Invoked: "Comment hidden"},
+	mcpToolDeleteComment:  {Invoking: "Deleting comment", Invoked: "Comment deleted"},
+	mcpToolListDrafts:     {Invoking: "Loading drafts", Invoked: "Drafts loaded"},
+	mcpToolUpdateDraft:    {Invoking: "Updating draft", Invoked: "Draft updated"},
+	mcpToolRenditions:     {Invoking: "Updating renditions", Invoked: "Renditions updated"},
+	mcpToolSchedulePost:   {Invoking: "Scheduling post", Invoked: "Post scheduled"},
+	mcpToolScheduleDraft:  {Invoking: "Scheduling draft", Invoked: "Draft scheduled"},
+	mcpToolGetPost:        {Invoking: "Loading post status", Invoked: "Post status loaded"},
+	mcpToolListPosts:      {Invoking: "Loading queue", Invoked: "Queue loaded"},
+	mcpToolCancelPost:     {Invoking: "Canceling post", Invoked: "Post canceled"},
+	mcpToolSuggestSlot:    {Invoking: "Finding next slot", Invoked: "Next slot found"},
+	mcpToolUploadURL:      {Invoking: "Uploading media", Invoked: "Media uploaded"},
+	mcpToolRenderWidget:   {Invoking: "Rendering view", Invoked: "View rendered"},
 }
 
 func mcpToolInvocationStatus(toolName string) mcpToolStatus {
@@ -1615,15 +1745,19 @@ func mcpToolOutputSchema(toolName string) map[string]any {
 		return mcpStructuredOutputSchema(map[string]any{
 			"post": mcpOpenObjectSchema(),
 		}, "post")
-	case mcpToolCreatePub:
+	case mcpToolCreatePub, mcpToolGetPub, mcpToolUpdatePub, mcpToolPubRenditions:
 		return mcpStructuredOutputSchema(map[string]any{
 			"publication": mcpOpenObjectSchema(),
 		}, "publication")
-	case mcpToolSchedulePub, mcpToolPublishPubNow:
+	case mcpToolSchedulePub, mcpToolPublishPubNow, mcpToolReplyRendition:
 		return mcpStructuredOutputSchema(map[string]any{
 			"publication": mcpOpenObjectSchema(),
 			"job_id":      map[string]any{"type": "string"},
 		}, "publication", "job_id")
+	case mcpToolReplyComment, mcpToolHideComment, mcpToolDeleteComment:
+		return mcpStructuredOutputSchema(map[string]any{
+			"message": map[string]any{"type": "string"}, "id": map[string]any{"type": "string"},
+		}, "message")
 	case mcpToolValidatePub:
 		return mcpStructuredOutputSchema(map[string]any{
 			"valid":  map[string]any{"type": "boolean"},
@@ -1918,8 +2052,9 @@ func (h *MCPHandler) callMCPOperation(ctx context.Context, userID, operation str
 	case mcpToolRenderWidget:
 		return h.renderSchedulerWidget(args)
 	case mcpToolCreateDraft, mcpToolListDrafts, mcpToolUpdateDraft,
-		mcpToolCreatePub, mcpToolListPubs, mcpToolValidatePub, mcpToolSchedulePub, mcpToolPublishPubNow,
-		mcpToolPubEvents, mcpToolComments, mcpToolRenditions, mcpToolSchedulePost, mcpToolScheduleDraft,
+		mcpToolCreatePub, mcpToolListPubs, mcpToolGetPub, mcpToolUpdatePub, mcpToolPubRenditions, mcpToolReplyRendition,
+		mcpToolValidatePub, mcpToolSchedulePub, mcpToolPublishPubNow, mcpToolPubEvents, mcpToolComments,
+		mcpToolReplyComment, mcpToolHideComment, mcpToolDeleteComment, mcpToolRenditions, mcpToolSchedulePost, mcpToolScheduleDraft,
 		mcpToolGetPost, mcpToolListPosts, mcpToolCancelPost, mcpToolSuggestSlot, mcpToolUploadURL:
 		return h.callWorkspaceActionTool(ctx, userID, operation, args)
 	default:
@@ -1931,7 +2066,9 @@ func (h *MCPHandler) callWorkspaceActionTool(ctx context.Context, userID, toolNa
 	switch toolName {
 	case mcpToolCreateDraft:
 		return h.createDraft(ctx, userID, args)
-	case mcpToolCreatePub, mcpToolListPubs, mcpToolValidatePub, mcpToolSchedulePub, mcpToolPublishPubNow, mcpToolPubEvents, mcpToolComments:
+	case mcpToolCreatePub, mcpToolListPubs, mcpToolGetPub, mcpToolUpdatePub, mcpToolPubRenditions, mcpToolReplyRendition,
+		mcpToolValidatePub, mcpToolSchedulePub, mcpToolPublishPubNow, mcpToolPubEvents, mcpToolComments,
+		mcpToolReplyComment, mcpToolHideComment, mcpToolDeleteComment:
 		return h.callPublicationTool(ctx, userID, toolName, args)
 	case mcpToolListDrafts:
 		return h.listDrafts(ctx, userID, args)
@@ -1964,6 +2101,14 @@ func (h *MCPHandler) callPublicationTool(ctx context.Context, userID, toolName s
 		return h.createPublication(ctx, userID, args)
 	case mcpToolListPubs:
 		return h.listPublications(ctx, userID, args)
+	case mcpToolGetPub:
+		return h.getPublication(ctx, userID, args)
+	case mcpToolUpdatePub:
+		return h.updatePublication(ctx, userID, args)
+	case mcpToolPubRenditions:
+		return h.setPublicationRenditions(ctx, userID, args)
+	case mcpToolReplyRendition:
+		return h.replyToRendition(ctx, userID, args)
 	case mcpToolValidatePub:
 		return h.validatePublication(ctx, userID, args)
 	case mcpToolSchedulePub:
@@ -1974,6 +2119,8 @@ func (h *MCPHandler) callPublicationTool(ctx context.Context, userID, toolName s
 		return h.listPublicationEvents(ctx, userID, args)
 	case mcpToolComments:
 		return h.listRenditionComments(ctx, userID, args)
+	case mcpToolReplyComment, mcpToolHideComment, mcpToolDeleteComment:
+		return h.moderateComment(ctx, userID, toolName, args)
 	default:
 		return nil, &mcpError{Code: -32602, Message: "unknown tool"}
 	}
@@ -2488,6 +2635,186 @@ func (h *MCPHandler) listPublications(ctx context.Context, userID string, args m
 	}, nil
 }
 
+func (h *MCPHandler) getPublication(ctx context.Context, userID string, args map[string]any) (any, *mcpError) {
+	publicationID, rpcErr := decodeMCPPublicationID(args, "invalid get_publication arguments")
+	if rpcErr != nil {
+		return nil, rpcErr
+	}
+	publication, err := (&PublicationHandler{db: h.db}).loadPublicationResponse(ctx, publicationID, userID)
+	if err != nil {
+		return nil, &mcpError{Code: -32602, Message: "publication not found or unavailable"}
+	}
+	return map[string]any{
+		"content":           []mcpContent{{Type: "text", Text: "Publication loaded: " + publication.ID}},
+		"structuredContent": map[string]any{"publication": publication},
+	}, nil
+}
+
+type mcpPublicationUpdateInput struct {
+	PublicationID  string                  `json:"publication_id"`
+	Title          *string                 `json:"title"`
+	ContentProfile *string                 `json:"content_profile"`
+	SourceText     *string                 `json:"source_text"`
+	SourceURL      *string                 `json:"source_url"`
+	Goal           *string                 `json:"goal"`
+	Audience       *string                 `json:"audience"`
+	ScheduledAt    *time.Time              `json:"scheduled_at"`
+	Metadata       *map[string]interface{} `json:"metadata"`
+}
+
+func applyMCPPublicationUpdate(publication *models.Publication, input mcpPublicationUpdateInput) bool {
+	if input.Title != nil {
+		publication.Title = *input.Title
+	}
+	if input.ContentProfile != nil {
+		publication.ContentProfile = *input.ContentProfile
+	}
+	if input.SourceText != nil {
+		publication.SourceText, publication.SourceContent = *input.SourceText, *input.SourceText
+	}
+	if input.SourceURL != nil {
+		publication.SourceURL = *input.SourceURL
+	}
+	if input.Goal != nil {
+		publication.Goal = *input.Goal
+	}
+	if input.Audience != nil {
+		publication.Audience = *input.Audience
+	}
+	rescheduleQueuedJob := input.ScheduledAt != nil && publication.Status == models.PublicationStatusScheduled
+	if input.ScheduledAt != nil {
+		publication.ScheduledAt = *input.ScheduledAt
+	}
+	if input.Metadata != nil {
+		publication.MetadataJSON, publication.ReleasePlanJSON = mustJSON(*input.Metadata), mustJSON(*input.Metadata)
+	}
+	publication.UpdatedAt = time.Now().UTC()
+	return rescheduleQueuedJob
+}
+
+func (h *MCPHandler) updatePublication(ctx context.Context, userID string, args map[string]any) (any, *mcpError) {
+	var input mcpPublicationUpdateInput
+	if err := decodeMCPArguments(args, &input); err != nil || strings.TrimSpace(input.PublicationID) == "" {
+		return nil, &mcpError{Code: -32602, Message: "invalid update_publication arguments"}
+	}
+	var publication models.Publication
+	if err := h.db.NewSelect().Model(&publication).Where("id = ?", input.PublicationID).Scan(ctx); err != nil {
+		return nil, &mcpError{Code: -32602, Message: "publication not found"}
+	}
+	if rpcErr := h.ensureWorkspaceEditAccess(ctx, userID, publication.WorkspaceID); rpcErr != nil {
+		return nil, rpcErr
+	}
+	if publication.Status != models.PublicationStatusDraft && publication.Status != models.PublicationStatusScheduled {
+		return nil, &mcpError{Code: -32602, Message: "publication is no longer editable"}
+	}
+	rescheduleQueuedJob := applyMCPPublicationUpdate(&publication, input)
+	handler := &PublicationHandler{db: h.db}
+	if err := h.db.RunInTx(ctx, &sql.TxOptions{}, func(txCtx context.Context, tx bun.Tx) error {
+		if _, err := tx.NewUpdate().Model(&publication).Where("id = ?", publication.ID).Exec(txCtx); err != nil {
+			return err
+		}
+		if rescheduleQueuedJob {
+			_, err := handler.replacePublicationJobTx(txCtx, tx, publication.ID, publication.ScheduledAt)
+			return err
+		}
+		return nil
+	}); err != nil {
+		return nil, &mcpError{Code: -32603, Message: "failed to update publication"}
+	}
+	return h.getPublication(ctx, userID, map[string]any{"publication_id": publication.ID})
+}
+
+func (h *MCPHandler) setPublicationRenditions(ctx context.Context, userID string, args map[string]any) (any, *mcpError) {
+	var input struct {
+		PublicationID string           `json:"publication_id"`
+		Renditions    []RenditionInput `json:"renditions"`
+	}
+	if err := decodeMCPArguments(args, &input); err != nil || strings.TrimSpace(input.PublicationID) == "" || len(input.Renditions) == 0 {
+		return nil, &mcpError{Code: -32602, Message: "invalid set_publication_renditions arguments"}
+	}
+	var publication models.Publication
+	if err := h.db.NewSelect().Model(&publication).Where("id = ?", input.PublicationID).Scan(ctx); err != nil {
+		return nil, &mcpError{Code: -32602, Message: "publication not found"}
+	}
+	if rpcErr := h.ensureWorkspaceEditAccess(ctx, userID, publication.WorkspaceID); rpcErr != nil {
+		return nil, rpcErr
+	}
+	if publication.Status != models.PublicationStatusDraft && publication.Status != models.PublicationStatusScheduled {
+		return nil, &mcpError{Code: -32602, Message: "publication is no longer editable"}
+	}
+	handler := &PublicationHandler{db: h.db}
+	accounts, err := handler.loadAccounts(ctx, publication.WorkspaceID, renditionAccountIDs(input.Renditions))
+	if err != nil {
+		return nil, &mcpError{Code: -32602, Message: err.Error()}
+	}
+	if err := handler.validateMediaBelongsToWorkspace(ctx, publication.WorkspaceID, allMediaIDs(nil, input.Renditions)); err != nil {
+		return nil, &mcpError{Code: -32602, Message: err.Error()}
+	}
+	if err := h.db.RunInTx(ctx, &sql.TxOptions{}, func(txCtx context.Context, tx bun.Tx) error {
+		var IDs []string
+		if err := tx.NewSelect().Model((*models.Rendition)(nil)).Column("id").Where("publication_id = ?", publication.ID).Scan(txCtx, &IDs); err != nil {
+			return err
+		}
+		if len(IDs) > 0 {
+			if _, err := tx.NewDelete().Model((*models.RenditionMedia)(nil)).Where("rendition_id IN (?)", bun.List(IDs)).Exec(txCtx); err != nil {
+				return err
+			}
+			if _, err := tx.NewDelete().Model((*models.Rendition)(nil)).Where("publication_id = ?", publication.ID).Exec(txCtx); err != nil {
+				return err
+			}
+		}
+		return handler.insertRenditions(txCtx, tx, &publication, input.Renditions, nil, accounts)
+	}); err != nil {
+		return nil, &mcpError{Code: -32603, Message: "failed to update publication renditions"}
+	}
+	return h.getPublication(ctx, userID, map[string]any{"publication_id": publication.ID})
+}
+
+func (h *MCPHandler) replyToRendition(ctx context.Context, userID string, args map[string]any) (any, *mcpError) {
+	var input struct {
+		RenditionID string                  `json:"rendition_id"`
+		Body        string                  `json:"body"`
+		ParentID    string                  `json:"parent_id"`
+		Settings    map[string]interface{}  `json:"settings"`
+		Media       []PublicationMediaInput `json:"media"`
+		RunAt       *time.Time              `json:"run_at"`
+	}
+	if err := decodeMCPArguments(args, &input); err != nil || strings.TrimSpace(input.RenditionID) == "" || strings.TrimSpace(input.Body) == "" {
+		return nil, &mcpError{Code: -32602, Message: "invalid reply_to_rendition arguments"}
+	}
+	rendition, publication, _, rpcErr := h.loadMCPCommentContext(ctx, userID, input.RenditionID)
+	if rpcErr != nil {
+		return nil, rpcErr
+	}
+	if rpcErr := h.ensureWorkspaceEditAccess(ctx, userID, publication.WorkspaceID); rpcErr != nil {
+		return nil, rpcErr
+	}
+	runAt := time.Now().UTC()
+	if input.RunAt != nil {
+		runAt = *input.RunAt
+	}
+	payload := mustJSON(map[string]any{"rendition_id": rendition.ID, "publication_id": publication.ID, "body": input.Body, "parent_id": input.ParentID, "settings": input.Settings, "media": input.Media, "action": "reply"})
+	job := &models.Job{ID: newUUID(), Type: jobTypePublishPublication, Payload: payload, Status: "pending", RunAt: runAt, MaxAttempts: 3}
+	if _, err := h.db.NewInsert().Model(job).Exec(ctx); err != nil {
+		return nil, &mcpError{Code: -32603, Message: "failed to enqueue reply"}
+	}
+	status, statusErr := h.loadMCPPublicationStatus(ctx, publication.ID)
+	if statusErr != nil {
+		return nil, statusErr
+	}
+	return mcpPublicationActionResult("Reply queued: "+rendition.ID, job.ID, status), nil
+}
+
+func decodeMCPPublicationID(args map[string]any, invalid string) (string, *mcpError) {
+	var input struct {
+		PublicationID string `json:"publication_id"`
+	}
+	if err := decodeMCPArguments(args, &input); err != nil || strings.TrimSpace(input.PublicationID) == "" {
+		return "", &mcpError{Code: -32602, Message: invalid}
+	}
+	return strings.TrimSpace(input.PublicationID), nil
+}
+
 func (h *MCPHandler) validatePublication(ctx context.Context, userID string, args map[string]any) (any, *mcpError) {
 	var input struct {
 		PublicationID string `json:"publication_id"`
@@ -2685,6 +3012,61 @@ func (h *MCPHandler) listRenditionComments(ctx context.Context, userID string, a
 		"structuredContent": map[string]any{
 			"comments": out,
 		},
+	}, nil
+}
+
+func (h *MCPHandler) moderateComment(ctx context.Context, userID, operation string, args map[string]any) (any, *mcpError) {
+	var input struct {
+		CommentID string `json:"comment_id"`
+		Body      string `json:"body"`
+	}
+	if err := decodeMCPArguments(args, &input); err != nil || strings.TrimSpace(input.CommentID) == "" {
+		return nil, &mcpError{Code: -32602, Message: "invalid comment action arguments"}
+	}
+	ref, err := decodeCommentReference(input.CommentID)
+	if err != nil {
+		return nil, &mcpError{Code: -32602, Message: "invalid comment ID"}
+	}
+	rendition, publication, account, rpcErr := h.loadMCPCommentContext(ctx, userID, ref.RenditionID)
+	if rpcErr != nil {
+		return nil, rpcErr
+	}
+	if rpcErr := h.ensureWorkspaceEditAccess(ctx, userID, publication.WorkspaceID); rpcErr != nil {
+		return nil, rpcErr
+	}
+	commenter, accessToken, rpcErr := h.commentAdapter(account)
+	if rpcErr != nil {
+		return nil, rpcErr
+	}
+	events := &CommentHandler{db: h.db}
+	message, actionID, action := "", "", ""
+	switch operation {
+	case mcpToolReplyComment:
+		if strings.TrimSpace(input.Body) == "" {
+			return nil, &mcpError{Code: -32602, Message: "reply body is required"}
+		}
+		action = "reply"
+		actionID, err = commenter.ReplyToComment(ctx, accessToken, account.AccountID, ref.ProviderCommentID, input.Body)
+		message = "comment reply sent"
+	case mcpToolHideComment:
+		action = "hide"
+		err = commenter.HideComment(ctx, accessToken, account.AccountID, ref.ProviderCommentID)
+		message = "comment hidden"
+	case mcpToolDeleteComment:
+		action = "delete"
+		err = commenter.DeleteComment(ctx, accessToken, account.AccountID, ref.ProviderCommentID)
+		message = "comment deleted"
+	default:
+		return nil, &mcpError{Code: -32602, Message: "unknown comment action"}
+	}
+	if err != nil {
+		events.recordCommentLifecycleEvent(ctx, publication, rendition, lifecycle.EventModerationActionFailed, lifecycle.StatusFailed, "comment "+action+" failed", map[string]any{"action": action, "provider_comment_id": ref.ProviderCommentID, "error": err.Error()})
+		return nil, &mcpError{Code: -32603, Message: "provider comment action failed: " + err.Error()}
+	}
+	events.recordCommentLifecycleEvent(ctx, publication, rendition, lifecycle.EventCommentActionSucceeded, lifecycle.StatusSucceeded, message, map[string]any{"action": action, "provider_comment_id": ref.ProviderCommentID, "id": actionID})
+	return map[string]any{
+		"content":           []mcpContent{{Type: "text", Text: message}},
+		"structuredContent": map[string]any{"message": message, "id": actionID},
 	}, nil
 }
 

@@ -20,6 +20,7 @@ All notable changes to this project are documented in this file.
 - Removed social media sets from the app, API, CLI, MCP tools, and docs; posting schedules now resolve at the workspace/account level with a migration that drops the legacy set tables.
 - Updated CLI and MCP publication workflows for current post types, explicit account targeting, media roles, YouTube title/description/privacy, TikTok settings, and publication schedule/publish actions.
 - Included the CLI in the repository's normal build, lint, test, and verification gates.
+- Brought CLI and MCP format-first workflows to parity with the app by adding publication reads/updates, rendition replacement, explicit rendition replies, and provider comment reply/hide/delete actions.
 
 ### Fixed
 
@@ -42,6 +43,8 @@ All notable changes to this project are documented in this file.
 - Preserved finalized `Location` headers on Meta OAuth callback redirects by setting redirect targets before Huma commits the 307 status.
 - Registered persisted and newly added dynamic Mastodon instance adapters with publishing and token refresh so custom instances can publish without manual server restarts.
 - Centralized frontend bearer-token access so profile avatar uploads, removal, authentication restoration, and logout stay synchronized with the shared API client.
+- Made failed-post activity explain every destination outcome and provider reason, with a credential-safe diagnostic report that users can copy for support.
+- Removed redundant healthy-state copy from social account cards, surfaced developer shortcuts and Mastodon servers, widened the desktop sidebar calendar, tightened footer rhythm, and translated the redesigned publishing surfaces in English and Portuguese.
 
 ## [1.0.40] - 2026-07-06
 

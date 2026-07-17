@@ -53,6 +53,20 @@ openpost publication create --profile long_video --accounts youtube --video-titl
 openpost publication schedule pub_123 --at 'tomorrow 9am'
 ```
 
+Edit source fields, replace account-specific outputs, queue replies, and moderate supported provider comments with the same publication command group:
+
+```sh
+openpost publication update pub_123 --title 'Final launch' --schedule 'Friday 10am'
+openpost publication renditions pub_123 --file ./renditions.json
+openpost publication reply rendition_123 --body 'Follow-up'
+openpost publication comments rendition_123
+openpost publication reply-comment '<opaque-comment-id>' --body 'Thanks!'
+openpost publication hide-comment '<opaque-comment-id>'
+openpost publication delete-comment '<opaque-comment-id>' --confirm
+```
+
+`renditions.json` is an array of the same typed rendition objects accepted by the publication API: each item targets a `social_account_id` and can set `profile`, `body`, `title`, `description`, provider `settings`, and ordered `media`.
+
 ## Create a Thread
 
 Create `launch.md` with front matter and `---` separators:

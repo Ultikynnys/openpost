@@ -1020,10 +1020,16 @@ openpost publication
 | --- | --- |
 | `openpost publication comments` | List comments for a published rendition |
 | `openpost publication create` | Create a format-first publication |
+| `openpost publication delete-comment` | Delete a provider comment |
 | `openpost publication events` | List publication lifecycle events |
+| `openpost publication hide-comment` | Hide a provider comment |
 | `openpost publication list` | List publications |
 | `openpost publication publish-now` | Queue a publication for immediate publishing |
+| `openpost publication renditions` | Replace destination-specific renditions from JSON |
+| `openpost publication reply` | Queue an explicit reply to a published rendition |
+| `openpost publication reply-comment` | Reply to a provider comment |
 | `openpost publication schedule` | Schedule an existing publication |
+| `openpost publication update` | Update an editable publication |
 | `openpost publication validate` | Validate a publication |
 | `openpost publication view` | View a publication |
 
@@ -1093,6 +1099,35 @@ openpost publication create [flags]
 | `--workspace` | `-` | workspace name or ID (default: profile or $OPENPOST_WORKSPACE) |
 | `--yes` | `false` | skip interactive confirmations |
 
+### `openpost publication delete-comment`
+
+Delete a provider comment
+
+**Usage**
+
+```text
+openpost publication delete-comment &lt;comment-id&gt; [flags]
+```
+
+**Flags**
+
+| Flag | Default | Description |
+| --- | --- | --- |
+| `--confirm` | `false` | confirm permanent provider deletion |
+
+**Inherited Flags**
+
+| Flag | Default | Description |
+| --- | --- | --- |
+| `--instance` | `-` | OpenPost instance URL (default: profile or $OPENPOST_INSTANCE) |
+| `--json` | `false` | emit machine-readable JSON instead of tables/prose |
+| `--no-color` | `false` | disable ANSI colors |
+| `--profile` | `-` | profile name from config (default: $OPENPOST_PROFILE or 'default') |
+| `--quiet` | `false` | suppress non-error output |
+| `--token` | `-` | API token override (default: keyring or $OPENPOST_TOKEN) |
+| `--workspace` | `-` | workspace name or ID (default: profile or $OPENPOST_WORKSPACE) |
+| `--yes` | `false` | skip interactive confirmations |
+
 ### `openpost publication events`
 
 List publication lifecycle events
@@ -1108,6 +1143,29 @@ openpost publication events &lt;publication-id&gt; [flags]
 | Flag | Default | Description |
 | --- | --- | --- |
 | `--limit` | `0` | maximum number of events to return |
+
+**Inherited Flags**
+
+| Flag | Default | Description |
+| --- | --- | --- |
+| `--instance` | `-` | OpenPost instance URL (default: profile or $OPENPOST_INSTANCE) |
+| `--json` | `false` | emit machine-readable JSON instead of tables/prose |
+| `--no-color` | `false` | disable ANSI colors |
+| `--profile` | `-` | profile name from config (default: $OPENPOST_PROFILE or 'default') |
+| `--quiet` | `false` | suppress non-error output |
+| `--token` | `-` | API token override (default: keyring or $OPENPOST_TOKEN) |
+| `--workspace` | `-` | workspace name or ID (default: profile or $OPENPOST_WORKSPACE) |
+| `--yes` | `false` | skip interactive confirmations |
+
+### `openpost publication hide-comment`
+
+Hide a provider comment
+
+**Usage**
+
+```text
+openpost publication hide-comment &lt;comment-id&gt;
+```
 
 **Inherited Flags**
 
@@ -1176,6 +1234,97 @@ openpost publication publish-now &lt;publication-id&gt;
 | `--workspace` | `-` | workspace name or ID (default: profile or $OPENPOST_WORKSPACE) |
 | `--yes` | `false` | skip interactive confirmations |
 
+### `openpost publication renditions`
+
+Replace destination-specific renditions from JSON
+
+**Usage**
+
+```text
+openpost publication renditions &lt;publication-id&gt; [flags]
+```
+
+**Flags**
+
+| Flag | Default | Description |
+| --- | --- | --- |
+| `--file` | `-` | JSON array of renditions, or '-' for stdin |
+
+**Inherited Flags**
+
+| Flag | Default | Description |
+| --- | --- | --- |
+| `--instance` | `-` | OpenPost instance URL (default: profile or $OPENPOST_INSTANCE) |
+| `--json` | `false` | emit machine-readable JSON instead of tables/prose |
+| `--no-color` | `false` | disable ANSI colors |
+| `--profile` | `-` | profile name from config (default: $OPENPOST_PROFILE or 'default') |
+| `--quiet` | `false` | suppress non-error output |
+| `--token` | `-` | API token override (default: keyring or $OPENPOST_TOKEN) |
+| `--workspace` | `-` | workspace name or ID (default: profile or $OPENPOST_WORKSPACE) |
+| `--yes` | `false` | skip interactive confirmations |
+
+### `openpost publication reply`
+
+Queue an explicit reply to a published rendition
+
+**Usage**
+
+```text
+openpost publication reply &lt;rendition-id&gt; [flags]
+```
+
+**Flags**
+
+| Flag | Default | Description |
+| --- | --- | --- |
+| `--at` | `-` | optional reply schedule time |
+| `--body` | `-` | reply text |
+| `--file` | `-` | read reply text from file or '-' for stdin |
+| `--parent-id` | `-` | external provider post or comment ID |
+
+**Inherited Flags**
+
+| Flag | Default | Description |
+| --- | --- | --- |
+| `--instance` | `-` | OpenPost instance URL (default: profile or $OPENPOST_INSTANCE) |
+| `--json` | `false` | emit machine-readable JSON instead of tables/prose |
+| `--no-color` | `false` | disable ANSI colors |
+| `--profile` | `-` | profile name from config (default: $OPENPOST_PROFILE or 'default') |
+| `--quiet` | `false` | suppress non-error output |
+| `--token` | `-` | API token override (default: keyring or $OPENPOST_TOKEN) |
+| `--workspace` | `-` | workspace name or ID (default: profile or $OPENPOST_WORKSPACE) |
+| `--yes` | `false` | skip interactive confirmations |
+
+### `openpost publication reply-comment`
+
+Reply to a provider comment
+
+**Usage**
+
+```text
+openpost publication reply-comment &lt;comment-id&gt; [flags]
+```
+
+**Flags**
+
+| Flag | Default | Description |
+| --- | --- | --- |
+| `--body` | `-` | reply text |
+| `--file` | `-` | read reply text from file or '-' for stdin |
+
+**Inherited Flags**
+
+| Flag | Default | Description |
+| --- | --- | --- |
+| `--instance` | `-` | OpenPost instance URL (default: profile or $OPENPOST_INSTANCE) |
+| `--json` | `false` | emit machine-readable JSON instead of tables/prose |
+| `--no-color` | `false` | disable ANSI colors |
+| `--profile` | `-` | profile name from config (default: $OPENPOST_PROFILE or 'default') |
+| `--quiet` | `false` | suppress non-error output |
+| `--token` | `-` | API token override (default: keyring or $OPENPOST_TOKEN) |
+| `--workspace` | `-` | workspace name or ID (default: profile or $OPENPOST_WORKSPACE) |
+| `--yes` | `false` | skip interactive confirmations |
+
 ### `openpost publication schedule`
 
 Schedule an existing publication
@@ -1200,6 +1349,39 @@ openpost publication schedule &lt;publication-id&gt; [flags]
 | `--json` | `false` | emit machine-readable JSON instead of tables/prose |
 | `--no-color` | `false` | disable ANSI colors |
 | `--profile` | `-` | profile name from config (default: $OPENPOST_PROFILE or 'default') |
+| `--quiet` | `false` | suppress non-error output |
+| `--token` | `-` | API token override (default: keyring or $OPENPOST_TOKEN) |
+| `--workspace` | `-` | workspace name or ID (default: profile or $OPENPOST_WORKSPACE) |
+| `--yes` | `false` | skip interactive confirmations |
+
+### `openpost publication update`
+
+Update an editable publication
+
+**Usage**
+
+```text
+openpost publication update &lt;publication-id&gt; [flags]
+```
+
+**Flags**
+
+| Flag | Default | Description |
+| --- | --- | --- |
+| `--content` | `-` | canonical post or caption text |
+| `--file` | `-` | read canonical text from file or '-' for stdin |
+| `--profile` | `-` | content profile |
+| `--schedule` | `-` | new schedule time |
+| `--title` | `-` | publication title |
+| `--url` | `-` | source URL; pass an empty value to clear |
+
+**Inherited Flags**
+
+| Flag | Default | Description |
+| --- | --- | --- |
+| `--instance` | `-` | OpenPost instance URL (default: profile or $OPENPOST_INSTANCE) |
+| `--json` | `false` | emit machine-readable JSON instead of tables/prose |
+| `--no-color` | `false` | disable ANSI colors |
 | `--quiet` | `false` | suppress non-error output |
 | `--token` | `-` | API token override (default: keyring or $OPENPOST_TOKEN) |
 | `--workspace` | `-` | workspace name or ID (default: profile or $OPENPOST_WORKSPACE) |

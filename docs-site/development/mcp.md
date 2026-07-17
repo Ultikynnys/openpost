@@ -163,11 +163,18 @@ collapsing the hard read/mutation safety boundary.
 - `upload_media_from_url`: fetches a public HTTP(S) media URL and stores it in a workspace.
 - `create_publication`: creates a format-first publication with renditions and destination-specific settings.
 - `list_publications`: lists format-first publications for a workspace.
+- `get_publication`: returns a publication with its destination renditions and delivery state.
+- `update_publication`: updates editable source fields and schedule time while preserving omitted values.
+- `set_publication_renditions`: replaces a publication's destination-specific outputs and media roles.
+- `reply_to_rendition`: queues an explicit provider reply immediately or at a requested time.
 - `validate_publication`: validates a publication before scheduling or publishing.
 - `schedule_publication`: schedules an existing publication.
 - `publish_publication_now`: queues an existing publication for immediate publishing.
 - `list_publication_events`: returns lifecycle events for a publication.
 - `list_rendition_comments`: lists comments for a published rendition.
+- `reply_to_comment`: replies to an opaque comment ID returned by `list_rendition_comments`.
+- `hide_comment`: hides a supported provider comment.
+- `delete_comment`: permanently deletes a supported provider comment.
 
 The directly advertised `render_scheduler_widget` is intentionally outside the
 delegated operation catalog; clients call it only when they want the Apps UI.

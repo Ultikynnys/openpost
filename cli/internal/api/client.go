@@ -692,18 +692,21 @@ type UpdatePublicationInput struct {
 }
 
 type Publication struct {
-	ID             string      `json:"id"`
-	WorkspaceID    string      `json:"workspace_id"`
-	CreatedBy      string      `json:"created_by"`
-	Title          string      `json:"title"`
-	ContentProfile string      `json:"content_profile"`
-	SourceText     string      `json:"source_text"`
-	SourceURL      string      `json:"source_url,omitempty"`
-	Status         string      `json:"status"`
-	ScheduledAt    string      `json:"scheduled_at,omitempty"`
-	ActualRunAt    string      `json:"actual_run_at,omitempty"`
-	CreatedAt      string      `json:"created_at"`
-	Renditions     []Rendition `json:"renditions"`
+	ID             string                 `json:"id"`
+	WorkspaceID    string                 `json:"workspace_id"`
+	CreatedBy      string                 `json:"created_by"`
+	Title          string                 `json:"title"`
+	ContentProfile string                 `json:"content_profile"`
+	SourceText     string                 `json:"source_text"`
+	SourceURL      string                 `json:"source_url,omitempty"`
+	Goal           string                 `json:"goal,omitempty"`
+	Audience       string                 `json:"audience,omitempty"`
+	Metadata       map[string]interface{} `json:"metadata,omitempty"`
+	Status         string                 `json:"status"`
+	ScheduledAt    string                 `json:"scheduled_at,omitempty"`
+	ActualRunAt    string                 `json:"actual_run_at,omitempty"`
+	CreatedAt      string                 `json:"created_at"`
+	Renditions     []Rendition            `json:"renditions"`
 }
 
 type Rendition struct {
@@ -746,6 +749,19 @@ type PublicationValidation struct {
 type PublicationActionOutput struct {
 	Message string `json:"message"`
 	JobID   string `json:"job_id,omitempty"`
+}
+
+type RenditionReplyInput struct {
+	Body     string                  `json:"body"`
+	ParentID string                  `json:"parent_id,omitempty"`
+	Settings map[string]interface{}  `json:"settings,omitempty"`
+	Media    []PublicationMediaInput `json:"media,omitempty"`
+	RunAt    *time.Time              `json:"run_at,omitempty"`
+}
+
+type CommentActionOutput struct {
+	Message string `json:"message"`
+	ID      string `json:"id,omitempty"`
 }
 
 type PublicationLifecycleEvent struct {
@@ -817,6 +833,22 @@ func (c *Client) UpdatePublication(ctx context.Context, id string, in UpdatePubl
 	return &out, nil
 }
 
+func (c *Client) UpsertPublicationRenditions(ctx context.Context, id string, renditions []RenditionInput) (*Publication, error) {
+	var out Publication
+	if err := c.PutJSON(ctx, "/api/v1/publications/"+url.PathEscape(id)+"/renditions", map[string]any{"renditions": renditions}, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+func (c *Client) ReplyToRendition(ctx context.Context, id string, in RenditionReplyInput) (*PublicationActionOutput, error) {
+	var out PublicationActionOutput
+	if err := c.PostJSON(ctx, "/api/v1/renditions/"+url.PathEscape(id)+"/reply", in, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 func (c *Client) ValidatePublication(ctx context.Context, id string) (*PublicationValidation, error) {
 	var out PublicationValidation
 	if err := c.PostJSON(ctx, "/api/v1/publications/"+url.PathEscape(id)+"/validate", map[string]any{}, &out); err != nil {
@@ -863,6 +895,30 @@ func (c *Client) ListRenditionComments(ctx context.Context, renditionID string) 
 		return nil, err
 	}
 	return out.Comments, nil
+}
+
+func (c *Client) ReplyToComment(ctx context.Context, commentID, body string) (*CommentActionOutput, error) {
+	var out CommentActionOutput
+	if err := c.PostJSON(ctx, "/api/v1/comments/"+url.PathEscape(commentID)+"/reply", map[string]string{"body": body}, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+func (c *Client) HideComment(ctx context.Context, commentID string) (*CommentActionOutput, error) {
+	var out CommentActionOutput
+	if err := c.PostJSON(ctx, "/api/v1/comments/"+url.PathEscape(commentID)+"/hide", map[string]any{}, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+func (c *Client) DeleteComment(ctx context.Context, commentID string) (*CommentActionOutput, error) {
+	var out CommentActionOutput
+	if err := c.DeleteJSON(ctx, "/api/v1/comments/"+url.PathEscape(commentID), &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
 }
 
 // ----- Auth: CLI device flow + API token management -----

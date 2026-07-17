@@ -359,29 +359,36 @@ func TestMCPOperationCatalogHasCompleteSafetyClassification(t *testing.T) {
 	t.Parallel()
 
 	expectedModes := map[string]mcpOperationMode{
-		mcpToolWorkspaces:    mcpOperationQuery,
-		mcpToolProviders:     mcpOperationQuery,
-		mcpToolAccounts:      mcpOperationQuery,
-		mcpToolListMedia:     mcpOperationQuery,
-		mcpToolReadiness:     mcpOperationQuery,
-		mcpToolCreatePub:     mcpOperationExecute,
-		mcpToolListPubs:      mcpOperationQuery,
-		mcpToolValidatePub:   mcpOperationQuery,
-		mcpToolSchedulePub:   mcpOperationExecute,
-		mcpToolPublishPubNow: mcpOperationExecute,
-		mcpToolPubEvents:     mcpOperationQuery,
-		mcpToolComments:      mcpOperationQuery,
-		mcpToolCreateDraft:   mcpOperationExecute,
-		mcpToolListDrafts:    mcpOperationQuery,
-		mcpToolUpdateDraft:   mcpOperationExecute,
-		mcpToolRenditions:    mcpOperationExecute,
-		mcpToolSchedulePost:  mcpOperationExecute,
-		mcpToolScheduleDraft: mcpOperationExecute,
-		mcpToolGetPost:       mcpOperationQuery,
-		mcpToolListPosts:     mcpOperationQuery,
-		mcpToolCancelPost:    mcpOperationExecute,
-		mcpToolSuggestSlot:   mcpOperationQuery,
-		mcpToolUploadURL:     mcpOperationExecute,
+		mcpToolWorkspaces:     mcpOperationQuery,
+		mcpToolProviders:      mcpOperationQuery,
+		mcpToolAccounts:       mcpOperationQuery,
+		mcpToolListMedia:      mcpOperationQuery,
+		mcpToolReadiness:      mcpOperationQuery,
+		mcpToolCreatePub:      mcpOperationExecute,
+		mcpToolListPubs:       mcpOperationQuery,
+		mcpToolGetPub:         mcpOperationQuery,
+		mcpToolUpdatePub:      mcpOperationExecute,
+		mcpToolPubRenditions:  mcpOperationExecute,
+		mcpToolReplyRendition: mcpOperationExecute,
+		mcpToolValidatePub:    mcpOperationQuery,
+		mcpToolSchedulePub:    mcpOperationExecute,
+		mcpToolPublishPubNow:  mcpOperationExecute,
+		mcpToolPubEvents:      mcpOperationQuery,
+		mcpToolComments:       mcpOperationQuery,
+		mcpToolReplyComment:   mcpOperationExecute,
+		mcpToolHideComment:    mcpOperationExecute,
+		mcpToolDeleteComment:  mcpOperationExecute,
+		mcpToolCreateDraft:    mcpOperationExecute,
+		mcpToolListDrafts:     mcpOperationQuery,
+		mcpToolUpdateDraft:    mcpOperationExecute,
+		mcpToolRenditions:     mcpOperationExecute,
+		mcpToolSchedulePost:   mcpOperationExecute,
+		mcpToolScheduleDraft:  mcpOperationExecute,
+		mcpToolGetPost:        mcpOperationQuery,
+		mcpToolListPosts:      mcpOperationQuery,
+		mcpToolCancelPost:     mcpOperationExecute,
+		mcpToolSuggestSlot:    mcpOperationQuery,
+		mcpToolUploadURL:      mcpOperationExecute,
 	}
 
 	catalog := mcpOperationCatalog()
@@ -403,6 +410,39 @@ func TestMCPOperationCatalogHasCompleteSafetyClassification(t *testing.T) {
 	}
 	require.Equal(t, len(expectedModes), len(seen))
 	require.False(t, seen[mcpToolRenderWidget], "the directly advertised renderer must not be delegated")
+}
+
+func TestMCPPublicationLifecycleOperationsStayInParity(t *testing.T) {
+	t.Parallel()
+	srv := newMCPTestServer(t)
+	ctx := context.Background()
+
+	created, rpcErr := srv.handler.createPublication(ctx, "user-1", map[string]any{
+		"workspace_id": "ws-1", "content_profile": "short_text", "source_text": "Initial copy",
+		"social_account_ids": []string{"account-1"},
+	})
+	require.Nil(t, rpcErr)
+	createdContent := created.(map[string]any)["structuredContent"].(map[string]any)
+	publicationID := createdContent["publication"].(mcpPublicationStatus).ID
+
+	_, rpcErr = srv.handler.updatePublication(ctx, "user-1", map[string]any{
+		"publication_id": publicationID, "title": "Updated title", "source_text": "Updated copy",
+	})
+	require.Nil(t, rpcErr)
+
+	_, rpcErr = srv.handler.setPublicationRenditions(ctx, "user-1", map[string]any{
+		"publication_id": publicationID,
+		"renditions":     []map[string]any{{"social_account_id": "account-1", "profile": "short_text", "body": "X-native copy"}},
+	})
+	require.Nil(t, rpcErr)
+
+	loaded, rpcErr := srv.handler.getPublication(ctx, "user-1", map[string]any{"publication_id": publicationID})
+	require.Nil(t, rpcErr)
+	publication := loaded.(map[string]any)["structuredContent"].(map[string]any)["publication"].(PublicationResponse)
+	require.Equal(t, "Updated title", publication.Title)
+	require.Equal(t, "Updated copy", publication.SourceText)
+	require.Len(t, publication.Renditions, 1)
+	require.Equal(t, "X-native copy", publication.Renditions[0].Body)
 }
 
 func TestMCPSearchReturnsRelevantOperationSchemas(t *testing.T) {

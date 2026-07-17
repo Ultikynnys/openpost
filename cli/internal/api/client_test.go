@@ -119,6 +119,50 @@ func TestListRenditionComments_WireFormat(t *testing.T) {
 	}
 }
 
+func TestPublicationMutationMethods_WireFormat(t *testing.T) {
+	requests := make(chan string, 5)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests <- r.Method + " " + r.URL.EscapedPath()
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == "/api/v1/publications/pub_1/renditions" {
+			_, _ = w.Write([]byte(`{"id":"pub_1","renditions":[]}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"message":"ok","id":"provider_reply","job_id":"job_1"}`))
+	}))
+	defer srv.Close()
+
+	c := New(srv.URL, "op_cli_test")
+	if _, err := c.UpsertPublicationRenditions(context.Background(), "pub_1", []RenditionInput{{SocialAccountID: "acc_1", Body: "Hello"}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.ReplyToRendition(context.Background(), "rend_1", RenditionReplyInput{Body: "Follow-up"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.ReplyToComment(context.Background(), "opaque/id", "Thanks"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.HideComment(context.Background(), "opaque/id"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.DeleteComment(context.Background(), "opaque/id"); err != nil {
+		t.Fatal(err)
+	}
+
+	want := []string{
+		"PUT /api/v1/publications/pub_1/renditions",
+		"POST /api/v1/renditions/rend_1/reply",
+		"POST /api/v1/comments/opaque%2Fid/reply",
+		"POST /api/v1/comments/opaque%2Fid/hide",
+		"DELETE /api/v1/comments/opaque%2Fid",
+	}
+	for _, expected := range want {
+		if got := <-requests; got != expected {
+			t.Fatalf("request = %q, want %q", got, expected)
+		}
+	}
+}
+
 // TestListAccounts_WireFormat verifies that ListAccounts decodes a raw
 // JSON array from the server. The server's Huma output type is
 // ListAccountsOutput { Body []AccountResponse } and Huma flattens the

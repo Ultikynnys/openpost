@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -38,11 +39,149 @@ func newPublicationCmd() *cobra.Command {
 	cmd.AddCommand(newPublicationCreateCmd())
 	cmd.AddCommand(newPublicationListCmd())
 	cmd.AddCommand(newPublicationViewCmd())
+	cmd.AddCommand(newPublicationUpdateCmd())
+	cmd.AddCommand(newPublicationRenditionsCmd())
+	cmd.AddCommand(newPublicationReplyCmd())
 	cmd.AddCommand(newPublicationValidateCmd())
 	cmd.AddCommand(newPublicationScheduleCmd())
 	cmd.AddCommand(newPublicationPublishNowCmd())
 	cmd.AddCommand(newPublicationEventsCmd())
 	cmd.AddCommand(newPublicationCommentsCmd())
+	cmd.AddCommand(newPublicationReplyCommentCmd())
+	cmd.AddCommand(newPublicationHideCommentCmd())
+	cmd.AddCommand(newPublicationDeleteCommentCmd())
+	return cmd
+}
+
+func newPublicationUpdateCmd() *cobra.Command {
+	var flags publicationFlags
+	cmd := &cobra.Command{
+		Use:   "update <publication-id>",
+		Short: "Update an editable publication",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, client, workspaceID, settings, err := postRuntime(cmd)
+			if err != nil {
+				return err
+			}
+			current, err := client.GetPublication(cmd.Context(), args[0])
+			if err != nil {
+				return err
+			}
+			input := api.UpdatePublicationInput{
+				Title: current.Title, ContentProfile: current.ContentProfile, SourceText: current.SourceText,
+				SourceURL: current.SourceURL, Goal: current.Goal, Audience: current.Audience, Metadata: current.Metadata,
+			}
+			if cmd.Flags().Changed("title") {
+				input.Title = flags.title
+			}
+			if cmd.Flags().Changed("profile") {
+				input.ContentProfile = flags.profile
+			}
+			if cmd.Flags().Changed("content") || cmd.Flags().Changed("file") {
+				input.SourceText, err = contentFromFlags(flags.content, flags.file)
+				if err != nil {
+					return err
+				}
+			}
+			if cmd.Flags().Changed("url") {
+				input.SourceURL = flags.url
+			}
+			if cmd.Flags().Changed("schedule") {
+				input.ScheduledAt, _, err = parseScheduleFlag(cmd, client, workspaceID, flags.schedule, settings.Timezone)
+				if err != nil {
+					return err
+				}
+			}
+			updated, err := client.UpdatePublication(cmd.Context(), args[0], input)
+			if err != nil {
+				return err
+			}
+			return printPublicationSummary(cfg, updated)
+		},
+	}
+	cmd.Flags().StringVar(&flags.title, "title", "", "publication title")
+	cmd.Flags().StringVar(&flags.profile, "profile", "", "content profile")
+	cmd.Flags().StringVar(&flags.content, "content", "", "canonical post or caption text")
+	cmd.Flags().StringVar(&flags.file, "file", "", "read canonical text from file or '-' for stdin")
+	cmd.Flags().StringVar(&flags.url, "url", "", "source URL; pass an empty value to clear")
+	cmd.Flags().StringVar(&flags.schedule, "schedule", "", "new schedule time")
+	return cmd
+}
+
+func newPublicationRenditionsCmd() *cobra.Command {
+	var file string
+	cmd := &cobra.Command{
+		Use:   "renditions <publication-id>",
+		Short: "Replace destination-specific renditions from JSON",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if strings.TrimSpace(file) == "" {
+				return fmt.Errorf("--file is required")
+			}
+			payload, err := contentFromFlags("", file)
+			if err != nil {
+				return err
+			}
+			var renditions []api.RenditionInput
+			if err := json.Unmarshal([]byte(payload), &renditions); err != nil {
+				return fmt.Errorf("decode renditions JSON: %w", err)
+			}
+			if len(renditions) == 0 {
+				return fmt.Errorf("renditions JSON must contain at least one item")
+			}
+			cfg, err := runtimeFrom(cmd)
+			if err != nil {
+				return err
+			}
+			client, err := clientFrom(cfg)
+			if err != nil {
+				return err
+			}
+			publication, err := client.UpsertPublicationRenditions(cmd.Context(), args[0], renditions)
+			if err != nil {
+				return err
+			}
+			return printPublicationSummary(cfg, publication)
+		},
+	}
+	cmd.Flags().StringVar(&file, "file", "", "JSON array of renditions, or '-' for stdin")
+	return cmd
+}
+
+func newPublicationReplyCmd() *cobra.Command {
+	var body, file, parentID, schedule string
+	cmd := &cobra.Command{
+		Use:   "reply <rendition-id>",
+		Short: "Queue an explicit reply to a published rendition",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			content, err := contentFromFlags(body, file)
+			if err != nil {
+				return err
+			}
+			if strings.TrimSpace(content) == "" {
+				return fmt.Errorf("--body or --file is required")
+			}
+			cfg, client, workspaceID, settings, err := postRuntime(cmd)
+			if err != nil {
+				return err
+			}
+			runAt, _, err := parseScheduleFlag(cmd, client, workspaceID, schedule, settings.Timezone)
+			if err != nil {
+				return err
+			}
+			result, err := client.ReplyToRendition(cmd.Context(), args[0], api.RenditionReplyInput{Body: content, ParentID: parentID, RunAt: runAt})
+			if err != nil {
+				return err
+			}
+			return printPublicationAction(cfg, result.Message, result.JobID)
+		},
+	}
+	cmd.Flags().StringVar(&body, "body", "", "reply text")
+	cmd.Flags().StringVar(&file, "file", "", "read reply text from file or '-' for stdin")
+	cmd.Flags().StringVar(&parentID, "parent-id", "", "external provider post or comment ID")
+	cmd.Flags().StringVar(&schedule, "at", "", "optional reply schedule time")
 	return cmd
 }
 
@@ -385,6 +524,99 @@ func newPublicationCommentsCmd() *cobra.Command {
 			return nil
 		},
 	}
+}
+
+func newPublicationReplyCommentCmd() *cobra.Command {
+	var body, file string
+	cmd := &cobra.Command{
+		Use:   "reply-comment <comment-id>",
+		Short: "Reply to a provider comment",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			content, err := contentFromFlags(body, file)
+			if err != nil {
+				return err
+			}
+			if strings.TrimSpace(content) == "" {
+				return fmt.Errorf("--body or --file is required")
+			}
+			cfg, err := runtimeFrom(cmd)
+			if err != nil {
+				return err
+			}
+			client, err := clientFrom(cfg)
+			if err != nil {
+				return err
+			}
+			result, err := client.ReplyToComment(cmd.Context(), args[0], content)
+			if err != nil {
+				return err
+			}
+			return printCommentAction(cfg, result)
+		},
+	}
+	cmd.Flags().StringVar(&body, "body", "", "reply text")
+	cmd.Flags().StringVar(&file, "file", "", "read reply text from file or '-' for stdin")
+	return cmd
+}
+
+func newPublicationHideCommentCmd() *cobra.Command {
+	return newPublicationCommentActionCmd("hide-comment <comment-id>", "Hide a provider comment", func(client *api.Client, cmd *cobra.Command, id string) (*api.CommentActionOutput, error) {
+		return client.HideComment(cmd.Context(), id)
+	})
+}
+
+func newPublicationDeleteCommentCmd() *cobra.Command {
+	cmd := newPublicationCommentActionCmd("delete-comment <comment-id>", "Delete a provider comment", func(client *api.Client, cmd *cobra.Command, id string) (*api.CommentActionOutput, error) {
+		return client.DeleteComment(cmd.Context(), id)
+	})
+	cmd.Flags().Bool("confirm", false, "confirm permanent provider deletion")
+	cmd.PreRunE = func(cmd *cobra.Command, _ []string) error {
+		confirmed, _ := cmd.Flags().GetBool("confirm")
+		if !confirmed {
+			return fmt.Errorf("--confirm is required to delete a provider comment")
+		}
+		return nil
+	}
+	return cmd
+}
+
+func newPublicationCommentActionCmd(use, short string, action func(*api.Client, *cobra.Command, string) (*api.CommentActionOutput, error)) *cobra.Command {
+	return &cobra.Command{
+		Use: use, Short: short, Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := runtimeFrom(cmd)
+			if err != nil {
+				return err
+			}
+			client, err := clientFrom(cfg)
+			if err != nil {
+				return err
+			}
+			result, err := action(client, cmd, args[0])
+			if err != nil {
+				return err
+			}
+			return printCommentAction(cfg, result)
+		},
+	}
+}
+
+func printPublicationAction(cfg *config.Runtime, message, jobID string) error {
+	result := api.PublicationActionOutput{Message: message, JobID: jobID}
+	if cfg.AsJSON {
+		return printerFrom(cfg).PrintJSON(result)
+	}
+	printerFrom(cfg).Printf("%s\t%s", message, emptyDash(jobID))
+	return nil
+}
+
+func printCommentAction(cfg *config.Runtime, result *api.CommentActionOutput) error {
+	if cfg.AsJSON {
+		return printerFrom(cfg).PrintJSON(result)
+	}
+	printerFrom(cfg).Printf("%s\t%s", result.Message, emptyDash(result.ID))
+	return nil
 }
 
 func printPublicationSummary(cfg *config.Runtime, publication *api.Publication) error {

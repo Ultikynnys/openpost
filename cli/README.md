@@ -135,6 +135,18 @@ openpost publication create --profile long_video --accounts youtube --video-titl
 openpost publication schedule pub_123 --at "tomorrow 9am"
 ```
 
+Continue the same publication lifecycle without dropping to raw HTTP:
+
+```sh
+openpost publication update pub_123 --title "Final launch" --schedule "Friday 10am"
+openpost publication renditions pub_123 --file ./renditions.json
+openpost publication reply rendition_123 --body "Follow-up" --at "tomorrow 9am"
+openpost publication comments rendition_123
+openpost publication reply-comment '<opaque-comment-id>' --body "Thanks!"
+openpost publication hide-comment '<opaque-comment-id>'
+openpost publication delete-comment '<opaque-comment-id>' --confirm
+```
+
 ## Billing
 
 Inspect or start hosted billing flows for the active workspace:
