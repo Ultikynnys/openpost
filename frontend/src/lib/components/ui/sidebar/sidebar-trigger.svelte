@@ -4,6 +4,7 @@
 	import { cn } from '$lib/utils.js';
 	import type { ComponentProps } from 'svelte';
 	import { useSidebar } from './context.svelte.js';
+	import { m } from '$lib/paraglide/messages';
 
 	let {
 		ref = $bindable(null),
@@ -32,5 +33,5 @@
 	{...restProps}
 >
 	<RiSideBarLine />
-	<span class="sr-only">Toggle Sidebar</span>
+	<span class="sr-only">{m.common_toggle_sidebar()}</span>
 </Button>

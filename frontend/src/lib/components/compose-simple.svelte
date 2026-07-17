@@ -1885,7 +1885,7 @@
 									variant="ghost"
 									size="icon-sm"
 									class="h-8 w-8 rounded-none shadow-none"
-									aria-label="Schedule to next free slot"
+									aria-label={m.compose_schedule_next_slot()}
 									onclick={scheduleNextFreeSlot}
 									disabled={suggestingSlot ||
 										isSubmitting ||
@@ -1901,7 +1901,7 @@
 							{/snippet}
 						</Tooltip.Trigger>
 						<Tooltip.Content>
-							<p class="text-sm">Schedule to next free slot</p>
+							<p class="text-sm">{m.compose_schedule_next_slot()}</p>
 						</Tooltip.Content>
 					</Tooltip.Root>
 				</div>
@@ -1914,7 +1914,7 @@
 					disabled={isSubmitting || !hasContent || selectedAccountIds.length === 0}
 				>
 					{#if isSubmitting}<LoaderIcon class="h-3.5 w-3.5 animate-spin" />{/if}
-					Publish
+					{m.compose_publish()}
 				</Button>
 			{/if}
 		</div>
@@ -1943,7 +1943,7 @@
 						bind:value={scheduleInput}
 						placeholder={scheduleInputPlaceholder}
 						class="h-10 bg-muted/40 text-base"
-						aria-label="Schedule time"
+						aria-label={m.compose_schedule_time()}
 					/>
 					{#if scheduleInputError}
 						<p class="px-1 text-xs text-destructive">{scheduleInputError}</p>
@@ -2008,7 +2008,9 @@
 						/>
 					</div>
 					<div class="border-t md:border-t-0 md:border-l">
-						<div class="border-b px-3 py-2 text-center text-sm font-medium">Time</div>
+						<div class="border-b px-3 py-2 text-center text-sm font-medium">
+							{m.compose_time()}
+						</div>
 						<div class="max-h-72 overflow-y-auto p-2">
 							{#if timeSlots.length === 0}
 								<p class="px-2 py-6 text-center text-xs text-muted-foreground">
@@ -2044,7 +2046,7 @@
 				<div class="rounded-lg border bg-muted/10 p-3">
 					<div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
 						<div class="space-y-1">
-							<div class="text-sm font-medium">Randomize publish time</div>
+							<div class="text-sm font-medium">{m.compose_randomize_time()}</div>
 							<div class="text-xs text-muted-foreground">
 								Workspace default: {formatRandomDelay(workspaceCtx.settings.random_delay_minutes)}.
 								Applies only to this post.
@@ -2105,8 +2107,12 @@
 			</div>
 
 			<Dialog.Footer class="border-t px-5 py-4">
-				<Button type="button" variant="outline" onclick={closeScheduleDialog}>Cancel</Button>
-				<Button type="button" variant="secondary" onclick={applyScheduleInputAndClose}>Done</Button>
+				<Button type="button" variant="outline" onclick={closeScheduleDialog}
+					>{m.common_cancel()}</Button
+				>
+				<Button type="button" variant="secondary" onclick={applyScheduleInputAndClose}
+					>{m.common_done()}</Button
+				>
 				<Button
 					type="button"
 					onclick={scheduleWithSelectedTime}
@@ -2140,7 +2146,7 @@
 		<div
 			class="mx-3 mt-2 rounded-md border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 md:mx-4 md:mt-3 dark:text-amber-300"
 		>
-			<div class="font-medium">Media compatibility warning</div>
+			<div class="font-medium">{m.compose_media_compatibility_warning()}</div>
 			<ul class="mt-1 list-disc space-y-0.5 pl-4">
 				{#each mediaCapabilityWarnings as warning (warning)}
 					<li>{warning}</li>
@@ -2206,7 +2212,7 @@
 									? 'bg-primary/5'
 									: ''}"
 								role="region"
-								aria-label="Drop zone for post {i + 1}"
+								aria-label={m.compose_drop_zone({ number: i + 1 })}
 								ondragover={handleDragOver}
 								ondragleave={handleDragLeave}
 								ondrop={(e) => handleDrop(e, i)}
@@ -2221,7 +2227,7 @@
 											<button
 												type="button"
 												class="drag-handle -ml-4 cursor-grab rounded p-0.5 text-muted-foreground opacity-0 transition-opacity group-hover/post:opacity-60 hover:opacity-100 active:cursor-grabbing"
-												title="Drag to reorder"
+												title={m.compose_drag_to_reorder()}
 											>
 												<GripVerticalIcon class="h-4 w-4" />
 											</button>
@@ -2232,7 +2238,7 @@
 										<div class="relative">
 											<textarea
 												id="post-textarea-{i}"
-												aria-label="Post text"
+												aria-label={m.compose_post_text()}
 												{@attach textareaAttachment(i)}
 												value={getEditorContentForPost(post)}
 												oninput={(e) => {
@@ -2358,7 +2364,7 @@
 																			mediaId,
 																			(e.target as HTMLTextAreaElement).value
 																		)}
-																	placeholder="Alt text..."
+																	placeholder={m.compose_alt_text_placeholder()}
 																	rows={2}
 																	class="w-full resize-none rounded bg-white/10 px-2 py-1 text-xs text-white placeholder:text-white/50 focus:outline-none"
 																></textarea>
@@ -2366,7 +2372,8 @@
 																	<button
 																		type="button"
 																		class="text-[10px] text-white/70 hover:text-white"
-																		onclick={() => (editingAltMediaId = null)}>Done</button
+																		onclick={() => (editingAltMediaId = null)}
+																		>{m.common_done()}</button
 																	>
 																</div>
 															</div>
@@ -2495,7 +2502,7 @@
 												type="button"
 												class="absolute top-3 right-0 rounded p-1 text-muted-foreground opacity-0 transition-opacity group-hover/post:opacity-100 hover:bg-muted hover:text-destructive"
 												onclick={() => removePost(i)}
-												title="Remove post"
+												title={m.compose_remove_post()}
 											>
 												<Trash2Icon class="h-3.5 w-3.5" />
 											</button>

@@ -7,6 +7,8 @@
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import { ui } from '$lib/stores/ui.svelte';
 	import { workspaceCtx } from '$lib/stores/workspace.svelte';
+	import { m } from '$lib/paraglide/messages';
+	import { getLocaleTag } from '$lib/i18n';
 	import CalendarIcon from 'lucide-svelte/icons/calendar-days';
 	import FileTextIcon from 'lucide-svelte/icons/file-text';
 	import ImageIcon from 'lucide-svelte/icons/image';
@@ -125,16 +127,18 @@
 				type="button"
 				class="group inline-flex items-center gap-1.5 text-xs font-medium text-sidebar-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-none"
 				onclick={() => onNavigate('/calendar')}
-				aria-label="Calendar"
+				aria-label={m.sidebar_calendar()}
 			>
 				<CalendarIcon class="size-3.5 text-primary" />
-				<span>Calendar</span>
+				<span>{m.sidebar_calendar()}</span>
 				<MaximizeIcon
 					class="size-3 text-sidebar-foreground/42 transition-colors group-hover:text-sidebar-foreground"
 				/>
 			</button>
 			<span class="text-[11px] text-sidebar-foreground/48 tabular-nums">
-				{#if loadingSchedule}Loading{:else}{scheduledCount} scheduled{/if}
+				{#if loadingSchedule}{m.sidebar_schedule_loading()}{:else}{m.sidebar_schedule_count({
+						count: scheduledCount
+					})}{/if}
 			</span>
 		</div>
 
@@ -144,8 +148,9 @@
 			bind:placeholder={calendarPlaceholder}
 			onValueChange={handleDateChange}
 			day={dayMarker}
+			locale={getLocaleTag()}
 			weekStartsOn={workspaceCtx.settings.week_start as 0 | 1 | 2 | 3 | 4 | 5 | 6}
-			class="mx-auto w-fit bg-transparent p-0 select-none [--cell-size:1.75rem] [&_[role=gridcell]_[role=button][data-today]]:bg-sidebar-primary [&_[role=gridcell]_[role=button][data-today]]:text-sidebar-primary-foreground [&_tr]:justify-center"
+			class="w-full bg-transparent p-0 select-none [--cell-size:1.75rem] [&_[role=gridcell]_[role=button][data-today]]:bg-sidebar-primary [&_[role=gridcell]_[role=button][data-today]]:text-sidebar-primary-foreground [&_tr]:justify-between"
 		/>
 	</section>
 
@@ -153,7 +158,7 @@
 		<div class="mb-1 flex h-7 items-center justify-between px-2">
 			<div class="flex items-center gap-1.5">
 				<span class="text-[11px] font-medium tracking-[0.1em] text-sidebar-foreground/52 uppercase"
-					>Drafts</span
+					>{m.sidebar_drafts()}</span
 				>
 				{#if !loadingDrafts && drafts.length > 0}
 					<span class="text-[11px] text-sidebar-foreground/38 tabular-nums">{drafts.length}</span>
@@ -164,12 +169,12 @@
 				class="rounded-sm px-1.5 py-1 text-[11px] font-medium text-sidebar-foreground/58 hover:bg-sidebar-accent hover:text-sidebar-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-none"
 				onclick={() => onNavigate('/activity?tab=drafts')}
 			>
-				View all
+				{m.sidebar_view_all()}
 			</button>
 		</div>
 
 		{#if loadingDrafts}
-			<div class="space-y-1 px-1 py-1" aria-label="Loading drafts">
+			<div class="space-y-1 px-1 py-1" aria-label={m.sidebar_drafts_loading()}>
 				{#each [1, 2, 3] as placeholder (placeholder)}
 					<div class="flex h-9 items-center gap-2 px-1.5">
 						<Skeleton class="size-6 rounded-md" />
@@ -185,7 +190,7 @@
 			>
 				<FileTextIcon class="mt-0.5 size-3.5 shrink-0 text-sidebar-foreground/38" />
 				<span class="text-xs leading-4 text-sidebar-foreground/52"
-					>Start writing. Your work saves here automatically.</span
+					>{m.sidebar_drafts_autosave_empty()}</span
 				>
 			</button>
 		{:else}
@@ -197,7 +202,7 @@
 							type="button"
 							class="group flex min-h-9 w-full items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-none"
 							onclick={() => onNavigate(`/posts/${draft.id}`)}
-							aria-label={`Resume draft: ${presentation.title}`}
+							aria-label={m.sidebar_resume_draft({ title: presentation.title })}
 						>
 							<span
 								class="flex size-6 shrink-0 items-center justify-center rounded-md bg-sidebar-accent/70 text-sidebar-foreground/58 group-hover:text-sidebar-foreground"
@@ -210,14 +215,14 @@
 								>
 								{#if presentation.isThread}
 									<span class="block text-[10px] leading-3.5 text-sidebar-foreground/45"
-										>{presentation.postCount} post thread</span
+										>{m.sidebar_thread_count({ count: presentation.postCount })}</span
 									>
 								{/if}
 							</span>
 							{#if presentation.hasMedia}
 								<ImageIcon
 									class="size-3 shrink-0 text-sidebar-foreground/38"
-									aria-label="Has media"
+									aria-label={m.sidebar_has_media()}
 								/>
 							{/if}
 						</button>

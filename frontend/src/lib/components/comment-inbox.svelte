@@ -7,6 +7,7 @@
 	import MessageCircleIcon from 'lucide-svelte/icons/message-circle';
 	import RefreshIcon from 'lucide-svelte/icons/refresh-cw';
 	import AlertCircleIcon from 'lucide-svelte/icons/alert-circle';
+	import { m } from '$lib/paraglide/messages';
 
 	type CommentResponse = components['schemas']['CommentResponse'];
 	type CommentListResponse = components['schemas']['CommentListResponse'];
@@ -134,7 +135,7 @@
 				<MessageCircleIcon class="h-4 w-4 text-muted-foreground" />
 			</div>
 			<div>
-				<h3 class="text-sm font-semibold">Comments</h3>
+				<h3 class="text-sm font-semibold">{m.comments_title()}</h3>
 				{#if platform}
 					<p class="text-xs text-muted-foreground capitalize">{platform}</p>
 				{/if}
@@ -229,12 +230,12 @@
 						<div class="mt-3 space-y-2">
 							<Textarea
 								bind:value={replyBody}
-								placeholder="Write a reply..."
-								aria-label="Reply body"
+								placeholder={m.comments_reply_placeholder()}
+								aria-label={m.comments_reply_body()}
 								class="min-h-20"
 							/>
 							<div class="flex justify-end gap-2">
-								<Button variant="ghost" size="sm" onclick={cancelReply}>Cancel</Button>
+								<Button variant="ghost" size="sm" onclick={cancelReply}>{m.common_cancel()}</Button>
 								<Button
 									size="sm"
 									onclick={() => sendReply(comment.id)}

@@ -17,6 +17,7 @@
 	import LoaderIcon from 'lucide-svelte/icons/loader-2';
 	import PencilIcon from 'lucide-svelte/icons/pencil';
 	import CheckIcon from 'lucide-svelte/icons/check';
+	import { m } from '$lib/paraglide/messages';
 
 	interface Props {
 		workspaceId: string;
@@ -162,7 +163,7 @@
 
 					{#if item.status === 'error'}
 						<div class="absolute inset-0 flex items-center justify-center bg-destructive/20">
-							<span class="text-xs text-destructive">Failed</span>
+							<span class="text-xs text-destructive">{m.media_upload_failed()}</span>
 						</div>
 					{/if}
 
@@ -172,7 +173,7 @@
 								<Textarea
 									bind:value={editingAltText}
 									class="h-full min-h-0 resize-none text-xs"
-									placeholder="Alt text"
+									placeholder={m.media_alt_text()}
 									onkeydown={(e) => {
 										if (e.key === 'Enter' && !e.shiftKey) {
 											e.preventDefault();
@@ -215,7 +216,7 @@
 											</button>
 										</TooltipTrigger>
 										<TooltipContent>
-											<p class="text-xs">Add alt text</p>
+											<p class="text-xs">{m.media_add_alt_text()}</p>
 										</TooltipContent>
 									</Tooltip>
 								</TooltipProvider>
@@ -243,7 +244,7 @@
 		<div class="text-xs text-muted-foreground">
 			{readyCount} media attached
 			{#if readyCount >= 4}
-				<span class="text-amber-500"> (max 4 per post on most platforms)</span>
+				<span class="text-amber-500"> {m.media_max_per_post()}</span>
 			{/if}
 		</div>
 	</div>
@@ -282,12 +283,12 @@
 	<div class="flex flex-col items-center gap-1 text-muted-foreground">
 		{#if items.length === 0}
 			<ImageIcon class="h-6 w-6" />
-			<span class="text-xs">Drop images or videos here, or click to upload</span>
+			<span class="text-xs">{m.media_drop_prompt()}</span>
 		{:else if items.length < 4}
 			<PlusIcon class="h-5 w-5" />
-			<span class="text-xs">Add more media</span>
+			<span class="text-xs">{m.media_add_more()}</span>
 		{:else}
-			<span class="text-xs text-amber-500">Maximum 4 media reached</span>
+			<span class="text-xs text-amber-500">{m.media_max_reached()}</span>
 		{/if}
 	</div>
 </button>

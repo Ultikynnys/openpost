@@ -62,7 +62,7 @@ describe('composer mode role mapping', () => {
 	it('separates YouTube video metadata from social captions', () => {
 		expect(roleFieldsForMode('short_video', [youtube, tiktok])).toEqual([
 			expect.objectContaining({ key: 'videoTitle', label: 'Video title' }),
-			expect.objectContaining({ key: 'videoDescription', label: 'Description' }),
+			expect.objectContaining({ key: 'videoDescription', label: 'Video description' }),
 			expect.objectContaining({ key: 'caption', label: 'Caption', hint: 'Caption · TikTok' })
 		]);
 	});
@@ -70,7 +70,7 @@ describe('composer mode role mapping', () => {
 	it('keeps long video YouTube-style first and adds caption for feed video targets', () => {
 		expect(roleFieldsForMode('long_video', [youtube, instagram])).toEqual([
 			expect.objectContaining({ key: 'videoTitle', label: 'Video title' }),
-			expect.objectContaining({ key: 'videoDescription', label: 'Description' }),
+			expect.objectContaining({ key: 'videoDescription', label: 'Video description' }),
 			expect.objectContaining({ key: 'caption', label: 'Caption', hint: 'Caption · Instagram' })
 		]);
 	});

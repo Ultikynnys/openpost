@@ -33,6 +33,7 @@
 	import Settings2Icon from 'lucide-svelte/icons/settings-2';
 	import UploadIcon from 'lucide-svelte/icons/upload';
 	import XIcon from 'lucide-svelte/icons/x';
+	import { m } from '$lib/paraglide/messages';
 
 	type Capability = components['schemas']['Capability'];
 	type Publication = components['schemas']['PublicationResponse'];
@@ -92,9 +93,9 @@
 		accounts.filter((account) => selectedAccountIds.includes(account.id))
 	);
 	const selectedAccountSummary = $derived.by(() => {
-		if (selectedAccountIds.length === 0) return 'No accounts';
-		if (selectedAccountIds.length === compatibleAccounts.length) return 'All accounts';
-		return `${selectedAccountIds.length} account${selectedAccountIds.length === 1 ? '' : 's'}`;
+		if (selectedAccountIds.length === 0) return m.compose_no_accounts();
+		if (selectedAccountIds.length === compatibleAccounts.length) return m.compose_all_accounts();
+		return m.compose_account_count({ count: selectedAccountIds.length });
 	});
 	const roleFields = $derived(roleFieldsForMode(mode, selectedAccounts));
 	const selectedCapabilities = $derived(
@@ -160,7 +161,7 @@
 		error = '';
 		try {
 			const { data: capabilityData, error: capError } = await client.GET('/capabilities', {});
-			if (capError) throw new Error(capError.detail || 'Failed to load capabilities');
+			if (capError) throw new Error(capError.detail || m.compose_load_capabilities_failed());
 			capabilities = capabilityData?.capabilities ?? [];
 			selectedWorkspaceId = selectedWorkspaceId || workspaceCtx.currentWorkspace?.id || '';
 			if (selectedWorkspaceId) {
@@ -168,7 +169,7 @@
 				await loadProviderReadiness();
 			}
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Failed to load composer';
+			error = err instanceof Error ? err.message : m.compose_load_composer_failed();
 		} finally {
 			loading = false;
 		}
@@ -181,12 +182,12 @@
 			const { data, error: err } = await client.GET('/accounts', {
 				params: { query: { workspace_id: selectedWorkspaceId } }
 			});
-			if (err) throw new Error(err.detail || 'Failed to load accounts');
+			if (err) throw new Error(err.detail || m.compose_load_accounts_failed());
 			accounts = (data ?? []).filter((account) => account.is_active);
 			normalizeSelectedAccounts();
 			settingsByAccount = normalizeAllAccountSettings(settingsByAccount);
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Failed to load accounts';
+			error = err instanceof Error ? err.message : m.compose_load_accounts_failed();
 		} finally {
 			accountsLoading = false;
 		}
@@ -198,10 +199,10 @@
 			const { data, error: err } = await client.GET('/provider-readiness', {
 				params: { query: { workspace_id: selectedWorkspaceId } }
 			});
-			if (err) throw new Error(err.detail || 'Failed to load provider readiness');
+			if (err) throw new Error(err.detail || m.compose_load_readiness_failed());
 			providerReadiness = data?.providers ?? [];
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Failed to load provider readiness';
+			error = err instanceof Error ? err.message : m.compose_load_readiness_failed();
 		}
 	}
 
@@ -364,7 +365,7 @@
 			}
 			validationIssues = [];
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Upload failed';
+			error = err instanceof Error ? err.message : m.compose_upload_failed();
 		} finally {
 			uploading = false;
 		}
@@ -374,7 +375,7 @@
 		if (!files?.[0] || !selectedWorkspaceId) return;
 		const file = files[0];
 		if (!file.type.startsWith('image/')) {
-			error = 'Choose an image thumbnail';
+			error = m.compose_choose_thumbnail();
 			return;
 		}
 		uploadingThumbnail = true;
@@ -392,7 +393,7 @@
 			thumbnailMediaId = uploaded.id;
 			validationIssues = [];
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Thumbnail upload failed';
+			error = err instanceof Error ? err.message : m.compose_thumbnail_upload_failed();
 		} finally {
 			uploadingThumbnail = false;
 		}
@@ -418,7 +419,7 @@
 	}
 
 	function scheduleLabel(): string {
-		if (!selectedDate || !selectedTime) return 'Schedule';
+		if (!selectedDate || !selectedTime) return m.compose_schedule();
 		const date = selectedDate.toDate(getLocalTimeZone());
 		return `${date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} ${selectedTime}`;
 	}
@@ -431,11 +432,11 @@
 
 	function formBlockers(): string[] {
 		const blockers: string[] = [];
-		if (!selectedWorkspaceId) blockers.push('Choose a workspace.');
-		if (selectedAccounts.length === 0) blockers.push('Choose at least one account.');
+		if (!selectedWorkspaceId) blockers.push(m.compose_choose_workspace_blocker());
+		if (selectedAccounts.length === 0) blockers.push(m.compose_choose_account_blocker());
 		for (const field of roleFields) {
 			if (field.required && !fieldValue(field.key).trim()) {
-				blockers.push(`${field.label} is required.`);
+				blockers.push(m.compose_field_required({ field: field.label }));
 			}
 		}
 		const mediaMin = Math.max(
@@ -443,13 +444,20 @@
 			...selectedCapabilities.map((capability) => capability.media.min_count)
 		);
 		if (mediaMin > 0 && media.length < mediaMin) {
-			blockers.push(`Add at least ${mediaMin} media item${mediaMin === 1 ? '' : 's'}.`);
+			blockers.push(
+				mediaMin === 1
+					? m.compose_add_media_singular()
+					: m.compose_add_media_plural({ count: mediaMin })
+			);
 		}
 		for (const account of selectedAccounts) {
 			const blockersForAccount = readinessBlockers(account);
 			if (blockersForAccount.length > 0) {
 				blockers.push(
-					`${getPlatformName(account.platform)} is blocked: ${accountBlockerText(account)}.`
+					m.compose_provider_blocked({
+						platform: getPlatformName(account.platform),
+						reason: accountBlockerText(account)
+					})
 				);
 			}
 		}
@@ -554,19 +562,19 @@
 					metadata: payload.metadata
 				}
 			});
-			if (updateError) throw new Error(updateError.detail || 'Failed to save publication');
+			if (updateError) throw new Error(updateError.detail || m.compose_save_publication_failed());
 			const { error: renditionError } = await client.PUT('/publications/{id}/renditions', {
 				params: { path: { id: publicationId } },
 				body: { renditions: payload.renditions }
 			});
-			if (renditionError) throw new Error(renditionError.detail || 'Failed to save outputs');
+			if (renditionError) throw new Error(renditionError.detail || m.compose_save_outputs_failed());
 			return publicationId;
 		}
 
 		const { data, error: createError } = await client.POST('/publications', {
 			body: payload
 		});
-		if (createError) throw new Error(createError.detail || 'Failed to create publication');
+		if (createError) throw new Error(createError.detail || m.compose_create_publication_failed());
 		publicationId = data.id;
 		return data.id;
 	}
@@ -575,7 +583,7 @@
 		const { data, error: err } = await client.POST('/publications/{id}/validate', {
 			params: { path: { id } }
 		});
-		if (err) throw new Error(err.detail || 'Validation failed');
+		if (err) throw new Error(err.detail || m.compose_validation_failed());
 		validationIssues = data?.issues ?? [];
 		return validationIssues;
 	}
@@ -587,7 +595,7 @@
 			return;
 		}
 		if (action === 'schedule' && !getScheduledAt()) {
-			error = 'Choose a date and time before scheduling.';
+			error = m.compose_choose_schedule();
 			success = '';
 			return;
 		}
@@ -598,7 +606,7 @@
 			const id = await persistPublication();
 			if (action === 'validate') {
 				await validatePublication(id);
-				success = 'Validation complete';
+				success = m.compose_validation_complete();
 			} else if (action === 'schedule') {
 				const issues = await validatePublication(id);
 				if (issues.some((issue) => issue.severity === 'error')) {
@@ -607,7 +615,7 @@
 				const { data, error: scheduleError } = await client.POST('/publications/{id}/schedule', {
 					params: { path: { id } }
 				});
-				if (scheduleError) throw new Error(scheduleError.detail || 'Failed to schedule');
+				if (scheduleError) throw new Error(scheduleError.detail || m.compose_schedule_failed());
 				success = data?.message ?? 'Publication scheduled';
 			} else if (action === 'publish') {
 				const issues = await validatePublication(id);
@@ -617,15 +625,15 @@
 				const { data, error: publishError } = await client.POST('/publications/{id}/publish-now', {
 					params: { path: { id } }
 				});
-				if (publishError) throw new Error(publishError.detail || 'Failed to publish');
-				success = data?.message ?? 'Publication queued';
+				if (publishError) throw new Error(publishError.detail || m.compose_publish_failed());
+				success = data?.message ?? m.compose_publication_queued();
 			} else {
-				success = isEditMode ? 'Changes saved' : 'Draft saved';
+				success = isEditMode ? m.compose_changes_saved() : m.compose_draft_saved();
 			}
 			ui.triggerRefresh();
 			if (isEditMode && action !== 'validate') onSuccess?.();
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Composer action failed';
+			error = err instanceof Error ? err.message : m.compose_action_failed();
 		} finally {
 			saving = false;
 		}
@@ -685,7 +693,7 @@
 				{/if}
 				{#if onCancel}
 					<Button variant="ghost" size="sm" class="h-8" onclick={onCancel} disabled={saving}>
-						Cancel
+						{m.common_cancel()}
 					</Button>
 				{/if}
 				<DropdownMenu.Root>
@@ -696,7 +704,7 @@
 								variant="ghost"
 								size="sm"
 								class="h-8 gap-1.5 px-2 text-xs text-muted-foreground"
-								aria-label="Target accounts"
+								aria-label={m.compose_target_accounts()}
 								disabled={loading || accountsLoading || accounts.length === 0}
 							>
 								<span class="max-w-28 truncate">{selectedAccountSummary}</span>
@@ -706,17 +714,17 @@
 					<DropdownMenu.Content class="w-72" align="start">
 						<div class="flex items-center justify-between gap-3 px-2 py-1.5">
 							<div>
-								<p class="text-sm font-medium">Publish to</p>
+								<p class="text-sm font-medium">{m.compose_publish_to()}</p>
 								<p class="text-xs text-muted-foreground">
-									Accounts compatible with {modeMeta.label}
+									{m.compose_accounts_compatible({ format: modeMeta.label })}
 								</p>
 							</div>
 							<div class="flex gap-1">
 								<Button variant="ghost" size="xs" class="h-6 text-xs" onclick={selectAllAccounts}
-									>All</Button
+									>{m.compose_all()}</Button
 								>
 								<Button variant="ghost" size="xs" class="h-6 text-xs" onclick={clearAllAccounts}
-									>None</Button
+									>{m.compose_none()}</Button
 								>
 							</div>
 						</div>
@@ -747,7 +755,9 @@
 							<button
 								type="button"
 								class="flex size-8 shrink-0 items-center justify-center rounded-full border bg-background text-foreground transition-colors hover:border-primary/60 hover:text-primary focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-								aria-label={`Remove @${accountLabel(account).replace(/^@/, '')} from targets`}
+								aria-label={m.compose_remove_target({
+									account: `@${accountLabel(account).replace(/^@/, '')}`
+								})}
 								title={`${accountLabel(account)} · ${getPlatformName(account.platform)}`}
 								onclick={() => toggleAccount(account)}
 							>
@@ -768,7 +778,7 @@
 					{:else}
 						<SaveIcon class="h-3.5 w-3.5" />
 					{/if}
-					{isEditMode ? 'Save changes' : 'Save draft'}
+					{isEditMode ? m.compose_save_changes() : m.compose_save_draft()}
 				</Button>
 				<Popover.Root bind:open={showSchedulePopover}>
 					<Popover.Trigger>
@@ -812,7 +822,7 @@
 							{#if selectedDate || selectedTime}
 								<div class="mt-3 flex gap-2 border-t pt-3">
 									<Button variant="ghost" size="sm" class="flex-1 text-xs" onclick={clearSchedule}
-										>Clear</Button
+										>{m.compose_clear()}</Button
 									>
 									<Button
 										size="sm"
@@ -823,7 +833,7 @@
 											runAction('schedule');
 										}}
 									>
-										Schedule
+										{m.compose_schedule()}
 									</Button>
 								</div>
 							{/if}
@@ -838,7 +848,7 @@
 					onclick={() => runAction('publish')}
 				>
 					<SendIcon class="h-3.5 w-3.5" />
-					Publish now
+					{m.compose_publish_now()}
 				</Button>
 			</div>
 		</div>
@@ -880,7 +890,7 @@
 
 				{#if accounts.length === 0}
 					<div class="rounded-lg border bg-muted/20 px-4 py-3 text-sm text-muted-foreground">
-						Connect a compatible social account before publishing this format.
+						{m.compose_connect_compatible()}
 					</div>
 				{/if}
 
@@ -896,7 +906,7 @@
 									{:else}
 										<UploadIcon class="h-4 w-4" />
 									{/if}
-									Upload media
+									{m.compose_upload_media()}
 									<input
 										class="sr-only"
 										type="file"
@@ -907,9 +917,7 @@
 									/>
 								</label>
 								<p class="text-sm text-muted-foreground">
-									{mode === 'long_video'
-										? 'Add the video file after the title and description are clear.'
-										: 'Add the images or videos this post will publish.'}
+									{mode === 'long_video' ? m.compose_add_long_video() : m.compose_add_media()}
 								</p>
 							</div>
 							{#if media.length > 0}
@@ -919,7 +927,7 @@
 											{#if isImage(item)}
 												<img
 													src={previewSrc(item)}
-													alt={item.filename || 'Uploaded media'}
+													alt={item.filename || m.compose_uploaded_media()}
 													class="aspect-video w-full object-cover"
 												/>
 											{:else if isVideo(item)}
@@ -944,7 +952,7 @@
 												<button
 													type="button"
 													class="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
-													aria-label="Remove media"
+													aria-label={m.compose_remove_media()}
 													onclick={() => removeMedia(item.id)}
 												>
 													<XIcon class="h-3.5 w-3.5" />
@@ -967,7 +975,7 @@
 										{:else}
 											<ImagePlusIcon class="h-4 w-4" />
 										{/if}
-										Thumbnail
+										{m.compose_thumbnail()}
 										<input
 											class="sr-only"
 											type="file"
@@ -976,22 +984,22 @@
 											onchange={(event) => handleThumbnail(event.currentTarget.files)}
 										/>
 									</label>
-									<p class="text-sm text-muted-foreground">Thumbnail · YouTube thumbnail</p>
+									<p class="text-sm text-muted-foreground">{m.compose_thumbnail_youtube()}</p>
 									{#if thumbnailMediaId}
 										<Button variant="ghost" size="sm" class="h-8 text-xs" onclick={clearThumbnail}>
-											Clear
+											{m.compose_clear()}
 										</Button>
 									{/if}
 								</div>
 								{#if thumbnailMedia}
 									<img
 										src={previewSrc(thumbnailMedia)}
-										alt={thumbnailMedia.filename || 'Thumbnail'}
+										alt={thumbnailMedia.filename || m.compose_thumbnail()}
 										class="mt-3 aspect-video max-h-48 rounded-md border object-cover"
 									/>
 								{:else if thumbnailMediaId}
 									<p class="mt-2 text-xs text-muted-foreground">
-										Existing thumbnail selected: {thumbnailMediaId}
+										{m.compose_existing_thumbnail({ id: thumbnailMediaId })}
 									</p>
 								{/if}
 							</div>
@@ -1028,7 +1036,7 @@
 						{/each}
 						{#if roleFields.length === 0}
 							<div class="rounded-md border bg-muted/20 px-3 py-2 text-sm text-muted-foreground">
-								This mode is media-first for the selected accounts.
+								{m.compose_media_first_notice()}
 							</div>
 						{/if}
 					</div>
@@ -1037,9 +1045,9 @@
 				<section class="space-y-3 border-t pt-5">
 					<div class="flex flex-wrap items-center justify-between gap-3">
 						<div>
-							<h2 class="text-sm font-semibold">Platform settings</h2>
+							<h2 class="text-sm font-semibold">{m.compose_platform_settings()}</h2>
 							<p class="text-xs text-muted-foreground">
-								Open a platform only when you need its specific output options.
+								{m.compose_platform_settings_body()}
 							</p>
 						</div>
 					</div>
@@ -1054,7 +1062,7 @@
 									(customizeAccountId = customizeAccountId === account.id ? '' : account.id)}
 							>
 								<Settings2Icon class="h-3.5 w-3.5" />
-								Customize {getPlatformName(account.platform)} output
+								{m.compose_customize_output({ platform: getPlatformName(account.platform) })}
 							</Button>
 						{/each}
 					</div>
@@ -1067,13 +1075,14 @@
 								<div class="mb-3 flex items-center gap-2">
 									<PlatformIcon platform={account.platform} class="h-4 w-4" />
 									<h3 class="text-sm font-semibold">
-										Customize {getPlatformName(account.platform)} output
+										{m.compose_customize_output({ platform: getPlatformName(account.platform) })}
 									</h3>
 								</div>
 								{#if settings.length === 0}
 									<p class="text-sm text-muted-foreground">
-										The important {getPlatformName(account.platform)} fields are already shown in the
-										main composer.
+										{m.compose_platform_fields_main({
+											platform: getPlatformName(account.platform)
+										})}
 									</p>
 								{:else}
 									<div class="grid gap-3 sm:grid-cols-2">
@@ -1140,8 +1149,11 @@
 				</section>
 
 				{#if localBlockers.length > 0 || blockingIssues.length > 0 || warningIssues.length > 0}
-					<section class="space-y-2 border-t pt-5 text-sm" aria-label="Publishing issues">
-						<h2 class="font-semibold">Check before publishing</h2>
+					<section
+						class="space-y-2 border-t pt-5 text-sm"
+						aria-label={m.compose_publishing_issues()}
+					>
+						<h2 class="font-semibold">{m.compose_check_before_publishing()}</h2>
 						{#each localBlockers as blocker (blocker)}
 							<div class="flex gap-2 text-destructive">
 								<AlertCircleIcon class="mt-0.5 size-4 shrink-0" /><span>{blocker}</span>

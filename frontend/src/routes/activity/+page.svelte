@@ -3,7 +3,7 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
-	import { client, type Post } from '$lib/api/client';
+	import { client, type Post, type SocialAccount } from '$lib/api/client';
 	import { workspaceCtx } from '$lib/stores/workspace.svelte';
 	import { Button } from '$lib/components/ui/button';
 	import { Tabs, TabsList, TabsTrigger, TabsContent } from '$lib/components/ui/tabs';
@@ -20,6 +20,7 @@
 	import PostsIcon from 'lucide-svelte/icons/files';
 	import PlusIcon from 'lucide-svelte/icons/plus';
 	import ClockIcon from 'lucide-svelte/icons/clock';
+	import CopyIcon from 'lucide-svelte/icons/copy';
 	import { m } from '$lib/paraglide/messages';
 	import { getLocaleTag } from '$lib/i18n';
 	import { getDraftPresentation } from '$lib/components/compose/draft-utils';
@@ -35,6 +36,8 @@
 
 	let posts = $state.raw<Post[]>([]);
 	let failedJobs = $state.raw<JobLog[]>([]);
+	let accounts = $state.raw<SocialAccount[]>([]);
+	let copiedReportPostID = $state('');
 	let loading = $state(true);
 	let error = $state('');
 	let activeTab = $state(page.url.searchParams.get('tab') === 'drafts' ? 'drafts' : 'scheduled');
@@ -70,11 +73,14 @@
 		try {
 			if (!workspaceCtx.currentWorkspace) await workspaceCtx.initialize();
 			const workspaceId = workspaceCtx.currentWorkspace?.id;
-			const [postsResponse, jobsResponse] = await Promise.all([
+			const [postsResponse, jobsResponse, accountsResponse] = await Promise.all([
 				client.GET('/posts', {
 					params: { query: { ...(workspaceId ? { workspace_id: workspaceId } : {}), limit: 200 } }
 				}),
-				client.GET('/jobs', { params: { query: { limit: 100, offset: 0 } } })
+				client.GET('/jobs', { params: { query: { limit: 100, offset: 0 } } }),
+				workspaceId
+					? client.GET('/accounts', { params: { query: { workspace_id: workspaceId } } })
+					: Promise.resolve({ data: [] as SocialAccount[] })
 			]);
 
 			if (postsResponse.error || !postsResponse.data) {
@@ -82,6 +88,7 @@
 			}
 			posts = postsResponse.data;
 			failedJobs = (jobsResponse.data ?? []).filter((job) => job.status === 'failed');
+			accounts = accountsResponse.data ?? [];
 		} catch (cause) {
 			error = cause instanceof Error ? cause.message : m.activity_failed_load();
 		} finally {
@@ -104,7 +111,7 @@
 	}
 
 	function postText(post: Post) {
-		if (post.status !== 'draft') return post.content || 'Untitled post';
+		if (post.status !== 'draft') return post.content || m.activity_untitled_post();
 		const presentation = getDraftPresentation(post);
 		return presentation.isThread
 			? `${presentation.title} · ${presentation.postCount} posts`
@@ -162,6 +169,86 @@
 				return 'text-muted-foreground';
 		}
 	}
+
+	function destinationAccount(destination: NonNullable<Post['destinations']>[number]) {
+		return accounts.find((account) => account.id === destination.social_account_id);
+	}
+
+	function destinationName(destination: NonNullable<Post['destinations']>[number]) {
+		const account = destinationAccount(destination);
+		return (
+			account?.slug ||
+			(account?.account_username ? `@${account.account_username}` : destination.platform)
+		);
+	}
+
+	function destinationStatusLabel(status: string) {
+		switch (status) {
+			case 'success':
+			case 'published':
+				return m.activity_destination_published();
+			case 'failed':
+				return m.activity_destination_failed();
+			case 'skipped':
+				return m.activity_destination_skipped();
+			default:
+				return m.activity_destination_pending();
+		}
+	}
+
+	function destinationStatusClass(status: string) {
+		switch (status) {
+			case 'success':
+			case 'published':
+				return 'text-emerald-700 dark:text-emerald-300';
+			case 'failed':
+				return 'text-destructive';
+			default:
+				return 'text-muted-foreground';
+		}
+	}
+
+	function destinationSummary(post: Post) {
+		const destinations = post.destinations ?? [];
+		return m.activity_delivery_summary({
+			published: destinations.filter((destination) =>
+				['success', 'published'].includes(destination.status)
+			).length,
+			failed: destinations.filter((destination) => destination.status === 'failed').length
+		});
+	}
+
+	function buildDeliveryReport(post: Post) {
+		const lines = [
+			m.activity_report_heading(),
+			`${m.activity_report_post()}: ${post.id}`,
+			`${m.activity_report_created()}: ${post.created_at}`
+		];
+		if (post.scheduled_at) lines.push(`${m.activity_report_scheduled()}: ${post.scheduled_at}`);
+		for (const destination of post.destinations ?? []) {
+			lines.push(
+				'',
+				`${m.activity_report_destination()}: ${destinationName(destination)} (${destination.platform})`
+			);
+			lines.push(`${m.activity_report_status()}: ${destinationStatusLabel(destination.status)}`);
+			if (destination.error_message) {
+				lines.push(`${m.activity_report_reason()}: ${destination.error_message}`);
+			}
+		}
+		return lines.join('\n');
+	}
+
+	async function copyDeliveryReport(post: Post) {
+		try {
+			await navigator.clipboard.writeText(buildDeliveryReport(post));
+			copiedReportPostID = post.id;
+			setTimeout(() => {
+				if (copiedReportPostID === post.id) copiedReportPostID = '';
+			}, 2500);
+		} catch {
+			error = m.activity_report_copy_failed();
+		}
+	}
 </script>
 
 {#snippet postList(items: Post[], emptyTitle: string, emptyDescription: string)}
@@ -190,14 +277,69 @@
 						<p class="mt-1.5 max-w-[72ch] text-sm leading-6 text-foreground/92">
 							{truncate(postText(post))}
 						</p>
-						{#if post.destinations?.length}
-							<div class="mt-2 flex flex-wrap gap-2">
+						{#if post.destinations?.length && post.status !== 'failed'}
+							<div class="mt-2 flex flex-wrap gap-x-3 gap-y-1.5">
 								{#each post.destinations as destination (destination.social_account_id)}
-									<span class="inline-flex items-center gap-1 text-xs text-muted-foreground">
+									<span class="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
 										<PlatformIcon platform={destination.platform} class="size-3.5" />
-										<span class="capitalize">{destination.platform}</span>
+										<span>{destinationName(destination)}</span>
+										<span class={destinationStatusClass(destination.status)}
+											>· {destinationStatusLabel(destination.status)}</span
+										>
 									</span>
 								{/each}
+							</div>
+						{:else if post.destinations?.length}
+							<div
+								class="mt-3 max-w-2xl rounded-md border border-destructive/15 bg-destructive/[0.035]"
+							>
+								<div
+									class="flex flex-wrap items-center justify-between gap-2 border-b border-destructive/10 px-3 py-2"
+								>
+									<div>
+										<p class="text-xs font-medium">{m.activity_delivery_details()}</p>
+										<p class="text-[0.6875rem] text-muted-foreground">{destinationSummary(post)}</p>
+									</div>
+									<Button
+										variant="ghost"
+										size="sm"
+										class="h-8 text-xs"
+										onclick={() => copyDeliveryReport(post)}
+									>
+										{#if copiedReportPostID === post.id}
+											<CheckCircleIcon class="mr-1.5 size-3.5 text-emerald-600" />
+											{m.activity_report_copied()}
+										{:else}
+											<CopyIcon class="mr-1.5 size-3.5" />
+											{m.activity_copy_report()}
+										{/if}
+									</Button>
+								</div>
+								<div class="divide-y divide-border/70 px-3">
+									{#each post.destinations as destination (destination.social_account_id)}
+										<div class="flex items-start gap-2.5 py-2.5 text-xs">
+											<PlatformIcon
+												platform={destination.platform}
+												class="mt-0.5 size-4 shrink-0"
+											/>
+											<div class="min-w-0 flex-1">
+												<div class="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+													<span class="font-medium">{destinationName(destination)}</span>
+													<span class={destinationStatusClass(destination.status)}
+														>{destinationStatusLabel(destination.status)}</span
+													>
+												</div>
+												{#if destination.status === 'failed'}
+													<p class="mt-1 leading-5 text-destructive/90">
+														{m.activity_failure_reason({
+															reason: destination.error_message || m.activity_unknown_failure()
+														})}
+													</p>
+												{/if}
+											</div>
+										</div>
+									{/each}
+								</div>
 							</div>
 						{/if}
 					</div>
@@ -206,7 +348,7 @@
 						size="sm"
 						class="min-h-10 shrink-0"
 						onclick={() => goto(resolve('/posts/[id]', { id: post.id }))}
-						aria-label={`Edit ${truncate(postText(post), 40)}`}
+						aria-label={m.activity_edit_post({ title: truncate(postText(post), 40) })}
 					>
 						<PencilIcon class="size-4 sm:mr-1.5" />
 						<span class="hidden sm:inline">{m.common_edit()}</span>
@@ -234,7 +376,7 @@
 		</Button>
 		<Button size="sm" onclick={() => goto(resolve('/'))}>
 			<PlusIcon class="mr-1.5 size-3.5" />
-			New post
+			{m.activity_new_post()}
 		</Button>
 	{/snippet}
 
@@ -250,48 +392,50 @@
 	<Tabs bind:value={activeTab}>
 		<TabsList variant="line" class="mb-6 w-full justify-start overflow-x-auto">
 			<TabsTrigger value="scheduled"
-				>Scheduled <span class="text-muted-foreground">{scheduledPosts.length}</span></TabsTrigger
+				>{m.activity_tab_scheduled()}
+				<span class="text-muted-foreground">{scheduledPosts.length}</span></TabsTrigger
 			>
 			<TabsTrigger value="published"
-				>Published <span class="text-muted-foreground">{publishedPosts.length}</span></TabsTrigger
+				>{m.activity_tab_published()}
+				<span class="text-muted-foreground">{publishedPosts.length}</span></TabsTrigger
 			>
 			<TabsTrigger value="failed"
-				>Failed <span class="text-muted-foreground">{failedPosts.length + failedJobs.length}</span
+				>{m.activity_tab_failed()}
+				<span class="text-muted-foreground">{failedPosts.length + failedJobs.length}</span
 				></TabsTrigger
 			>
 			<TabsTrigger value="drafts"
-				>Drafts <span class="text-muted-foreground">{drafts.length}</span></TabsTrigger
+				>{m.activity_tab_drafts()}
+				<span class="text-muted-foreground">{drafts.length}</span></TabsTrigger
 			>
 		</TabsList>
 
 		<TabsContent value="scheduled">
 			{@render postList(
 				scheduledPosts,
-				'Nothing scheduled',
-				'Choose a time from the composer when your next post is ready.'
+				m.activity_empty_scheduled_title(),
+				m.activity_empty_scheduled_body()
 			)}
 		</TabsContent>
 		<TabsContent value="published">
 			{@render postList(
 				publishedPosts,
-				'No published posts yet',
-				'Posts you publish will be kept here for reference.'
+				m.activity_empty_published_title(),
+				m.activity_empty_published_body()
 			)}
 		</TabsContent>
 		<TabsContent value="failed">
 			{@render postList(
 				failedPosts,
-				'No failed posts',
-				'Publishing problems will appear here with a clear path to edit and retry.'
+				m.activity_empty_failed_title(),
+				m.activity_empty_failed_body()
 			)}
 			{#if failedJobs.length > 0}
 				<details class="mt-6 border-t pt-4">
 					<summary
 						class="cursor-pointer text-sm font-medium text-destructive focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
 					>
-						Technical details for {failedJobs.length} failed {failedJobs.length === 1
-							? 'delivery'
-							: 'deliveries'}
+						{m.activity_technical_details({ count: failedJobs.length })}
 					</summary>
 					<div class="mt-3 divide-y rounded-md bg-muted/35 px-4">
 						{#each failedJobs as job (job.id)}
@@ -299,7 +443,7 @@
 								<div>
 									<p class="font-medium">{job.type.replaceAll('_', ' ')}</p>
 									<p class="mt-1 text-xs text-destructive">
-										{job.last_error || 'Delivery failed.'}
+										{job.last_error || m.activity_delivery_failed()}
 									</p>
 								</div>
 								{#if failedJobPostID(job)}
@@ -307,7 +451,7 @@
 										variant="ghost"
 										size="sm"
 										onclick={() => goto(resolve('/posts/[id]', { id: failedJobPostID(job) }))}
-										>Open post</Button
+										>{m.activity_open_post()}</Button
 									>
 								{/if}
 							</div>
@@ -317,11 +461,7 @@
 			{/if}
 		</TabsContent>
 		<TabsContent value="drafts">
-			{@render postList(
-				drafts,
-				'No drafts yet',
-				'Start writing and OpenPost will keep your work here.'
-			)}
+			{@render postList(drafts, m.activity_empty_drafts_title(), m.activity_empty_drafts_body())}
 		</TabsContent>
 	</Tabs>
 </PageContainer>

@@ -26,6 +26,7 @@
 	import ChevronLeftIcon from 'lucide-svelte/icons/chevron-left';
 	import ChevronRightIcon from 'lucide-svelte/icons/chevron-right';
 	import Grid2X2Icon from 'lucide-svelte/icons/grid-2x2';
+	import { m } from '$lib/paraglide/messages';
 
 	interface MediaItem {
 		id: string;
@@ -386,12 +387,12 @@
 			}
 			return text;
 		}
-		return 'Manage your media attachments';
+		return m.media_library_description();
 	});
 </script>
 
 <svelte:head>
-	<title>Media Library - OpenPost</title>
+	<title>{m.media_library_title()} - {m.common_openpost()}</title>
 </svelte:head>
 
 {#if toastMessage}
@@ -406,11 +407,11 @@
 {/if}
 
 <PageContainer
-	title="Media Library"
+	title={m.media_library_title()}
 	description={descriptionText}
 	icon={ImageIcon}
 	{loading}
-	loadingMessage="Loading media library..."
+	loadingMessage={m.common_loading()}
 >
 	{#snippet actions()}
 		<div class="flex items-center gap-2">
@@ -462,12 +463,16 @@
 		<div class="ml-auto flex items-center gap-2">
 			<Select.Root type="single" bind:value={sort}>
 				<Select.Trigger class="h-9 w-[120px] text-sm">
-					{sort === 'newest' ? 'Newest' : sort === 'oldest' ? 'Oldest' : 'Size'}
+					{sort === 'newest'
+						? m.media_sort_newest()
+						: sort === 'oldest'
+							? m.media_sort_oldest()
+							: m.media_sort_size()}
 				</Select.Trigger>
 				<Select.Content>
-					<Select.Item value="newest">Newest</Select.Item>
-					<Select.Item value="oldest">Oldest</Select.Item>
-					<Select.Item value="size">Size</Select.Item>
+					<Select.Item value="newest">{m.media_sort_newest()}</Select.Item>
+					<Select.Item value="oldest">{m.media_sort_oldest()}</Select.Item>
+					<Select.Item value="size">{m.media_sort_size()}</Select.Item>
 				</Select.Content>
 			</Select.Root>
 		</div>
@@ -493,7 +498,7 @@
 						Delete Selected
 					</Button>
 				{/if}
-				<Button variant="ghost" size="sm" onclick={cancelSelection}>Cancel</Button>
+				<Button variant="ghost" size="sm" onclick={cancelSelection}>{m.common_cancel()}</Button>
 			</div>
 		</div>
 	{/if}
@@ -513,7 +518,7 @@
 		{#if filter !== 'all'}
 			<EmptyState
 				icon={ImageIcon}
-				title="No media found"
+				title={m.media_empty_title()}
 				description="Try changing your filters"
 				actionLabel="Show All"
 				onAction={() => (filter = 'all')}
@@ -523,7 +528,7 @@
 		{:else}
 			<EmptyState
 				icon={ImageIcon}
-				title="No media found"
+				title={m.media_empty_title()}
 				description="Upload some files to get started"
 				actionLabel="Upload"
 				onAction={() => (uploadDialogOpen = true)}
@@ -594,14 +599,14 @@
 							<button
 								class="rounded-full bg-white/20 p-2 backdrop-blur-sm transition-colors hover:bg-white/30"
 								onclick={() => showUsage(media)}
-								title="View usage"
+								title={m.media_view_usage()}
 							>
 								<ExternalLinkIcon class="size-4 text-white" />
 							</button>
 							<button
 								class="rounded-full bg-white/20 p-2 backdrop-blur-sm transition-colors hover:bg-white/30"
 								onclick={() => downloadMedia(media)}
-								title="Download"
+								title={m.media_download()}
 							>
 								<DownloadIcon class="size-4 text-white" />
 							</button>
@@ -619,7 +624,7 @@
 								<button
 									class="rounded-full bg-white/20 p-2 backdrop-blur-sm transition-colors hover:bg-red-500/80"
 									onclick={() => deleteMedia(media.id)}
-									title="Delete"
+									title={m.common_delete()}
 								>
 									<TrashIcon class="size-4 text-white" />
 								</button>
@@ -709,20 +714,20 @@
 <Dialog.Root bind:open={uploadDialogOpen}>
 	<Dialog.Content class="sm:max-w-md">
 		<Dialog.Header>
-			<Dialog.Title>Upload Media</Dialog.Title>
-			<Dialog.Description>Upload images or videos to use in your posts.</Dialog.Description>
+			<Dialog.Title>{m.media_upload_title()}</Dialog.Title>
+			<Dialog.Description>{m.media_upload_description()}</Dialog.Description>
 		</Dialog.Header>
 
 		<div class="space-y-4 py-4">
 			<div class="space-y-2">
-				<span class="text-sm font-medium">Single Upload</span>
+				<span class="text-sm font-medium">{m.media_single_upload()}</span>
 				<label
 					class="flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-muted-foreground/25 p-6 transition-colors hover:border-primary/50"
 					for="file-upload"
 				>
 					<UploadIcon class="mb-2 h-8 w-8 text-muted-foreground/40" />
-					<p class="text-sm font-medium">Click to select a file</p>
-					<p class="text-sm text-muted-foreground">Image or video (max 50MB)</p>
+					<p class="text-sm font-medium">{m.media_select_file()}</p>
+					<p class="text-sm text-muted-foreground">{m.media_file_limits()}</p>
 				</label>
 				<input id="file-upload" type="file" accept="image/*,video/*" class="hidden" />
 			</div>
@@ -732,19 +737,19 @@
 					<div class="w-full border-t"></div>
 				</div>
 				<div class="relative flex justify-center text-xs uppercase">
-					<span class="bg-background px-2 text-muted-foreground">Or</span>
+					<span class="bg-background px-2 text-muted-foreground">{m.media_or()}</span>
 				</div>
 			</div>
 
 			<div class="space-y-2">
-				<span class="text-sm font-medium">Batch Upload (up to 10)</span>
+				<span class="text-sm font-medium">{m.media_batch_upload()}</span>
 				<label
 					class="flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-muted-foreground/25 p-6 transition-colors hover:border-primary/50"
 					for="batch-file-upload"
 				>
 					<Grid2X2Icon class="mb-2 h-8 w-8 text-muted-foreground/40" />
-					<p class="text-sm font-medium">Select multiple files</p>
-					<p class="text-sm text-muted-foreground">Images or videos</p>
+					<p class="text-sm font-medium">{m.media_select_files()}</p>
+					<p class="text-sm text-muted-foreground">{m.media_images_or_videos()}</p>
 				</label>
 				<input
 					id="batch-file-upload"
@@ -772,7 +777,9 @@
 		</div>
 
 		<Dialog.Footer>
-			<Button variant="outline" onclick={() => (uploadDialogOpen = false)}>Cancel</Button>
+			<Button variant="outline" onclick={() => (uploadDialogOpen = false)}
+				>{m.common_cancel()}</Button
+			>
 			<Button onclick={handleUpload} disabled={uploadLoading}>
 				{#if uploadLoading}
 					<LoaderIcon class="mr-2 size-4 animate-spin" />
@@ -787,7 +794,7 @@
 <Dialog.Root bind:open={usageDialogOpen}>
 	<Dialog.Content class="sm:max-w-lg">
 		<Dialog.Header>
-			<Dialog.Title>Media Usage</Dialog.Title>
+			<Dialog.Title>{m.media_usage_title()}</Dialog.Title>
 			<Dialog.Description>
 				{#if selectedMedia}
 					{selectedMedia.usage_count}
@@ -827,7 +834,8 @@
 		</div>
 
 		<Dialog.Footer>
-			<Button variant="outline" onclick={() => (usageDialogOpen = false)}>Close</Button>
+			<Button variant="outline" onclick={() => (usageDialogOpen = false)}>{m.common_close()}</Button
+			>
 		</Dialog.Footer>
 	</Dialog.Content>
 </Dialog.Root>

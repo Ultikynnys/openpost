@@ -1,4 +1,5 @@
 import { getPlatformKey, getPlatformName } from '$lib/utils';
+import { m } from '$lib/paraglide/messages';
 
 export const COMPOSER_MODE_KEYS = [
 	'short_text',
@@ -172,7 +173,24 @@ export const COMPOSER_MODE_GROUPS: ComposerModeGroup[] = [
 ];
 
 export function composerMode(key: ComposerModeKey): ComposerMode {
-	return COMPOSER_MODES.find((mode) => mode.key === key) ?? COMPOSER_MODES[0];
+	const mode = COMPOSER_MODES.find((candidate) => candidate.key === key) ?? COMPOSER_MODES[0];
+	const copy: Record<ComposerModeKey, { label: string; description: string }> = {
+		short_text: { label: m.compose_mode_post(), description: m.compose_mode_post_description() },
+		thread: { label: m.compose_mode_thread(), description: m.compose_mode_thread_description() },
+		link_share: { label: m.compose_mode_link(), description: m.compose_mode_link_description() },
+		image_post: { label: m.compose_mode_image(), description: m.compose_mode_image_description() },
+		carousel: {
+			label: m.compose_mode_carousel(),
+			description: m.compose_mode_carousel_description()
+		},
+		story: { label: m.compose_mode_story(), description: m.compose_mode_story_description() },
+		short_video: {
+			label: m.compose_mode_short_video(),
+			description: m.compose_mode_short_video_description()
+		},
+		long_video: { label: m.compose_mode_video(), description: m.compose_mode_video_description() }
+	};
+	return { ...mode, ...copy[mode.key] };
 }
 
 export function isLegacyComposerMode(key: ComposerModeKey): boolean {
@@ -194,8 +212,8 @@ export function roleFieldsForMode(
 			return [
 				{
 					key: 'postText',
-					label: 'Post text',
-					hint: 'Post text',
+					label: m.compose_post_text(),
+					hint: m.compose_post_text(),
 					type: 'textarea',
 					required: true,
 					rows: 8
@@ -205,15 +223,15 @@ export function roleFieldsForMode(
 			return [
 				{
 					key: 'linkUrl',
-					label: 'Link URL',
-					hint: 'Shared link',
+					label: m.compose_link_url(),
+					hint: m.compose_shared_link(),
 					type: 'url',
 					required: true
 				},
 				{
 					key: 'postText',
-					label: 'Post text',
-					hint: 'Post text',
+					label: m.compose_post_text(),
+					hint: m.compose_post_text(),
 					type: 'textarea',
 					rows: 7
 				}
@@ -351,8 +369,8 @@ function renditionPayload({
 function captionField(hint: string, required = false): FocusedRoleField {
 	return {
 		key: 'caption',
-		label: 'Caption',
-		hint: hint ? `Caption · ${hint}` : 'Caption',
+		label: m.compose_caption(),
+		hint: hint ? `${m.compose_caption()} · ${hint}` : m.compose_caption(),
 		type: 'textarea',
 		required,
 		rows: 7
@@ -362,8 +380,8 @@ function captionField(hint: string, required = false): FocusedRoleField {
 function videoTitleField(): FocusedRoleField {
 	return {
 		key: 'videoTitle',
-		label: 'Video title',
-		hint: 'Video title · YouTube title',
+		label: m.compose_video_title(),
+		hint: `${m.compose_video_title()} · YouTube`,
 		type: 'text',
 		required: true
 	};
@@ -372,8 +390,8 @@ function videoTitleField(): FocusedRoleField {
 function videoDescriptionField(): FocusedRoleField {
 	return {
 		key: 'videoDescription',
-		label: 'Description',
-		hint: 'Description · YouTube description',
+		label: m.compose_video_description(),
+		hint: `${m.compose_video_description()} · YouTube`,
 		type: 'textarea',
 		rows: 8
 	};

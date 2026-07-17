@@ -3,6 +3,7 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { isNavigationItemActive, mobileNavigation } from '$lib/app-navigation';
+	import { m } from '$lib/paraglide/messages';
 	import CalendarIcon from 'lucide-svelte/icons/calendar-days';
 	import ComposeIcon from 'lucide-svelte/icons/plus';
 	import PostsIcon from 'lucide-svelte/icons/files';
@@ -26,11 +27,28 @@
 				return ComposeIcon;
 		}
 	}
+
+	function labelFor(id: (typeof items)[number]['id']) {
+		switch (id) {
+			case 'new':
+				return m.sidebar_new();
+			case 'calendar':
+				return m.sidebar_calendar();
+			case 'posts':
+				return m.sidebar_activity();
+			case 'media':
+				return m.sidebar_media();
+			case 'accounts':
+				return m.sidebar_accounts();
+			default:
+				return '';
+		}
+	}
 </script>
 
 <nav
 	class="fixed inset-x-0 bottom-0 z-30 border-t bg-background/96 px-2 pt-1 pb-[max(0.35rem,env(safe-area-inset-bottom))] backdrop-blur-md md:hidden"
-	aria-label="Primary navigation"
+	aria-label={m.sidebar_primary_navigation()}
 >
 	<ul class="grid grid-cols-5">
 		{#each items as item (item.id)}
@@ -57,8 +75,7 @@
 					>
 						<Icon class={item.id === 'new' ? 'size-5' : 'size-4'} />
 					</span>
-					<span>{item.id === 'new' ? 'New' : item.id === 'accounts' ? 'Accounts' : item.label}</span
-					>
+					<span>{labelFor(item.id)}</span>
 				</button>
 			</li>
 		{/each}

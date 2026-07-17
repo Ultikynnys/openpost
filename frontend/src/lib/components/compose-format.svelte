@@ -22,6 +22,7 @@
 	import UploadIcon from 'lucide-svelte/icons/upload';
 	import VideoIcon from 'lucide-svelte/icons/video';
 	import XIcon from 'lucide-svelte/icons/x';
+	import { m } from '$lib/paraglide/messages';
 
 	type Profile = {
 		key: string;
@@ -472,7 +473,7 @@
 					{/each}
 				</select>
 				<div class="flex min-w-0 flex-1 items-center gap-2 text-sm text-muted-foreground">
-					<span class="font-medium text-foreground">Format-first composer</span>
+					<span class="font-medium text-foreground">{m.compose_format_first()}</span>
 					<span>{selectedProfileMeta?.description}</span>
 				</div>
 				<Button
@@ -511,7 +512,7 @@
 					{:else}
 						<SendIcon class="mr-2 h-4 w-4" />
 					{/if}
-					Publish
+					{m.compose_publish()}
 				</Button>
 			</div>
 		</div>
@@ -522,7 +523,9 @@
 			<aside class="border-r bg-muted/20 p-4 lg:overflow-y-auto">
 				<div class="space-y-3">
 					<div>
-						<p class="text-xs font-semibold text-muted-foreground uppercase">Profile</p>
+						<p class="text-xs font-semibold text-muted-foreground uppercase">
+							{m.compose_profile()}
+						</p>
 						<div class="mt-2 grid gap-2">
 							{#each profiles as profile (profile.key)}
 								{@const Icon = profileIcons[profile.key] ?? TextIcon}
@@ -568,7 +571,7 @@
 					<section class="space-y-3">
 						<div class="flex items-center justify-between">
 							<div>
-								<h2 class="text-base font-semibold">Destinations</h2>
+								<h2 class="text-base font-semibold">{m.compose_destinations()}</h2>
 								<p class="text-sm text-muted-foreground">
 									Only accounts compatible with {selectedProfileMeta?.name} are selectable.
 								</p>
@@ -627,37 +630,37 @@
 							<div class="grid gap-3 md:grid-cols-2">
 								<div>
 									<label class="text-xs font-medium text-muted-foreground" for="publication-title"
-										>Title</label
+										>{m.compose_publication_title()}</label
 									>
 									<Input
 										id="publication-title"
 										bind:value={title}
 										oninput={syncSourceToRenditions}
-										placeholder="Campaign or video title"
+										placeholder={m.compose_title_placeholder()}
 									/>
 								</div>
 								<div>
 									<label class="text-xs font-medium text-muted-foreground" for="source-url"
-										>Source URL</label
+										>{m.compose_source_url()}</label
 									>
 									<Input id="source-url" bind:value={sourceURL} placeholder="https://..." />
 								</div>
 							</div>
 							<div>
 								<label class="text-xs font-medium text-muted-foreground" for="source-text"
-									>Source text</label
+									>{m.compose_source_text()}</label
 								>
 								<Textarea
 									id="source-text"
 									class="min-h-44 resize-y"
 									bind:value={sourceText}
 									oninput={syncSourceToRenditions}
-									placeholder="Write the canonical idea here. Customize each platform in the rendition rail."
+									placeholder={m.compose_source_text_placeholder()}
 								/>
 							</div>
 							<div class="grid gap-3 md:grid-cols-3">
-								<Input bind:value={goal} placeholder="Goal" />
-								<Input bind:value={audience} placeholder="Audience" />
+								<Input bind:value={goal} placeholder={m.compose_goal()} />
+								<Input bind:value={audience} placeholder={m.compose_audience()} />
 								<Input type="datetime-local" bind:value={scheduleAt} />
 							</div>
 							<div class="rounded-md border border-dashed p-4">
@@ -708,7 +711,7 @@
 
 						<div class="rounded-md border bg-background">
 							<div class="border-b px-3 py-2">
-								<h3 class="text-sm font-semibold">Validation</h3>
+								<h3 class="text-sm font-semibold">{m.compose_validation()}</h3>
 							</div>
 							<div class="space-y-2 p-3 text-sm">
 								{#if validationIssues.length === 0}
@@ -731,7 +734,7 @@
 									{#if blockingIssues.length === 0}
 										<div class="flex gap-2 text-emerald-700 dark:text-emerald-300">
 											<CheckCircle2Icon class="mt-0.5 h-4 w-4" />
-											<span>No blocking issues.</span>
+											<span>{m.compose_no_blocking_issues()}</span>
 										</div>
 									{/if}
 								{/if}
@@ -743,8 +746,8 @@
 
 			<aside class="min-h-0 border-l bg-muted/20 lg:overflow-y-auto">
 				<div class="border-b p-4">
-					<h2 class="text-base font-semibold">Renditions</h2>
-					<p class="text-sm text-muted-foreground">One output per selected account.</p>
+					<h2 class="text-base font-semibold">{m.compose_renditions()}</h2>
+					<p class="text-sm text-muted-foreground">{m.compose_renditions_body()}</p>
 				</div>
 				<div class="space-y-3 p-4">
 					{#if renditions.length === 0}
@@ -782,7 +785,7 @@
 							<div class="space-y-3 rounded-md border bg-background p-3">
 								<div>
 									<label class="text-xs font-medium text-muted-foreground" for="rendition-title"
-										>Rendition title</label
+										>{m.compose_rendition_title()}</label
 									>
 									<Input
 										id="rendition-title"
@@ -792,7 +795,7 @@
 								</div>
 								<div>
 									<label class="text-xs font-medium text-muted-foreground" for="rendition-body"
-										>Body</label
+										>{m.compose_body()}</label
 									>
 									<Textarea
 										id="rendition-body"
@@ -810,7 +813,7 @@
 								<div>
 									<label
 										class="text-xs font-medium text-muted-foreground"
-										for="rendition-description">Description</label
+										for="rendition-description">{m.compose_description()}</label
 									>
 									<Textarea
 										id="rendition-description"
@@ -879,7 +882,9 @@
 								{/if}
 
 								<div class="rounded-md border bg-muted/30 p-3">
-									<p class="text-xs font-semibold text-muted-foreground uppercase">Preview</p>
+									<p class="text-xs font-semibold text-muted-foreground uppercase">
+										{m.compose_preview()}
+									</p>
 									<p class="mt-2 text-sm font-medium">{activeRendition.title || title}</p>
 									<p class="mt-2 text-sm whitespace-pre-wrap text-muted-foreground">
 										{activeRendition.body || 'No body text yet.'}

@@ -41,13 +41,12 @@
 	import { client } from '$lib/api/client';
 	import { getLocaleTag } from '$lib/i18n';
 	import { hostedPlanFromSearchParams } from '$lib/billing';
+	import { m } from '$lib/paraglide/messages';
 	import {
 		apiTokenScopeOptions,
 		billingMetricLabels,
 		billingPlans,
 		cleanupDaysOptions,
-		dayNames,
-		dayShortNames,
 		getTimezoneLabel,
 		inviteRoleOptions,
 		timezones,
@@ -118,6 +117,12 @@
 
 	const authState = $derived($auth);
 	const currentOrganizationID = $derived(workspaceCtx.currentWorkspace?.organization_id ?? '');
+	const weekdayFormatter = $derived(
+		new Intl.DateTimeFormat(getLocaleTag(), { weekday: 'short', timeZone: 'UTC' })
+	);
+	const longWeekdayFormatter = $derived(
+		new Intl.DateTimeFormat(getLocaleTag(), { weekday: 'long', timeZone: 'UTC' })
+	);
 	const passkeyCount = $derived((securityStatus?.passkeys ?? []).length);
 	const teamMembers = $derived(workspaceTeam?.members ?? []);
 	const pendingInvitations = $derived(workspaceTeam?.invitations ?? []);
@@ -131,29 +136,29 @@
 	const apiTokenWorkspaceOptions = $derived([
 		{
 			value: 'current',
-			label: 'Current workspace',
-			description: workspaceCtx.currentWorkspace?.name ?? 'Selected workspace only.'
+			label: m.settings_current_workspace(),
+			description: workspaceCtx.currentWorkspace?.name ?? m.settings_current_workspace_body()
 		},
 		{
 			value: 'all',
-			label: 'All workspaces',
-			description: 'Every workspace you can access.'
+			label: m.settings_all_workspaces(),
+			description: m.settings_all_workspaces_body()
 		}
 	]);
 	const selectedAPITokenWorkspaceScope = $derived(
 		apiTokenWorkspaceOptions.find((option) => option.value === apiTokenWorkspaceScope) ??
 			apiTokenWorkspaceOptions[0]
 	);
-	const settingsTabs = [
-		{ id: 'profile', label: 'Profile' },
-		{ id: 'security', label: 'Security' },
-		{ id: 'developer', label: 'Developer access' },
-		{ id: 'general', label: 'General' },
-		{ id: 'schedule', label: 'Posting schedule' },
-		{ id: 'media', label: 'Media retention' },
-		{ id: 'members', label: 'Members' },
-		{ id: 'plan', label: 'Plan & usage' }
-	] as const;
+	const settingsTabs = $derived([
+		{ id: 'profile', label: m.settings_profile() },
+		{ id: 'security', label: m.settings_security() },
+		{ id: 'developer', label: m.settings_developer() },
+		{ id: 'general', label: m.settings_general() },
+		{ id: 'schedule', label: m.settings_schedule() },
+		{ id: 'media', label: m.settings_media() },
+		{ id: 'members', label: m.settings_members() },
+		{ id: 'plan', label: m.settings_plan() }
+	] as const);
 	const activeSettingsTab = $derived.by(() =>
 		normalizeSettingsTab(
 			page.url.searchParams.get('tab') || page.url.hash.replace(/^#/, '') || null
@@ -179,25 +184,26 @@
 		)
 	);
 	const activeSettingsTitle = $derived.by(() => {
-		if (activeSettingsTab === 'profile') return 'Profile';
-		if (activeSettingsTab === 'security') return 'Security';
-		if (activeSettingsTab === 'developer') return 'Developer access';
-		if (activeSettingsTab === 'members') return 'Team members';
-		if (activeSettingsTab === 'plan') return 'Plan & usage';
-		if (activeSettingsTab === 'schedule') return 'Posting schedule';
-		if (activeSettingsTab === 'media') return 'Media retention';
-		return 'General';
+		if (activeSettingsTab === 'profile') return m.settings_profile();
+		if (activeSettingsTab === 'security') return m.settings_security();
+		if (activeSettingsTab === 'developer') return m.settings_developer();
+		if (activeSettingsTab === 'members') return m.settings_team_members();
+		if (activeSettingsTab === 'plan') return m.settings_plan();
+		if (activeSettingsTab === 'schedule') return m.settings_schedule();
+		if (activeSettingsTab === 'media') return m.settings_media();
+		return m.settings_general();
 	});
 	const activeSettingsDescription = $derived.by(() => {
-		if (activeSettingsTab === 'profile') return 'Your name and avatar across OpenPost.';
-		if (activeSettingsTab === 'security') return 'Sign-in methods, passkeys, and active sessions.';
-		if (activeSettingsTab === 'developer') return 'API tokens, CLI devices, and tool activity.';
-		if (activeSettingsTab === 'members') return 'People who can publish from this workspace.';
-		if (activeSettingsTab === 'plan') return 'Current plan, usage, and billing.';
-		if (activeSettingsTab === 'schedule')
-			return 'Reusable publishing times and scheduling defaults.';
-		if (activeSettingsTab === 'media') return 'Control how long unused media is kept.';
-		return `Workspace identity, timezone, and calendar preferences for ${workspaceCtx.currentWorkspace?.name || 'this workspace'}.`;
+		if (activeSettingsTab === 'profile') return m.settings_profile_description();
+		if (activeSettingsTab === 'security') return m.settings_security_description();
+		if (activeSettingsTab === 'developer') return m.settings_developer_description();
+		if (activeSettingsTab === 'members') return m.settings_members_description();
+		if (activeSettingsTab === 'plan') return m.settings_plan_description();
+		if (activeSettingsTab === 'schedule') return m.settings_schedule_description();
+		if (activeSettingsTab === 'media') return m.settings_media_description();
+		return m.settings_general_description({
+			workspace: workspaceCtx.currentWorkspace?.name || m.settings_workspace()
+		});
 	});
 	const requestedBillingPlan = $derived.by(() => {
 		const planID = hostedPlanFromSearchParams(page.url.searchParams);
@@ -216,6 +222,11 @@
 	});
 	function isSettingsTab(value: string): value is (typeof settingsTabs)[number]['id'] {
 		return settingsTabs.some((tab) => tab.id === value);
+	}
+
+	function localizedWeekday(dayIndex: number, format: 'short' | 'long' = 'short') {
+		const date = new Date(Date.UTC(2026, 6, 5 + dayIndex));
+		return (format === 'long' ? longWeekdayFormatter : weekdayFormatter).format(date);
 	}
 
 	function normalizeSettingsTab(value: string | null) {
@@ -239,10 +250,10 @@
 			const { data, error: err } = await client.PATCH('/auth/profile', {
 				body: { display_name: profileDisplayName }
 			});
-			if (err || !data) throw new Error(err?.detail || 'Failed to update profile');
+			if (err || !data) throw new Error(err?.detail || m.settings_action_failed());
 			auth.setUser(data);
 			profileDisplayName = data.display_name ?? '';
-			toastMessage = 'Profile updated';
+			toastMessage = m.settings_profile_updated();
 		} catch (e) {
 			profileError = (e as Error).message;
 		} finally {
@@ -254,7 +265,7 @@
 		if (authState.user) {
 			auth.setUser({ ...authState.user, avatar_url: avatarURL });
 		}
-		toastMessage = 'Profile picture updated';
+		toastMessage = m.settings_picture_updated();
 	}
 
 	async function removeAvatar() {
@@ -263,11 +274,11 @@
 		profileError = '';
 		try {
 			const { error: err } = await client.DELETE('/auth/profile/avatar', {});
-			if (err) throw new Error(err.detail || 'Failed to remove avatar');
+			if (err) throw new Error(err.detail || m.settings_action_failed());
 			if (authState.user) {
 				auth.setUser({ ...authState.user, avatar_url: '' });
 			}
-			toastMessage = 'Profile picture removed';
+			toastMessage = m.settings_picture_removed();
 		} catch (e) {
 			profileError = (e as Error).message;
 		} finally {
@@ -280,7 +291,7 @@
 		securityError = '';
 		try {
 			const { data, error: err } = await client.GET('/auth/security');
-			if (err || !data) throw new Error(err?.detail || 'Failed to load account security');
+			if (err || !data) throw new Error(err?.detail || m.settings_action_failed());
 			securityStatus = data;
 		} catch (e) {
 			securityError = (e as Error).message;
@@ -294,7 +305,7 @@
 		authSessionsError = '';
 		try {
 			const { data, error: err } = await client.GET('/auth/sessions');
-			if (err || !data) throw new Error(err?.detail || 'Failed to load active sessions');
+			if (err || !data) throw new Error(err?.detail || m.settings_action_failed());
 			authSessions = data as AuthSessionSummary[];
 		} catch (e) {
 			authSessions = [];
@@ -309,7 +320,7 @@
 		securityError = '';
 		try {
 			const { data, error: err } = await client.GET('/api-tokens');
-			if (err || !data) throw new Error(err?.detail || 'Failed to load API tokens');
+			if (err || !data) throw new Error(err?.detail || m.settings_action_failed());
 			apiTokens = data as APITokenSummary[];
 		} catch (e) {
 			securityError = (e as Error).message;
@@ -325,7 +336,7 @@
 			const { data, error: err } = await client.GET('/mcp/activity', {
 				params: { query: { limit: 8 } }
 			});
-			if (err || !data) throw new Error(err?.detail || 'Failed to load MCP activity');
+			if (err || !data) throw new Error(err?.detail || m.settings_action_failed());
 			mcpActivity = data as MCPActivityItem[];
 		} catch (e) {
 			mcpActivityError = (e as Error).message;
@@ -344,7 +355,7 @@
 			const { data, error: err } = await client.GET('/workspaces/{id}/team', {
 				params: { path: { id: workspaceID } }
 			});
-			if (err || !data) throw new Error(err?.detail || 'Failed to load workspace team');
+			if (err || !data) throw new Error(err?.detail || m.settings_action_failed());
 			workspaceTeam = data as WorkspaceTeam;
 		} catch (e) {
 			workspaceTeam = null;
@@ -369,7 +380,7 @@
 					role: inviteRole
 				}
 			});
-			if (err || !data) throw new Error(err?.detail || 'Failed to create workspace invitation');
+			if (err || !data) throw new Error(err?.detail || m.settings_action_failed());
 			const invitation = data as WorkspaceInvitation;
 			createdInviteURL =
 				invitation.accept_url ||
@@ -377,7 +388,7 @@
 			inviteEmail = '';
 			inviteRole = 'editor';
 			await loadWorkspaceTeam();
-			toastMessage = 'Invitation link created';
+			toastMessage = m.settings_invite_created();
 		} catch (e) {
 			teamError = (e as Error).message;
 		} finally {
@@ -395,9 +406,9 @@
 			const { error: err } = await client.DELETE('/workspaces/{id}/invitations/{invitation_id}', {
 				params: { path: { id: workspaceID, invitation_id: invitationID } }
 			});
-			if (err) throw new Error(err.detail || 'Failed to revoke workspace invitation');
+			if (err) throw new Error(err.detail || m.settings_action_failed());
 			await loadWorkspaceTeam();
-			toastMessage = 'Invitation revoked';
+			toastMessage = m.settings_invitation_revoked();
 		} catch (e) {
 			teamError = (e as Error).message;
 		} finally {
@@ -408,7 +419,7 @@
 	async function copyCreatedInviteURL() {
 		if (!createdInviteURL) return;
 		await navigator.clipboard.writeText(createdInviteURL);
-		toastMessage = 'Invite link copied';
+		toastMessage = m.settings_invite_copied();
 	}
 
 	async function createAPIToken() {
@@ -426,7 +437,7 @@
 					...(workspaceID ? { workspace_id: workspaceID } : {})
 				}
 			});
-			if (err || !data) throw new Error(err?.detail || 'Failed to create API token');
+			if (err || !data) throw new Error(err?.detail || m.settings_action_failed());
 			createdAPIToken = data.token;
 			apiTokenName = fallbackName;
 			await loadAPITokens();
@@ -448,14 +459,14 @@
 			const { data, error: err } = await client.DELETE('/auth/sessions/{session_id}', {
 				params: { path: { session_id: session.id } }
 			});
-			if (err) throw new Error(err.detail || 'Failed to revoke session');
+			if (err) throw new Error(err.detail || m.settings_action_failed());
 			if (data?.revoked_current || session.current) {
 				await auth.logout();
 				await goto(resolve('/login'));
 				return;
 			}
 			await loadAuthSessions();
-			toastMessage = 'Session revoked';
+			toastMessage = m.settings_session_revoked();
 		} catch (e) {
 			authSessionsError = (e as Error).message;
 		} finally {
@@ -472,9 +483,9 @@
 			const { error: err } = await client.DELETE('/api-tokens/{id}', {
 				params: { path: { id: tokenID } }
 			});
-			if (err) throw new Error(err.detail || 'Failed to revoke API token');
+			if (err) throw new Error(err.detail || m.settings_action_failed());
 			await loadAPITokens();
-			toastMessage = 'API token revoked';
+			toastMessage = m.settings_token_revoked();
 		} catch (e) {
 			securityError = (e as Error).message;
 		} finally {
@@ -495,7 +506,7 @@
 				: await client.GET('/billing/status', {
 						params: { query: { workspace_id: workspaceID } }
 					});
-			if (err || !data) throw new Error(err?.detail || 'Failed to load billing status');
+			if (err || !data) throw new Error(err?.detail || m.settings_action_failed());
 			billingStatus = data as BillingStatus;
 		} catch (e) {
 			billingStatus = null;
@@ -519,7 +530,7 @@
 				: await client.POST('/billing/checkout', {
 						body: { workspace_id: workspaceID, plan_id: planID }
 					});
-			if (err || !data?.url) throw new Error(err?.detail || 'Failed to create checkout');
+			if (err || !data?.url) throw new Error(err?.detail || m.settings_action_failed());
 			window.location.assign(data.url);
 		} catch (e) {
 			billingError = (e as Error).message;
@@ -541,7 +552,7 @@
 				: await client.POST('/billing/portal', {
 						body: { workspace_id: workspaceID }
 					});
-			if (err || !data?.url) throw new Error(err?.detail || 'Failed to open billing portal');
+			if (err || !data?.url) throw new Error(err?.detail || m.settings_action_failed());
 			window.location.assign(data.url);
 		} catch (e) {
 			billingError = (e as Error).message;
@@ -557,7 +568,7 @@
 			const { data, error: err } = await client.POST('/auth/security/totp/setup', {
 				body: { current_password: currentPassword }
 			});
-			if (err || !data) throw new Error(err?.detail || 'Failed to start authenticator setup');
+			if (err || !data) throw new Error(err?.detail || m.settings_action_failed());
 			totpSetupChallengeId = data.challenge_id;
 			totpManualEntryKey = data.manual_entry_key;
 			totpQRCodeDataURL = data.qr_code_data_url;
@@ -580,14 +591,14 @@
 					code: totpCode
 				}
 			});
-			if (err || !data) throw new Error(err?.detail || 'Failed to confirm authenticator app');
+			if (err || !data) throw new Error(err?.detail || m.settings_action_failed());
 			securityStatus = data;
 			totpSetupChallengeId = '';
 			totpManualEntryKey = '';
 			totpQRCodeDataURL = '';
 			totpCode = '';
 			currentPassword = '';
-			toastMessage = 'Authenticator app enabled';
+			toastMessage = m.settings_authenticator_enabled_notice();
 		} catch (e) {
 			securityError = (e as Error).message;
 		} finally {
@@ -602,10 +613,10 @@
 			const { data, error: err } = await client.POST('/auth/security/totp/disable', {
 				body: { current_password: currentPassword }
 			});
-			if (err || !data) throw new Error(err?.detail || 'Failed to disable authenticator app');
+			if (err || !data) throw new Error(err?.detail || m.settings_action_failed());
 			securityStatus = data;
 			currentPassword = '';
-			toastMessage = 'Authenticator app disabled';
+			toastMessage = m.settings_authenticator_disabled_notice();
 		} catch (e) {
 			securityError = (e as Error).message;
 		} finally {
@@ -627,7 +638,7 @@
 				}
 			);
 			if (beginError || !beginData) {
-				throw new Error(beginError?.detail || 'Failed to start passkey registration');
+				throw new Error(beginError?.detail || m.settings_action_failed());
 			}
 
 			const credential = await createPasskeyCredential(beginData.options);
@@ -638,11 +649,11 @@
 					credential
 				}
 			});
-			if (err || !data) throw new Error(err?.detail || 'Failed to save passkey');
+			if (err || !data) throw new Error(err?.detail || m.settings_action_failed());
 			securityStatus = data;
 			currentPassword = '';
 			newPasskeyName = '';
-			toastMessage = 'Passkey added';
+			toastMessage = m.settings_passkey_added();
 		} catch (e) {
 			securityError = (e as Error).message;
 		} finally {
@@ -661,10 +672,10 @@
 					body: { current_password: currentPassword }
 				}
 			);
-			if (err || !data) throw new Error(err?.detail || 'Failed to remove passkey');
+			if (err || !data) throw new Error(err?.detail || m.settings_action_failed());
 			securityStatus = data;
 			currentPassword = '';
-			toastMessage = 'Passkey removed';
+			toastMessage = m.settings_passkey_removed();
 		} catch (e) {
 			securityError = (e as Error).message;
 		} finally {
@@ -686,7 +697,7 @@
 				slot_end_hour: workspaceCtx.settings.slot_end_hour,
 				slot_interval_minutes: workspaceCtx.settings.slot_interval_minutes
 			});
-			toastMessage = 'Settings saved successfully';
+			toastMessage = m.settings_saved();
 		} catch (e) {
 			toastMessage = (e as Error).message;
 		} finally {
@@ -721,7 +732,7 @@
 			intervalError = '';
 			workspaceCtx.settings.slot_interval_minutes = parsed;
 		} else if (value.trim() !== '') {
-			intervalError = 'Enter a duration between 1 minute and 3 hours (e.g. 15m, 1h, 30)';
+			intervalError = m.settings_interval_invalid();
 		}
 	}
 
@@ -732,7 +743,7 @@
 			draftGapError = '';
 			workspaceCtx.settings.draft_gap_minutes = parsed;
 		} else if (value.trim() !== '') {
-			draftGapError = 'Enter a duration between 0 minutes and 24 hours (e.g. 45m, 2h, 0)';
+			draftGapError = m.settings_draft_gap_invalid();
 		}
 	}
 
@@ -841,7 +852,7 @@
 				}
 			}
 			await loadSchedules();
-			toastMessage = 'Time row added successfully';
+			toastMessage = m.settings_time_added();
 		} catch (e) {
 			toastMessage = (e as Error).message || 'Failed to add schedule row';
 		}
@@ -854,7 +865,7 @@
 			});
 			if (err) throw err;
 			await loadSchedules();
-			toastMessage = 'Schedule deleted successfully';
+			toastMessage = m.settings_schedule_deleted();
 		} catch (e) {
 			toastMessage = (e as Error).message || 'Failed to delete schedule';
 		}
@@ -869,7 +880,7 @@
 			}
 			await createSchedule(dayOfWeek, row.local_hour, row.local_minute);
 			await loadSchedules();
-			toastMessage = 'Schedule updated successfully';
+			toastMessage = m.settings_schedule_updated();
 		} catch (e) {
 			toastMessage = (e as Error).message || 'Failed to update schedule';
 		}
@@ -886,7 +897,7 @@
 				}
 			}
 			await loadSchedules();
-			toastMessage = 'Time row removed successfully';
+			toastMessage = m.settings_time_removed();
 		} catch (e) {
 			toastMessage = (e as Error).message || 'Failed to remove schedule row';
 		}
@@ -1061,7 +1072,7 @@
 </script>
 
 <svelte:head>
-	<title>Settings - OpenPost</title>
+	<title>{m.settings_page_title()}</title>
 </svelte:head>
 
 {#if toastMessage}
@@ -1074,7 +1085,7 @@
 			size="icon-sm"
 			class="-my-1 -mr-2"
 			onclick={() => (toastMessage = '')}
-			aria-label="Dismiss notification"
+			aria-label={m.common_dismiss()}
 		>
 			<XIcon class="size-4" />
 		</Button>
@@ -1086,19 +1097,19 @@
 	description={activeSettingsDescription}
 	icon={SettingsIcon}
 	loading={!workspaceCtx.currentWorkspace}
-	loadingMessage="Loading workspace..."
+	loadingMessage={m.settings_loading_workspace()}
 >
 	<div class="grid min-w-0 items-start gap-8 lg:grid-cols-[13rem_minmax(0,1fr)]">
 		<aside class="min-w-0 lg:sticky lg:top-6">
 			<nav
 				{@attach keepActiveSettingsTabVisible}
 				class="flex max-w-full gap-2 overflow-x-auto pb-2 lg:flex-col lg:overflow-visible lg:pb-0"
-				aria-label="Settings"
+				aria-label={m.settings_nav_label()}
 			>
 				<p
 					class="hidden px-2 text-[11px] font-medium tracking-[0.12em] text-muted-foreground uppercase lg:block"
 				>
-					Personal
+					{m.settings_personal()}
 				</p>
 				{#each settingsTabs.slice(0, 3) as tab (tab.id)}
 					<button
@@ -1119,7 +1130,7 @@
 				<p
 					class="hidden px-2 pt-4 text-[11px] font-medium tracking-[0.12em] text-muted-foreground uppercase lg:block"
 				>
-					Workspace
+					{m.settings_workspace()}
 				</p>
 				{#each settingsTabs.slice(3, 6) as tab (tab.id)}
 					<button
@@ -1142,12 +1153,12 @@
 					class="min-h-10 shrink-0 rounded-md px-3 py-2 text-left text-sm font-medium text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none lg:w-full"
 					onclick={() => goto(resolve('/accounts'))}
 				>
-					Social accounts
+					{m.accounts_heading()}
 				</button>
 				<p
 					class="hidden px-2 pt-4 text-[11px] font-medium tracking-[0.12em] text-muted-foreground uppercase lg:block"
 				>
-					Team & billing
+					{m.settings_team_billing()}
 				</p>
 				{#each settingsTabs.slice(6) as tab (tab.id)}
 					<button
@@ -1198,7 +1209,7 @@
 								type="button"
 								onclick={() => (avatarUploaderOpen = true)}
 								class="absolute inset-0 flex items-center justify-center rounded-full bg-black/45 text-white opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-								aria-label="Change profile picture"
+								aria-label={m.settings_change_profile_picture()}
 							>
 								<CameraIcon class="h-6 w-6" />
 							</button>
@@ -1206,11 +1217,11 @@
 
 						<div class="min-w-0 flex-1 space-y-3">
 							<div class="space-y-2">
-								<Label for="profile-display-name">Display name</Label>
+								<Label for="profile-display-name">{m.settings_display_name()}</Label>
 								<Input
 									id="profile-display-name"
 									bind:value={profileDisplayName}
-									placeholder="Your name"
+									placeholder={m.settings_your_name()}
 									maxlength={120}
 								/>
 							</div>
@@ -1218,7 +1229,7 @@
 							<div class="flex flex-wrap gap-2">
 								<Button type="button" variant="outline" onclick={() => (avatarUploaderOpen = true)}>
 									<CameraIcon class="mr-2 h-4 w-4" />
-									Change Picture
+									{m.settings_change_picture()}
 								</Button>
 								{#if profileAvatarURL}
 									<Button
@@ -1229,7 +1240,7 @@
 										disabled={profileBusy}
 									>
 										<TrashIcon class="mr-2 h-4 w-4" />
-										Remove
+										{m.settings_remove()}
 									</Button>
 								{/if}
 							</div>
@@ -1251,7 +1262,7 @@
 							{:else}
 								<SaveIcon class="mr-2 h-4 w-4" />
 							{/if}
-							Save Profile
+							{m.settings_save_profile()}
 						</Button>
 					</div>
 				</form>
@@ -1281,11 +1292,12 @@
 							<div class="flex flex-col gap-1">
 								<span class="text-sm font-medium">{workspaceCtx.currentWorkspace?.name}</span>
 								<span class="text-sm text-muted-foreground">
-									{workspaceCtx.currentWorkspace?.organization_name || 'Personal workspace'}
+									{workspaceCtx.currentWorkspace?.organization_name ||
+										m.settings_personal_workspace()}
 								</span>
 							</div>
 							<div class="space-y-2">
-								<Label for="workspace-avatar-url">Workspace image URL</Label>
+								<Label for="workspace-avatar-url">{m.settings_workspace_image_url()}</Label>
 								<Input
 									id="workspace-avatar-url"
 									type="url"
@@ -1301,11 +1313,11 @@
 					class="flex flex-col gap-3 border-t pt-5 sm:flex-row sm:items-center sm:justify-between"
 				>
 					<div>
-						<p class="text-sm font-medium">Connected channels</p>
-						<p class="text-sm text-muted-foreground">Choose where this workspace can publish.</p>
+						<p class="text-sm font-medium">{m.settings_connected_channels()}</p>
+						<p class="text-sm text-muted-foreground">{m.settings_connected_channels_body()}</p>
 					</div>
 					<Button variant="outline" onclick={() => goto(resolve('/accounts'))}
-						>Manage social accounts</Button
+						>{m.settings_manage_accounts()}</Button
 					>
 				</div>
 			</section>
@@ -1315,10 +1327,10 @@
 					<div>
 						<h2 class="flex items-center gap-2 text-lg font-semibold">
 							<UsersIcon class="h-5 w-5 text-muted-foreground" />
-							Team
+							{m.settings_team()}
 						</h2>
 						<p class="mt-2 text-sm text-muted-foreground">
-							Invite collaborators and choose what they can do in this workspace.
+							{m.settings_team_body()}
 						</p>
 					</div>
 					<div class="rounded-md border bg-muted/20 px-3 py-2 text-sm">
@@ -1341,7 +1353,7 @@
 					class="mb-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_220px_auto]"
 				>
 					<div class="space-y-2">
-						<Label for="team-invite-email">Invite email</Label>
+						<Label for="team-invite-email">{m.settings_invite_email()}</Label>
 						<Input
 							id="team-invite-email"
 							data-testid="team-invite-email"
@@ -1353,7 +1365,7 @@
 						/>
 					</div>
 					<div class="space-y-2">
-						<Label for="team-invite-role">Role</Label>
+						<Label for="team-invite-role">{m.settings_role()}</Label>
 						<Select.Root
 							type="single"
 							value={inviteRole}
@@ -1385,7 +1397,7 @@
 							{:else}
 								<UserPlusIcon class="mr-2 h-4 w-4" />
 							{/if}
-							Send Invite
+							{m.settings_send_invite()}
 						</Button>
 					</div>
 				</form>
@@ -1395,7 +1407,7 @@
 						data-testid="team-invite-link"
 						class="mb-4 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-4"
 					>
-						<p class="text-sm font-medium text-emerald-900">Invite link created</p>
+						<p class="text-sm font-medium text-emerald-900">{m.settings_invite_created()}</p>
 						<div class="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
 							<p
 								class="min-w-0 flex-1 rounded-md bg-background px-3 py-2 font-mono text-xs break-all"
@@ -1404,7 +1416,7 @@
 							</p>
 							<Button type="button" variant="outline" size="sm" onclick={copyCreatedInviteURL}>
 								<CopyIcon class="mr-2 h-4 w-4" />
-								Copy
+								{m.common_copy()}
 							</Button>
 						</div>
 					</div>
@@ -1418,7 +1430,7 @@
 				{:else}
 					<div class="grid gap-4 lg:grid-cols-2">
 						<div>
-							<h3 class="mb-2 text-sm font-semibold">Members</h3>
+							<h3 class="mb-2 text-sm font-semibold">{m.settings_members_heading()}</h3>
 							<div data-testid="team-members-list" class="space-y-2">
 								{#each teamMembers as member (member.user_id)}
 									<div
@@ -1435,14 +1447,14 @@
 									</div>
 								{:else}
 									<p class="rounded-md border bg-muted/20 p-4 text-sm text-muted-foreground">
-										No members found for this workspace.
+										{m.settings_no_members()}
 									</p>
 								{/each}
 							</div>
 						</div>
 
 						<div>
-							<h3 class="mb-2 text-sm font-semibold">Pending Invitations</h3>
+							<h3 class="mb-2 text-sm font-semibold">{m.settings_pending_invitations()}</h3>
 							<div data-testid="team-invitations-list" class="space-y-2">
 								{#each pendingInvitations as invitation (invitation.id)}
 									<div
@@ -1463,12 +1475,12 @@
 											onclick={() => revokeWorkspaceInvitation(invitation.id)}
 											disabled={teamBusy}
 										>
-											Revoke
+											{m.settings_revoke()}
 										</Button>
 									</div>
 								{:else}
 									<p class="rounded-md border bg-muted/20 p-4 text-sm text-muted-foreground">
-										No pending invitations.
+										{m.settings_no_invitations()}
 									</p>
 								{/each}
 							</div>
@@ -1482,10 +1494,10 @@
 					<div>
 						<h2 class="flex items-center gap-2 text-lg font-semibold">
 							<CreditCardIcon class="h-5 w-5 text-muted-foreground" />
-							Billing
+							{m.settings_billing()}
 						</h2>
 						<p class="mt-2 text-sm text-muted-foreground">
-							Review the current plan and usage for your team.
+							{m.settings_billing_body()}
 						</p>
 					</div>
 					<Button variant="outline" onclick={openBillingPortal} disabled={billingPortalBusy}>
@@ -1494,7 +1506,7 @@
 						{:else}
 							<ExternalLinkIcon class="mr-2 h-4 w-4" />
 						{/if}
-						Customer Portal
+						{m.settings_customer_portal()}
 					</Button>
 				</div>
 
@@ -1507,11 +1519,12 @@
 					<div class="mb-4 grid gap-3 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
 						<div class="rounded-lg border bg-muted/20 p-4">
 							<p class="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-								Current plan
+								{m.settings_current_plan()}
 							</p>
 							<div class="mt-2 flex flex-wrap items-end gap-x-3 gap-y-1">
 								<p class="text-2xl font-semibold">
-									{currentBillingPlan?.name ?? (billingStatus.plan_id || 'No active plan')}
+									{currentBillingPlan?.name ??
+										(billingStatus.plan_id || m.settings_no_active_plan())}
 								</p>
 								<p class="pb-1 text-sm text-muted-foreground capitalize">{billingStatus.status}</p>
 							</div>
@@ -1524,18 +1537,18 @@
 								</p>
 							{:else if hasActiveBillingPlan}
 								<p class="mt-2 text-sm text-muted-foreground">
-									This organization has an active hosted plan.
+									{m.settings_active_plan()}
 								</p>
 							{:else}
 								<p class="mt-2 text-sm text-muted-foreground">
-									Start checkout to activate hosted billing for this organization.
+									{m.settings_start_checkout()}
 								</p>
 							{/if}
 						</div>
 
 						<div class="rounded-lg border bg-muted/20 p-4">
 							<p class="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-								Usage this month
+								{m.settings_usage_month()}
 							</p>
 							{#if monthlyBillingUsageRows.length}
 								<div class="mt-3 grid gap-3 sm:grid-cols-2">
@@ -1561,7 +1574,7 @@
 								</div>
 							{:else}
 								<p class="mt-2 text-sm text-muted-foreground">
-									Usage counters appear here after an active subscription snapshot is received.
+									{m.settings_usage_empty()}
 								</p>
 							{/if}
 						</div>
@@ -1572,7 +1585,7 @@
 					<summary
 						class="cursor-pointer text-sm font-medium focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
 					>
-						{hasActiveBillingPlan ? 'Compare or change plan' : 'Choose a plan'}
+						{hasActiveBillingPlan ? m.settings_compare_plan() : m.settings_choose_plan()}
 					</summary>
 					<div class="mt-4 grid gap-3 lg:grid-cols-3">
 						{#each billingPlans as plan (plan.id)}
@@ -1604,9 +1617,9 @@
 										<LoaderIcon class="mr-2 h-4 w-4 animate-spin" />
 									{/if}
 									{#if hasActiveBillingPlan && billingStatus?.plan_id === plan.id}
-										Current Plan
+										{m.settings_current_plan()}
 									{:else if hasActiveBillingPlan}
-										Use customer portal
+										{m.settings_use_portal()}
 									{:else}
 										Choose {plan.name}
 									{/if}
@@ -1628,11 +1641,10 @@
 			<section id="security" class:hidden={activeSettingsTab !== 'security'} class="scroll-mt-24">
 				<h2 class="mb-4 flex items-center gap-2 text-lg font-semibold">
 					<ShieldCheckIcon class="h-5 w-5 text-muted-foreground" />
-					Account Security
+					{m.settings_account_security()}
 				</h2>
 				<p class="mb-4 text-sm text-muted-foreground">
-					Turn on two-factor authentication for your user account with an authenticator app and
-					optional passkeys. These protections follow your login, not your workspace.
+					{m.settings_account_security_body()}
 				</p>
 
 				{#if loadingSecurity}
@@ -1647,10 +1659,10 @@
 								<div>
 									<p class="text-sm font-medium">{securityStatus?.user.email}</p>
 									<p class="text-sm text-muted-foreground">
-										Active methods:
+										{m.settings_active_methods()}
 										{securityStatus?.methods?.length
 											? (securityStatus.methods ?? []).join(', ')
-											: 'none configured'}
+											: m.settings_none_configured()}
 									</p>
 								</div>
 								<p class="text-sm text-muted-foreground">
@@ -1664,10 +1676,10 @@
 								<div>
 									<h3 class="flex items-center gap-2 font-medium">
 										<MonitorIcon class="h-4 w-4 text-muted-foreground" />
-										Active Sessions
+										{m.settings_active_sessions()}
 									</h3>
 									<p class="mt-1 text-sm text-muted-foreground">
-										Review signed-in browsers and revoke access without changing your password.
+										{m.settings_active_sessions_body()}
 									</p>
 								</div>
 								<Button
@@ -1679,7 +1691,7 @@
 									{#if authSessionsLoading}
 										<LoaderIcon class="mr-2 h-4 w-4 animate-spin" />
 									{/if}
-									Refresh
+									{m.common_refresh()}
 								</Button>
 							</div>
 
@@ -1698,7 +1710,7 @@
 								</div>
 							{:else if authSessions.length === 0}
 								<p class="rounded-md border bg-muted/20 p-4 text-sm text-muted-foreground">
-									No active web sessions found.
+									{m.settings_no_sessions()}
 								</p>
 							{:else}
 								<div class="space-y-2" data-testid="auth-session-list">
@@ -1716,13 +1728,13 @@
 														<span
 															class="rounded-full bg-primary/10 px-2 py-0.5 text-xs text-primary"
 														>
-															Current
+															{m.settings_current()}
 														</span>
 													{/if}
 												</div>
 												<p class="mt-1 text-xs text-muted-foreground">
-													{session.ip_address || 'Unknown IP'} · Last used
-													{formatSessionTime(session.last_used_at)} · Expires
+													{session.ip_address || m.settings_unknown_ip()} · {m.settings_last_used()}
+													{formatSessionTime(session.last_used_at)} · {m.settings_expires()}
 													{formatSessionTime(session.expires_at)}
 												</p>
 											</div>
@@ -1738,7 +1750,7 @@
 												{:else}
 													<LogOutIcon class="mr-2 h-4 w-4" />
 												{/if}
-												{session.current ? 'Sign out' : 'Revoke'}
+												{session.current ? m.settings_sign_out() : m.settings_revoke()}
 											</Button>
 										</div>
 									{/each}
@@ -1750,20 +1762,19 @@
 							<div class="rounded-lg border p-4">
 								<div class="mb-3 flex items-center gap-2">
 									<SmartphoneIcon class="h-4 w-4 text-muted-foreground" />
-									<h3 class="font-medium">Authenticator App</h3>
+									<h3 class="font-medium">{m.settings_authenticator()}</h3>
 								</div>
 								<p class="mb-4 text-sm text-muted-foreground">
-									Scan a QR code in Authy, 1Password, Google Authenticator, or any standard TOTP
-									app.
+									{m.settings_authenticator_body()}
 								</p>
 
 								{#if securityStatus?.totp_enabled}
 									<div class="space-y-3">
 										<div class="rounded-md bg-emerald-500/10 px-3 py-2 text-sm text-emerald-700">
-											Authenticator app is enabled.
+											{m.settings_authenticator_enabled()}
 										</div>
 										<div class="space-y-2">
-											<Label for="disable-password">Current password</Label>
+											<Label for="disable-password">{m.settings_current_password()}</Label>
 											<Input
 												id="disable-password"
 												type="password"
@@ -1776,13 +1787,13 @@
 											onclick={disableTOTP}
 											disabled={securityBusy || !currentPassword.trim()}
 										>
-											Disable Authenticator App
+											{m.settings_disable_authenticator()}
 										</Button>
 									</div>
 								{:else}
 									<div class="space-y-3">
 										<div class="space-y-2">
-											<Label for="totp-password">Current password</Label>
+											<Label for="totp-password">{m.settings_current_password()}</Label>
 											<Input
 												id="totp-password"
 												type="password"
@@ -1794,7 +1805,7 @@
 											onclick={startTOTPSetup}
 											disabled={securityBusy || !currentPassword.trim()}
 										>
-											Start Authenticator Setup
+											{m.settings_start_authenticator()}
 										</Button>
 
 										{#if totpSetupChallengeId}
@@ -1805,13 +1816,13 @@
 													class="mx-auto h-48 w-48 rounded-lg border bg-white p-2"
 												/>
 												<div class="space-y-1">
-													<p class="text-sm font-medium">Manual entry key</p>
+													<p class="text-sm font-medium">{m.settings_manual_key()}</p>
 													<p class="font-mono text-xs break-all text-muted-foreground">
 														{totpManualEntryKey}
 													</p>
 												</div>
 												<div class="space-y-2">
-													<Label for="totp-code">Enter the 6-digit code from your app</Label>
+													<Label for="totp-code">{m.settings_totp_code()}</Label>
 													<Input
 														id="totp-code"
 														bind:value={totpCode}
@@ -1825,7 +1836,7 @@
 													onclick={confirmTOTPSetup}
 													disabled={securityBusy || totpCode.trim().length !== 6}
 												>
-													Confirm Authenticator App
+													{m.settings_confirm_authenticator()}
 												</Button>
 											</div>
 										{/if}
@@ -1836,15 +1847,15 @@
 							<div class="rounded-lg border p-4">
 								<div class="mb-3 flex items-center gap-2">
 									<KeyRoundIcon class="h-4 w-4 text-muted-foreground" />
-									<h3 class="font-medium">Passkeys</h3>
+									<h3 class="font-medium">{m.settings_passkeys()}</h3>
 								</div>
 								<p class="mb-4 text-sm text-muted-foreground">
-									Add device-backed passkeys as a second factor for faster sign-ins.
+									{m.settings_passkeys_body()}
 								</p>
 
 								<div class="space-y-3">
 									<div class="space-y-2">
-										<Label for="passkey-password">Current password</Label>
+										<Label for="passkey-password">{m.settings_current_password()}</Label>
 										<Input
 											id="passkey-password"
 											type="password"
@@ -1853,7 +1864,7 @@
 										/>
 									</div>
 									<div class="space-y-2">
-										<Label for="passkey-name">Passkey name</Label>
+										<Label for="passkey-name">{m.settings_passkey_name()}</Label>
 										<Input
 											id="passkey-name"
 											bind:value={newPasskeyName}
@@ -1861,7 +1872,7 @@
 										/>
 									</div>
 									<Button onclick={addPasskey} disabled={securityBusy || !currentPassword.trim()}>
-										Add Passkey
+										{m.settings_add_passkey()}
 									</Button>
 								</div>
 
@@ -1886,12 +1897,12 @@
 													onclick={() => removePasskey(passkey.id)}
 													disabled={securityBusy || !currentPassword.trim()}
 												>
-													Remove
+													{m.settings_remove()}
 												</Button>
 											</div>
 										{/each}
 									{:else}
-										<p class="text-sm text-muted-foreground">No passkeys added yet.</p>
+										<p class="text-sm text-muted-foreground">{m.settings_no_passkeys()}</p>
 									{/if}
 								</div>
 							</div>
@@ -1911,16 +1922,15 @@
 			<section id="tokens" class:hidden={activeSettingsTab !== 'developer'} class="scroll-mt-24">
 				<h2 class="mb-4 flex items-center gap-2 text-lg font-semibold">
 					<TerminalIcon class="h-5 w-5 text-muted-foreground" />
-					CLI Devices & API Tokens
+					{m.settings_tokens_heading()}
 				</h2>
 				<p class="mb-4 text-sm text-muted-foreground">
-					Create dedicated tokens for ChatGPT, Claude, the MCP server, the OpenPost CLI, CI, cron,
-					and other automation. Revoke any token here without changing your password.
+					{m.settings_tokens_body()}
 				</p>
 
 				<div class="mb-4 grid gap-3 lg:grid-cols-[1fr_240px_240px_auto]">
 					<div class="space-y-2">
-						<Label for="api-token-name">New token name</Label>
+						<Label for="api-token-name">{m.settings_token_name()}</Label>
 						<Input
 							id="api-token-name"
 							bind:value={apiTokenName}
@@ -1928,7 +1938,7 @@
 						/>
 					</div>
 					<div class="space-y-2">
-						<Label for="api-token-scope">Token scope</Label>
+						<Label for="api-token-scope">{m.settings_token_scope()}</Label>
 						<Select.Root
 							type="single"
 							value={apiTokenScope}
@@ -1950,7 +1960,7 @@
 						</Select.Root>
 					</div>
 					<div class="space-y-2">
-						<Label for="api-token-workspace">Access boundary</Label>
+						<Label for="api-token-workspace">{m.settings_access_boundary()}</Label>
 						<Select.Root
 							type="single"
 							value={apiTokenWorkspaceScope}
@@ -1980,7 +1990,7 @@
 							{#if apiTokenBusy}
 								<LoaderIcon class="mr-2 h-4 w-4 animate-spin" />
 							{/if}
-							Create Token
+							{m.settings_create_token()}
 						</Button>
 					</div>
 				</div>
@@ -1989,7 +1999,7 @@
 					<div
 						class="mb-4 rounded-lg border border-amber-300/50 bg-amber-50 p-4 text-sm text-amber-950"
 					>
-						<p class="font-medium">Copy this token now. It will not be shown again.</p>
+						<p class="font-medium">{m.settings_copy_token_now()}</p>
 						<p class="mt-2 font-mono text-xs break-all">{createdAPIToken}</p>
 					</div>
 				{/if}
@@ -2001,7 +2011,7 @@
 					</div>
 				{:else if apiTokens.length === 0}
 					<p class="rounded-md border bg-muted/20 p-4 text-sm text-muted-foreground">
-						No API tokens or CLI devices are currently authorized.
+						{m.settings_no_tokens()}
 					</p>
 				{:else}
 					<div class="space-y-2">
@@ -2031,7 +2041,7 @@
 									onclick={() => revokeAPIToken(token.id)}
 									disabled={apiTokenBusy}
 								>
-									Revoke
+									{m.settings_revoke()}
 								</Button>
 							</div>
 						{/each}
@@ -2043,10 +2053,10 @@
 						<div>
 							<h3 class="flex items-center gap-2 text-sm font-semibold">
 								<ActivityIcon class="h-4 w-4 text-muted-foreground" />
-								Recent MCP Activity
+								{m.settings_mcp_activity()}
 							</h3>
 							<p class="mt-1 text-sm text-muted-foreground">
-								Recent tool calls from ChatGPT, Claude, the CLI proxy, and other MCP clients.
+								{m.settings_mcp_activity_body()}
 							</p>
 						</div>
 						<Button
@@ -2058,7 +2068,7 @@
 							{#if mcpActivityLoading}
 								<LoaderIcon class="mr-2 h-4 w-4 animate-spin" />
 							{/if}
-							Refresh
+							{m.common_refresh()}
 						</Button>
 					</div>
 
@@ -2081,7 +2091,7 @@
 							data-testid="mcp-activity-empty"
 							class="rounded-md border bg-muted/20 p-4 text-sm text-muted-foreground"
 						>
-							No MCP tool calls have been recorded yet.
+							{m.settings_no_mcp_activity()}
 						</p>
 					{:else}
 						<div data-testid="mcp-activity-list" class="space-y-2">
@@ -2133,11 +2143,11 @@
 			>
 				<h2 class="mb-4 flex items-center gap-2 text-lg font-semibold">
 					<ClockIcon class="h-5 w-5 text-muted-foreground" />
-					Date & Time
+					{m.settings_date_time()}
 				</h2>
 				<div class="grid gap-4 sm:grid-cols-2">
 					<div class="space-y-2">
-						<label class="text-sm font-medium" for="timezone-select">Timezone</label>
+						<label class="text-sm font-medium" for="timezone-select">{m.settings_timezone()}</label>
 						<Select.Root
 							type="single"
 							value={workspaceCtx.settings.timezone}
@@ -2158,27 +2168,29 @@
 							</Select.Content>
 						</Select.Root>
 						<p class="text-sm text-muted-foreground">
-							Detected from your browser the first time a workspace loads, then saved here.
+							{m.settings_timezone_body()}
 						</p>
 					</div>
 
 					<div class="space-y-2">
-						<label class="text-sm font-medium" for="week-start-select">Week Starts On</label>
+						<label class="text-sm font-medium" for="week-start-select"
+							>{m.settings_week_starts()}</label
+						>
 						<Select.Root
 							type="single"
 							value={String(workspaceCtx.settings.week_start)}
 							onValueChange={(v) => handleWeekStartChange(Number(v))}
 						>
 							<Select.Trigger id="week-start-select" class="w-full">
-								{workspaceCtx.settings.week_start === 0 ? 'Sunday' : 'Monday'}
+								{workspaceCtx.settings.week_start === 0 ? m.settings_sunday() : m.settings_monday()}
 							</Select.Trigger>
 							<Select.Content>
-								<Select.Item value="0">Sunday</Select.Item>
-								<Select.Item value="1">Monday</Select.Item>
+								<Select.Item value="0">{m.settings_sunday()}</Select.Item>
+								<Select.Item value="1">{m.settings_monday()}</Select.Item>
 							</Select.Content>
 						</Select.Root>
 						<p class="text-sm text-muted-foreground">
-							Defaulted from your locale on first load and used for calendar layout.
+							{m.settings_week_start_body()}
 						</p>
 					</div>
 				</div>
@@ -2191,10 +2203,12 @@
 			>
 				<h2 class="mb-4 flex items-center gap-2 text-lg font-semibold">
 					<ImageIcon class="h-5 w-5 text-muted-foreground" />
-					Media Cleanup
+					{m.settings_media_cleanup()}
 				</h2>
 				<div class="space-y-2">
-					<label class="text-sm font-medium" for="cleanup-select">Auto-delete unused media</label>
+					<label class="text-sm font-medium" for="cleanup-select"
+						>{m.settings_auto_delete_media()}</label
+					>
 					<Select.Root
 						type="single"
 						value={String(workspaceCtx.settings.media_cleanup_days)}
@@ -2202,7 +2216,7 @@
 					>
 						<Select.Trigger id="cleanup-select" class="w-full">
 							{cleanupDaysOptions.find((o) => o.value === workspaceCtx.settings.media_cleanup_days)
-								?.label || 'Disabled'}
+								?.label || m.settings_disabled()}
 						</Select.Trigger>
 						<Select.Content>
 							{#each cleanupDaysOptions as option (option.value)}
@@ -2211,8 +2225,7 @@
 						</Select.Content>
 					</Select.Root>
 					<p class="text-sm text-muted-foreground">
-						Automatically delete unused, non-favorited media after this period. Favorited media is
-						always kept.
+						{m.settings_auto_delete_media_body()}
 					</p>
 				</div>
 			</section>
@@ -2225,7 +2238,7 @@
 				<div class="mb-4 flex items-center justify-between">
 					<h2 class="flex items-center gap-2 text-lg font-semibold">
 						<CalendarIcon class="h-5 w-5 text-muted-foreground" />
-						Posting Schedule
+						{m.settings_posting_schedule()}
 					</h2>
 					<Button
 						onclick={() => (showSuggestSchedule = !showSuggestSchedule)}
@@ -2233,22 +2246,21 @@
 						size="sm"
 					>
 						<SparklesIcon class="mr-2 h-4 w-4" />
-						Suggest Weekly Pattern
+						{m.settings_suggest_pattern()}
 					</Button>
 				</div>
 				<p class="mb-4 text-sm text-muted-foreground">
-					Define reusable posting times in your workspace timezone. Toggle each weekday checkbox to
-					decide when that time is active. The "Suggest Time" action will use these slots first.
+					{m.settings_schedule_body()}
 				</p>
 
 				<div class="mb-4 rounded-xl border bg-muted/20 p-4">
 					<div class="grid gap-4 lg:grid-cols-[180px_1fr_auto]">
 						<div class="space-y-2">
-							<label class="text-sm font-medium" for="new-time">Add time row</label>
+							<label class="text-sm font-medium" for="new-time">{m.settings_add_time_row()}</label>
 							<Input id="new-time" bind:value={newTimeInput} type="time" step="900" />
 						</div>
 						<div class="space-y-2">
-							<span class="text-sm font-medium">Active days</span>
+							<span class="text-sm font-medium">{m.settings_active_days()}</span>
 							<div class="flex flex-wrap gap-3">
 								{#each dayOrder as dayIndex (dayIndex)}
 									<label
@@ -2258,7 +2270,7 @@
 											checked={newTimeDays.includes(dayIndex)}
 											onCheckedChange={() => toggleNewDay(dayIndex)}
 										/>
-										<span>{dayShortNames[dayIndex]}</span>
+										<span>{localizedWeekday(dayIndex)}</span>
 									</label>
 								{/each}
 							</div>
@@ -2266,7 +2278,7 @@
 						<div class="flex items-end">
 							<Button onclick={addTimeRow} class="w-full lg:w-auto">
 								<PlusIcon class="mr-2 h-4 w-4" />
-								Add Time
+								{m.settings_add_time()}
 							</Button>
 						</div>
 					</div>
@@ -2274,7 +2286,9 @@
 						<p class="mt-3 text-xs text-destructive">{newTimeError}</p>
 					{:else}
 						<p class="mt-3 text-xs text-muted-foreground">
-							New rows are created in {getTimezoneLabel(workspaceCtx.settings.timezone)}.
+							{m.settings_new_rows_timezone({
+								timezone: getTimezoneLabel(workspaceCtx.settings.timezone)
+							})}
 						</p>
 					{/if}
 				</div>
@@ -2284,7 +2298,7 @@
 						<div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
 							<div class="space-y-2">
 								<label class="text-sm font-medium" for="posts-per-day"
-									>Suggested posts per day</label
+									>{m.settings_suggested_posts_day()}</label
 								>
 								<Select.Root
 									type="single"
@@ -2303,13 +2317,13 @@
 							</div>
 							<div class="flex gap-2">
 								<Button onclick={() => (showSuggestSchedule = false)} variant="outline" size="sm"
-									>Cancel</Button
+									>{m.common_cancel()}</Button
 								>
 								<Button onclick={generateSuggestedSchedule} size="sm" disabled={generatingSchedule}>
 									{#if generatingSchedule}
 										<LoaderIcon class="mr-2 h-4 w-4 animate-spin" />
 									{/if}
-									Generate
+									{m.settings_generate()}
 								</Button>
 							</div>
 						</div>
@@ -2330,13 +2344,13 @@
 							<div
 								class="px-4 py-3 text-xs font-semibold tracking-wide text-muted-foreground uppercase"
 							>
-								Time
+								{m.settings_time()}
 							</div>
 							{#each dayOrder as dayIndex (dayIndex)}
 								<div
 									class="px-2 py-3 text-center text-xs font-semibold tracking-wide text-muted-foreground uppercase"
 								>
-									{dayShortNames[dayIndex]}
+									{localizedWeekday(dayIndex)}
 								</div>
 							{/each}
 							<div class="px-2 py-3"></div>
@@ -2344,7 +2358,7 @@
 
 						{#if scheduleRows.length === 0}
 							<div class="px-4 py-10 text-center text-sm text-muted-foreground">
-								No posting times yet. Add a row above or generate a suggested weekly pattern.
+								{m.settings_no_posting_times()}
 							</div>
 						{:else}
 							{#each scheduleRows as row (row.key)}
@@ -2362,7 +2376,10 @@
 											<Checkbox
 												checked={Boolean(row.days[dayIndex])}
 												onCheckedChange={() => toggleScheduleCell(row, dayIndex)}
-												aria-label={`Toggle ${dayNames[dayIndex]} ${formatTime(row.local_hour, row.local_minute)}`}
+												aria-label={m.settings_toggle_schedule_cell({
+													day: localizedWeekday(dayIndex, 'long'),
+													time: formatTime(row.local_hour, row.local_minute)
+												})}
 											/>
 										</div>
 									{/each}
@@ -2372,7 +2389,9 @@
 											size="icon"
 											class="h-8 w-8"
 											onclick={() => removeTimeRow(row)}
-											aria-label={`Remove ${formatTime(row.local_hour, row.local_minute)} row`}
+											aria-label={m.settings_remove_time_row({
+												time: formatTime(row.local_hour, row.local_minute)
+											})}
 										>
 											<TrashIcon class="h-4 w-4" />
 										</Button>
@@ -2391,14 +2410,16 @@
 			>
 				<h2 class="mb-4 flex items-center gap-2 text-lg font-semibold">
 					<ClockIcon class="h-5 w-5 text-muted-foreground" />
-					Advanced scheduling
+					{m.settings_advanced_scheduling()}
 				</h2>
 				<div class="space-y-4">
 					<p class="text-sm text-muted-foreground">
-						Optional timing rules for teams that need variation or queue spillover.
+						{m.settings_advanced_scheduling_body()}
 					</p>
 					<div class="space-y-2">
-						<label class="text-sm font-medium" for="random-delay">Time variation</label>
+						<label class="text-sm font-medium" for="random-delay"
+							>{m.settings_time_variation()}</label
+						>
 						<Select.Root
 							type="single"
 							value={String(workspaceCtx.settings.random_delay_minutes)}
@@ -2406,39 +2427,41 @@
 						>
 							<Select.Trigger id="random-delay" class="w-full sm:w-64">
 								{#if workspaceCtx.settings.random_delay_minutes === 0}
-									No delay (exact time)
+									{m.settings_no_delay()}
 								{:else}
-									±{workspaceCtx.settings.random_delay_minutes} minutes
+									±{m.settings_minutes({
+										minutes: workspaceCtx.settings.random_delay_minutes
+									})}
 								{/if}
 							</Select.Trigger>
 							<Select.Content>
-								<Select.Item value="0">No delay (exact time)</Select.Item>
-								<Select.Item value="5">±5 minutes</Select.Item>
-								<Select.Item value="10">±10 minutes</Select.Item>
-								<Select.Item value="15">±15 minutes</Select.Item>
-								<Select.Item value="30">±30 minutes</Select.Item>
-								<Select.Item value="45">±45 minutes</Select.Item>
-								<Select.Item value="60">±1 hour</Select.Item>
+								<Select.Item value="0">{m.settings_no_delay()}</Select.Item>
+								{#each [5, 10, 15, 30, 45] as delay (delay)}
+									<Select.Item value={String(delay)}
+										>±{m.settings_minutes({ minutes: delay })}</Select.Item
+									>
+								{/each}
+								<Select.Item value="60">±{m.settings_one_hour()}</Select.Item>
 							</Select.Content>
 						</Select.Root>
 					</div>
 					<div class="space-y-2">
-						<label class="text-sm font-medium" for="draft-gap">When today's queue is full</label>
+						<label class="text-sm font-medium" for="draft-gap">{m.settings_queue_full()}</label>
 						<Input
 							id="draft-gap"
 							type="text"
 							value={draftGapInput}
 							oninput={(e) => handleDraftGapChange((e.target as HTMLInputElement).value)}
-							placeholder="e.g. 45m, 2h, 0"
+							placeholder={m.settings_draft_gap_placeholder()}
 							class={draftGapError ? 'border-destructive' : ''}
 						/>
 						{#if draftGapError}
 							<p class="text-xs text-destructive">{draftGapError}</p>
 						{:else}
 							<p class="text-xs text-muted-foreground">
-								When a day has no unused schedule slots left, "Suggest Time" will place the next
-								post at least {workspaceCtx.settings.draft_gap_minutes} minutes after the latest scheduled
-								post that day. Use `0` to disable the spillover rule.
+								{m.settings_queue_spillover_body({
+									minutes: workspaceCtx.settings.draft_gap_minutes
+								})}
 							</p>
 						{/if}
 					</div>
@@ -2452,15 +2475,15 @@
 			>
 				<h2 class="mb-4 flex items-center gap-2 text-lg font-semibold">
 					<ClockIcon class="h-5 w-5 text-muted-foreground" />
-					Time picker range
+					{m.settings_time_picker_range()}
 				</h2>
 				<div class="space-y-4">
 					<p class="text-sm text-muted-foreground">
-						Choose the hours and interval shown in the composer time picker.
+						{m.settings_time_picker_range_body()}
 					</p>
 					<div class="grid gap-4 sm:grid-cols-3">
 						<div class="space-y-2">
-							<label class="text-sm font-medium" for="start-time">Start time</label>
+							<label class="text-sm font-medium" for="start-time">{m.settings_start_time()}</label>
 							<Select.Root
 								type="single"
 								value={String(workspaceCtx.settings.slot_start_hour)}
@@ -2479,7 +2502,7 @@
 							</Select.Root>
 						</div>
 						<div class="space-y-2">
-							<label class="text-sm font-medium" for="end-time">End time</label>
+							<label class="text-sm font-medium" for="end-time">{m.settings_end_time()}</label>
 							<Select.Root
 								type="single"
 								value={String(workspaceCtx.settings.slot_end_hour)}
@@ -2498,13 +2521,13 @@
 							</Select.Root>
 						</div>
 						<div class="space-y-2">
-							<label class="text-sm font-medium" for="interval">Interval</label>
+							<label class="text-sm font-medium" for="interval">{m.settings_interval()}</label>
 							<input
 								id="interval"
 								type="text"
 								value={intervalInput}
 								oninput={(e) => handleIntervalChange((e.target as HTMLInputElement).value)}
-								placeholder="e.g. 15m, 30 min, 1h"
+								placeholder={m.settings_interval_placeholder()}
 								class="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm {intervalError
 									? 'border-destructive'
 									: ''}"
@@ -2513,7 +2536,9 @@
 								<p class="text-xs text-destructive">{intervalError}</p>
 							{:else}
 								<p class="text-xs text-muted-foreground">
-									Current: {workspaceCtx.settings.slot_interval_minutes} minutes
+									{m.settings_current_interval({
+										minutes: workspaceCtx.settings.slot_interval_minutes
+									})}
 								</p>
 							{/if}
 						</div>
@@ -2531,7 +2556,7 @@
 					{:else}
 						<SaveIcon class="mr-2 h-4 w-4" />
 					{/if}
-					Save Changes
+					{m.settings_save_changes()}
 				</Button>
 			</div>
 		</div>

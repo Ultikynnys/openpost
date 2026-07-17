@@ -13,6 +13,7 @@
 	import ShuffleIcon from 'lucide-svelte/icons/shuffle';
 	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
 	import { goto } from '$app/navigation';
+	import { m } from '$lib/paraglide/messages';
 
 	interface Prompt {
 		id: string;
@@ -147,7 +148,7 @@
 </script>
 
 <svelte:head>
-	<title>Prompts - OpenPost</title>
+	<title>{m.prompts_page_title()}</title>
 </svelte:head>
 
 {#if toastMessage}
@@ -156,7 +157,7 @@
 	>
 		<span class="text-sm">{toastMessage}</span>
 		<button onclick={() => (toastMessage = '')}>
-			<span class="sr-only">Close</span>
+			<span class="sr-only">{m.common_close()}</span>
 			<svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
 				<path d="M18 6L6 18M6 6l12 12" />
 			</svg>
@@ -165,7 +166,7 @@
 {/if}
 
 <PageContainer
-	title="Writing Prompts"
+	title={m.prompts_title()}
 	description="Get inspired with writing prompts for your social media content"
 	icon={LightbulbIcon}
 	loading={!workspaceCtx.currentWorkspace}
@@ -187,11 +188,11 @@
 						}}
 					>
 						<Select.Trigger class="w-40">
-							{selectedCategory === 'all' ? 'All Categories' : selectedCategory}
+							{selectedCategory === 'all' ? m.prompts_all_categories() : selectedCategory}
 						</Select.Trigger>
 						<Select.Content>
-							<Select.Item value="all">All Categories</Select.Item>
-							{#each categories as category}
+							<Select.Item value="all">{m.prompts_all_categories()}</Select.Item>
+							{#each categories as category (category)}
 								<Select.Item value={category}>{category}</Select.Item>
 							{/each}
 						</Select.Content>
@@ -201,11 +202,11 @@
 			<div class="flex gap-2">
 				<Button onclick={getRandomPrompt} variant="outline" class="gap-2">
 					<ShuffleIcon class="h-4 w-4" />
-					Random
+					{m.prompts_random()}
 				</Button>
 				<Button onclick={() => (showAddPrompt = true)} class="gap-2">
 					<PlusIcon class="h-4 w-4" />
-					Add Prompt
+					{m.prompts_add()}
 				</Button>
 			</div>
 		</div>
@@ -213,7 +214,7 @@
 		<!-- Prompts Grid -->
 		{#if loading}
 			<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-				{#each Array(6) as _}
+				{#each Array(6) as _, index (index)}
 					<div class="h-32 rounded-lg bg-muted">
 						<Skeleton class="h-full w-full" />
 					</div>
@@ -222,9 +223,9 @@
 		{:else if prompts.length === 0}
 			<div class="rounded-lg border border-dashed p-12 text-center">
 				<LightbulbIcon class="mx-auto h-12 w-12 text-muted-foreground" />
-				<h3 class="mt-4 text-base font-semibold">No prompts found</h3>
+				<h3 class="mt-4 text-base font-semibold">{m.prompts_empty()}</h3>
 				<p class="mt-2 text-sm text-muted-foreground">
-					Get started by adding your first writing prompt.
+					{m.prompts_empty_body()}
 				</p>
 			</div>
 		{:else}
@@ -238,13 +239,13 @@
 			)}
 
 			<div class="space-y-6">
-				{#each Object.entries(groupedPrompts) as [category, categoryPrompts]}
+				{#each Object.entries(groupedPrompts) as [category, categoryPrompts] (category)}
 					<section>
 						<h2 class="mb-3 text-xs font-semibold tracking-wider text-muted-foreground uppercase">
 							{category}
 						</h2>
 						<div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-							{#each categoryPrompts as prompt}
+							{#each categoryPrompts as prompt (prompt.id)}
 								<div
 									role="button"
 									tabindex="0"
@@ -300,20 +301,21 @@
 				}}
 			>
 				<div class="w-full max-w-md rounded-lg border bg-background p-6 shadow-lg">
-					<h3 class="mb-4 text-lg font-semibold">Add New Prompt</h3>
+					<h3 class="mb-4 text-lg font-semibold">{m.prompts_add_title()}</h3>
 					<div class="space-y-4">
 						<div class="space-y-2">
-							<label class="text-sm font-medium" for="prompt-text">Prompt Text</label>
+							<label class="text-sm font-medium" for="prompt-text">{m.prompts_text()}</label>
 							<textarea
 								id="prompt-text"
 								bind:value={newPromptText}
-								placeholder="What's your favorite tool for productivity and why?"
+								placeholder={m.prompts_text_placeholder()}
 								rows={3}
 								class="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm"
 							></textarea>
 						</div>
 						<div class="space-y-2">
-							<label class="text-sm font-medium" for="prompt-category">Category</label>
+							<label class="text-sm font-medium" for="prompt-category">{m.prompts_category()}</label
+							>
 							{#if loadingCategories}
 								<div class="h-9 animate-pulse rounded-md bg-muted"></div>
 							{:else}
@@ -323,10 +325,10 @@
 									onValueChange={(v) => (newPromptCategory = v)}
 								>
 									<Select.Trigger id="prompt-category" class="w-full">
-										{newPromptCategory || 'Select a category'}
+										{newPromptCategory || m.prompts_select_category()}
 									</Select.Trigger>
 									<Select.Content>
-										{#each categories as category}
+										{#each categories as category (category)}
 											<Select.Item value={category}>{category}</Select.Item>
 										{/each}
 									</Select.Content>
@@ -335,7 +337,9 @@
 						</div>
 					</div>
 					<div class="mt-6 flex justify-end gap-2">
-						<Button onclick={() => (showAddPrompt = false)} variant="outline">Cancel</Button>
+						<Button onclick={() => (showAddPrompt = false)} variant="outline"
+							>{m.common_cancel()}</Button
+						>
 						<Button
 							onclick={addPrompt}
 							disabled={!newPromptText.trim() || !newPromptCategory || submitting}

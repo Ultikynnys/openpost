@@ -38,7 +38,9 @@
 	let authState = $derived($auth);
 	const sidebar = Sidebar.useSidebar();
 	const currentPath = $derived(page.url.pathname);
-	const currentWorkspaceName = $derived(workspaceCtx.currentWorkspace?.name ?? 'Select workspace');
+	const currentWorkspaceName = $derived(
+		workspaceCtx.currentWorkspace?.name ?? m.sidebar_select_workspace()
+	);
 	const currentWorkspaceAvatarURL = $derived(workspaceAvatarURL(workspaceCtx.currentWorkspace));
 	const currentWorkspaceInitials = $derived(workspaceInitials(workspaceCtx.currentWorkspace));
 	const userDisplayName = $derived(
@@ -47,7 +49,11 @@
 	const userAvatarURL = $derived(authState.user?.avatar_url ?? '');
 	const userInitials = $derived(initials(userDisplayName || authState.user?.email || 'User'));
 	const navigationItems = $derived(
-		primaryNavigation.map((item) => ({ ...item, icon: navigationIcon(item.id) }))
+		primaryNavigation.map((item) => ({
+			...item,
+			label: navigationLabel(item.id),
+			icon: navigationIcon(item.id)
+		}))
 	);
 	const newPostItem = $derived(navigationItems.find((item) => item.id === 'new')!);
 	const workspaceNavigationItems = $derived(
@@ -69,6 +75,34 @@
 				return AccountsIcon;
 			default:
 				return SettingsIcon;
+		}
+	}
+
+	function navigationLabel(id: PrimaryNavigationItem['id']) {
+		switch (id) {
+			case 'new':
+				return m.sidebar_new_post();
+			case 'calendar':
+				return m.sidebar_calendar();
+			case 'posts':
+				return m.sidebar_activity();
+			case 'media':
+				return m.sidebar_media();
+			case 'accounts':
+				return m.sidebar_accounts();
+			case 'settings':
+				return m.sidebar_settings();
+		}
+	}
+
+	function appearanceLabel(mode: AppearanceMode) {
+		switch (mode) {
+			case 'light':
+				return m.sidebar_appearance_light();
+			case 'dark':
+				return m.sidebar_appearance_dark();
+			default:
+				return m.sidebar_appearance_system();
 		}
 	}
 
@@ -123,7 +157,7 @@
 		<a
 			href={resolve('/')}
 			class="flex h-10 items-center gap-2 rounded-md px-2 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0 focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-none"
-			aria-label="OpenPost home"
+			aria-label={m.common_openpost()}
 		>
 			<Logo width={26} height={26} showText={sidebar.state !== 'collapsed'} />
 		</a>
@@ -135,7 +169,7 @@
 						{...props}
 						size="lg"
 						class="border border-sidebar-border bg-sidebar-accent/35 data-[state=open]:bg-sidebar-accent"
-						tooltipContent="Switch workspace"
+						tooltipContent={m.sidebar_switch_workspace()}
 					>
 						<Avatar.Root class="size-8 rounded-md">
 							{#if currentWorkspaceAvatarURL}
@@ -147,7 +181,9 @@
 						</Avatar.Root>
 						<div class="grid min-w-0 flex-1 text-start leading-tight">
 							<span class="truncate text-sm font-medium">{currentWorkspaceName}</span>
-							<span class="truncate text-xs text-sidebar-foreground/62">Workspace</span>
+							<span class="truncate text-xs text-sidebar-foreground/62"
+								>{m.sidebar_workspace()}</span
+							>
 						</div>
 						<ChevronsUpDownIcon class="ms-auto size-4" />
 					</Sidebar.MenuButton>
@@ -159,7 +195,7 @@
 				align="start"
 				sideOffset={6}
 			>
-				<DropdownMenu.Label>Switch workspace</DropdownMenu.Label>
+				<DropdownMenu.Label>{m.sidebar_switch_workspace()}</DropdownMenu.Label>
 				{#each workspaceCtx.workspaces as workspace (workspace.id)}
 					<DropdownMenu.Item onclick={() => switchWorkspace(workspace)} class="gap-3 py-2">
 						<Avatar.Root class="size-8 rounded-md">
@@ -176,12 +212,12 @@
 					</DropdownMenu.Item>
 				{/each}
 				{#if workspaceCtx.workspaces.length === 0}
-					<DropdownMenu.Item disabled>No workspaces</DropdownMenu.Item>
+					<DropdownMenu.Item disabled>{m.sidebar_no_workspaces()}</DropdownMenu.Item>
 				{/if}
 				<DropdownMenu.Separator />
 				<DropdownMenu.Item onclick={() => navigate('/settings?tab=general')}>
 					<SettingsIcon class="mr-2 size-4 text-muted-foreground" />
-					Workspace settings
+					{m.sidebar_workspace_settings()}
 				</DropdownMenu.Item>
 			</DropdownMenu.Content>
 		</DropdownMenu.Root>
@@ -213,7 +249,7 @@
 				<Sidebar.GroupLabel
 					class="px-2 text-[11px] tracking-[0.12em] text-sidebar-foreground/48 uppercase"
 				>
-					Publish
+					{m.sidebar_publish()}
 				</Sidebar.GroupLabel>
 				<Sidebar.GroupContent>
 					<Sidebar.Menu class="gap-1">
@@ -240,11 +276,11 @@
 
 	<Sidebar.Footer class="border-t border-sidebar-border p-2">
 		{#if showDesktopPlanner}
-			<div class="pb-2">
+			<div class="pb-1">
 				<p
 					class="flex h-7 items-center px-2 text-[11px] tracking-[0.1em] text-sidebar-foreground/52 uppercase"
 				>
-					Workspace
+					{m.sidebar_workspace()}
 				</p>
 				<Sidebar.Menu class="grid grid-cols-2 gap-1">
 					{#each workspaceNavigationItems as item (item.id)}
@@ -256,14 +292,14 @@
 								onclick={() => navigate(item.href)}
 							>
 								<item.icon class="size-3.5" />
-								<span>{item.id === 'accounts' ? 'Accounts' : item.label}</span>
+								<span>{item.label}</span>
 							</Sidebar.MenuButton>
 						</Sidebar.MenuItem>
 					{/each}
 				</Sidebar.Menu>
 			</div>
 		{/if}
-		<Sidebar.Menu class={showDesktopPlanner ? 'border-t border-sidebar-border pt-2' : ''}>
+		<Sidebar.Menu class={showDesktopPlanner ? 'border-t border-sidebar-border pt-1' : ''}>
 			<Sidebar.MenuItem>
 				<DropdownMenu.Root>
 					<DropdownMenu.Trigger>
@@ -272,7 +308,7 @@
 								{...props}
 								size="lg"
 								class="data-[state=open]:bg-sidebar-accent"
-								tooltipContent="Profile and appearance"
+								tooltipContent={m.sidebar_profile_appearance()}
 							>
 								<Avatar.Root class="size-8 rounded-full">
 									{#if userAvatarURL}<Avatar.Image src={userAvatarURL} alt={userDisplayName} />{/if}
@@ -300,20 +336,20 @@
 					>
 						<DropdownMenu.Item onclick={() => navigate('/settings?tab=profile')}>
 							<UserIcon class="mr-2 size-4 text-muted-foreground" />
-							Profile & security
+							{m.sidebar_profile_security()}
 						</DropdownMenu.Item>
 						<DropdownMenu.Sub>
 							<DropdownMenu.SubTrigger>
 								<PaletteIcon class="mr-2 size-4 text-muted-foreground" />
-								Appearance
+								{m.sidebar_appearance()}
 								<span class="ml-auto text-muted-foreground capitalize"
-									>{userPrefersMode.current}</span
+									>{appearanceLabel(userPrefersMode.current as AppearanceMode)}</span
 								>
 							</DropdownMenu.SubTrigger>
 							<DropdownMenu.SubContent class="w-40">
 								{#each ['system', 'light', 'dark'] as appearance (appearance)}
 									<DropdownMenu.Item onclick={() => chooseAppearance(appearance as AppearanceMode)}>
-										<span class="capitalize">{appearance}</span>
+										<span>{appearanceLabel(appearance as AppearanceMode)}</span>
 										{#if userPrefersMode.current === appearance}
 											<CheckIcon class="ml-auto size-4 text-primary" />
 										{/if}

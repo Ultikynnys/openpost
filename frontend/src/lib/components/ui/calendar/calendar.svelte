@@ -5,6 +5,7 @@
 	import type { ButtonVariant } from '../button/button.svelte';
 	import { isEqualMonth, type DateValue } from '@internationalized/date';
 	import type { Snippet } from 'svelte';
+	import { m } from '$lib/paraglide/messages';
 
 	let {
 		ref = $bindable(null),
@@ -56,6 +57,7 @@ get along, so we shut typescript up by casting `value` to `never`.
 	{locale}
 	{monthFormat}
 	{yearFormat}
+	calendarLabel={m.calendar_label()}
 	{...restProps}
 >
 	{#snippet children({ months, weekdays })}

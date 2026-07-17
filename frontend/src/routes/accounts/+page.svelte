@@ -19,6 +19,7 @@
 	import UsersIcon from 'lucide-svelte/icons/users';
 	import XIcon from 'lucide-svelte/icons/x';
 	import { Skeleton } from '$lib/components/ui/skeleton';
+	import { m } from '$lib/paraglide/messages';
 
 	let workspaces = $state<Workspace[] | null>(null);
 	let selectedWorkspaceId = $state('');
@@ -34,7 +35,7 @@
 	let customMastodonLoading = $state(false);
 	let selectedWorkspaceName = $derived(
 		workspaces?.find((workspace) => workspace.id === selectedWorkspaceId)?.name ||
-			'Select workspace'
+			m.accounts_select_workspace()
 	);
 	let toastMessage = $state('');
 	let toastActionHref = $state('');
@@ -74,13 +75,15 @@
 		return fallback;
 	}
 
-	function showConnectError(value: unknown, fallback = 'Could not start account connection') {
+	function showConnectError(value: unknown, fallback: string = m.accounts_connect_failed()) {
 		const message = connectErrorMessage(value, fallback);
 		const lower = message.toLowerCase();
 		const needsBilling = lower.includes('subscription') || lower.includes('social account limit');
 		showToast(
 			message,
-			needsBilling ? { href: '/settings?tab=billing#billing', label: 'Open billing' } : undefined
+			needsBilling
+				? { href: '/settings?tab=billing#billing', label: m.accounts_open_billing() }
+				: undefined
 		);
 	}
 
@@ -131,9 +134,22 @@
 		return account.account_id || account.platform;
 	}
 
+	function accountSlug(account: SocialAccount): string {
+		return account.slug || account.account_username || account.account_id || account.platform;
+	}
+
+	function accountServer(account: SocialAccount): string {
+		if (account.platform !== 'mastodon' || !account.instance_url) return '';
+		try {
+			return new URL(account.instance_url).host;
+		} catch {
+			return account.instance_url.replace(/^https?:\/\//, '').replace(/\/$/, '');
+		}
+	}
+
 	function openEditAccount(account: SocialAccount) {
 		editingAccount = account;
-		editAccountSlug = (account as SocialAccount & { slug?: string }).slug ?? '';
+		editAccountSlug = account.slug ?? '';
 		editAccountError = '';
 		editAccountDialogOpen = true;
 	}
@@ -147,7 +163,7 @@
 				params: { path: { account_id: editingAccount.id } },
 				body: { slug: editAccountSlug.trim() }
 			});
-			if (err) throw new Error(err.detail || 'Failed to update account slug');
+			if (err) throw new Error(err.detail || m.accounts_update_slug_failed());
 			editAccountDialogOpen = false;
 			editingAccount = null;
 			await loadAccounts();
@@ -205,7 +221,7 @@
 
 	async function connectTwitter() {
 		if (!selectedWorkspaceId) {
-			showToast('Create a workspace before connecting social accounts.');
+			showToast(m.accounts_create_workspace_first());
 			return;
 		}
 		try {
@@ -215,13 +231,13 @@
 			if (err) throw new Error((err as any).detail || 'Failed to get X auth URL');
 			if (data?.url) window.location.href = data.url;
 		} catch (e) {
-			showConnectError(e, 'Failed to get X auth URL');
+			showConnectError(e);
 		}
 	}
 
 	async function connectMastodon(options: { serverName?: string; instanceURL?: string }) {
 		if (!selectedWorkspaceId) {
-			showToast('Create a workspace before connecting social accounts.');
+			showToast(m.accounts_create_workspace_first());
 			return;
 		}
 
@@ -248,14 +264,14 @@
 			if (err) throw new Error((err as any).detail || 'Failed to get Mastodon auth URL');
 			if (data?.url) window.location.href = data.url;
 		} catch (e) {
-			showConnectError(e, 'Failed to get Mastodon auth URL');
+			showConnectError(e);
 		}
 	}
 
 	async function connectCustomMastodon() {
 		const instanceURL = customMastodonInstance.trim();
 		if (!instanceURL) {
-			showToast('Enter a Mastodon instance URL.');
+			showToast(m.accounts_enter_mastodon_instance());
 			return;
 		}
 		customMastodonLoading = true;
@@ -268,7 +284,7 @@
 
 	async function connectBluesky() {
 		if (!selectedWorkspaceId) {
-			showToast('Create a workspace before connecting social accounts.');
+			showToast(m.accounts_create_workspace_first());
 			return;
 		}
 		clearToast();
@@ -280,7 +296,7 @@
 
 	async function submitBlueskyLogin() {
 		if (!blueskyHandle.trim() || !blueskyAppPassword.trim()) {
-			blueskyError = 'Please enter both handle and app password';
+			blueskyError = m.accounts_bluesky_fields_required();
 			return;
 		}
 
@@ -295,148 +311,43 @@
 					app_password: blueskyAppPassword.trim()
 				}
 			});
-			if (err) throw new Error(err.detail || 'Login failed');
+			if (err) throw new Error(err.detail || m.accounts_login_failed());
 			blueskyModalOpen = false;
 			await loadAccounts();
 		} catch (e) {
 			blueskyError = (e as Error).message;
-			showConnectError(e, 'Login failed');
+			showConnectError(e, m.accounts_login_failed());
 		} finally {
 			blueskyLoading = false;
 		}
 	}
 
-	async function connectLinkedIn() {
+	async function connectOAuthProvider(platform: string) {
 		if (!selectedWorkspaceId) {
-			showToast('Create a workspace before connecting social accounts.');
+			showToast(m.accounts_create_workspace_first());
 			return;
 		}
-
 		try {
 			localStorage.setItem('oauth_workspace_id', selectedWorkspaceId);
-
 			const { data, error: err } = await client.GET('/accounts/{platform}/auth-url', {
 				params: {
-					path: { platform: 'linkedin' },
+					path: { platform },
 					query: { workspace_id: selectedWorkspaceId }
 				}
 			});
-			if (err) throw new Error((err as any).detail || 'Failed to get LinkedIn auth URL');
+			if (err) throw new Error((err as any).detail || m.accounts_connect_failed());
 			if (data?.url) window.location.href = data.url;
 		} catch (e) {
-			showConnectError(e, 'Failed to get LinkedIn auth URL');
+			showConnectError(e);
 		}
 	}
 
-	async function connectThreads() {
-		if (!selectedWorkspaceId) {
-			showToast('Create a workspace before connecting social accounts.');
-			return;
-		}
-
-		try {
-			localStorage.setItem('oauth_workspace_id', selectedWorkspaceId);
-
-			const { data, error: err } = await client.GET('/accounts/{platform}/auth-url', {
-				params: {
-					path: { platform: 'threads' },
-					query: { workspace_id: selectedWorkspaceId }
-				}
-			});
-			if (err) throw new Error((err as any).detail || 'Failed to get Threads auth URL');
-			if (data?.url) window.location.href = data.url;
-		} catch (e) {
-			showConnectError(e, 'Failed to get Threads auth URL');
-		}
-	}
-
-	async function connectTikTok() {
-		if (!selectedWorkspaceId) {
-			showToast('Create a workspace before connecting social accounts.');
-			return;
-		}
-
-		try {
-			localStorage.setItem('oauth_workspace_id', selectedWorkspaceId);
-
-			const { data, error: err } = await client.GET('/accounts/{platform}/auth-url', {
-				params: {
-					path: { platform: 'tiktok' },
-					query: { workspace_id: selectedWorkspaceId }
-				}
-			});
-			if (err) throw new Error((err as any).detail || 'Failed to get TikTok auth URL');
-			if (data?.url) window.location.href = data.url;
-		} catch (e) {
-			showConnectError(e, 'Failed to get TikTok auth URL');
-		}
-	}
-
-	async function connectFacebook() {
-		if (!selectedWorkspaceId) {
-			showToast('Create a workspace before connecting social accounts.');
-			return;
-		}
-
-		try {
-			localStorage.setItem('oauth_workspace_id', selectedWorkspaceId);
-
-			const { data, error: err } = await client.GET('/accounts/{platform}/auth-url', {
-				params: {
-					path: { platform: 'facebook' },
-					query: { workspace_id: selectedWorkspaceId }
-				}
-			});
-			if (err) throw new Error((err as any).detail || 'Failed to get Facebook auth URL');
-			if (data?.url) window.location.href = data.url;
-		} catch (e) {
-			showConnectError(e, 'Failed to get Facebook auth URL');
-		}
-	}
-
-	async function connectInstagram() {
-		if (!selectedWorkspaceId) {
-			showToast('Create a workspace before connecting social accounts.');
-			return;
-		}
-
-		try {
-			localStorage.setItem('oauth_workspace_id', selectedWorkspaceId);
-
-			const { data, error: err } = await client.GET('/accounts/{platform}/auth-url', {
-				params: {
-					path: { platform: 'instagram' },
-					query: { workspace_id: selectedWorkspaceId }
-				}
-			});
-			if (err) throw new Error((err as any).detail || 'Failed to get Instagram auth URL');
-			if (data?.url) window.location.href = data.url;
-		} catch (e) {
-			showConnectError(e, 'Failed to get Instagram auth URL');
-		}
-	}
-
-	async function connectYouTube() {
-		if (!selectedWorkspaceId) {
-			showToast('Create a workspace before connecting social accounts.');
-			return;
-		}
-
-		try {
-			localStorage.setItem('oauth_workspace_id', selectedWorkspaceId);
-
-			const { data, error: err } = await client.GET('/accounts/{platform}/auth-url', {
-				params: {
-					path: { platform: 'youtube' },
-					query: { workspace_id: selectedWorkspaceId }
-				}
-			});
-			if (err) throw new Error((err as any).detail || 'Failed to get YouTube auth URL');
-			if (data?.url) window.location.href = data.url;
-		} catch (e) {
-			showConnectError(e, 'Failed to get YouTube auth URL');
-		}
-	}
+	const connectLinkedIn = () => connectOAuthProvider('linkedin');
+	const connectThreads = () => connectOAuthProvider('threads');
+	const connectTikTok = () => connectOAuthProvider('tiktok');
+	const connectFacebook = () => connectOAuthProvider('facebook');
+	const connectInstagram = () => connectOAuthProvider('instagram');
+	const connectYouTube = () => connectOAuthProvider('youtube');
 
 	function providerKey(provider: ProviderInfo): string {
 		if (provider.platform === 'mastodon') {
@@ -452,32 +363,32 @@
 
 	function providerDescription(provider: ProviderInfo): string {
 		if (provider.description) return provider.description;
-		if (!provider.configured) return 'Your instance administrator needs to enable this platform.';
+		if (!provider.configured) return m.accounts_provider_admin_enable();
 		if (isCustomMastodonProvider(provider)) {
-			return 'Connect any public Mastodon instance';
+			return m.accounts_provider_custom_mastodon();
 		}
 		if (provider.platform === 'mastodon' && provider.instance_url) {
 			return provider.instance_url.replace('https://', '');
 		}
 		switch (provider.platform) {
 			case 'x':
-				return 'Post tweets';
+				return m.accounts_provider_x();
 			case 'threads':
-				return 'Post to Threads';
+				return m.accounts_provider_threads();
 			case 'bluesky':
-				return 'Post to Bluesky';
+				return m.accounts_provider_bluesky();
 			case 'linkedin':
-				return 'Post to LinkedIn';
+				return m.accounts_provider_linkedin();
 			case 'instagram':
-				return 'Post to Instagram Business';
+				return m.accounts_provider_instagram();
 			case 'facebook':
-				return 'Post to Facebook Pages';
+				return m.accounts_provider_facebook();
 			case 'youtube':
-				return 'Upload YouTube videos and Shorts';
+				return m.accounts_provider_youtube();
 			case 'tiktok':
-				return 'Post short-form video to TikTok';
+				return m.accounts_provider_tiktok();
 			default:
-				return 'Connect account';
+				return m.accounts_provider_default();
 		}
 	}
 
@@ -489,13 +400,15 @@
 	function providerStatusLabel(provider: ProviderInfo): string {
 		switch (providerStatus(provider)) {
 			case 'available':
-				return 'Available';
+				return m.accounts_provider_available();
 			case 'planned':
-				return 'Planned';
+				return m.accounts_provider_planned();
 			case 'needs_configuration':
-				return 'Admin setup required';
+				return m.accounts_provider_admin_required();
 			default:
-				return provider.configured ? 'Available' : 'Unavailable';
+				return provider.configured
+					? m.accounts_provider_available()
+					: m.accounts_provider_unavailable();
 		}
 	}
 
@@ -517,8 +430,8 @@
 	}
 
 	function providerActionLabel(provider: ProviderInfo): string {
-		if (providerStatus(provider) === 'planned') return 'Planned';
-		return provider.configured ? 'Connect' : 'Ask admin';
+		if (providerStatus(provider) === 'planned') return m.accounts_provider_planned();
+		return provider.configured ? m.common_connect() : m.accounts_provider_ask_admin();
 	}
 
 	function isCustomMastodonProvider(provider: ProviderInfo): boolean {
@@ -545,7 +458,7 @@
 
 	async function canOpenMastodonCode(provider: ProviderInfo): Promise<boolean> {
 		if (!selectedWorkspaceId) {
-			showToast('Create a workspace before connecting social accounts.');
+			showToast(m.accounts_create_workspace_first());
 			return false;
 		}
 
@@ -555,7 +468,7 @@
 		if (isCustomMastodonProvider(provider)) {
 			const instanceURL = customMastodonInstance.trim();
 			if (!instanceURL) {
-				showToast('Enter a Mastodon instance URL.');
+				showToast(m.accounts_enter_mastodon_instance());
 				return false;
 			}
 			query.instance_url = instanceURL;
@@ -570,7 +483,7 @@
 			if (err) throw new Error((err as any).detail || 'Could not start Mastodon connection');
 			return true;
 		} catch (e) {
-			showConnectError(e, 'Could not start Mastodon connection');
+			showConnectError(e);
 			return false;
 		}
 	}
@@ -620,7 +533,7 @@
 </script>
 
 <svelte:head>
-	<title>Connected Accounts - OpenPost</title>
+	<title>{m.accounts_page_title()}</title>
 </svelte:head>
 
 {#if toastMessage}
@@ -634,7 +547,7 @@
 		<button
 			onclick={clearToast}
 			class="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-			aria-label="Dismiss notification"
+			aria-label={m.common_dismiss()}
 		>
 			<XIcon class="size-4" />
 		</button>
@@ -662,16 +575,16 @@
 	</div>
 {:else if !workspaces || workspaces.length === 0}
 	<div class="mx-auto max-w-md px-4 py-16 text-center">
-		<h2 class="mb-2 text-xl font-semibold">No Workspaces Found</h2>
+		<h2 class="mb-2 text-xl font-semibold">{m.accounts_no_workspaces_title()}</h2>
 		<p class="mb-4 text-sm text-muted-foreground">
-			Create a workspace first before connecting social accounts.
+			{m.accounts_no_workspaces_body()}
 		</p>
-		<Button href="/">Create Workspace</Button>
+		<Button href="/">{m.accounts_create_workspace()}</Button>
 	</div>
 {:else}
 	<PageContainer
-		title="Social accounts"
-		description="Connect the channels this workspace publishes to."
+		title={m.accounts_heading()}
+		description={m.accounts_description()}
 		icon={UsersIcon}
 	>
 		{#if error}
@@ -679,7 +592,7 @@
 				class="mb-4 flex items-center gap-2 rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive"
 			>
 				{error}
-				<Button variant="ghost" size="sm" onclick={() => (error = '')}>Dismiss</Button>
+				<Button variant="ghost" size="sm" onclick={() => (error = '')}>{m.common_dismiss()}</Button>
 			</div>
 		{/if}
 
@@ -687,12 +600,15 @@
 		<div class="mb-10">
 			<div class="mb-4 flex flex-wrap items-end justify-between gap-3">
 				<div>
-					<h2 class="text-base font-semibold">Connected channels</h2>
+					<h2 class="text-base font-semibold">{m.accounts_connected_channels()}</h2>
 					<p class="mt-1 text-sm text-muted-foreground">
-						{accounts.length} connection{accounts.length === 1 ? '' : 's'} in {selectedWorkspaceName}
+						{m.accounts_connection_summary({
+							count: accounts.length,
+							workspace: selectedWorkspaceName
+						})}
 					</p>
 				</div>
-				<Button href="/" size="sm">Create a post</Button>
+				<Button href="/" size="sm">{m.accounts_create_post()}</Button>
 			</div>
 
 			{#if accountsLoading}
@@ -704,8 +620,8 @@
 			{:else if !accounts || accounts.length === 0}
 				<EmptyState
 					icon={UsersIcon}
-					title="No accounts connected"
-					description="Connect a platform below to get started"
+					title={m.accounts_empty_title()}
+					description={m.accounts_empty_body()}
 					variant="muted"
 					size="md"
 				/>
@@ -714,7 +630,7 @@
 					class="grid gap-px overflow-hidden rounded-lg border bg-border sm:grid-cols-2 xl:grid-cols-3"
 				>
 					{#each accounts as account (account.id)}
-						<article class="flex min-h-32 flex-col justify-between gap-5 bg-background p-4">
+						<article class="flex min-h-28 flex-col justify-between gap-3 bg-background p-4">
 							<div class="flex items-start gap-3">
 								<div
 									class="flex size-10 shrink-0 items-center justify-center rounded-lg {getPlatformColor(
@@ -728,12 +644,12 @@
 										<h3 class="truncate text-sm font-semibold">
 											{getPlatformName(account.platform)}
 										</h3>
-										<span
-											class={account.is_active
-												? 'size-1.5 rounded-full bg-emerald-500'
-												: 'size-1.5 rounded-full bg-muted-foreground/40'}
-											aria-label={account.is_active ? 'Ready to publish' : 'Connection paused'}
-										></span>
+										{#if !account.is_active}
+											<span
+												class="size-1.5 rounded-full bg-amber-500"
+												aria-label={m.accounts_connection_paused()}
+											></span>
+										{/if}
 									</div>
 									<p class="mt-1 truncate text-sm text-muted-foreground">
 										{accountDisplayName(account)}
@@ -746,7 +662,9 @@
 												{...props}
 												variant="ghost"
 												size="icon-sm"
-												aria-label={`Actions for ${accountDisplayName(account)}`}
+												aria-label={m.accounts_actions_for({
+													account: accountDisplayName(account)
+												})}
 											>
 												<MoreHorizontalIcon class="size-4" />
 											</Button>
@@ -754,19 +672,36 @@
 									</DropdownMenu.Trigger>
 									<DropdownMenu.Content align="end" class="w-48">
 										<DropdownMenu.Item onclick={() => openEditAccount(account)}
-											>Account details</DropdownMenu.Item
+											>{m.accounts_details()}</DropdownMenu.Item
 										>
 										<DropdownMenu.Separator />
 										<DropdownMenu.Item
 											class="text-destructive"
-											onclick={() => disconnectAccount(account.id)}>Disconnect</DropdownMenu.Item
+											onclick={() => disconnectAccount(account.id)}
+											>{m.common_disconnect()}</DropdownMenu.Item
 										>
 									</DropdownMenu.Content>
 								</DropdownMenu.Root>
 							</div>
-							<p class="font-mono text-[0.6875rem] tracking-wide text-muted-foreground uppercase">
-								{account.is_active ? 'Ready to publish' : 'Connection paused'}
-							</p>
+							<div
+								class="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground"
+							>
+								<span class="inline-flex min-w-0 items-center gap-1.5">
+									<span>{m.accounts_shortcut()}</span>
+									<code
+										class="max-w-44 truncate rounded bg-muted px-1.5 py-0.5 font-mono text-[0.6875rem] text-foreground"
+										>{accountSlug(account)}</code
+									>
+								</span>
+								{#if accountServer(account)}
+									<span class="truncate">{m.accounts_server()}: {accountServer(account)}</span>
+								{/if}
+								{#if !account.is_active}
+									<span class="text-amber-700 dark:text-amber-300"
+										>{m.accounts_connection_paused()}</span
+									>
+								{/if}
+							</div>
 						</article>
 					{/each}
 				</div>
@@ -775,9 +710,9 @@
 
 		<!-- Connect a Platform -->
 		<div>
-			<h2 class="mb-1 text-base font-semibold">Add a channel</h2>
+			<h2 class="mb-1 text-base font-semibold">{m.accounts_add_channel()}</h2>
 			<p class="mb-4 text-sm text-muted-foreground">
-				Choose a platform to connect to this workspace.
+				{m.accounts_add_channel_body()}
 			</p>
 
 			<div class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
@@ -825,9 +760,11 @@
 											variant="outline"
 											size="sm"
 											class="text-xs"
-											onclick={() => openMastodonCode(provider)}>Code</Button
+											onclick={() => openMastodonCode(provider)}>{m.accounts_code()}</Button
 										>
-										<Button onclick={() => connectProvider(provider)} size="sm">Connect</Button>
+										<Button onclick={() => connectProvider(provider)} size="sm"
+											>{m.common_connect()}</Button
+										>
 									</div>
 								{:else if !isCustomMastodonProvider(provider)}
 									<Button
@@ -848,7 +785,9 @@
 									}}
 								>
 									<div class="space-y-1.5">
-										<Label for="custom-mastodon-instance" class="text-xs">Instance URL</Label>
+										<Label for="custom-mastodon-instance" class="text-xs"
+											>{m.accounts_instance_url()}</Label
+										>
 										<Input
 											id="custom-mastodon-instance"
 											bind:value={customMastodonInstance}
@@ -860,10 +799,10 @@
 										variant="outline"
 										size="sm"
 										class="self-end"
-										onclick={() => openMastodonCode(provider)}>Code</Button
+										onclick={() => openMastodonCode(provider)}>{m.accounts_code()}</Button
 									>
 									<Button type="submit" size="sm" class="self-end" disabled={customMastodonLoading}>
-										{customMastodonLoading ? 'Connecting...' : 'Connect'}
+										{customMastodonLoading ? m.common_connecting() : m.common_connect()}
 									</Button>
 								</form>
 							{/if}
@@ -878,10 +817,9 @@
 <Dialog.Root bind:open={blueskyModalOpen}>
 	<Dialog.Content class="sm:max-w-md">
 		<Dialog.Header>
-			<Dialog.Title>Connect Bluesky</Dialog.Title>
+			<Dialog.Title>{m.accounts_connect_bluesky()}</Dialog.Title>
 			<Dialog.Description>
-				Enter your Bluesky handle and an app password. You can create an app password in Bluesky
-				Settings &gt; App Passwords.
+				{m.accounts_bluesky_description()}
 			</Dialog.Description>
 		</Dialog.Header>
 		<form
@@ -892,7 +830,7 @@
 			}}
 		>
 			<div class="space-y-2">
-				<Label for="bluesky-handle">Handle</Label>
+				<Label for="bluesky-handle">{m.accounts_handle()}</Label>
 				<Input
 					type="text"
 					id="bluesky-handle"
@@ -902,7 +840,7 @@
 				/>
 			</div>
 			<div class="space-y-2">
-				<Label for="bluesky-password">App Password</Label>
+				<Label for="bluesky-password">{m.accounts_app_password()}</Label>
 				<Input
 					type="password"
 					id="bluesky-password"
@@ -920,10 +858,10 @@
 			{/if}
 			<div class="flex justify-end gap-2">
 				<Dialog.Close>
-					<Button variant="outline" type="button">Cancel</Button>
+					<Button variant="outline" type="button">{m.common_cancel()}</Button>
 				</Dialog.Close>
 				<Button type="submit" disabled={blueskyLoading}>
-					{blueskyLoading ? 'Connecting...' : 'Connect'}
+					{blueskyLoading ? m.common_connecting() : m.common_connect()}
 				</Button>
 			</div>
 		</form>
@@ -933,9 +871,9 @@
 <Dialog.Root bind:open={editAccountDialogOpen}>
 	<Dialog.Content class="sm:max-w-md">
 		<Dialog.Header>
-			<Dialog.Title>Account details</Dialog.Title>
+			<Dialog.Title>{m.accounts_details()}</Dialog.Title>
 			<Dialog.Description>
-				Connection details and an optional shortcut for developer tools.
+				{m.accounts_details_description()}
 			</Dialog.Description>
 		</Dialog.Header>
 		{#if editingAccount}
@@ -949,21 +887,22 @@
 				<div class="rounded-md bg-muted/40 p-3 text-sm">
 					<div class="font-medium">{accountDisplayName(editingAccount)}</div>
 					<div class="text-muted-foreground">{getPlatformName(editingAccount.platform)}</div>
+					{#if accountServer(editingAccount)}
+						<div class="mt-1 text-xs text-muted-foreground">
+							{m.accounts_server()}: {accountServer(editingAccount)}
+						</div>
+					{/if}
 				</div>
-				<details>
-					<summary
-						class="cursor-pointer text-sm font-medium focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-					>
-						Developer shortcut
-					</summary>
-					<p class="mt-2 text-xs text-muted-foreground">
-						Use this stable name with the CLI, for example
+				<div class="space-y-3 rounded-md border p-3">
+					<h3 class="text-sm font-medium">{m.accounts_developer_shortcut()}</h3>
+					<p class="text-xs text-muted-foreground">
+						{m.accounts_shortcut_example()}
 						<code class="rounded bg-muted px-1 py-0.5"
 							>openpost post create --accounts {editAccountSlug || 'main-x'}</code
 						>.
 					</p>
-					<div class="mt-3 space-y-2">
-						<Label for="account-slug">Shortcut</Label>
+					<div class="space-y-2">
+						<Label for="account-slug">{m.accounts_shortcut()}</Label>
 						<Input
 							id="account-slug"
 							bind:value={editAccountSlug}
@@ -972,11 +911,10 @@
 							required
 						/>
 						<p class="text-xs text-muted-foreground">
-							Use lowercase letters, numbers, and hyphens. Slugs must be unique within this
-							workspace.
+							{m.accounts_shortcut_hint()}
 						</p>
 					</div>
-				</details>
+				</div>
 				{#if editAccountError}
 					<div
 						class="rounded-md border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive"
@@ -986,10 +924,10 @@
 				{/if}
 				<div class="flex justify-end gap-2">
 					<Dialog.Close>
-						<Button variant="outline" type="button">Cancel</Button>
+						<Button variant="outline" type="button">{m.common_cancel()}</Button>
 					</Dialog.Close>
 					<Button type="submit" disabled={editAccountLoading || !editAccountSlug.trim()}>
-						{editAccountLoading ? 'Saving...' : 'Save details'}
+						{editAccountLoading ? m.common_saving() : m.accounts_save_details()}
 					</Button>
 				</div>
 			</form>
