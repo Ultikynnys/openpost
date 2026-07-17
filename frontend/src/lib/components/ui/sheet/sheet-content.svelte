@@ -11,6 +11,7 @@
 	import RiCloseLine from 'remixicon-svelte/icons/close-line';
 	import { cn, type WithoutChildrenOrChild } from '$lib/utils.js';
 	import type { ComponentProps } from 'svelte';
+	import { m } from '$lib/paraglide/messages';
 
 	let {
 		ref = $bindable(null),
@@ -44,9 +45,14 @@
 		{#if showCloseButton}
 			<SheetPrimitive.Close data-slot="sheet-close">
 				{#snippet child({ props })}
-					<Button variant="ghost" class="absolute top-4 right-4" size="icon-sm" {...props}>
+					<Button
+						variant="ghost"
+						class="absolute top-4 right-4 min-h-11 min-w-11 sm:min-h-8 sm:min-w-8"
+						size="icon-sm"
+						{...props}
+					>
 						<RiCloseLine />
-						<span class="sr-only">Close</span>
+						<span class="sr-only">{m.common_close()}</span>
 					</Button>
 				{/snippet}
 			</SheetPrimitive.Close>

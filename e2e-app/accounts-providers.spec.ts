@@ -112,6 +112,9 @@ test("accounts page shows configured and unavailable providers", async ({
     page.getByRole("heading", { name: "Add a channel" }),
   ).toBeVisible();
   await expect(page.getByTestId("provider-card-bluesky")).toContainText(
+    "Post to Bluesky",
+  );
+  await expect(page.getByTestId("provider-card-bluesky")).not.toContainText(
     "Handle and app-password connection.",
   );
   await expect(page.getByTestId("provider-card-bluesky")).not.toContainText(
@@ -141,6 +144,17 @@ test("accounts page shows configured and unavailable providers", async ({
         .getByTestId(`provider-card-${platform}`)
         .getByRole("button", { name: "Ask admin" }),
     ).toBeDisabled();
+  }
+
+  for (const [platform, title] of [
+    ["instagram", "Instagram"],
+    ["facebook", "Facebook"],
+    ["youtube", "YouTube"],
+    ["tiktok", "TikTok"],
+  ] as const) {
+    await expect(
+      page.getByTestId(`provider-card-${platform}`).locator("svg title"),
+    ).toHaveText(title);
   }
 });
 
@@ -195,8 +209,11 @@ test("accounts page starts custom Mastodon instance connection", async ({
   await page.goto("/accounts");
   const card = page.getByTestId("provider-card-mastodon");
   await expect(card).toContainText("Connect any public Mastodon instance");
-  await card.getByLabel("Instance URL").fill("mastodon.social");
   await card.getByRole("button", { name: "Connect" }).click();
+  const dialog = page.getByRole("dialog", { name: "Connect Mastodon" });
+  await expect(dialog).toBeVisible();
+  await dialog.getByLabel("Server address").fill("mastodon.social");
+  await dialog.getByRole("button", { name: "Connect" }).click();
 
   await expect(page).toHaveURL(/\/accounts\/mastodon\/callback/);
   expect(authURLRequest?.workspaceId).toBeTruthy();

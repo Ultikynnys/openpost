@@ -31,8 +31,20 @@
 
 	let providerEntries = $state.raw<ProviderInfo[]>([]);
 	let providersLoading = $state(false);
+	let mastodonModalOpen = $state(false);
 	let customMastodonInstance = $state('');
 	let customMastodonLoading = $state(false);
+	let mastodonError = $state('');
+	let mastodonProviders = $derived(
+		providerEntries.filter((provider) => provider.platform === 'mastodon')
+	);
+	let connectionProviderEntries = $derived.by(() => {
+		const preferredMastodon =
+			mastodonProviders.find(isCustomMastodonProvider) ?? mastodonProviders[0];
+		return providerEntries.filter(
+			(provider) => provider.platform !== 'mastodon' || provider === preferredMastodon
+		);
+	});
 	let selectedWorkspaceName = $derived(
 		workspaces?.find((workspace) => workspace.id === selectedWorkspaceId)?.name ||
 			m.accounts_select_workspace()
@@ -235,48 +247,38 @@
 		}
 	}
 
-	async function connectMastodon(options: { serverName?: string; instanceURL?: string }) {
+	type MastodonConnectionOptions = { serverName?: string; instanceURL?: string };
+
+	async function connectMastodon(options: MastodonConnectionOptions) {
 		if (!selectedWorkspaceId) {
-			showToast(m.accounts_create_workspace_first());
-			return;
+			throw new Error(m.accounts_create_workspace_first());
 		}
 
-		try {
-			localStorage.setItem('oauth_workspace_id', selectedWorkspaceId);
-			if (options.instanceURL) {
-				localStorage.setItem('oauth_mastodon_instance_url', options.instanceURL);
-				localStorage.removeItem('oauth_mastodon_server');
-			} else if (options.serverName) {
-				localStorage.setItem('oauth_mastodon_server', options.serverName);
-				localStorage.removeItem('oauth_mastodon_instance_url');
-			}
-
-			const { data, error: err } = await client.GET('/accounts/{platform}/auth-url', {
-				params: {
-					path: { platform: 'mastodon' },
-					query: {
-						workspace_id: selectedWorkspaceId,
-						server_name: options.serverName,
-						instance_url: options.instanceURL
-					}
+		rememberMastodonConnection(options);
+		const { data, error: err } = await client.GET('/accounts/{platform}/auth-url', {
+			params: {
+				path: { platform: 'mastodon' },
+				query: {
+					workspace_id: selectedWorkspaceId,
+					server_name: options.serverName,
+					instance_url: options.instanceURL
 				}
-			});
-			if (err) throw new Error((err as any).detail || 'Failed to get Mastodon auth URL');
-			if (data?.url) window.location.href = data.url;
-		} catch (e) {
-			showConnectError(e);
-		}
+			}
+		});
+		if (err) throw new Error((err as any).detail || m.accounts_connect_failed());
+		if (!data?.url) throw new Error(m.accounts_connect_failed());
+		window.location.href = data.url;
 	}
 
 	async function connectCustomMastodon() {
-		const instanceURL = customMastodonInstance.trim();
-		if (!instanceURL) {
-			showToast(m.accounts_enter_mastodon_instance());
-			return;
-		}
+		const options = mastodonConnectionOptions();
+		if (!options) return;
 		customMastodonLoading = true;
+		mastodonError = '';
 		try {
-			await connectMastodon({ instanceURL });
+			await connectMastodon(options);
+		} catch (e) {
+			mastodonError = connectErrorMessage(e, m.accounts_connect_failed());
 		} finally {
 			customMastodonLoading = false;
 		}
@@ -350,25 +352,17 @@
 	const connectYouTube = () => connectOAuthProvider('youtube');
 
 	function providerKey(provider: ProviderInfo): string {
-		if (provider.platform === 'mastodon') {
-			return provider.instance_url || provider.name || provider.platform;
-		}
 		return provider.platform;
 	}
 
 	function providerTitle(provider: ProviderInfo): string {
-		if (provider.platform === 'mastodon' && provider.name) return provider.name;
 		return provider.display_name || getPlatformName(provider.platform);
 	}
 
 	function providerDescription(provider: ProviderInfo): string {
-		if (provider.description) return provider.description;
 		if (!provider.configured) return m.accounts_provider_admin_enable();
-		if (isCustomMastodonProvider(provider)) {
+		if (provider.platform === 'mastodon') {
 			return m.accounts_provider_custom_mastodon();
-		}
-		if (provider.platform === 'mastodon' && provider.instance_url) {
-			return provider.instance_url.replace('https://', '');
 		}
 		switch (provider.platform) {
 			case 'x':
@@ -388,7 +382,7 @@
 			case 'tiktok':
 				return m.accounts_provider_tiktok();
 			default:
-				return m.accounts_provider_default();
+				return provider.description || m.accounts_provider_default();
 		}
 	}
 
@@ -438,43 +432,74 @@
 		return provider.platform === 'mastodon' && provider.configured && !provider.instance_url;
 	}
 
-	function rememberMastodonProvider(provider: ProviderInfo) {
-		if (!selectedWorkspaceId) return;
-		localStorage.setItem('oauth_workspace_id', selectedWorkspaceId);
-		if (isCustomMastodonProvider(provider)) {
-			const instanceURL = customMastodonInstance.trim();
-			if (instanceURL) {
-				localStorage.setItem('oauth_mastodon_instance_url', instanceURL);
-				localStorage.removeItem('oauth_mastodon_server');
-			}
+	function mastodonHost(value: string): string {
+		try {
+			const url = new URL(value.includes('://') ? value : `https://${value}`);
+			return url.host.toLowerCase();
+		} catch {
+			return '';
+		}
+	}
+
+	function mastodonConnectionOptions(): MastodonConnectionOptions | null {
+		const instance = customMastodonInstance.trim();
+		if (!instance) {
+			mastodonError = m.accounts_enter_mastodon_instance();
+			return null;
+		}
+
+		if (mastodonProviders.some(isCustomMastodonProvider)) {
+			return { instanceURL: instance };
+		}
+
+		const instanceHost = mastodonHost(instance);
+		const configuredProvider = mastodonProviders.find(
+			(provider) =>
+				(provider.instance_url && mastodonHost(provider.instance_url) === instanceHost) ||
+				provider.name?.toLowerCase() === instance.toLowerCase()
+		);
+		if (configuredProvider) {
+			return { serverName: configuredProvider.name || configuredProvider.instance_url };
+		}
+
+		mastodonError = m.accounts_mastodon_instance_unavailable();
+		return null;
+	}
+
+	function openMastodonModal() {
+		if (!selectedWorkspaceId) {
+			showToast(m.accounts_create_workspace_first());
 			return;
 		}
-		const serverName = provider.name || provider.instance_url || '';
-		if (serverName) {
-			localStorage.setItem('oauth_mastodon_server', serverName);
+		clearToast();
+		customMastodonInstance = '';
+		mastodonError = '';
+		mastodonModalOpen = true;
+	}
+
+	function rememberMastodonConnection(options: MastodonConnectionOptions) {
+		if (!selectedWorkspaceId) return;
+		localStorage.setItem('oauth_workspace_id', selectedWorkspaceId);
+		if (options.instanceURL) {
+			localStorage.setItem('oauth_mastodon_instance_url', options.instanceURL);
+			localStorage.removeItem('oauth_mastodon_server');
+		} else if (options.serverName) {
+			localStorage.setItem('oauth_mastodon_server', options.serverName);
 			localStorage.removeItem('oauth_mastodon_instance_url');
 		}
 	}
 
-	async function canOpenMastodonCode(provider: ProviderInfo): Promise<boolean> {
+	async function canOpenMastodonCode(options: MastodonConnectionOptions): Promise<boolean> {
 		if (!selectedWorkspaceId) {
-			showToast(m.accounts_create_workspace_first());
+			mastodonError = m.accounts_create_workspace_first();
 			return false;
 		}
 
 		const query: { workspace_id: string; server_name?: string; instance_url?: string } = {
-			workspace_id: selectedWorkspaceId
+			workspace_id: selectedWorkspaceId,
+			server_name: options.serverName,
+			instance_url: options.instanceURL
 		};
-		if (isCustomMastodonProvider(provider)) {
-			const instanceURL = customMastodonInstance.trim();
-			if (!instanceURL) {
-				showToast(m.accounts_enter_mastodon_instance());
-				return false;
-			}
-			query.instance_url = instanceURL;
-		} else {
-			query.server_name = provider.name || provider.instance_url || '';
-		}
 
 		try {
 			const { error: err } = await client.GET('/accounts/{platform}/auth-url', {
@@ -483,14 +508,15 @@
 			if (err) throw new Error((err as any).detail || 'Could not start Mastodon connection');
 			return true;
 		} catch (e) {
-			showConnectError(e);
+			mastodonError = connectErrorMessage(e, m.accounts_connect_failed());
 			return false;
 		}
 	}
 
-	async function openMastodonCode(provider: ProviderInfo) {
-		if (!(await canOpenMastodonCode(provider))) return;
-		rememberMastodonProvider(provider);
+	async function openMastodonCode() {
+		const options = mastodonConnectionOptions();
+		if (!options || !(await canOpenMastodonCode(options))) return;
+		rememberMastodonConnection(options);
 		goto(resolve('/accounts/mastodon/callback'));
 	}
 
@@ -501,11 +527,7 @@
 				connectTwitter();
 				break;
 			case 'mastodon':
-				if (isCustomMastodonProvider(provider)) {
-					connectCustomMastodon();
-				} else {
-					connectMastodon({ serverName: provider.name || provider.instance_url || '' });
-				}
+				openMastodonModal();
 				break;
 			case 'threads':
 				connectThreads();
@@ -722,16 +744,16 @@
 					<Skeleton class="h-20 rounded-lg" />
 					<Skeleton class="h-20 rounded-lg" />
 				{:else}
-					{#each providerEntries as provider (providerKey(provider))}
+					{#each connectionProviderEntries as provider (providerKey(provider))}
 						<div
 							data-testid={`provider-card-${provider.platform}`}
-							class="group rounded-lg border bg-card p-4 transition-all hover:shadow-sm {providerCanConnect(
+							class="group flex h-full min-h-28 flex-col rounded-lg border bg-card p-4 transition-all hover:shadow-sm {providerCanConnect(
 								provider
 							)
 								? ''
 								: 'bg-muted/20'}"
 						>
-							<div class="flex items-center gap-3">
+							<div class="flex items-start gap-3">
 								<div
 									class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full {getPlatformColor(
 										provider.platform
@@ -754,58 +776,15 @@
 										{providerDescription(provider)}
 									</p>
 								</div>
-								{#if provider.platform === 'mastodon' && provider.configured && !isCustomMastodonProvider(provider)}
-									<div class="flex gap-1.5">
-										<Button
-											variant="outline"
-											size="sm"
-											class="text-xs"
-											onclick={() => openMastodonCode(provider)}>{m.accounts_code()}</Button
-										>
-										<Button onclick={() => connectProvider(provider)} size="sm"
-											>{m.common_connect()}</Button
-										>
-									</div>
-								{:else if !isCustomMastodonProvider(provider)}
-									<Button
-										onclick={() => connectProvider(provider)}
-										size="sm"
-										disabled={!providerCanConnect(provider)}
-									>
-										{providerActionLabel(provider)}
-									</Button>
-								{/if}
 							</div>
-							{#if isCustomMastodonProvider(provider)}
-								<form
-									class="mt-4 grid gap-2 sm:grid-cols-[1fr_auto_auto]"
-									onsubmit={(e: SubmitEvent) => {
-										e.preventDefault();
-										connectCustomMastodon();
-									}}
-								>
-									<div class="space-y-1.5">
-										<Label for="custom-mastodon-instance" class="text-xs"
-											>{m.accounts_instance_url()}</Label
-										>
-										<Input
-											id="custom-mastodon-instance"
-											bind:value={customMastodonInstance}
-											placeholder="mastodon.social"
-											autocomplete="url"
-										/>
-									</div>
-									<Button
-										variant="outline"
-										size="sm"
-										class="self-end"
-										onclick={() => openMastodonCode(provider)}>{m.accounts_code()}</Button
-									>
-									<Button type="submit" size="sm" class="self-end" disabled={customMastodonLoading}>
-										{customMastodonLoading ? m.common_connecting() : m.common_connect()}
-									</Button>
-								</form>
-							{/if}
+							<Button
+								class="mt-3 min-h-11 self-end sm:min-h-9"
+								onclick={() => connectProvider(provider)}
+								size="sm"
+								disabled={!providerCanConnect(provider)}
+							>
+								{providerActionLabel(provider)}
+							</Button>
 						</div>
 					{/each}
 				{/if}
@@ -813,6 +792,64 @@
 		</div>
 	</PageContainer>
 {/if}
+
+<Dialog.Root bind:open={mastodonModalOpen}>
+	<Dialog.Content class="sm:max-w-md">
+		<Dialog.Header>
+			<Dialog.Title>{m.accounts_connect_mastodon()}</Dialog.Title>
+			<Dialog.Description>{m.accounts_mastodon_description()}</Dialog.Description>
+		</Dialog.Header>
+		<form
+			class="space-y-4"
+			onsubmit={(e: SubmitEvent) => {
+				e.preventDefault();
+				connectCustomMastodon();
+			}}
+		>
+			<div class="space-y-2">
+				<Label for="mastodon-server">{m.accounts_mastodon_server_address()}</Label>
+				<Input
+					id="mastodon-server"
+					class="h-11 sm:h-9"
+					bind:value={customMastodonInstance}
+					placeholder="mastodon.social"
+					autocomplete="url"
+					autocapitalize="none"
+					spellcheck="false"
+					required
+				/>
+			</div>
+			{#if mastodonError}
+				<div
+					role="alert"
+					class="rounded-md border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive"
+				>
+					{mastodonError}
+				</div>
+			{/if}
+			<div class="flex flex-wrap justify-end gap-2">
+				<Dialog.Close>
+					{#snippet child({ props })}
+						<Button {...props} class="min-h-11 sm:min-h-9" variant="outline" type="button">
+							{m.common_cancel()}
+						</Button>
+					{/snippet}
+				</Dialog.Close>
+				<Button
+					class="min-h-11 sm:min-h-9"
+					variant="outline"
+					type="button"
+					onclick={openMastodonCode}
+				>
+					{m.accounts_code()}
+				</Button>
+				<Button class="min-h-11 sm:min-h-9" type="submit" disabled={customMastodonLoading}>
+					{customMastodonLoading ? m.common_connecting() : m.common_connect()}
+				</Button>
+			</div>
+		</form>
+	</Dialog.Content>
+</Dialog.Root>
 
 <Dialog.Root bind:open={blueskyModalOpen}>
 	<Dialog.Content class="sm:max-w-md">
@@ -858,7 +895,9 @@
 			{/if}
 			<div class="flex justify-end gap-2">
 				<Dialog.Close>
-					<Button variant="outline" type="button">{m.common_cancel()}</Button>
+					{#snippet child({ props })}
+						<Button {...props} variant="outline" type="button">{m.common_cancel()}</Button>
+					{/snippet}
 				</Dialog.Close>
 				<Button type="submit" disabled={blueskyLoading}>
 					{blueskyLoading ? m.common_connecting() : m.common_connect()}
@@ -924,7 +963,9 @@
 				{/if}
 				<div class="flex justify-end gap-2">
 					<Dialog.Close>
-						<Button variant="outline" type="button">{m.common_cancel()}</Button>
+						{#snippet child({ props })}
+							<Button {...props} variant="outline" type="button">{m.common_cancel()}</Button>
+						{/snippet}
 					</Dialog.Close>
 					<Button type="submit" disabled={editAccountLoading || !editAccountSlug.trim()}>
 						{editAccountLoading ? m.common_saving() : m.accounts_save_details()}

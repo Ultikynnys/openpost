@@ -1085,7 +1085,7 @@
 			size="icon-sm"
 			class="-my-1 -mr-2"
 			onclick={() => (toastMessage = '')}
-			aria-label={m.common_dismiss()}
+			aria-label={m.common_dismiss_notification()}
 		>
 			<XIcon class="size-4" />
 		</Button>

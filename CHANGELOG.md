@@ -6,6 +6,8 @@ All notable changes to this project are documented in this file.
 
 ### Changed
 
+- Collapsed Mastodon connection choices into one consistent provider card that asks for the server address in a focused dialog.
+- Replaced generic Instagram, Facebook, YouTube, and TikTok glyphs with their actual brand marks throughout the app.
 - Restored a desktop planning sidebar with a compact schedule calendar, one-click autosaved draft resumption, and always-visible workspace navigation while preserving the mobile bottom navigation and collapsed icon rail.
 - Reworked the authenticated app around persistent primary navigation, a focused Posts area, intent-based composer formats, clearer content customization language, compact social accounts, day drawers, and task-specific settings pages on desktop and mobile.
 - Relicensed OpenPost from MIT to AGPL-3.0-only and restored clear open-source positioning across the project, marketing site, documentation, and authenticated app.
