@@ -22,13 +22,7 @@ describe('primary application navigation', () => {
 		expect(composer && isNavigationItemActive(composer, '/')).toBe(true);
 	});
 
-	it('keeps the mobile bar focused on the five everyday destinations', () => {
-		expect(mobileNavigation.map((item) => item.id)).toEqual([
-			'calendar',
-			'posts',
-			'new',
-			'media',
-			'accounts'
-		]);
+	it('keeps four content destinations in the mobile bar before the More menu', () => {
+		expect(mobileNavigation.map((item) => item.id)).toEqual(['calendar', 'posts', 'new', 'media']);
 	});
 });

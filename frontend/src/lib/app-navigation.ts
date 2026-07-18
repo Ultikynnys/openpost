@@ -21,7 +21,7 @@ export const primaryNavigation: PrimaryNavigationItem[] = [
 	{ id: 'settings', label: 'Settings', href: '/settings', match: ['/settings'], mobile: false }
 ];
 
-const mobileNavigationOrder = ['calendar', 'posts', 'new', 'media', 'accounts'] as const;
+const mobileNavigationOrder = ['calendar', 'posts', 'new', 'media'] as const;
 
 export const mobileNavigation = mobileNavigationOrder.map((id) =>
 	primaryNavigation.find((item) => item.id === id)!

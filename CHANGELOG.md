@@ -4,6 +4,8 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+- Redesign the mobile app shell and composer with a safe-area-aware More menu, compact post controls, circular rendition targets, and always-visible touch actions for media and thread editing.
+
 ### Changed
 
 - Made MCP post scheduling accept atomic destination-specific renditions and made status/list readback authoritative for rendition content and media; the CLI can inspect renditions and replace or clear source media on post updates.

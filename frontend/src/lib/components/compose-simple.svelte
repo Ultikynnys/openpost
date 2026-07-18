@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount, tick, type Snippet } from 'svelte';
-	import { SvelteMap, SvelteSet } from 'svelte/reactivity';
+	import { MediaQuery, SvelteMap, SvelteSet } from 'svelte/reactivity';
 	import { client, type SocialAccount, type Workspace, getToken } from '$lib/api/client';
 	import { getApiBase } from '$lib/stores/instance.svelte';
 	import { getAuthenticatedMediaByID } from '$lib/media-url';
@@ -34,6 +34,8 @@
 	import GripVerticalIcon from 'lucide-svelte/icons/grip-vertical';
 	import Trash2Icon from 'lucide-svelte/icons/trash-2';
 	import TypeIcon from 'lucide-svelte/icons/type';
+	import MoreHorizontalIcon from 'lucide-svelte/icons/ellipsis';
+	import CalendarClockIcon from 'lucide-svelte/icons/calendar-clock';
 	import { ui } from '$lib/stores/ui.svelte';
 	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
 	import { ReorderableList } from 'svelte-reorderable-list';
@@ -142,6 +144,7 @@
 	const textareaRefs = new SvelteMap<number, HTMLTextAreaElement>();
 	const scheduleInputPlaceholder = 'Write any time, e.g. "tomorrow at 9am" or "in 3 hours"';
 	const randomDelayOptions = [0, 5, 10, 15, 30, 45, 60];
+	const desktopComposerControls = new MediaQuery('min-width: 768px');
 
 	// --------------------------------------------------------------------------
 	// Constants & derived values
@@ -1716,305 +1719,530 @@
 <!-- Top Bar -->
 <!-- ====================================================================== -->
 <div class="flex flex-1 flex-col overflow-hidden">
-	<div class="flex flex-wrap items-center justify-between gap-2 border-b px-3 py-2 md:px-4 md:py-3">
-		<div class="flex flex-wrap items-center gap-2">
-			{#if modeControl}
-				{@render modeControl()}
-			{/if}
-
-			<!-- Account selector -->
-			{#if accounts.length > 0}
+	{#if !desktopComposerControls.current}
+		<div
+			class="sticky top-0 z-20 border-b bg-background/94 px-3 py-2 backdrop-blur-md"
+			data-testid="mobile-composer-controls"
+		>
+			<div class="flex min-w-0 items-center gap-1.5">
+				{#if modeControl}
+					<div
+						class="min-w-0 flex-1 [&_[data-testid=composer-mode-select]]:w-full [&_[data-testid=composer-mode-select]]:max-w-none"
+					>
+						{@render modeControl()}
+					</div>
+				{/if}
+				{#if accounts.length > 0}
+					<DropdownMenu.Root>
+						<DropdownMenu.Trigger>
+							{#snippet child({ props })}
+								<Button
+									{...props}
+									variant="outline"
+									size="sm"
+									class="h-11 shrink-0 gap-1 px-2.5 text-xs"
+									aria-label={m.compose_publish_to()}
+								>
+									<span class="tabular-nums">{selectedAccountIds.length}/{accounts.length}</span>
+									<ChevronDownIcon class="size-3" />
+								</Button>
+							{/snippet}
+						</DropdownMenu.Trigger>
+						<DropdownMenu.Content class="w-72 max-w-[calc(100vw-1rem)]" align="start">
+							<div class="flex items-center justify-between px-2 py-1.5">
+								<span class="text-sm font-medium text-muted-foreground"
+									>{m.compose_publish_to()}</span
+								>
+								<div class="flex gap-1">
+									<Button variant="ghost" size="sm" onclick={selectAllAccounts}
+										>{m.common_all()}</Button
+									>
+									<Button variant="ghost" size="sm" onclick={clearAllAccounts}
+										>{m.common_none()}</Button
+									>
+								</div>
+							</div>
+							<DropdownMenu.Separator />
+							{#each accounts as account (account.id)}
+								<DropdownMenu.CheckboxItem
+									class="min-h-11 gap-2"
+									checked={selectedAccountIds.includes(account.id)}
+									onCheckedChange={() => toggleAccount(account.id)}
+								>
+									<PlatformIcon platform={getPlatformKey(account.platform)} class="size-4" />
+									<span class="min-w-0 truncate"
+										>{getPlatformName(account.platform)}{account.account_username
+											? ` @${account.account_username}`
+											: ''}</span
+									>
+								</DropdownMenu.CheckboxItem>
+							{/each}
+						</DropdownMenu.Content>
+					</DropdownMenu.Root>
+				{/if}
+				{#if isEditMode && !autoSavesDraft}
+					<Button
+						type="button"
+						variant="outline"
+						size="icon"
+						class="ml-auto size-11 shrink-0"
+						title={formatScheduledDisplay()}
+						aria-label={formatScheduledDisplay()}
+						onclick={openScheduleDialog}
+						disabled={isSubmitting || isSaving}
+					>
+						<CalendarClockIcon class="size-4" />
+					</Button>
+					<Button
+						size="sm"
+						class="h-11 shrink-0 px-3"
+						onclick={saveEditedPost}
+						disabled={isSaving || isSubmitting || !hasContent || selectedAccountIds.length === 0}
+					>
+						{#if isSaving}<LoaderIcon class="size-3.5 animate-spin" />{/if}
+						<span>{isSaving ? m.compose_saving_changes() : m.compose_save_changes()}</span>
+					</Button>
+				{:else}
+					<Button
+						type="button"
+						variant="outline"
+						size="icon"
+						class="ml-auto size-11 shrink-0"
+						title={formatScheduledDisplay()}
+						aria-label={formatScheduledDisplay()}
+						onclick={openScheduleDialog}
+						disabled={isSubmitting || isSaving}
+					>
+						<CalendarClockIcon class="size-4" />
+					</Button>
+					<Button
+						type="button"
+						size="sm"
+						class="h-11 shrink-0 px-3"
+						onclick={() => publish(true)}
+						disabled={isSubmitting || !hasContent || selectedAccountIds.length === 0}
+					>
+						{#if isSubmitting}<LoaderIcon class="size-3.5 animate-spin" />{/if}
+						{m.compose_publish()}
+					</Button>
+				{/if}
+			</div>
+			<div class="mt-2 flex min-w-0 items-center gap-1.5 border-t border-border/70 pt-2">
+				<div
+					class="flex min-w-0 flex-1 [scrollbar-width:none] items-center gap-2 overflow-x-auto overflow-y-hidden px-0.5 py-0.5 [&::-webkit-scrollbar]:hidden"
+					data-testid="mobile-rendition-scroller"
+				>
+					{#if selectedAccounts.length > 0}
+						<button
+							type="button"
+							class={[
+								'flex aspect-square size-11 min-h-11 max-w-11 min-w-11 flex-none shrink-0 items-center justify-center rounded-full border',
+								activeVariantAccountId === null
+									? 'border-foreground bg-foreground text-background'
+									: 'border-border bg-background text-foreground'
+							]}
+							onclick={() => activateVariantTab(null)}
+							title={m.compose_all_synced()}
+							aria-label={m.compose_all_synced()}
+							data-testid="mobile-rendition-all"
+						>
+							<Link2Icon class="size-4" />
+						</button>
+						{#each selectedAccounts as account (account.id)}
+							{@const isUnsynced = variants.has(account.id)}
+							<button
+								type="button"
+								class={[
+									'relative flex aspect-square size-11 min-h-11 max-w-11 min-w-11 flex-none shrink-0 items-center justify-center rounded-full border',
+									activeVariantAccountId === account.id
+										? isUnsynced
+											? 'border-amber-500/70 bg-amber-500/12 text-amber-700'
+											: 'border-foreground bg-foreground text-background'
+										: 'border-border bg-background text-foreground'
+								]}
+								onclick={() => activateVariantTab(account.id)}
+								title={`${getPlatformName(account.platform)}${account.account_username ? ` @${account.account_username}` : ''}`}
+								aria-label={`${getPlatformName(account.platform)}${account.account_username ? ` @${account.account_username}` : ''} · ${isUnsynced ? m.compose_custom_state() : m.compose_synced_state()}`}
+								data-testid="mobile-rendition-account"
+							>
+								<PlatformIcon platform={getPlatformKey(account.platform)} class="size-4" />
+								{#if isUnsynced}<span
+										class="absolute -right-0.5 -bottom-0.5 flex size-4 items-center justify-center rounded-full bg-amber-500 text-white ring-2 ring-background"
+										><UnlinkIcon class="size-2.5" /></span
+									>{/if}
+							</button>
+						{/each}
+					{/if}
+				</div>
+				{#if activeVariantAccount}
+					<button
+						type="button"
+						class="flex aspect-square size-11 min-h-11 min-w-11 flex-none items-center justify-center rounded-full border bg-background"
+						onclick={() =>
+							activeVariantIsUnsynced
+								? resyncAccount(activeVariantAccount.id)
+								: unsyncAccount(activeVariantAccount.id)}
+						title={activeVariantIsUnsynced ? m.compose_sync_back() : m.compose_unsync()}
+						aria-label={activeVariantIsUnsynced ? m.compose_sync_back() : m.compose_unsync()}
+					>
+						{#if activeVariantIsUnsynced}<Link2Icon class="size-4" />{:else}<UnlinkIcon
+								class="size-4"
+							/>{/if}
+					</button>
+				{/if}
 				<DropdownMenu.Root>
 					<DropdownMenu.Trigger>
 						{#snippet child({ props })}
-							<Button {...props} variant="ghost" size="sm" class="gap-1.5 text-xs">
-								<span class="hidden text-muted-foreground sm:inline">
-									{selectedAccountIds.length === accounts.length
-										? m.compose_all_accounts()
-										: `${selectedAccountIds.length} account${selectedAccountIds.length !== 1 ? 's' : ''}`}
-								</span>
-								<span class="text-muted-foreground sm:hidden"
-									>{selectedAccountIds.length}/{accounts.length}</span
-								>
-								<ChevronDownIcon class="h-3 w-3" />
-							</Button>
+							<button
+								{...props}
+								type="button"
+								class="flex aspect-square size-11 min-h-11 min-w-11 flex-none items-center justify-center rounded-full border bg-background"
+								aria-label={m.sidebar_more()}><MoreHorizontalIcon class="size-4" /></button
+							>
 						{/snippet}
 					</DropdownMenu.Trigger>
-					<DropdownMenu.Content class="w-64" align="start">
-						<div class="flex items-center justify-between px-2 py-1.5">
-							<span class="text-sm font-medium text-muted-foreground">{m.compose_publish_to()}</span
-							>
-							<div class="flex gap-1">
-								<Button variant="ghost" size="xs" onclick={selectAllAccounts} class="h-5 text-xs"
-									>{m.common_all()}</Button
-								>
-								<Button variant="ghost" size="xs" onclick={clearAllAccounts} class="h-5 text-xs"
-									>{m.common_none()}</Button
-								>
-							</div>
-						</div>
-						<DropdownMenu.Separator />
-						{#each accounts as account (account.id)}
-							{@const isSelected = selectedAccountIds.includes(account.id)}
-							{@const isUnsynced = variants.has(account.id)}
-							<DropdownMenu.CheckboxItem
-								checked={isSelected}
-								onCheckedChange={() => toggleAccount(account.id)}
-								class="gap-2"
-							>
-								<PlatformIcon platform={getPlatformKey(account.platform)} class="h-4 w-4" />
-								<div class="flex flex-1 items-center gap-1.5">
-									<span class="text-sm">{getPlatformName(account.platform)}</span>
-									{#if account.account_username}<span class="text-xs text-muted-foreground"
-											>@{account.account_username}</span
-										>{/if}
-								</div>
-								{#if isUnsynced}<span class="text-xs text-amber-500">{m.compose_custom()}</span
-									>{/if}
-							</DropdownMenu.CheckboxItem>
-						{/each}
+					<DropdownMenu.Content class="w-56" align="end">
+						<DropdownMenu.Item
+							class="min-h-11"
+							onclick={() => (showPromptCard ? dismissPrompt() : fetchRandomPrompt())}
+							><LightbulbIcon class="mr-2 size-4" />{showPromptCard
+								? m.compose_dismiss_inspiration()
+								: m.compose_need_inspiration()}</DropdownMenu.Item
+						>
+						{#if draftId}<DropdownMenu.Item
+								class="min-h-11 text-destructive focus:text-destructive"
+								onclick={() => (showDeleteConfirm = true)}
+								disabled={isDeleting || isSaving || isSubmitting}
+								><Trash2Icon class="mr-2 size-4" />{m.common_delete()}</DropdownMenu.Item
+							>{/if}
 					</DropdownMenu.Content>
 				</DropdownMenu.Root>
+			</div>
+			{#if showDeleteConfirm && draftId}
+				<div
+					class="mt-2 flex min-h-11 items-center justify-end gap-2 border-t border-border/70 pt-2"
+					data-testid="mobile-composer-delete-confirmation"
+				>
+					<span class="mr-auto text-xs text-destructive">{m.day_posts_delete_confirm()}</span>
+					<Button
+						variant="ghost"
+						size="sm"
+						onclick={() => (showDeleteConfirm = false)}
+						disabled={isDeleting}>{m.common_cancel()}</Button
+					>
+					<Button variant="destructive" size="sm" onclick={deleteDraft} disabled={isDeleting}
+						>{#if isDeleting}<LoaderIcon
+								class="size-3 animate-spin"
+							/>{/if}{m.common_delete()}</Button
+					>
+				</div>
 			{/if}
 		</div>
+	{:else}
+		<div class="flex flex-wrap items-center justify-between gap-2 border-b px-4 py-3">
+			<div class="flex flex-wrap items-center gap-2">
+				{#if modeControl}
+					{@render modeControl()}
+				{/if}
 
-		<div class="flex flex-wrap items-center gap-1.5 md:gap-2">
-			<!-- Per-account customization tabs -->
-			{#if selectedAccounts.length > 0}
-				<div
-					class="flex max-w-[min(62vw,30rem)] [scrollbar-width:none] items-center gap-1 overflow-x-auto overflow-y-hidden py-1 pr-2 pl-1 [-ms-overflow-style:none] sm:max-w-[min(58vw,34rem)] lg:max-w-[40rem] lg:pr-3 [&::-webkit-scrollbar]:hidden"
-				>
-					<Tooltip.Root>
-						<Tooltip.Trigger>
+				<!-- Account selector -->
+				{#if accounts.length > 0}
+					<DropdownMenu.Root>
+						<DropdownMenu.Trigger>
 							{#snippet child({ props })}
-								<button
-									{...props}
-									type="button"
-									class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border transition-colors {activeVariantAccountId ===
-									null
-										? 'border-foreground bg-foreground text-background'
-										: 'border-border bg-background text-foreground hover:border-foreground/30'}"
-									onclick={() => activateVariantTab(null)}
-									title={m.compose_all_synced()}
-								>
-									<Link2Icon class="h-3.5 w-3.5" />
-								</button>
+								<Button {...props} variant="ghost" size="sm" class="gap-1.5 text-xs">
+									<span class="hidden text-muted-foreground sm:inline">
+										{selectedAccountIds.length === accounts.length
+											? m.compose_all_accounts()
+											: `${selectedAccountIds.length} account${selectedAccountIds.length !== 1 ? 's' : ''}`}
+									</span>
+									<span class="text-muted-foreground sm:hidden"
+										>{selectedAccountIds.length}/{accounts.length}</span
+									>
+									<ChevronDownIcon class="h-3 w-3" />
+								</Button>
 							{/snippet}
-						</Tooltip.Trigger>
-						<Tooltip.Content><p class="text-sm">{m.compose_all_synced()}</p></Tooltip.Content>
-					</Tooltip.Root>
+						</DropdownMenu.Trigger>
+						<DropdownMenu.Content class="w-64" align="start">
+							<div class="flex items-center justify-between px-2 py-1.5">
+								<span class="text-sm font-medium text-muted-foreground"
+									>{m.compose_publish_to()}</span
+								>
+								<div class="flex gap-1">
+									<Button variant="ghost" size="xs" onclick={selectAllAccounts} class="h-5 text-xs"
+										>{m.common_all()}</Button
+									>
+									<Button variant="ghost" size="xs" onclick={clearAllAccounts} class="h-5 text-xs"
+										>{m.common_none()}</Button
+									>
+								</div>
+							</div>
+							<DropdownMenu.Separator />
+							{#each accounts as account (account.id)}
+								{@const isSelected = selectedAccountIds.includes(account.id)}
+								{@const isUnsynced = variants.has(account.id)}
+								<DropdownMenu.CheckboxItem
+									checked={isSelected}
+									onCheckedChange={() => toggleAccount(account.id)}
+									class="gap-2"
+								>
+									<PlatformIcon platform={getPlatformKey(account.platform)} class="h-4 w-4" />
+									<div class="flex flex-1 items-center gap-1.5">
+										<span class="text-sm">{getPlatformName(account.platform)}</span>
+										{#if account.account_username}<span class="text-xs text-muted-foreground"
+												>@{account.account_username}</span
+											>{/if}
+									</div>
+									{#if isUnsynced}<span class="text-xs text-amber-500">{m.compose_custom()}</span
+										>{/if}
+								</DropdownMenu.CheckboxItem>
+							{/each}
+						</DropdownMenu.Content>
+					</DropdownMenu.Root>
+				{/if}
+			</div>
 
-					{#each selectedAccounts as account (account.id)}
-						{@const isUnsynced = variants.has(account.id)}
+			<div class="flex flex-wrap items-center gap-1.5 md:gap-2">
+				<!-- Per-account customization tabs -->
+				{#if selectedAccounts.length > 0}
+					<div
+						class="flex max-w-[min(62vw,30rem)] [scrollbar-width:none] items-center gap-1 overflow-x-auto overflow-y-hidden py-1 pr-2 pl-1 [-ms-overflow-style:none] sm:max-w-[min(58vw,34rem)] lg:max-w-[40rem] lg:pr-3 [&::-webkit-scrollbar]:hidden"
+					>
 						<Tooltip.Root>
 							<Tooltip.Trigger>
 								{#snippet child({ props })}
 									<button
 										{...props}
 										type="button"
-										class="relative z-0 flex h-8 w-8 shrink-0 items-center justify-center overflow-visible rounded-full border transition-colors {activeVariantAccountId ===
-										account.id
-											? isUnsynced
-												? 'border-amber-500/70 bg-amber-500/12 text-amber-700'
-												: 'border-foreground bg-foreground text-background'
+										class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border transition-colors {activeVariantAccountId ===
+										null
+											? 'border-foreground bg-foreground text-background'
 											: 'border-border bg-background text-foreground hover:border-foreground/30'}"
-										onclick={() => activateVariantTab(account.id)}
-										title={getPlatformName(account.platform)}
+										onclick={() => activateVariantTab(null)}
+										title={m.compose_all_synced()}
 									>
-										<PlatformIcon platform={getPlatformKey(account.platform)} class="h-3.5 w-3.5" />
-										{#if isUnsynced}
-											<span
-												class="absolute -right-1 -bottom-1 z-10 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-amber-500 text-white shadow-sm ring-2 ring-background"
-											>
-												<UnlinkIcon class="h-2 w-2" />
-											</span>
+										<Link2Icon class="h-3.5 w-3.5" />
+									</button>
+								{/snippet}
+							</Tooltip.Trigger>
+							<Tooltip.Content><p class="text-sm">{m.compose_all_synced()}</p></Tooltip.Content>
+						</Tooltip.Root>
+
+						{#each selectedAccounts as account (account.id)}
+							{@const isUnsynced = variants.has(account.id)}
+							<Tooltip.Root>
+								<Tooltip.Trigger>
+									{#snippet child({ props })}
+										<button
+											{...props}
+											type="button"
+											class="relative z-0 flex h-8 w-8 shrink-0 items-center justify-center overflow-visible rounded-full border transition-colors {activeVariantAccountId ===
+											account.id
+												? isUnsynced
+													? 'border-amber-500/70 bg-amber-500/12 text-amber-700'
+													: 'border-foreground bg-foreground text-background'
+												: 'border-border bg-background text-foreground hover:border-foreground/30'}"
+											onclick={() => activateVariantTab(account.id)}
+											title={getPlatformName(account.platform)}
+										>
+											<PlatformIcon
+												platform={getPlatformKey(account.platform)}
+												class="h-3.5 w-3.5"
+											/>
+											{#if isUnsynced}
+												<span
+													class="absolute -right-1 -bottom-1 z-10 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-amber-500 text-white shadow-sm ring-2 ring-background"
+												>
+													<UnlinkIcon class="h-2 w-2" />
+												</span>
+											{/if}
+										</button>
+									{/snippet}
+								</Tooltip.Trigger>
+								<Tooltip.Content>
+									<p class="text-sm">
+										{getPlatformName(account.platform)}{account.account_username
+											? ` @${account.account_username}`
+											: ''}{isUnsynced
+											? ` · ${m.compose_custom_state()}`
+											: ` · ${m.compose_synced_state()}`}
+									</p>
+								</Tooltip.Content>
+							</Tooltip.Root>
+						{/each}
+					</div>
+
+					{#if activeVariantAccount}
+						<Tooltip.Root>
+							<Tooltip.Trigger>
+								{#snippet child({ props })}
+									<button
+										{...props}
+										type="button"
+										class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-border bg-background text-foreground transition-colors hover:border-foreground/30"
+										onclick={() =>
+											activeVariantIsUnsynced
+												? resyncAccount(activeVariantAccount.id)
+												: unsyncAccount(activeVariantAccount.id)}
+										title={activeVariantIsUnsynced ? m.compose_sync_back() : m.compose_unsync()}
+									>
+										{#if activeVariantIsUnsynced}
+											<Link2Icon class="h-3.5 w-3.5" />
+										{:else}
+											<UnlinkIcon class="h-3.5 w-3.5" />
 										{/if}
 									</button>
 								{/snippet}
 							</Tooltip.Trigger>
 							<Tooltip.Content>
 								<p class="text-sm">
-									{getPlatformName(account.platform)}{account.account_username
-										? ` @${account.account_username}`
-										: ''}{isUnsynced
-										? ` · ${m.compose_custom_state()}`
-										: ` · ${m.compose_synced_state()}`}
+									{activeVariantIsUnsynced ? m.compose_sync_back() : m.compose_unsync()}
 								</p>
 							</Tooltip.Content>
 						</Tooltip.Root>
-					{/each}
-				</div>
-
-				{#if activeVariantAccount}
-					<Tooltip.Root>
-						<Tooltip.Trigger>
-							{#snippet child({ props })}
-								<button
-									{...props}
-									type="button"
-									class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-border bg-background text-foreground transition-colors hover:border-foreground/30"
-									onclick={() =>
-										activeVariantIsUnsynced
-											? resyncAccount(activeVariantAccount.id)
-											: unsyncAccount(activeVariantAccount.id)}
-									title={activeVariantIsUnsynced ? m.compose_sync_back() : m.compose_unsync()}
-								>
-									{#if activeVariantIsUnsynced}
-										<Link2Icon class="h-3.5 w-3.5" />
-									{:else}
-										<UnlinkIcon class="h-3.5 w-3.5" />
-									{/if}
-								</button>
-							{/snippet}
-						</Tooltip.Trigger>
-						<Tooltip.Content>
-							<p class="text-sm">
-								{activeVariantIsUnsynced ? m.compose_sync_back() : m.compose_unsync()}
-							</p>
-						</Tooltip.Content>
-					</Tooltip.Root>
+					{/if}
 				{/if}
-			{/if}
 
-			<!-- Prompt -->
-			<Tooltip.Root>
-				<Tooltip.Trigger>
-					{#snippet child({ props })}
-						<Button
-							{...props}
-							variant="ghost"
-							size="icon"
-							class="h-8 w-8 {showPromptCard ? 'text-amber-500' : ''}"
-							onclick={() => (showPromptCard ? dismissPrompt() : fetchRandomPrompt())}
-						>
-							<LightbulbIcon class="h-4 w-4" />
-						</Button>
-					{/snippet}
-				</Tooltip.Trigger>
-				<Tooltip.Content>
-					<p class="text-sm">
-						{showPromptCard ? m.compose_dismiss_inspiration() : m.compose_need_inspiration()}
-					</p>
-				</Tooltip.Content>
-			</Tooltip.Root>
+				<!-- Prompt -->
+				<Tooltip.Root>
+					<Tooltip.Trigger>
+						{#snippet child({ props })}
+							<Button
+								{...props}
+								variant="ghost"
+								size="icon"
+								class="h-8 w-8 {showPromptCard ? 'text-amber-500' : ''}"
+								onclick={() => (showPromptCard ? dismissPrompt() : fetchRandomPrompt())}
+							>
+								<LightbulbIcon class="h-4 w-4" />
+							</Button>
+						{/snippet}
+					</Tooltip.Trigger>
+					<Tooltip.Content>
+						<p class="text-sm">
+							{showPromptCard ? m.compose_dismiss_inspiration() : m.compose_need_inspiration()}
+						</p>
+					</Tooltip.Content>
+				</Tooltip.Root>
 
-			{#if draftId}
-				{#if showDeleteConfirm}
-					<div class="flex items-center gap-1" data-testid="composer-delete-confirmation">
-						<span class="hidden text-xs text-destructive sm:inline"
-							>{m.day_posts_delete_confirm()}</span
-						>
-						<Button
-							variant="ghost"
-							size="xs"
-							class="h-7 text-xs"
-							onclick={() => (showDeleteConfirm = false)}
-							disabled={isDeleting}
-						>
-							{m.common_cancel()}
-						</Button>
-						<Button
-							variant="destructive"
-							size="xs"
-							class="h-7 gap-1 text-xs"
-							onclick={deleteDraft}
-							disabled={isDeleting}
-						>
-							{#if isDeleting}<LoaderIcon class="size-3 animate-spin" />{/if}
-							{m.common_delete()}
-						</Button>
-					</div>
+				{#if draftId}
+					{#if showDeleteConfirm}
+						<div class="flex items-center gap-1" data-testid="composer-delete-confirmation">
+							<span class="hidden text-xs text-destructive sm:inline"
+								>{m.day_posts_delete_confirm()}</span
+							>
+							<Button
+								variant="ghost"
+								size="xs"
+								class="h-7 text-xs"
+								onclick={() => (showDeleteConfirm = false)}
+								disabled={isDeleting}
+							>
+								{m.common_cancel()}
+							</Button>
+							<Button
+								variant="destructive"
+								size="xs"
+								class="h-7 gap-1 text-xs"
+								onclick={deleteDraft}
+								disabled={isDeleting}
+							>
+								{#if isDeleting}<LoaderIcon class="size-3 animate-spin" />{/if}
+								{m.common_delete()}
+							</Button>
+						</div>
+					{:else}
+						<Tooltip.Root>
+							<Tooltip.Trigger>
+								{#snippet child({ props })}
+									<Button
+										{...props}
+										variant="ghost"
+										size="icon"
+										class="h-8 w-8 text-muted-foreground hover:text-destructive"
+										aria-label={m.common_delete()}
+										data-testid="composer-delete"
+										onclick={() => (showDeleteConfirm = true)}
+										disabled={isDeleting || isSaving || isSubmitting}
+									>
+										<Trash2Icon class="size-4" />
+									</Button>
+								{/snippet}
+							</Tooltip.Trigger>
+							<Tooltip.Content><p class="text-sm">{m.common_delete()}</p></Tooltip.Content>
+						</Tooltip.Root>
+					{/if}
+				{/if}
+
+				{#if isEditMode && !autoSavesDraft}
+					<Button
+						size="sm"
+						class="gap-1.5"
+						onclick={saveEditedPost}
+						disabled={isSaving || isSubmitting || !hasContent || selectedAccountIds.length === 0}
+					>
+						{#if isSaving}<LoaderIcon class="h-3.5 w-3.5 animate-spin" />{/if}
+						<span>{isSaving ? m.compose_saving_changes() : m.compose_save_changes()}</span>
+					</Button>
 				{:else}
-					<Tooltip.Root>
-						<Tooltip.Trigger>
-							{#snippet child({ props })}
-								<Button
-									{...props}
-									variant="ghost"
-									size="icon"
-									class="h-8 w-8 text-muted-foreground hover:text-destructive"
-									aria-label={m.common_delete()}
-									data-testid="composer-delete"
-									onclick={() => (showDeleteConfirm = true)}
-									disabled={isDeleting || isSaving || isSubmitting}
-								>
-									<Trash2Icon class="size-4" />
-								</Button>
-							{/snippet}
-						</Tooltip.Trigger>
-						<Tooltip.Content><p class="text-sm">{m.common_delete()}</p></Tooltip.Content>
-					</Tooltip.Root>
-				{/if}
-			{/if}
+					<div
+						class="inline-flex overflow-hidden rounded-md border bg-background"
+						title={formatScheduledDisplay()}
+					>
+						<Button
+							type="button"
+							variant="ghost"
+							size="sm"
+							class="h-8 rounded-none border-r border-border px-3 shadow-none"
+							onclick={openScheduleDialog}
+							disabled={isSubmitting || isSaving}
+						>
+							{formatScheduledDisplay()}
+						</Button>
+						<Tooltip.Root>
+							<Tooltip.Trigger>
+								{#snippet child({ props })}
+									<Button
+										{...props}
+										type="button"
+										variant="ghost"
+										size="icon-sm"
+										class="h-8 w-8 rounded-none shadow-none"
+										aria-label={m.compose_schedule_next_slot()}
+										onclick={scheduleNextFreeSlot}
+										disabled={suggestingSlot ||
+											isSubmitting ||
+											!hasContent ||
+											selectedAccountIds.length === 0}
+									>
+										{#if suggestingSlot || isSubmitting}
+											<LoaderIcon class="h-3.5 w-3.5 animate-spin" />
+										{:else}
+											<ArrowRightIcon class="h-3.5 w-3.5" />
+										{/if}
+									</Button>
+								{/snippet}
+							</Tooltip.Trigger>
+							<Tooltip.Content>
+								<p class="text-sm">{m.compose_schedule_next_slot()}</p>
+							</Tooltip.Content>
+						</Tooltip.Root>
+					</div>
 
-			{#if isEditMode && !autoSavesDraft}
-				<Button
-					size="sm"
-					class="gap-1.5"
-					onclick={saveEditedPost}
-					disabled={isSaving || isSubmitting || !hasContent || selectedAccountIds.length === 0}
-				>
-					{#if isSaving}<LoaderIcon class="h-3.5 w-3.5 animate-spin" />{/if}
-					<span>{isSaving ? m.compose_saving_changes() : m.compose_save_changes()}</span>
-				</Button>
-			{:else}
-				<div
-					class="inline-flex overflow-hidden rounded-md border bg-background"
-					title={formatScheduledDisplay()}
-				>
 					<Button
 						type="button"
-						variant="ghost"
 						size="sm"
-						class="h-8 rounded-none border-r border-border px-3 shadow-none"
-						onclick={openScheduleDialog}
-						disabled={isSubmitting || isSaving}
+						class="h-8 px-3"
+						onclick={() => publish(true)}
+						disabled={isSubmitting || !hasContent || selectedAccountIds.length === 0}
 					>
-						{formatScheduledDisplay()}
+						{#if isSubmitting}<LoaderIcon class="h-3.5 w-3.5 animate-spin" />{/if}
+						{m.compose_publish()}
 					</Button>
-					<Tooltip.Root>
-						<Tooltip.Trigger>
-							{#snippet child({ props })}
-								<Button
-									{...props}
-									type="button"
-									variant="ghost"
-									size="icon-sm"
-									class="h-8 w-8 rounded-none shadow-none"
-									aria-label={m.compose_schedule_next_slot()}
-									onclick={scheduleNextFreeSlot}
-									disabled={suggestingSlot ||
-										isSubmitting ||
-										!hasContent ||
-										selectedAccountIds.length === 0}
-								>
-									{#if suggestingSlot || isSubmitting}
-										<LoaderIcon class="h-3.5 w-3.5 animate-spin" />
-									{:else}
-										<ArrowRightIcon class="h-3.5 w-3.5" />
-									{/if}
-								</Button>
-							{/snippet}
-						</Tooltip.Trigger>
-						<Tooltip.Content>
-							<p class="text-sm">{m.compose_schedule_next_slot()}</p>
-						</Tooltip.Content>
-					</Tooltip.Root>
-				</div>
-
-				<Button
-					type="button"
-					size="sm"
-					class="h-8 px-3"
-					onclick={() => publish(true)}
-					disabled={isSubmitting || !hasContent || selectedAccountIds.length === 0}
-				>
-					{#if isSubmitting}<LoaderIcon class="h-3.5 w-3.5 animate-spin" />{/if}
-					{m.compose_publish()}
-				</Button>
-			{/if}
+				{/if}
+			</div>
 		</div>
-	</div>
+	{/if}
 
 	<Dialog.Root bind:open={showScheduleDialog}>
 		<Dialog.Content class="max-h-[calc(100vh-2rem)] overflow-y-auto p-0 sm:max-w-3xl">
@@ -2322,8 +2550,9 @@
 										<div class="relative flex flex-col items-center pt-3">
 											<button
 												type="button"
-												class="drag-handle -ml-4 cursor-grab rounded p-0.5 text-muted-foreground opacity-0 transition-opacity group-hover/post:opacity-60 hover:opacity-100 active:cursor-grabbing"
+												class="drag-handle -ml-6 flex size-10 cursor-grab items-center justify-center rounded-md text-muted-foreground opacity-70 transition-opacity hover:bg-muted hover:opacity-100 active:cursor-grabbing md:-ml-4 md:size-6 md:opacity-0 md:group-hover/post:opacity-60"
 												title={m.compose_drag_to_reorder()}
+												aria-label={m.compose_drag_to_reorder()}
 											>
 												<GripVerticalIcon class="h-4 w-4" />
 											</button>
@@ -2425,28 +2654,42 @@
 															/>
 														{/if}
 														<div
-															class="absolute inset-0 flex items-start justify-end gap-1 bg-black/0 p-2 opacity-0 transition-all group-hover/media:bg-black/40 group-hover/media:opacity-100"
+															class="absolute top-2 right-2 flex items-center gap-1 opacity-100 md:opacity-0 md:transition-opacity md:group-hover/media:opacity-100"
+															data-testid="composer-media-actions"
 														>
 															<button
 																type="button"
-																class="rounded-md bg-black/60 px-2 py-1 text-xs text-white backdrop-blur-sm transition-colors hover:bg-black/80"
+																class={[
+																	'flex size-10 items-center justify-center rounded-md bg-black/75 text-white shadow-sm backdrop-blur-sm transition-colors hover:bg-black/90 md:size-7',
+																	mediaAltTexts.get(mediaId)
+																		? 'ring-2 ring-primary/80 ring-offset-1 ring-offset-transparent'
+																		: ''
+																]}
+																aria-label={mediaAltTexts.get(mediaId)
+																	? m.media_alt_text()
+																	: m.media_add_alt_text()}
+																title={mediaAltTexts.get(mediaId)
+																	? m.media_alt_text()
+																	: m.media_add_alt_text()}
 																onclick={(e) => {
 																	e.stopPropagation();
 																	editingAltMediaId =
 																		editingAltMediaId === mediaId ? null : mediaId;
 																}}
 															>
-																<TypeIcon class="h-3 w-3" />
+																<TypeIcon class="size-4 md:size-3.5" />
 															</button>
 															<button
 																type="button"
-																class="rounded-md bg-black/60 p-1 text-white backdrop-blur-sm transition-colors hover:bg-red-500/80"
+																class="flex size-10 items-center justify-center rounded-md bg-black/75 text-white shadow-sm backdrop-blur-sm transition-colors hover:bg-red-600 md:size-7"
+																aria-label={m.compose_remove_media()}
+																title={m.compose_remove_media()}
 																onclick={(e) => {
 																	e.stopPropagation();
 																	removeMedia(i, mi);
 																}}
 															>
-																<XIcon class="h-3 w-3" />
+																<XIcon class="size-4 md:size-3.5" />
 															</button>
 														</div>
 														{#if editingAltMediaId === mediaId}
@@ -2462,7 +2705,8 @@
 																		)}
 																	placeholder={m.compose_alt_text_placeholder()}
 																	rows={2}
-																	class="w-full resize-none rounded bg-white/10 px-2 py-1 text-xs text-white placeholder:text-white/50 focus:outline-none"
+																	class="w-full resize-none rounded bg-white/10 px-2 py-2 text-base text-white placeholder:text-white/60 focus:ring-2 focus:ring-white/70 focus:outline-none md:py-1 md:text-xs"
+																	aria-label={m.media_alt_text()}
 																></textarea>
 																<div class="mt-1 flex justify-end gap-1">
 																	<button
@@ -2596,9 +2840,10 @@
 										{#if isThread}
 											<button
 												type="button"
-												class="absolute top-3 right-0 rounded p-1 text-muted-foreground opacity-0 transition-opacity group-hover/post:opacity-100 hover:bg-muted hover:text-destructive"
+												class="absolute top-1 right-0 flex size-10 items-center justify-center rounded-md text-muted-foreground opacity-70 transition-opacity hover:bg-muted hover:text-destructive md:top-3 md:size-7 md:opacity-0 md:group-hover/post:opacity-100"
 												onclick={() => removePost(i)}
 												title={m.compose_remove_post()}
+												aria-label={m.compose_remove_post()}
 											>
 												<Trash2Icon class="h-3.5 w-3.5" />
 											</button>

@@ -6,10 +6,7 @@
 	import { quintOut } from 'svelte/easing';
 	import { auth } from '$lib/stores/auth';
 	import { workspaceCtx } from '$lib/stores/workspace.svelte';
-	import { instanceStore } from '$lib/stores/instance.svelte';
-	import { recreateClient } from '$lib/api/client';
 	import { ui } from '$lib/stores/ui.svelte';
-	import { IS_CAPACITOR } from '$lib/env';
 	import { m } from '$lib/paraglide/messages';
 	import {
 		isNavigationItemActive,
@@ -21,24 +18,16 @@
 	import * as Avatar from '$lib/components/ui/avatar';
 	import Logo from './Logo.svelte';
 	import SidebarPlanner from './sidebar-planner.svelte';
-	import LanguageSwitcher from './language-switcher.svelte';
+	import AccountPreferencesMenu from './account-preferences-menu.svelte';
 	import CalendarIcon from 'lucide-svelte/icons/calendar-days';
 	import ComposeIcon from 'lucide-svelte/icons/square-pen';
 	import PostsIcon from 'lucide-svelte/icons/files';
 	import MediaIcon from 'lucide-svelte/icons/images';
 	import AccountsIcon from 'lucide-svelte/icons/users';
 	import SettingsIcon from 'lucide-svelte/icons/settings';
-	import UserIcon from 'lucide-svelte/icons/user-round';
-	import PaletteIcon from 'lucide-svelte/icons/palette';
-	import LogOutIcon from 'lucide-svelte/icons/log-out';
 	import ChevronsUpDownIcon from 'lucide-svelte/icons/chevrons-up-down';
-	import ServerIcon from 'lucide-svelte/icons/server';
 	import CheckIcon from 'lucide-svelte/icons/check';
-	import Volume2Icon from 'lucide-svelte/icons/volume-2';
-	import { setMode, userPrefersMode } from 'mode-watcher';
 	import type { Workspace } from '$lib/api/client';
-	import { soundPreferences } from '$lib/stores/sound-preferences.svelte';
-	type AppearanceMode = 'system' | 'light' | 'dark';
 
 	let authState = $derived($auth);
 	const sidebar = Sidebar.useSidebar();
@@ -101,17 +90,6 @@
 		}
 	}
 
-	function appearanceLabel(mode: AppearanceMode) {
-		switch (mode) {
-			case 'light':
-				return m.sidebar_appearance_light();
-			case 'dark':
-				return m.sidebar_appearance_dark();
-			default:
-				return m.sidebar_appearance_system();
-		}
-	}
-
 	function initials(value: string) {
 		const parts = value
 			.replace(/@.*/, '')
@@ -140,22 +118,6 @@
 		sidebar.setOpenMobile(false);
 		if (href === '/') ui.startNewPost();
 		goto(resolve(href as '/'));
-	}
-
-	async function handleLogout() {
-		await auth.logout();
-		await goto(resolve('/login' as '/'));
-	}
-
-	async function handleSwitchServer() {
-		await auth.logout();
-		instanceStore().clearInstanceUrl();
-		recreateClient();
-		await goto(resolve('/connect' as '/'));
-	}
-
-	function chooseAppearance(nextMode: AppearanceMode) {
-		setMode(nextMode);
 	}
 </script>
 
@@ -341,49 +303,7 @@
 						align="end"
 						sideOffset={6}
 					>
-						<DropdownMenu.Item onclick={() => navigate('/settings?tab=profile')}>
-							<UserIcon class="mr-2 size-4 text-muted-foreground" />
-							{m.sidebar_profile_security()}
-						</DropdownMenu.Item>
-						<DropdownMenu.Sub>
-							<DropdownMenu.SubTrigger>
-								<PaletteIcon class="mr-2 size-4 text-muted-foreground" />
-								{m.sidebar_appearance()}
-								<span class="ml-auto text-muted-foreground capitalize"
-									>{appearanceLabel(userPrefersMode.current as AppearanceMode)}</span
-								>
-							</DropdownMenu.SubTrigger>
-							<DropdownMenu.SubContent class="w-40">
-								{#each ['system', 'light', 'dark'] as appearance (appearance)}
-									<DropdownMenu.Item onclick={() => chooseAppearance(appearance as AppearanceMode)}>
-										<span>{appearanceLabel(appearance as AppearanceMode)}</span>
-										{#if userPrefersMode.current === appearance}
-											<CheckIcon class="ml-auto size-4 text-primary" />
-										{/if}
-									</DropdownMenu.Item>
-								{/each}
-							</DropdownMenu.SubContent>
-						</DropdownMenu.Sub>
-						<DropdownMenu.CheckboxItem
-							checked={soundPreferences.enabled}
-							onCheckedChange={(checked) => soundPreferences.setEnabled(checked)}
-						>
-							<Volume2Icon class="mr-2 size-4 text-muted-foreground" />
-							{m.sidebar_interface_sounds()}
-						</DropdownMenu.CheckboxItem>
-						<LanguageSwitcher variant="menu" />
-						{#if IS_CAPACITOR}
-							<DropdownMenu.Separator />
-							<DropdownMenu.Item onclick={handleSwitchServer}>
-								<ServerIcon class="mr-2 size-4 text-muted-foreground" />
-								{m.sidebar_change_server()}
-							</DropdownMenu.Item>
-						{/if}
-						<DropdownMenu.Separator />
-						<DropdownMenu.Item onclick={handleLogout}>
-							<LogOutIcon class="mr-2 size-4 text-muted-foreground" />
-							{m.sidebar_log_out()}
-						</DropdownMenu.Item>
+						<AccountPreferencesMenu onNavigate={() => sidebar.setOpenMobile(false)} />
 					</DropdownMenu.Content>
 				</DropdownMenu.Root>
 			</Sidebar.MenuItem>

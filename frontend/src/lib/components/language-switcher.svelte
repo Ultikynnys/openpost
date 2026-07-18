@@ -9,9 +9,10 @@
 	interface Props {
 		compact?: boolean;
 		variant?: 'button' | 'menu';
+		touchSize?: boolean;
 	}
 
-	let { compact = false, variant = 'button' }: Props = $props();
+	let { compact = false, variant = 'button', touchSize = false }: Props = $props();
 
 	let currentLocale = $derived(getCurrentLocale());
 
@@ -22,14 +23,14 @@
 
 {#if variant === 'menu'}
 	<DropdownMenu.Sub>
-		<DropdownMenu.SubTrigger>
+		<DropdownMenu.SubTrigger class={touchSize ? 'min-h-11' : ''}>
 			<LanguagesIcon class="mr-2 size-4 text-muted-foreground" />
 			<span>{m.language_label()}</span>
 			<span class="text-muted-foreground">{localeLabels[currentLocale]}</span>
 		</DropdownMenu.SubTrigger>
 		<DropdownMenu.SubContent class="w-44">
 			{#each locales as locale (locale)}
-				<DropdownMenu.Item onclick={() => selectLocale(locale)}>
+				<DropdownMenu.Item class={touchSize ? 'min-h-11' : ''} onclick={() => selectLocale(locale)}>
 					<div class="flex w-full items-center justify-between gap-3">
 						<span>{localeLabels[locale]}</span>
 						{#if locale === currentLocale}
