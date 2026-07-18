@@ -1753,7 +1753,7 @@ func (h *PostHandler) UpsertVariants(api huma.API) {
 			accountIDs = append(accountIDs, v.SocialAccountID)
 			if v.MediaIDs != nil && *v.MediaIDs != "" {
 				var mediaIDs []string
-				if err := json.Unmarshal([]byte(*v.MediaIDs), &mediaIDs); err != nil {
+				if err := json.Unmarshal([]byte(*v.MediaIDs), &mediaIDs); err != nil || mediaIDs == nil {
 					return nil, huma.Error400BadRequest("variant media_ids must be a JSON array of media IDs")
 				}
 				variantMediaIDs = append(variantMediaIDs, mediaIDs...)

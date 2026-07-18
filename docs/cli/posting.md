@@ -41,6 +41,15 @@ openpost media upload ./image.png --alt 'Product screenshot showing the new queu
 openpost post create --accounts x --content 'New queue view is live.' --media <id> --schedule 'next monday 9am'
 ```
 
+View destination-specific renditions alongside the shared post source, or replace
+source media on an existing post. Pass an empty `--media` value to clear it:
+
+```sh
+openpost post view <post-id>
+openpost post update <post-id> --media <id> --media <second-id>
+openpost post update <post-id> --media ''
+```
+
 ## Rich Publications
 
 Use `openpost publication create` for post types that need explicit provider

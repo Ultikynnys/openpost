@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/openpost/backend/internal/capabilities"
 	"github.com/openpost/backend/internal/models"
 	"github.com/openpost/backend/internal/platform"
 	"github.com/uptrace/bun"
@@ -65,6 +66,27 @@ func (s *Service) ValidateScheduledProviderMedia(ctx context.Context, workspaceI
 		}
 	}
 	return nil
+}
+
+// ValidateScheduledProviderOutput validates the effective content and media for
+// one destination through the same provider capability paths used elsewhere.
+func (s *Service) ValidateScheduledProviderOutput(ctx context.Context, workspaceID, accountID, content string, mediaIDs []string) error {
+	platforms, err := s.platformsForAccounts(ctx, workspaceID, []string{accountID})
+	if err != nil {
+		return err
+	}
+	if len(platforms) == 0 {
+		return nil
+	}
+	provider := platforms[0]
+	if _, ok := capabilities.Find(provider, models.ContentProfileShortText); ok {
+		for _, issue := range capabilities.Validate(provider, models.ContentProfileShortText, content, "", "", nil, nil) {
+			if issue.Severity == severityError {
+				return UserError{Message: issue.Message}
+			}
+		}
+	}
+	return s.ValidateScheduledProviderMedia(ctx, workspaceID, []string{accountID}, mediaIDs)
 }
 
 func (s *Service) DestinationAccountIDs(ctx context.Context, postID string) ([]string, error) {

@@ -50,6 +50,7 @@
 		type VariantPost
 	} from './compose/draft-utils';
 	import { minimumAccountCharacterLimit, uniquePlatformLimits } from './compose/platform-limits';
+	import { editorAccountIdAfterVariantLoad } from './compose/editor-target';
 	import { parseNaturalScheduleInput } from './compose/schedule-language';
 	import { soundPreferences } from '$lib/stores/sound-preferences.svelte';
 
@@ -366,6 +367,11 @@
 		}
 		if (nextVariants.size !== variants.size) {
 			variants = nextVariants;
+			activeVariantAccountId = editorAccountIdAfterVariantLoad(
+				activeVariantAccountId,
+				selectedAccountIds,
+				nextVariants.keys()
+			);
 		}
 
 		if (activeVariantAccountId && !validIds.has(activeVariantAccountId)) {
@@ -1460,6 +1466,11 @@
 				}
 			}
 			variants = nextVariants;
+			activeVariantAccountId = editorAccountIdAfterVariantLoad(
+				activeVariantAccountId,
+				selectedAccountIds,
+				nextVariants.keys()
+			);
 
 			// Fetch metadata for variant-only media IDs not already hydrated.
 			const missingIds = [...variantMediaIds].filter(

@@ -1669,11 +1669,9 @@ func (h *MediaHandler) processUploadBytes(ctx context.Context, input mediaUpload
 		Scan(ctx)
 	if err == nil {
 		return map[string]interface{}{
-			"id":        existing.ID,
-			"mime_type": existing.MimeType,
-			"url":       "/media/" + existing.ID,
-			"size":      existing.Size,
-			"deduped":   true,
+			"id": existing.ID, "mime_type": existing.MimeType, "url": "/media/" + existing.ID,
+			"size": existing.Size, "deduped": true, "alt_text": existing.AltText,
+			"original_filename": existing.OriginalFilename,
 		}, nil
 	}
 	if err := h.checkUploadQuota(ctx, input.WorkspaceID, input.Size); err != nil {
@@ -1732,11 +1730,9 @@ func (h *MediaHandler) processUploadBytes(ctx context.Context, input mediaUpload
 	}
 
 	return map[string]interface{}{
-		"id":        mediaID,
-		"mime_type": mimeType,
-		"url":       "/media/" + mediaID,
-		"size":      input.Size,
-		"deduped":   false,
+		"id": mediaID, "mime_type": mimeType, "url": "/media/" + mediaID,
+		"size": input.Size, "deduped": false, "alt_text": media.AltText,
+		"original_filename": media.OriginalFilename,
 	}, nil
 }
 

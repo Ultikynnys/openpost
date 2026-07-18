@@ -548,6 +548,17 @@ type Post struct {
 	MediaIDs           []string          `json:"media_ids,omitempty"`
 	Media              []PostMedia       `json:"media,omitempty"`
 	ThreadDraft        *string           `json:"thread_draft,omitempty"`
+	Renditions         []PostRendition   `json:"renditions"`
+}
+
+type PostRendition struct {
+	ID                string   `json:"id"`
+	SocialAccountID   string   `json:"social_account_id"`
+	Content           string   `json:"content"`
+	MediaIDs          []string `json:"media_ids"`
+	MediaMode         string   `json:"media_mode"`
+	EffectiveMediaIDs []string `json:"effective_media_ids"`
+	IsUnsynced        bool     `json:"is_unsynced"`
 }
 
 type CreatePostInput struct {
@@ -590,6 +601,45 @@ func (c *Client) GetPost(ctx context.Context, id string) (*Post, error) {
 	if err := c.GetJSON(ctx, "/api/v1/posts/"+url.PathEscape(id), &out); err != nil {
 		return nil, err
 	}
+	var variants struct {
+		Variants []struct {
+			ID              string `json:"id"`
+			SocialAccountID string `json:"social_account_id"`
+			Content         string `json:"content"`
+			MediaIDs        string `json:"media_ids"`
+			IsUnsynced      bool   `json:"is_unsynced"`
+		} `json:"variants"`
+	}
+	if err := c.GetJSON(ctx, "/api/v1/posts/"+url.PathEscape(id)+"/variants", &variants); err != nil {
+		return nil, err
+	}
+	for _, variant := range variants.Variants {
+		mediaIDs := []string{}
+		mediaMode := "inherit"
+		if trimmed := strings.TrimSpace(variant.MediaIDs); trimmed != "" {
+			if trimmed[0] != '[' {
+				return nil, fmt.Errorf("decode rendition %s media_ids: media_ids must be a JSON array", variant.ID)
+			}
+			if err := json.Unmarshal([]byte(trimmed), &mediaIDs); err != nil {
+				return nil, fmt.Errorf("decode rendition %s media_ids: %w", variant.ID, err)
+			}
+			if len(mediaIDs) == 0 {
+				mediaMode = "clear"
+			} else {
+				mediaMode = "override"
+			}
+		}
+		effectiveMediaIDs := mediaIDs
+		if mediaMode == "inherit" {
+			effectiveMediaIDs = append([]string(nil), out.MediaIDs...)
+			if len(effectiveMediaIDs) == 0 {
+				for _, media := range out.Media {
+					effectiveMediaIDs = append(effectiveMediaIDs, media.MediaID)
+				}
+			}
+		}
+		out.Renditions = append(out.Renditions, PostRendition{ID: variant.ID, SocialAccountID: variant.SocialAccountID, Content: variant.Content, MediaIDs: mediaIDs, MediaMode: mediaMode, EffectiveMediaIDs: effectiveMediaIDs, IsUnsynced: variant.IsUnsynced})
+	}
 	return &out, nil
 }
 
@@ -598,12 +648,12 @@ func (c *Client) DeletePost(ctx context.Context, id string) error {
 }
 
 type UpdatePostInput struct {
-	Content            *string  `json:"content,omitempty"`
-	ScheduledAt        *string  `json:"scheduled_at,omitempty"`
-	SocialAccountIDs   []string `json:"social_account_ids,omitempty"`
-	MediaIDs           []string `json:"media_ids,omitempty"`
-	RandomDelayMinutes *int     `json:"random_delay_minutes,omitempty"`
-	ThreadDraft        *string  `json:"thread_draft,omitempty"`
+	Content            *string   `json:"content,omitempty"`
+	ScheduledAt        *string   `json:"scheduled_at,omitempty"`
+	SocialAccountIDs   []string  `json:"social_account_ids,omitempty"`
+	MediaIDs           *[]string `json:"media_ids,omitempty"`
+	RandomDelayMinutes *int      `json:"random_delay_minutes,omitempty"`
+	ThreadDraft        *string   `json:"thread_draft,omitempty"`
 }
 
 func (c *Client) UpdatePost(ctx context.Context, id string, in UpdatePostInput) (*Post, error) {

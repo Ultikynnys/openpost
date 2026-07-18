@@ -124,6 +124,46 @@ func TestListPostsRejectsNegativeOffset(t *testing.T) {
 	require.Contains(t, resp.Body.String(), "offset must be greater than or equal to 0")
 }
 
+func TestUpsertVariantsRejectsNullMediaIDsWithoutPersistence(t *testing.T) {
+	t.Parallel()
+
+	db := createHandlerTestDB(
+		t,
+		(*models.WorkspaceMember)(nil),
+		(*models.Post)(nil),
+		(*models.PostVariant)(nil),
+	)
+	ctx := context.Background()
+	_, err := db.NewInsert().Model(&models.WorkspaceMember{
+		WorkspaceID: "ws-1",
+		UserID:      "user-1",
+		Role:        models.WorkspaceRoleAdmin,
+	}).Exec(ctx)
+	require.NoError(t, err)
+	_, err = db.NewInsert().Model(&models.Post{
+		ID:          "post-1",
+		WorkspaceID: "ws-1",
+		CreatedByID: "user-1",
+		Content:     "source content",
+		Status:      statusDraft,
+	}).Exec(ctx)
+	require.NoError(t, err)
+
+	e := echo.New()
+	api := humaecho.NewWithGroup(e, e.Group("/api/v1"), huma.DefaultConfig("Test", "1.0.0"))
+	NewPostHandler(db, testAuthenticator{}).UpsertVariants(api)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPut, "/api/v1/posts/post-1/variants", strings.NewReader(`{"variants":[{"social_account_id":"account-1","media_ids":"null","is_unsynced":false}]}`))
+	req.Header.Set("Authorization", "Bearer web-token")
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusBadRequest, rec.Code, rec.Body.String())
+	count, err := db.NewSelect().Model((*models.PostVariant)(nil)).Count(ctx)
+	require.NoError(t, err)
+	require.Zero(t, count)
+}
+
 type listPostsTestServer struct {
 	echo *echo.Echo
 	db   *bun.DB

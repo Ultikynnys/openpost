@@ -170,6 +170,9 @@ func newPostViewCmd() *cobra.Command {
 			for _, d := range post.Destinations {
 				p.Printf("destination %s\t%s\t%s\t%s", d.SocialAccountID, d.Platform, d.Status, emptyDash(d.ErrorMessage))
 			}
+			for _, rendition := range post.Renditions {
+				p.Printf("rendition %s\tunsynced=%t\tmedia=%s\teffective_media=%s\t%s", rendition.SocialAccountID, rendition.IsUnsynced, rendition.MediaMode, strings.Join(rendition.EffectiveMediaIDs, ","), rendition.Content)
+			}
 			return nil
 		},
 	}
@@ -216,6 +219,13 @@ func newPostUpdateCmd() *cobra.Command {
 			if cmd.Flags().Changed("random-delay") {
 				in.RandomDelayMinutes = &flags.randomDelay
 			}
+			if cmd.Flags().Changed("media") {
+				mediaIDs, err := resolveMedia(cmd, client, workspaceID, flags.media, flags.mediaAlt)
+				if err != nil {
+					return err
+				}
+				in.MediaIDs = &mediaIDs
+			}
 			post, err := client.UpdatePost(cmd.Context(), args[0], in)
 			if err != nil {
 				return err
@@ -227,6 +237,8 @@ func newPostUpdateCmd() *cobra.Command {
 	cmd.Flags().StringVar(&flags.schedule, "schedule", "", "natural-language, RFC3339, next-slot, now, or draft; empty string unschedules")
 	cmd.Flags().StringVar(&flags.accounts, "accounts", "", "comma-separated account selectors")
 	cmd.Flags().IntVar(&flags.randomDelay, "random-delay", 0, "random delay in minutes")
+	cmd.Flags().StringArrayVar(&flags.media, "media", nil, "replacement media id or local file path; repeatable; pass an empty value to clear")
+	cmd.Flags().StringArrayVar(&flags.mediaAlt, "media-alt", nil, "alt text for the matching uploaded --media")
 	return cmd
 }
 
@@ -398,6 +410,11 @@ func resolveAccounts(cmd *cobra.Command, client *api.Client, workspaceID, csv st
 }
 
 func resolveMedia(cmd *cobra.Command, client *api.Client, workspaceID string, mediaValues, altValues []string) ([]string, error) {
+	expanded := make([]string, 0, len(mediaValues))
+	for _, value := range mediaValues {
+		expanded = append(expanded, splitCSV(value)...)
+	}
+	mediaValues = expanded
 	existing := map[string]bool{}
 	list, _ := client.ListMedia(cmd.Context(), workspaceID, 200)
 	for _, item := range list {

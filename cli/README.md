@@ -82,6 +82,10 @@ openpost media upload ./image.png --alt "Product screenshot"
 openpost media list --limit 25
 ```
 
+`openpost post view <id>` includes destination-specific renditions. Replace source
+attachments with repeatable or comma-separated `--media` values on `post update`,
+or use `--media ''` to clear them.
+
 ## Account targeting
 
 Use `account list` to see account IDs, slugs, and platform selectors. Pass

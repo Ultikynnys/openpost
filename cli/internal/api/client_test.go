@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -548,6 +550,85 @@ func TestCreatePost_WireFormat(t *testing.T) {
 	}
 	if got.Content != "Hi" {
 		t.Errorf("expected content Hi, got %q", got.Content)
+	}
+}
+
+func TestGetPostIncludesRenditions(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if strings.HasSuffix(r.URL.Path, "/variants") {
+			_, _ = w.Write([]byte(`{"variants":[{"id":"inherit","social_account_id":"a1","content":"Inherited","media_ids":"","is_unsynced":true},{"id":"clear","social_account_id":"a2","content":"Clear","media_ids":"[]","is_unsynced":true},{"id":"override","social_account_id":"a3","content":"Override","media_ids":"[\"m1\"]","is_unsynced":true}]}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"id":"p1","content":"source","media":[{"media_id":"source-media"}]}`))
+	}))
+	defer srv.Close()
+	got, err := New(srv.URL, "").GetPost(context.Background(), "p1")
+	if err != nil || len(got.Renditions) != 3 {
+		t.Fatalf("post = %+v, err = %v", got, err)
+	}
+	if got.Renditions[0].MediaMode != "inherit" || !reflect.DeepEqual(got.Renditions[0].EffectiveMediaIDs, []string{"source-media"}) {
+		t.Fatalf("inherit rendition = %+v", got.Renditions[0])
+	}
+	if got.Renditions[1].MediaMode != "clear" || len(got.Renditions[1].EffectiveMediaIDs) != 0 {
+		t.Fatalf("clear rendition = %+v", got.Renditions[1])
+	}
+	if got.Renditions[2].MediaMode != "override" || !reflect.DeepEqual(got.Renditions[2].MediaIDs, []string{"m1"}) {
+		t.Fatalf("override rendition = %+v", got.Renditions[2])
+	}
+}
+
+func TestGetPostRejectsMalformedRenditionMediaJSON(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if strings.HasSuffix(r.URL.Path, "/variants") {
+			_, _ = w.Write([]byte(`{"variants":[{"id":"bad","media_ids":"not-json"}]}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"id":"p1"}`))
+	}))
+	defer srv.Close()
+	_, err := New(srv.URL, "").GetPost(context.Background(), "p1")
+	if err == nil || !strings.Contains(err.Error(), "decode rendition bad media_ids") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestGetPostRejectsNullRenditionMediaJSON(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if strings.HasSuffix(r.URL.Path, "/variants") {
+			_, _ = w.Write([]byte(`{"variants":[{"id":"null-media","media_ids":"null"}]}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"id":"p1"}`))
+	}))
+	defer srv.Close()
+	_, err := New(srv.URL, "").GetPost(context.Background(), "p1")
+	if err == nil || !strings.Contains(err.Error(), "decode rendition null-media media_ids") || !strings.Contains(err.Error(), "JSON array") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestUpdatePostMediaDistinguishesOmittedFromCleared(t *testing.T) {
+	var bodies []map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		bodies = append(bodies, body)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"p1"}`))
+	}))
+	defer srv.Close()
+	c := New(srv.URL, "")
+	_, _ = c.UpdatePost(context.Background(), "p1", UpdatePostInput{})
+	empty := []string{}
+	_, _ = c.UpdatePost(context.Background(), "p1", UpdatePostInput{MediaIDs: &empty})
+	if _, ok := bodies[0]["media_ids"]; ok {
+		t.Fatal("omitted update unexpectedly sent media_ids")
+	}
+	if got, ok := bodies[1]["media_ids"].([]any); !ok || len(got) != 0 {
+		t.Fatalf("clear media_ids = %#v", bodies[1]["media_ids"])
 	}
 }
 

@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -410,6 +411,25 @@ func TestMCPOperationCatalogHasCompleteSafetyClassification(t *testing.T) {
 	}
 	require.Equal(t, len(expectedModes), len(seen))
 	require.False(t, seen[mcpToolRenderWidget], "the directly advertised renderer must not be delegated")
+}
+
+func TestMCPPostCreationSchemasAdvertiseRenditionsOnlyWhereSupported(t *testing.T) {
+	t.Parallel()
+
+	propertiesFor := func(name string) map[string]any {
+		t.Helper()
+		for _, operation := range mcpOperationCatalog() {
+			if operation.Descriptor["name"] == name {
+				input := operation.Descriptor["inputSchema"].(map[string]any)
+				return input["properties"].(map[string]any)
+			}
+		}
+		t.Fatalf("operation %s not found", name)
+		return nil
+	}
+
+	require.Contains(t, propertiesFor(mcpToolSchedulePost), "renditions")
+	require.NotContains(t, propertiesFor(mcpToolCreateDraft), "renditions")
 }
 
 func TestMCPPublicationLifecycleOperationsStayInParity(t *testing.T) {
@@ -1370,7 +1390,6 @@ func TestMCPCallListMedia(t *testing.T) {
 		DisplayOrder: 0,
 	}).Exec(context.Background())
 	require.NoError(t, err)
-
 	resp := srv.request(t, "web-token", map[string]any{
 		"jsonrpc": "2.0",
 		"id":      "call-media",
@@ -1960,6 +1979,75 @@ func TestMCPCallSetPostRenditionsRejectsNonDestinationAccount(t *testing.T) {
 	require.Equal(t, 0, count)
 }
 
+func TestMCPCallSetPostRenditionsRejectsInvalidScheduledOutputWithoutMutation(t *testing.T) {
+	srv := newMCPTestServer(t)
+	post := models.Post{ID: "scheduled-rendition-invalid", WorkspaceID: "ws-1", CreatedByID: "user-1", Content: "source", Status: models.PostStatusScheduled, ScheduledAt: time.Now().Add(time.Hour), CreatedAt: time.Now()}
+	_, err := srv.db.NewInsert().Model(&post).Exec(context.Background())
+	require.NoError(t, err)
+	_, err = srv.db.NewInsert().Model(&models.PostDestination{ID: "scheduled-rendition-invalid-destination", PostID: post.ID, SocialAccountID: "account-1", Status: postStatusPending}).Exec(context.Background())
+	require.NoError(t, err)
+	existing := models.PostVariant{ID: "scheduled-rendition-existing", PostID: post.ID, SocialAccountID: "account-1", Content: "valid existing copy", MediaIDs: "", CreatedAt: time.Now(), UpdatedAt: time.Now()}
+	_, err = srv.db.NewInsert().Model(&existing).Exec(context.Background())
+	require.NoError(t, err)
+
+	resp := srv.request(t, "web-token", map[string]any{"jsonrpc": "2.0", "id": "invalid-scheduled-rendition", "method": "tools/call", "params": map[string]any{"name": "set_post_renditions", "arguments": map[string]any{
+		"workspace_id": "ws-1", "post_id": post.ID, "renditions": []map[string]any{{"social_account_id": "account-1", "content": strings.Repeat("x", 281)}},
+	}}})
+	require.Equal(t, http.StatusOK, resp.Code)
+	var out map[string]any
+	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &out))
+	rpcErr := out["error"].(map[string]any)
+	require.Equal(t, float64(-32602), rpcErr["code"])
+	require.Contains(t, rpcErr["message"], "invalid scheduled rendition")
+
+	var stored models.PostVariant
+	require.NoError(t, srv.db.NewSelect().Model(&stored).Where("id = ?", existing.ID).Scan(context.Background()))
+	require.Equal(t, existing.Content, stored.Content)
+	require.Equal(t, existing.MediaIDs, stored.MediaIDs)
+}
+
+func TestMCPCallSetPostRenditionsAcceptsValidScheduledMediaModes(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		media   any
+		wantRaw string
+	}{
+		{name: "inherit", wantRaw: ""},
+		{name: "override", media: []string{"override-media"}, wantRaw: `["override-media"]`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := newMCPTestServer(t)
+			insertMCPTestMedia(t, srv, models.MediaAttachment{ID: "source-media"})
+			insertMCPTestMedia(t, srv, models.MediaAttachment{ID: "override-media"})
+			post := models.Post{ID: "scheduled-rendition-" + tc.name, WorkspaceID: "ws-1", CreatedByID: "user-1", Content: "source", Status: models.PostStatusScheduled, ScheduledAt: time.Now().Add(time.Hour), CreatedAt: time.Now()}
+			_, err := srv.db.NewInsert().Model(&post).Exec(context.Background())
+			require.NoError(t, err)
+			_, err = srv.db.NewInsert().Model(&models.PostDestination{ID: post.ID + "-destination", PostID: post.ID, SocialAccountID: "account-1", Status: postStatusPending}).Exec(context.Background())
+			require.NoError(t, err)
+			_, err = srv.db.NewInsert().Model(&models.PostMedia{PostID: post.ID, MediaID: "source-media"}).Exec(context.Background())
+			require.NoError(t, err)
+			rendition := map[string]any{"social_account_id": "account-1", "content": "valid destination copy"}
+			if tc.media != nil {
+				rendition["media_ids"] = tc.media
+			}
+			resp := srv.request(t, "web-token", map[string]any{"jsonrpc": "2.0", "id": tc.name, "method": "tools/call", "params": map[string]any{"name": "set_post_renditions", "arguments": map[string]any{
+				"workspace_id": "ws-1", "post_id": post.ID, "renditions": []map[string]any{rendition},
+			}}})
+			var out map[string]any
+			require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &out))
+			require.NotContains(t, out, "error")
+			var stored models.PostVariant
+			require.NoError(t, srv.db.NewSelect().Model(&stored).Where("post_id = ?", post.ID).Scan(context.Background()))
+			require.Equal(t, tc.wantRaw, stored.MediaIDs)
+		})
+	}
+}
+
+func TestDecodeVariantMediaStateRejectsNull(t *testing.T) {
+	_, _, err := decodeVariantMediaState("null")
+	require.ErrorContains(t, err, "JSON array")
+}
+
 func TestMCPCallSchedulePostCreatesPublishJob(t *testing.T) {
 	t.Parallel()
 
@@ -1969,6 +2057,7 @@ func TestMCPCallSchedulePostCreatesPublishJob(t *testing.T) {
 		OriginalFilename: "schedule.png",
 		AltText:          "Scheduled image",
 	})
+	insertMCPTestMedia(t, srv, models.MediaAttachment{ID: "media-rendition", OriginalFilename: "x.png"})
 	scheduledAt := "2026-07-01T12:00:00Z"
 	resp := srv.request(t, "web-token", map[string]any{
 		"jsonrpc": "2.0",
@@ -1982,6 +2071,7 @@ func TestMCPCallSchedulePostCreatesPublishJob(t *testing.T) {
 				"scheduled_at":       scheduledAt,
 				"social_account_ids": []string{"account-1"},
 				"media_ids":          []string{"media-schedule"},
+				"renditions":         []map[string]any{{"social_account_id": "account-1", "content": strings.Repeat("x", 280), "media_ids": []string{"media-rendition"}}},
 			},
 		},
 	})
@@ -1999,6 +2089,11 @@ func TestMCPCallSchedulePostCreatesPublishJob(t *testing.T) {
 	require.Len(t, destinations, 1)
 	require.Equal(t, "account-1", destinations[0].(map[string]any)["social_account_id"])
 	require.Equal(t, []any{"media-schedule"}, post["media_ids"])
+	renditions := post["renditions"].([]any)
+	require.Len(t, renditions, 1)
+	require.Equal(t, []any{"media-rendition"}, renditions[0].(map[string]any)["media_ids"])
+	require.Equal(t, "override", renditions[0].(map[string]any)["media_mode"])
+	require.Equal(t, []any{"media-rendition"}, renditions[0].(map[string]any)["effective_media_ids"])
 	media := post["media"].([]any)
 	require.Len(t, media, 1)
 	require.Equal(t, "Scheduled image", media[0].(map[string]any)["alt_text"])
@@ -2021,6 +2116,88 @@ func TestMCPCallSchedulePostCreatesPublishJob(t *testing.T) {
 	var postMedia models.PostMedia
 	require.NoError(t, srv.db.NewSelect().Model(&postMedia).Where("post_id = ?", postID).Scan(context.Background()))
 	require.Equal(t, "media-schedule", postMedia.MediaID)
+}
+
+func TestMCPCallSchedulePostRenditionMediaModes(t *testing.T) {
+	tests := []struct {
+		name          string
+		media         any
+		wantRaw       string
+		wantMode      string
+		wantEffective []any
+	}{
+		{name: "inherit", wantRaw: "", wantMode: "inherit", wantEffective: []any{"source-media"}},
+		{name: "clear", media: []string{}, wantRaw: "[]", wantMode: "clear", wantEffective: []any{}},
+		{name: "override", media: []string{"override-media"}, wantRaw: `["override-media"]`, wantMode: "override", wantEffective: []any{"override-media"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			srv := newMCPTestServer(t)
+			insertMCPTestMedia(t, srv, models.MediaAttachment{ID: "source-media", MimeType: "image/png"})
+			insertMCPTestMedia(t, srv, models.MediaAttachment{ID: "override-media", MimeType: "image/png"})
+			rendition := map[string]any{"social_account_id": "account-1", "content": "destination copy"}
+			if tt.media != nil {
+				rendition["media_ids"] = tt.media
+			}
+			resp := srv.request(t, "web-token", map[string]any{"jsonrpc": "2.0", "id": "modes", "method": "tools/call", "params": map[string]any{"name": "schedule_post", "arguments": map[string]any{
+				"workspace_id": "ws-1", "content": "source", "scheduled_at": "2026-07-01T12:00:00Z", "social_account_ids": []string{"account-1"}, "media_ids": []string{"source-media"}, "renditions": []map[string]any{rendition},
+			}}})
+			var out map[string]any
+			require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &out))
+			require.NotContains(t, out, "error")
+			got := out["result"].(map[string]any)["structuredContent"].(map[string]any)["post"].(map[string]any)["renditions"].([]any)[0].(map[string]any)
+			require.Equal(t, tt.wantMode, got["media_mode"])
+			require.Equal(t, tt.wantEffective, got["effective_media_ids"])
+			var stored models.PostVariant
+			require.NoError(t, srv.db.NewSelect().Model(&stored).Scan(context.Background()))
+			require.Equal(t, tt.wantRaw, stored.MediaIDs)
+		})
+	}
+}
+
+func TestMCPCallSchedulePostValidatesDestinationEffectiveMedia(t *testing.T) {
+	for _, tc := range []struct {
+		name             string
+		source, override string
+		wantError        bool
+	}{
+		{name: "rejects incompatible rendition", source: "video", override: "image", wantError: true},
+		{name: "accepts valid override despite invalid source", source: "image", override: "video"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := newMCPTestServer(t)
+			_, err := srv.db.NewInsert().Model(&models.SocialAccount{ID: "youtube-effective", WorkspaceID: "ws-1", Platform: "youtube", AccountID: "yt", Slug: "yt", AccessTokenEnc: []byte("token"), IsActive: true, CreatedAt: time.Now()}).Exec(context.Background())
+			require.NoError(t, err)
+			insertMCPTestMedia(t, srv, models.MediaAttachment{ID: "image", MimeType: "image/png"})
+			insertMCPTestMedia(t, srv, models.MediaAttachment{ID: "video", MimeType: "video/mp4"})
+			resp := srv.request(t, "web-token", map[string]any{"jsonrpc": "2.0", "id": "effective", "method": "tools/call", "params": map[string]any{"name": "schedule_post", "arguments": map[string]any{
+				"workspace_id": "ws-1", "content": "source", "scheduled_at": "2026-07-01T12:00:00Z", "social_account_ids": []string{"youtube-effective"}, "media_ids": []string{tc.source}, "renditions": []map[string]any{{"social_account_id": "youtube-effective", "content": "youtube", "media_ids": []string{tc.override}}},
+			}}})
+			var out map[string]any
+			require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &out))
+			if tc.wantError {
+				require.Contains(t, out["error"].(map[string]any)["message"], "video attachments only")
+			} else {
+				require.NotContains(t, out, "error")
+			}
+		})
+	}
+}
+
+func TestMCPCallSchedulePostRejectsOverLimitXRenditionBeforeEnqueue(t *testing.T) {
+	t.Parallel()
+	srv := newMCPTestServer(t)
+	resp := srv.request(t, "web-token", map[string]any{"jsonrpc": "2.0", "id": "over-limit", "method": "tools/call", "params": map[string]any{"name": "schedule_post", "arguments": map[string]any{
+		"workspace_id": "ws-1", "content": "shared", "scheduled_at": "2026-07-01T12:00:00Z", "social_account_ids": []string{"account-1"},
+		"renditions": []map[string]any{{"social_account_id": "account-1", "content": strings.Repeat("x", 281)}},
+	}}})
+	require.Equal(t, http.StatusOK, resp.Code)
+	var out map[string]any
+	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &out))
+	require.Contains(t, out["error"].(map[string]any)["message"], "280 character limit")
+	var count int
+	require.NoError(t, srv.db.NewSelect().ColumnExpr("COUNT(*)").TableExpr("jobs").Scan(context.Background(), &count))
+	require.Zero(t, count)
 }
 
 func TestMCPCallSchedulePostRejectsProviderMediaErrors(t *testing.T) {
@@ -2106,6 +2283,8 @@ func TestMCPCallGetPostStatusReturnsDestinations(t *testing.T) {
 		DisplayOrder: 0,
 	}).Exec(context.Background())
 	require.NoError(t, err)
+	_, err = srv.db.NewInsert().Model(&models.PostVariant{ID: "variant-status", PostID: post.ID, SocialAccountID: "account-1", Content: "X status", MediaIDs: "", IsUnsynced: true, CreatedAt: time.Now(), UpdatedAt: time.Now()}).Exec(context.Background())
+	require.NoError(t, err)
 
 	resp := srv.request(t, "web-token", map[string]any{
 		"jsonrpc": "2.0",
@@ -2137,6 +2316,9 @@ func TestMCPCallGetPostStatusReturnsDestinations(t *testing.T) {
 	require.Len(t, destinations, 1)
 	require.Equal(t, "x", destinations[0].(map[string]any)["platform"])
 	require.Equal(t, "x-openpost", destinations[0].(map[string]any)["slug"])
+	rendition := gotPost["renditions"].([]any)[0].(map[string]any)
+	require.Equal(t, "inherit", rendition["media_mode"])
+	require.Equal(t, []any{"media-status"}, rendition["effective_media_ids"])
 }
 
 func TestMCPCallListScheduledPostsReturnsQueue(t *testing.T) {
@@ -2191,6 +2373,8 @@ func TestMCPCallListScheduledPostsReturnsQueue(t *testing.T) {
 		Status:          postStatusPending,
 	}).Exec(context.Background())
 	require.NoError(t, err)
+	_, err = srv.db.NewInsert().Model(&models.PostVariant{ID: "variant-list", PostID: "post-list-early", SocialAccountID: "account-1", Content: "clear media", MediaIDs: "[]", IsUnsynced: true, CreatedAt: time.Now(), UpdatedAt: time.Now()}).Exec(context.Background())
+	require.NoError(t, err)
 
 	resp := srv.request(t, "web-token", map[string]any{
 		"jsonrpc": "2.0",
@@ -2223,6 +2407,9 @@ func TestMCPCallListScheduledPostsReturnsQueue(t *testing.T) {
 	destinations := first["destinations"].([]any)
 	require.Len(t, destinations, 1)
 	require.Equal(t, "x", destinations[0].(map[string]any)["platform"])
+	listRendition := first["renditions"].([]any)[0].(map[string]any)
+	require.Equal(t, "clear", listRendition["media_mode"])
+	require.Equal(t, []any{}, listRendition["effective_media_ids"])
 	require.Equal(t, "post-list-late", gotPosts[1].(map[string]any)["id"])
 }
 
