@@ -14,7 +14,7 @@
 	import MoreIcon from 'lucide-svelte/icons/menu';
 
 	const items = mobileNavigation;
-	const pathname = $derived(page.url.pathname);
+	const pathname = $derived(String(page.url.pathname));
 
 	function iconFor(id: (typeof items)[number]['id']) {
 		switch (id) {
