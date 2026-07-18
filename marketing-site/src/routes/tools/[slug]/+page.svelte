@@ -4,12 +4,7 @@
 	import { ArrowRight, CheckCircle2, Copy, Wand2 } from 'lucide-svelte';
 	import { Button } from '$lib/components/ui/button';
 	import PlatformIcon from '$lib/components/platform-icon.svelte';
-	import {
-		X_PREMIUM_CHAR_LIMIT,
-		publicPlatformLimits,
-		platformCharacterLimit,
-		type PlatformLimitDefinition
-	} from '$lib/platform-limits';
+	import { publicPlatformLimits, platformCharacterLimit } from '$lib/platform-limits';
 	import { appUrl, getTool, siteUrl } from '../../_marketing';
 
 	const slug = $derived(page.params.slug ?? '');
@@ -23,7 +18,6 @@
 		'Launch note: OpenPost keeps social publishing focused. Draft once, adapt per platform, preview the destination shape, then schedule into the next workspace slot.'
 	);
 	let selectedPlatform = $state('x');
-	let xPremium = $state(false);
 	let formatterMode = $state<'bold' | 'italic' | 'clear'>('bold');
 	let timezone = $state('Europe/Lisbon');
 	let cadence = $state<'weekday' | 'daily' | 'launch'>('weekday');
@@ -36,27 +30,13 @@
 	const previewPlatforms = publicLimits.filter((platform) =>
 		['x', 'mastodon', 'bluesky', 'linkedin', 'threads'].includes(platform.key)
 	);
-	const currentLimit = $derived(
-		selectedPlatform === 'x' && xPremium
-			? X_PREMIUM_CHAR_LIMIT
-			: platformCharacterLimit(selectedPlatform)
-	);
+	const currentLimit = $derived(platformCharacterLimit(selectedPlatform));
 	const draftLength = $derived(draft.length);
 	const remaining = $derived(currentLimit - draftLength);
 	const threadParts = $derived.by(() => splitThread(draft, currentLimit));
 	const handleResult = $derived.by(() => parseHandle(handleInput));
 	const postingSlots = $derived.by(() => buildSlots(timezone, cadence));
 	const formattedDraft = $derived.by(() => formatLinkedIn(draft, formatterMode));
-
-	function platformDisplay(platform: PlatformLimitDefinition) {
-		if (platform.key === 'x') return xPremium ? 'X Premium' : platform.name;
-		return platform.name;
-	}
-
-	function limitFor(platform: PlatformLimitDefinition) {
-		if (platform.key === 'x' && xPremium) return X_PREMIUM_CHAR_LIMIT;
-		return platform.charLimit;
-	}
 
 	function splitThread(value: string, limit: number) {
 		const text = value.trim().replace(/\s+/g, ' ');
@@ -134,7 +114,8 @@
 				const code = char.charCodeAt(0);
 				if (code >= 65 && code <= 90) return String.fromCodePoint(upperBase + code - 65);
 				if (code >= 97 && code <= 122) return String.fromCodePoint(lowerBase + code - 97);
-				if (digitBase && code >= 48 && code <= 57) return String.fromCodePoint(digitBase + code - 48);
+				if (digitBase && code >= 48 && code <= 57)
+					return String.fromCodePoint(digitBase + code - 48);
 				return char;
 			})
 			.join('');
@@ -183,22 +164,20 @@
 				></textarea>
 
 				{#if tool.slug === 'multi-platform-character-counter'}
-					<div class="mt-4 flex flex-wrap items-center gap-3">
-						<label class="inline-flex items-center gap-2 text-sm text-muted-foreground">
-							<input type="checkbox" bind:checked={xPremium} class="size-4 rounded border" />
-							Use X Premium longer-post limit
-						</label>
-					</div>
 					<div class="mt-4 grid gap-3 sm:grid-cols-2">
 						{#each selectablePlatforms as platform (platform.key)}
-							{@const limit = limitFor(platform)}
+							{@const limit = platform.charLimit}
 							<div class="rounded-md border bg-muted/25 p-3">
 								<div class="flex items-center justify-between gap-3">
 									<span class="inline-flex items-center gap-2 text-sm font-medium">
 										<PlatformIcon platform={platform.key} class="size-4" />
-										{platformDisplay(platform)}
+										{platform.name}
 									</span>
-									<span class="font-mono text-xs {draftLength > limit ? 'text-red-500' : 'text-muted-foreground'}">
+									<span
+										class="font-mono text-xs {draftLength > limit
+											? 'text-red-500'
+											: 'text-muted-foreground'}"
+									>
 										{draftLength}/{limit.toLocaleString()}
 									</span>
 								</div>
@@ -213,19 +192,17 @@
 					</div>
 				{:else if tool.slug === 'thread-splitter'}
 					<div class="mt-4 flex flex-wrap items-center gap-3">
-						<select bind:value={selectedPlatform} class="rounded-md border bg-background px-3 py-2 text-sm">
+						<select
+							bind:value={selectedPlatform}
+							class="rounded-md border bg-background px-3 py-2 text-sm"
+						>
 							{#each selectablePlatforms as platform (platform.key)}
 								<option value={platform.key}>{platform.name}</option>
 							{/each}
 						</select>
-						{#if selectedPlatform === 'x'}
-							<label class="inline-flex items-center gap-2 text-sm text-muted-foreground">
-								<input type="checkbox" bind:checked={xPremium} class="size-4 rounded border" />
-								X Premium
-							</label>
-						{/if}
 						<span class="font-mono text-xs text-muted-foreground">
-							{threadParts.length || 0} part{threadParts.length === 1 ? '' : 's'} at {currentLimit.toLocaleString()} chars
+							{threadParts.length || 0} part{threadParts.length === 1 ? '' : 's'} at {currentLimit.toLocaleString()}
+							chars
 						</span>
 					</div>
 					<div class="mt-4 grid gap-3">
@@ -244,11 +221,7 @@
 					</div>
 				{:else if tool.slug === 'linkedin-text-formatter'}
 					<div class="mt-4 flex flex-wrap gap-2">
-						{#each [
-							['bold', 'Bold'],
-							['italic', 'Italic'],
-							['clear', 'Clean spacing']
-						] as option (option[0])}
+						{#each [['bold', 'Bold'], ['italic', 'Italic'], ['clear', 'Clean spacing']] as option (option[0])}
 							<Button
 								type="button"
 								variant={formatterMode === option[0] ? 'default' : 'outline'}
@@ -263,7 +236,12 @@
 					<div class="mt-4 rounded-md border bg-muted/25 p-4">
 						<div class="mb-3 flex items-center justify-between gap-3">
 							<span class="text-sm font-medium">Formatted copy</span>
-							<Button type="button" size="sm" variant="ghost" onclick={() => copyText(formattedDraft)}>
+							<Button
+								type="button"
+								size="sm"
+								variant="ghost"
+								onclick={() => copyText(formattedDraft)}
+							>
 								<Copy data-icon="inline-start" />
 								Copy
 							</Button>
@@ -309,7 +287,9 @@
 					/>
 					<div class="mt-4 rounded-md border bg-muted/25 p-4">
 						<div class="flex items-center gap-2">
-							<CheckCircle2 class="size-4 {handleResult.valid ? 'text-primary' : 'text-muted-foreground'}" />
+							<CheckCircle2
+								class="size-4 {handleResult.valid ? 'text-primary' : 'text-muted-foreground'}"
+							/>
 							<span class="font-medium">{handleResult.type}</span>
 						</div>
 						<p class="mt-2 text-sm leading-6 text-muted-foreground">{handleResult.message}</p>
@@ -321,18 +301,17 @@
 					</div>
 				{:else}
 					<div class="mt-4 flex flex-wrap items-center gap-3">
-						<select bind:value={selectedPlatform} class="rounded-md border bg-background px-3 py-2 text-sm">
+						<select
+							bind:value={selectedPlatform}
+							class="rounded-md border bg-background px-3 py-2 text-sm"
+						>
 							{#each previewPlatforms as platform (platform.key)}
 								<option value={platform.key}>{platform.name}</option>
 							{/each}
 						</select>
-						{#if selectedPlatform === 'x'}
-							<label class="inline-flex items-center gap-2 text-sm text-muted-foreground">
-								<input type="checkbox" bind:checked={xPremium} class="size-4 rounded border" />
-								X Premium
-							</label>
-						{/if}
-						<span class="font-mono text-xs {remaining < 0 ? 'text-red-500' : 'text-muted-foreground'}">
+						<span
+							class="font-mono text-xs {remaining < 0 ? 'text-red-500' : 'text-muted-foreground'}"
+						>
 							{remaining.toLocaleString()} remaining
 						</span>
 					</div>
