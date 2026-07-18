@@ -27,6 +27,7 @@
 	import ChevronRightIcon from 'lucide-svelte/icons/chevron-right';
 	import Grid2X2Icon from 'lucide-svelte/icons/grid-2x2';
 	import { m } from '$lib/paraglide/messages';
+	import { soundPreferences } from '$lib/stores/sound-preferences.svelte';
 
 	interface MediaItem {
 		id: string;
@@ -265,9 +266,11 @@
 			if (batchFileInput) batchFileInput.value = '';
 			toastMessage =
 				uploaded.length === 1 ? 'File uploaded successfully' : `Uploaded ${uploaded.length} files`;
+			soundPreferences.play('success');
 			await loadMedia();
 		} catch (e) {
 			uploadError = (e as Error).message;
+			soundPreferences.play('error');
 		} finally {
 			uploadLoading = false;
 			uploadProgress = '';

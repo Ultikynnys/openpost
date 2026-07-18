@@ -51,6 +51,7 @@
 	} from './compose/draft-utils';
 	import { minimumAccountCharacterLimit, uniquePlatformLimits } from './compose/platform-limits';
 	import { parseNaturalScheduleInput } from './compose/schedule-language';
+	import { soundPreferences } from '$lib/stores/sound-preferences.svelte';
 
 	// --------------------------------------------------------------------------
 	// Types
@@ -933,6 +934,7 @@
 				await scheduleEditedThread(scheduledAt, randomDelay);
 				lastSavedSnapshot = getSaveSnapshot();
 				success = m.compose_changes_saved();
+				soundPreferences.play('success');
 				ui.triggerRefresh();
 				if (onSuccess) {
 					setTimeout(() => onSuccess(), 500);
@@ -959,6 +961,7 @@
 
 			lastSavedSnapshot = getSaveSnapshot();
 			success = m.compose_changes_saved();
+			soundPreferences.play('success');
 			ui.triggerRefresh();
 
 			if (onSuccess) {
@@ -966,6 +969,7 @@
 			}
 		} catch (e) {
 			error = (e as Error).message || 'Failed to save changes';
+			soundPreferences.play('error');
 		} finally {
 			isSaving = false;
 		}
@@ -1118,6 +1122,7 @@
 			}
 
 			success = publishNow ? m.compose_publishing_now() : m.compose_scheduled_success();
+			soundPreferences.play('success');
 			ui.triggerRefresh();
 
 			if (isEditMode && onSuccess) {
@@ -1136,6 +1141,7 @@
 			}
 		} catch (e) {
 			error = (e as Error).message || 'Failed to publish';
+			soundPreferences.play('error');
 		} finally {
 			isSubmitting = false;
 		}
@@ -1184,6 +1190,7 @@
 		if (!selectedWorkspaceId || isSubmitting) return;
 
 		isUploading = true;
+		let uploadedCount = 0;
 		try {
 			for (const file of Array.from(files)) {
 				if (!isSupportedMediaFile(file)) continue;
@@ -1203,11 +1210,14 @@
 					mediaSizes = nextSizes;
 				}
 				addMediaToPost(targetPostIndex, data.id);
+				uploadedCount++;
 				scheduleAutoSave();
 			}
+			if (uploadedCount > 0) soundPreferences.play('success');
 		} catch (e) {
 			console.error('Failed to upload media:', e);
 			error = (e as Error).message || 'Failed to upload media';
+			soundPreferences.play('error');
 		} finally {
 			isUploading = false;
 		}

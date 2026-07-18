@@ -31,8 +31,10 @@
 	import ChevronsUpDownIcon from 'lucide-svelte/icons/chevrons-up-down';
 	import ServerIcon from 'lucide-svelte/icons/server';
 	import CheckIcon from 'lucide-svelte/icons/check';
+	import Volume2Icon from 'lucide-svelte/icons/volume-2';
 	import { setMode, userPrefersMode } from 'mode-watcher';
 	import type { Workspace } from '$lib/api/client';
+	import { soundPreferences } from '$lib/stores/sound-preferences.svelte';
 	type AppearanceMode = 'system' | 'light' | 'dark';
 
 	let authState = $derived($auth);
@@ -357,6 +359,13 @@
 								{/each}
 							</DropdownMenu.SubContent>
 						</DropdownMenu.Sub>
+						<DropdownMenu.CheckboxItem
+							checked={soundPreferences.enabled}
+							onCheckedChange={(checked) => soundPreferences.setEnabled(checked)}
+						>
+							<Volume2Icon class="mr-2 size-4 text-muted-foreground" />
+							{m.sidebar_interface_sounds()}
+						</DropdownMenu.CheckboxItem>
 						<LanguageSwitcher variant="menu" />
 						{#if IS_CAPACITOR}
 							<DropdownMenu.Separator />

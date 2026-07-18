@@ -18,6 +18,7 @@
 	import PencilIcon from 'lucide-svelte/icons/pencil';
 	import CheckIcon from 'lucide-svelte/icons/check';
 	import { m } from '$lib/paraglide/messages';
+	import { soundPreferences } from '$lib/stores/sound-preferences.svelte';
 
 	interface Props {
 		workspaceId: string;
@@ -51,6 +52,8 @@
 	}
 
 	async function handleFiles(files: FileList | File[]) {
+		let uploadedCount = 0;
+		let failedCount = 0;
 		for (const file of Array.from(files)) {
 			if (!isSupportedMediaFile(file)) continue;
 
@@ -71,13 +74,20 @@
 				if (idx !== -1) {
 					items = items.map((m, i) => (i === idx ? { ...m, id: data.id, status: 'ready' } : m));
 				}
+				uploadedCount++;
 			} catch (error) {
 				console.error('Failed to upload media', error);
 				const idx = items.findIndex((m) => m.clientId === item.clientId);
 				if (idx !== -1) {
 					items = items.map((m, i) => (i === idx ? { ...m, status: 'error' } : m));
 				}
+				failedCount++;
 			}
+		}
+		if (failedCount > 0) {
+			soundPreferences.play('error');
+		} else if (uploadedCount > 0) {
+			soundPreferences.play('success');
 		}
 		resetFileInput();
 	}

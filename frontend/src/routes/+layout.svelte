@@ -21,6 +21,7 @@
 	import { m } from '$lib/paraglide/messages';
 	import { onboardingPathForPlan } from '$lib/billing';
 	import { safeSameOriginRedirect } from '$lib/redirects';
+	import { soundPreferences } from '$lib/stores/sound-preferences.svelte';
 
 	let { children } = $props();
 
@@ -66,6 +67,7 @@
 	}
 
 	onMount(() => {
+		soundPreferences.initialize();
 		instance.initialize();
 		auth.initialize();
 	});

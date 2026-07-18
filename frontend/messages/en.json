@@ -135,6 +135,7 @@
 	"sidebar_appearance_system": "System",
 	"sidebar_appearance_light": "Light",
 	"sidebar_appearance_dark": "Dark",
+	"sidebar_interface_sounds": "Interface sounds",
 	"calendar_page_title": "Calendar - OpenPost",
 	"calendar_kicker": "Publishing calendar",
 	"calendar_scheduled_summary": "{count} scheduled",
