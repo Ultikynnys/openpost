@@ -3,6 +3,7 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { isNavigationItemActive, mobileNavigation } from '$lib/app-navigation';
+	import { ui } from '$lib/stores/ui.svelte';
 	import { m } from '$lib/paraglide/messages';
 	import CalendarIcon from 'lucide-svelte/icons/calendar-days';
 	import ComposeIcon from 'lucide-svelte/icons/plus';
@@ -65,7 +66,10 @@
 								? 'text-foreground'
 								: 'text-muted-foreground'
 					]}
-					onclick={() => goto(resolve(item.href as '/'))}
+					onclick={() => {
+						if (item.id === 'new') ui.startNewPost();
+						goto(resolve(item.href as '/'));
+					}}
 					aria-current={active ? 'page' : undefined}
 				>
 					<span

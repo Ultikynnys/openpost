@@ -2,10 +2,13 @@
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
+	import { fly } from 'svelte/transition';
+	import { quintOut } from 'svelte/easing';
 	import { auth } from '$lib/stores/auth';
 	import { workspaceCtx } from '$lib/stores/workspace.svelte';
 	import { instanceStore } from '$lib/stores/instance.svelte';
 	import { recreateClient } from '$lib/api/client';
+	import { ui } from '$lib/stores/ui.svelte';
 	import { IS_CAPACITOR } from '$lib/env';
 	import { m } from '$lib/paraglide/messages';
 	import {
@@ -57,11 +60,12 @@
 			icon: navigationIcon(item.id)
 		}))
 	);
-	const newPostItem = $derived(navigationItems.find((item) => item.id === 'new')!);
+	const sidebarNavigationItems = $derived(navigationItems.filter((item) => item.id !== 'new'));
 	const workspaceNavigationItems = $derived(
 		navigationItems.filter((item) => ['posts', 'media', 'accounts', 'settings'].includes(item.id))
 	);
 	const showDesktopPlanner = $derived(!sidebar.isMobile && sidebar.state === 'expanded');
+	const showHomeBrand = $derived(currentPath === '/' && !ui.activeComposerDraftId);
 
 	function navigationIcon(id: PrimaryNavigationItem['id']) {
 		switch (id) {
@@ -134,6 +138,7 @@
 
 	function navigate(href: string) {
 		sidebar.setOpenMobile(false);
+		if (href === '/') ui.startNewPost();
 		goto(resolve(href as '/'));
 	}
 
@@ -156,13 +161,33 @@
 
 <Sidebar.Root collapsible="icon">
 	<Sidebar.Header class="gap-2 border-b border-sidebar-border p-2" data-testid="app-sidebar">
-		<a
-			href={resolve('/')}
-			class="flex h-10 items-center gap-2 rounded-md px-2 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0 focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-none"
-			aria-label={m.sidebar_openpost_home()}
-		>
-			<Logo width={26} height={26} showText={sidebar.state !== 'collapsed'} />
-		</a>
+		<div class="relative h-10 overflow-hidden rounded-md">
+			{#key showHomeBrand}
+				{#if showHomeBrand}
+					<a
+						href={resolve('/')}
+						class="absolute inset-0 flex items-center gap-2 rounded-md px-2 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0 focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-none"
+						aria-label={m.sidebar_openpost_home()}
+						data-testid="sidebar-home-brand"
+						transition:fly={{ x: -12, duration: 180, easing: quintOut }}
+					>
+						<Logo width={26} height={26} showText={sidebar.state !== 'collapsed'} />
+					</a>
+				{:else}
+					<a
+						href={resolve('/')}
+						class="absolute inset-0 flex items-center gap-2 rounded-md bg-primary px-3 text-sm font-semibold text-primary-foreground shadow-xs group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0 hover:bg-primary/90 focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-none"
+						aria-label={m.sidebar_new_post()}
+						data-testid="sidebar-new-post"
+						onclick={() => ui.startNewPost()}
+						transition:fly={{ x: 12, duration: 180, easing: quintOut }}
+					>
+						<ComposeIcon class="size-4" />
+						{#if sidebar.state !== 'collapsed'}<span>{m.sidebar_new_post()}</span>{/if}
+					</a>
+				{/if}
+			{/key}
+		</div>
 
 		<DropdownMenu.Root>
 			<DropdownMenu.Trigger>
@@ -227,24 +252,6 @@
 
 	<Sidebar.Content class={showDesktopPlanner ? 'py-2' : 'px-2 py-3'}>
 		{#if showDesktopPlanner}
-			<Sidebar.Group class="px-2 pt-0 pb-2">
-				<Sidebar.GroupContent>
-					<Sidebar.Menu>
-						<Sidebar.MenuItem>
-							<Sidebar.MenuButton
-								isActive={isNavigationItemActive(newPostItem, currentPath)}
-								class="h-10 bg-primary text-sm font-medium text-primary-foreground shadow-xs hover:bg-primary/90 hover:text-primary-foreground data-active:bg-primary data-active:text-primary-foreground"
-								tooltipContent={newPostItem.label}
-								onclick={() => navigate(newPostItem.href)}
-							>
-								<newPostItem.icon class="size-4" />
-								<span>{newPostItem.label}</span>
-							</Sidebar.MenuButton>
-						</Sidebar.MenuItem>
-					</Sidebar.Menu>
-				</Sidebar.GroupContent>
-			</Sidebar.Group>
-
 			<SidebarPlanner onNavigate={navigate} />
 		{:else}
 			<Sidebar.Group class="p-0">
@@ -255,13 +262,11 @@
 				</Sidebar.GroupLabel>
 				<Sidebar.GroupContent>
 					<Sidebar.Menu class="gap-1">
-						{#each navigationItems as item (item.id)}
+						{#each sidebarNavigationItems as item (item.id)}
 							<Sidebar.MenuItem>
 								<Sidebar.MenuButton
 									isActive={isNavigationItemActive(item, currentPath)}
-									class={item.id === 'new'
-										? 'h-10 bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground data-active:bg-primary data-active:text-primary-foreground'
-										: 'h-10 text-sm'}
+									class="h-10 text-sm"
 									tooltipContent={item.label}
 									onclick={() => navigate(item.href)}
 								>

@@ -27,6 +27,7 @@ All notable changes to this project are documented in this file.
 
 ### Fixed
 
+- Unified new and persisted draft composing: the first autosave now establishes the draft URL, draft editing keeps the normal schedule/publish controls, deletion lives in the composer toolbar, and the sidebar brand becomes the contextual New post action away from an empty homepage.
 - Unified every composer format under the same compact publishing toolbar, removed duplicate workspace controls, kept the authenticated app shell mounted during navigation, restored the collapsed-sidebar logo, and tightened the Social accounts layout.
 - Kept the active Settings section visible in the mobile tab strip, removed repeated section headings, and made status notifications properly announced and dismissible.
 - Restored Link, Image, Carousel, and Story to the composer post-type picker, with grouped descriptions that keep all eight formats easy to distinguish on desktop and mobile.

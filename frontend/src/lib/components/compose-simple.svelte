@@ -73,7 +73,8 @@
 		initialScheduleDate?: string | null;
 		initialWorkspaceId?: string | null;
 		onSuccess?: () => void;
-		onCancel?: () => void;
+		onDeleted?: () => void;
+		onDraftCreated?: (id: string) => void;
 		onThreadStateChange?: (isThread: boolean) => void;
 		modeControl?: Snippet;
 	}
@@ -86,7 +87,8 @@
 		initialScheduleDate = null,
 		initialWorkspaceId = null,
 		onSuccess,
-		onCancel,
+		onDeleted,
+		onDraftCreated,
 		onThreadStateChange,
 		modeControl
 	}: Props = $props();
@@ -98,6 +100,8 @@
 	let lastInitializedPostId = $state<string | null>(null);
 	let isSaving = $state(false);
 	let isSubmitting = $state(false);
+	let isDeleting = $state(false);
+	let showDeleteConfirm = $state(false);
 	let error = $state('');
 	let success = $state('');
 
@@ -184,7 +188,7 @@
 	const hasContent = $derived(hasAnyContent(posts));
 	const totalChars = $derived(posts.reduce((sum, p) => sum + p.content.length, 0));
 	const isThread = $derived(posts.length > 1);
-	const hasUnsavedChanges = $derived(isEditMode && getSaveSnapshot() !== lastSavedSnapshot);
+	const autoSavesDraft = $derived(!isEditMode || initialPost?.status === 'draft');
 	const selectedAccounts = $derived(accounts.filter((a) => selectedAccountIds.includes(a.id)));
 	const syncedLinkedInThreadAccounts = $derived.by(() => {
 		if (!isThread) return [];
@@ -826,7 +830,7 @@
 	// Draft saving
 	// --------------------------------------------------------------------------
 	function scheduleAutoSave() {
-		if (isEditMode) return;
+		if (!autoSavesDraft) return;
 		if (autoSaveTimer) clearTimeout(autoSaveTimer);
 		autoSaveTimer = setTimeout(() => {
 			if (!hasContent) return;
@@ -842,6 +846,7 @@
 		isSaving = true;
 		error = '';
 
+		let createdDraftId: string | null = null;
 		try {
 			// Threads: store the encoded draft in the new dedicated
 			// `thread_draft` field, and put the first post's text in
@@ -881,7 +886,10 @@
 			} else {
 				const { data, error: postErr } = await client.POST('/posts', { body });
 				if (postErr) throw new Error((postErr as any).detail || 'Failed to save draft');
-				if (data?.id) draftId = data.id;
+				if (data?.id) {
+					draftId = data.id;
+					createdDraftId = data.id;
+				}
 			}
 
 			if (draftId && !isThread) {
@@ -890,11 +898,43 @@
 
 			lastSavedSnapshot = getSaveSnapshot();
 			ui.triggerRefresh();
+			if (createdDraftId) onDraftCreated?.(createdDraftId);
 		} catch (e) {
 			console.error('Failed to auto-save draft:', e);
 			error = (e as Error).message || 'Failed to save draft';
 		} finally {
 			isSaving = false;
+		}
+	}
+
+	async function deleteDraft() {
+		if (!draftId || isDeleting) return;
+		clearAutoSaveTimer();
+		isDeleting = true;
+		error = '';
+		try {
+			const { error: deleteErr } = await client.DELETE('/posts/{id}', {
+				params: { path: { id: draftId } }
+			});
+			if (deleteErr) throw new Error((deleteErr as any).detail || 'Failed to delete post');
+
+			ui.triggerRefresh();
+			posts = [makeEmptyPost()];
+			activePostIndex = 0;
+			draftId = null;
+			lastSavedSnapshot = '';
+			variants = new Map();
+			activeVariantAccountId = null;
+			selectedDate = undefined;
+			selectedTime = null;
+			randomDelayOverride = 'default';
+			showDeleteConfirm = false;
+			onDeleted?.();
+		} catch (e) {
+			error = (e as Error).message || 'Failed to delete post';
+			soundPreferences.play('error');
+		} finally {
+			isDeleting = false;
 		}
 	}
 
@@ -1017,6 +1057,7 @@
 	// Publishing
 	// --------------------------------------------------------------------------
 	async function publish(publishNow: boolean = false) {
+		clearAutoSaveTimer();
 		error = '';
 		success = '';
 
@@ -1137,6 +1178,7 @@
 				selectedDate = undefined;
 				selectedTime = null;
 				randomDelayOverride = 'default';
+				onSuccess?.();
 				setTimeout(() => (success = ''), 3000);
 			}
 		} catch (e) {
@@ -1665,22 +1707,6 @@
 <div class="flex flex-1 flex-col overflow-hidden">
 	<div class="flex flex-wrap items-center justify-between gap-2 border-b px-3 py-2 md:px-4 md:py-3">
 		<div class="flex flex-wrap items-center gap-2">
-			{#if isEditMode && onCancel}
-				<Button variant="ghost" size="sm" class="text-xs" onclick={onCancel}
-					>{m.common_cancel()}</Button
-				>
-			{/if}
-			{#if isEditMode}
-				<div class="flex items-center gap-2 rounded-md border bg-muted/30 px-2 py-1">
-					<span class="text-xs font-medium"
-						>{m.compose_editing_post({ status: initialPost?.status ?? '' })}</span
-					>
-					<span class="text-xs text-muted-foreground">
-						{hasUnsavedChanges ? m.compose_unsaved_changes() : m.compose_saved_state()}
-					</span>
-				</div>
-			{/if}
-
 			{#if modeControl}
 				{@render modeControl()}
 			{/if}
@@ -1861,7 +1887,56 @@
 				</Tooltip.Content>
 			</Tooltip.Root>
 
-			{#if isEditMode}
+			{#if draftId}
+				{#if showDeleteConfirm}
+					<div class="flex items-center gap-1" data-testid="composer-delete-confirmation">
+						<span class="hidden text-xs text-destructive sm:inline"
+							>{m.day_posts_delete_confirm()}</span
+						>
+						<Button
+							variant="ghost"
+							size="xs"
+							class="h-7 text-xs"
+							onclick={() => (showDeleteConfirm = false)}
+							disabled={isDeleting}
+						>
+							{m.common_cancel()}
+						</Button>
+						<Button
+							variant="destructive"
+							size="xs"
+							class="h-7 gap-1 text-xs"
+							onclick={deleteDraft}
+							disabled={isDeleting}
+						>
+							{#if isDeleting}<LoaderIcon class="size-3 animate-spin" />{/if}
+							{m.common_delete()}
+						</Button>
+					</div>
+				{:else}
+					<Tooltip.Root>
+						<Tooltip.Trigger>
+							{#snippet child({ props })}
+								<Button
+									{...props}
+									variant="ghost"
+									size="icon"
+									class="h-8 w-8 text-muted-foreground hover:text-destructive"
+									aria-label={m.common_delete()}
+									data-testid="composer-delete"
+									onclick={() => (showDeleteConfirm = true)}
+									disabled={isDeleting || isSaving || isSubmitting}
+								>
+									<Trash2Icon class="size-4" />
+								</Button>
+							{/snippet}
+						</Tooltip.Trigger>
+						<Tooltip.Content><p class="text-sm">{m.common_delete()}</p></Tooltip.Content>
+					</Tooltip.Root>
+				{/if}
+			{/if}
+
+			{#if isEditMode && !autoSavesDraft}
 				<Button
 					size="sm"
 					class="gap-1.5"

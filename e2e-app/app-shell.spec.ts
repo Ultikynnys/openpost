@@ -32,6 +32,7 @@ test("authenticated navigation keeps the app shell mounted", async ({
   await page.getByRole("button", { name: "Posts", exact: true }).click();
   await expect(page).toHaveURL(/\/activity$/);
   await expect(page.getByTestId("app-sidebar")).toBeVisible();
+  await expect(page.getByTestId("sidebar-new-post")).toBeVisible();
   await expect
     .poll(() =>
       page.evaluate(
@@ -45,6 +46,40 @@ test("authenticated navigation keeps the app shell mounted", async ({
   await page.getByRole("button", { name: "Calendar", exact: true }).click();
   await expect(page).toHaveURL(/\/calendar$/);
   await expect(page.getByTestId("app-sidebar")).toBeVisible();
+});
+
+test("first autosave establishes the draft URL and keeps draft actions in one composer", async ({
+  page,
+  request,
+}) => {
+  const unique = Date.now().toString(36);
+  const email = `composer-draft-${unique}@example.com`;
+  const content = "Keep this draft attached to its own URL.";
+
+  const auth = await registerUser(request, email);
+  await createWorkspace(request, auth.token, "Draft URL E2E");
+  await authenticatePage(page, auth.token);
+  await page.goto("/");
+
+  await expect(page.getByTestId("sidebar-home-brand")).toBeVisible();
+  await expect(page.getByTestId("sidebar-new-post")).toHaveCount(0);
+
+  await page.getByLabel("Post text").fill(content);
+  await expect(page).toHaveURL(/\/posts\/[a-zA-Z0-9-]+$/, { timeout: 10_000 });
+  await expect(page.getByTestId("sidebar-new-post")).toBeVisible();
+  await expect(page.getByTestId("composer-delete")).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Schedule", exact: true }).first(),
+  ).toBeVisible();
+  await expect(page.getByText("Editing draft post")).toHaveCount(0);
+  await expect(page.getByText("Saved", { exact: true })).toHaveCount(0);
+
+  await page.reload();
+  await expect(page.getByLabel("Post text")).toHaveValue(content);
+  await expect(page.getByTestId("composer-delete")).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Schedule", exact: true }).first(),
+  ).toBeVisible();
 });
 
 test("collapsed sidebar keeps the OpenPost mark without overflowing text", async ({

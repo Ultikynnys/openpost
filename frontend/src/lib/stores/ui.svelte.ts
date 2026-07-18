@@ -6,6 +6,8 @@ class UIState {
 	isDayPostsOpen = $state(false);
 	dayPostsDate = $state<DateValue | undefined>(undefined);
 	refreshCounter = $state(0);
+	composerResetCounter = $state(0);
+	activeComposerDraftId = $state<string | null>(null);
 	promptText = $state<string | null>(null);
 
 	openCompose(date?: DateValue) {
@@ -38,6 +40,19 @@ class UIState {
 
 	clearPrompt() {
 		this.promptText = null;
+	}
+
+	setActiveComposerDraft(id: string) {
+		this.activeComposerDraftId = id;
+	}
+
+	clearActiveComposerDraft() {
+		this.activeComposerDraftId = null;
+	}
+
+	startNewPost() {
+		this.activeComposerDraftId = null;
+		this.composerResetCounter++;
 	}
 
 	triggerRefresh() {

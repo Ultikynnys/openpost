@@ -5,10 +5,8 @@
 	import { client } from '$lib/api/client';
 	import type { components } from '$lib/api/types';
 	import ComposeSimple from '$lib/components/compose-simple.svelte';
-	import { ui } from '$lib/stores/ui.svelte';
 	import { Button } from '$lib/components/ui/button';
 	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
-	import TrashIcon from 'lucide-svelte/icons/trash-2';
 
 	type PostDetailResponse = components['schemas']['PostDetailResponse'];
 	type PostDetail = Omit<PostDetailResponse, 'media' | 'destinations'> & {
@@ -19,8 +17,6 @@
 	let post = $state<PostDetail | null>(null);
 	let hasLoaded = $state(false);
 	let error = $state('');
-	let deleting = $state(false);
-	let showDeleteConfirm = $state(false);
 	let requestedPostId = $state('');
 
 	const postId = $derived($page.params.id);
@@ -51,29 +47,7 @@
 		}
 	});
 
-	async function handleDelete() {
-		if (!post) return;
-		deleting = true;
-		try {
-			const { error: err } = await client.DELETE('/posts/{id}', {
-				params: { path: { id: post.id } }
-			});
-			if (err) throw new Error(err.detail || 'Failed to delete post');
-			ui.triggerRefresh();
-			goto(resolve('/'));
-		} catch (e) {
-			error = (e as Error).message;
-			deleting = false;
-			showDeleteConfirm = false;
-		}
-	}
-
 	async function handleSuccess() {
-		ui.triggerRefresh();
-		goto(resolve('/'));
-	}
-
-	function handleCancel() {
 		goto(resolve('/'));
 	}
 </script>
@@ -96,45 +70,6 @@
 	</div>
 {:else if post}
 	<div class="flex flex-1 flex-col overflow-hidden">
-		<div class="flex flex-wrap items-center justify-end gap-2 border-b px-3 py-2 md:px-4">
-			{#if post.status === 'draft' || post.status === 'scheduled'}
-				{#if showDeleteConfirm}
-					<div class="flex items-center gap-2">
-						<span class="text-xs text-destructive">Delete?</span>
-						<Button
-							variant="ghost"
-							size="xs"
-							onclick={() => (showDeleteConfirm = false)}
-							disabled={deleting}
-							class="h-6 text-xs"
-						>
-							Cancel
-						</Button>
-						<Button
-							variant="destructive"
-							size="xs"
-							onclick={handleDelete}
-							disabled={deleting}
-							class="h-6 text-xs"
-						>
-							{deleting ? '...' : 'Confirm'}
-						</Button>
-					</div>
-				{:else}
-					<Button
-						variant="ghost"
-						size="xs"
-						class="h-6 gap-1 text-xs text-muted-foreground hover:text-destructive"
-						onclick={() => (showDeleteConfirm = true)}
-						disabled={deleting}
-					>
-						<TrashIcon class="h-3 w-3" />
-						Delete
-					</Button>
-				{/if}
-			{/if}
-		</div>
-
 		{#if error}
 			<div
 				class="mx-4 mt-3 rounded-md border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive"
@@ -143,6 +78,6 @@
 			</div>
 		{/if}
 
-		<ComposeSimple initialPost={post} onSuccess={handleSuccess} onCancel={handleCancel} />
+		<ComposeSimple initialPost={post} onSuccess={handleSuccess} onDeleted={handleSuccess} />
 	</div>
 {/if}
