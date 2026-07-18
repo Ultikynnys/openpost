@@ -952,6 +952,8 @@ openpost post update &lt;post-id&gt; [flags]
 | --- | --- | --- |
 | `--accounts` | `-` | comma-separated account selectors |
 | `--content` | `-` | post content |
+| `--media` | `[]` | replacement media id or local file path; repeatable; pass an empty value to clear |
+| `--media-alt` | `[]` | alt text for the matching uploaded --media |
 | `--random-delay` | `0` | random delay in minutes |
 | `--schedule` | `-` | natural-language, RFC3339, next-slot, now, or draft; empty string unschedules |
 

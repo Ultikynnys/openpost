@@ -79,12 +79,8 @@ func (s *Service) ValidateScheduledProviderOutput(ctx context.Context, workspace
 		return nil
 	}
 	provider := platforms[0]
-	if _, ok := capabilities.Find(provider, models.ContentProfileShortText); ok {
-		for _, issue := range capabilities.Validate(provider, models.ContentProfileShortText, content, "", "", nil, nil) {
-			if issue.Severity == severityError {
-				return UserError{Message: issue.Message}
-			}
-		}
+	if limit, ok := capabilities.ProviderTextLimit(provider); ok && len([]rune(content)) > limit {
+		return UserError{Message: fmt.Sprintf("Text is over the %d character limit", limit)}
 	}
 	return s.ValidateScheduledProviderMedia(ctx, workspaceID, []string{accountID}, mediaIDs)
 }

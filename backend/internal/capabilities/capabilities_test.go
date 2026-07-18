@@ -165,6 +165,21 @@ func TestTikTokPhotoCapabilityMatchesDocumentedMediaLimits(t *testing.T) {
 	require.ElementsMatch(t, []string{"image/jpeg", "image/webp"}, capability.Media.AllowedMIMEs)
 }
 
+func TestProviderTextLimitUsesGenericPostOrConservativePublicationLimit(t *testing.T) {
+	tests := map[string]int{
+		ProviderInstagram: 2200,
+		ProviderLinkedIn:  3000,
+		ProviderTikTok:    2200,
+		ProviderYouTube:   5000,
+		ProviderX:         280,
+	}
+	for provider, want := range tests {
+		limit, ok := ProviderTextLimit(provider)
+		require.True(t, ok, provider)
+		require.Equal(t, want, limit, provider)
+	}
+}
+
 func TestThreadsCarouselCapabilityAllowsMixedMedia(t *testing.T) {
 	capability, ok := Find(ProviderThreads, models.ContentProfileCarousel)
 

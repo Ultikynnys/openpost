@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
 	DEFAULT_PLATFORM_CHAR_LIMIT,
-	X_PREMIUM_CHAR_LIMIT,
 	accountHasXPremiumLongPosts,
 	accountCharacterLimit,
 	minimumAccountCharacterLimit,
@@ -15,26 +14,26 @@ describe('platform-limits', () => {
 		expect(accountCharacterLimit({ platform: 'linkedin' })).toBe(3000);
 	});
 
-	it('supports X Premium longer-post limits when an account is marked premium', () => {
-		expect(accountCharacterLimit({ platform: 'x', limit_profile: 'x-premium' })).toBe(
-			X_PREMIUM_CHAR_LIMIT
-		);
+	it('keeps X conservative when the account API has no verified premium entitlement', () => {
+		expect(accountCharacterLimit({ platform: 'x', limit_profile: 'x-premium' })).toBe(280);
 		expect(
 			accountCharacterLimit({
 				platform: 'x',
 				capabilities: ['long_posts']
 			})
-		).toBe(X_PREMIUM_CHAR_LIMIT);
+		).toBe(280);
 		expect(
 			accountCharacterLimit({
 				platform: 'x',
 				metadata: { x_premium: true }
 			})
-		).toBe(X_PREMIUM_CHAR_LIMIT);
+		).toBe(280);
 	});
 
-	it('detects X Premium only from explicit account signals', () => {
-		expect(accountHasXPremiumLongPosts({ platform: 'x', capabilities: ['long_posts'] })).toBe(true);
+	it('does not infer X Premium from fields absent from the account API contract', () => {
+		expect(accountHasXPremiumLongPosts({ platform: 'x', capabilities: ['long_posts'] })).toBe(
+			false
+		);
 		expect(accountHasXPremiumLongPosts({ platform: 'x', account_username: 'premium' })).toBe(false);
 		expect(accountHasXPremiumLongPosts({ platform: 'mastodon', limit_profile: 'x-premium' })).toBe(
 			false
@@ -65,7 +64,6 @@ describe('platform-limits', () => {
 			])
 		).toEqual([
 			expect.objectContaining({ platform: 'X', key: 'x', limit: 280 }),
-			expect.objectContaining({ platform: 'X Premium', key: 'x', limit: X_PREMIUM_CHAR_LIMIT }),
 			expect.objectContaining({ platform: 'Mastodon', key: 'mastodon', limit: 500 })
 		]);
 	});

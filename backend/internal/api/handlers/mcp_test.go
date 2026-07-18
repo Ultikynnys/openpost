@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -2198,6 +2199,74 @@ func TestMCPCallSchedulePostRejectsOverLimitXRenditionBeforeEnqueue(t *testing.T
 	var count int
 	require.NoError(t, srv.db.NewSelect().ColumnExpr("COUNT(*)").TableExpr("jobs").Scan(context.Background(), &count))
 	require.Zero(t, count)
+}
+
+func TestMCPCallSchedulePostValidatesInstagramAndTikTokCaptionBoundariesBeforeEnqueue(t *testing.T) {
+	for _, provider := range []string{"instagram", "tiktok"} {
+		for _, delta := range []int{0, 1} {
+			name := fmt.Sprintf("%s/%d", provider, delta)
+			t.Run(name, func(t *testing.T) {
+				srv := newMCPTestServer(t)
+				accountID := provider + "-caption"
+				_, err := srv.db.NewInsert().Model(&models.SocialAccount{ID: accountID, WorkspaceID: "ws-1", Platform: provider, AccountID: accountID, Slug: accountID, AccessTokenEnc: []byte("token"), IsActive: true, CreatedAt: time.Now()}).Exec(context.Background())
+				require.NoError(t, err)
+				mediaID := provider + "-caption-video"
+				insertMCPTestMedia(t, srv, models.MediaAttachment{ID: mediaID, MimeType: "video/mp4"})
+
+				resp := srv.request(t, "web-token", map[string]any{"jsonrpc": "2.0", "id": name, "method": "tools/call", "params": map[string]any{"name": "schedule_post", "arguments": map[string]any{
+					"workspace_id": "ws-1", "content": "source", "scheduled_at": "2026-07-01T12:00:00Z", "social_account_ids": []string{accountID}, "media_ids": []string{mediaID},
+					"renditions": []map[string]any{{"social_account_id": accountID, "content": strings.Repeat("x", 2200+delta)}},
+				}}})
+				var out map[string]any
+				require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &out))
+				jobCount, err := srv.db.NewSelect().ColumnExpr("COUNT(*)").TableExpr("jobs").Count(context.Background())
+				require.NoError(t, err)
+				if delta == 0 {
+					require.NotContains(t, out, "error")
+					require.Equal(t, 1, jobCount)
+				} else {
+					require.Contains(t, out["error"].(map[string]any)["message"], "2200 character limit")
+					require.Zero(t, jobCount)
+				}
+			})
+		}
+	}
+}
+
+func TestMCPCallSetPostRenditionsValidatesInstagramAndTikTokCaptionBoundariesBeforeUpdate(t *testing.T) {
+	for _, provider := range []string{"instagram", "tiktok"} {
+		t.Run(provider, func(t *testing.T) {
+			srv := newMCPTestServer(t)
+			accountID := provider + "-update-caption"
+			_, err := srv.db.NewInsert().Model(&models.SocialAccount{ID: accountID, WorkspaceID: "ws-1", Platform: provider, AccountID: accountID, Slug: accountID, AccessTokenEnc: []byte("token"), IsActive: true, CreatedAt: time.Now()}).Exec(context.Background())
+			require.NoError(t, err)
+			mediaID := provider + "-update-video"
+			insertMCPTestMedia(t, srv, models.MediaAttachment{ID: mediaID, MimeType: "video/mp4"})
+			post := models.Post{ID: provider + "-scheduled-update", WorkspaceID: "ws-1", CreatedByID: "user-1", Content: "source", Status: models.PostStatusScheduled, ScheduledAt: time.Now().Add(time.Hour), CreatedAt: time.Now()}
+			_, err = srv.db.NewInsert().Model(&post).Exec(context.Background())
+			require.NoError(t, err)
+			_, err = srv.db.NewInsert().Model(&models.PostDestination{ID: post.ID + "-destination", PostID: post.ID, SocialAccountID: accountID, Status: postStatusPending}).Exec(context.Background())
+			require.NoError(t, err)
+			_, err = srv.db.NewInsert().Model(&models.PostMedia{PostID: post.ID, MediaID: mediaID}).Exec(context.Background())
+			require.NoError(t, err)
+
+			call := func(content string) map[string]any {
+				resp := srv.request(t, "web-token", map[string]any{"jsonrpc": "2.0", "id": provider, "method": "tools/call", "params": map[string]any{"name": "set_post_renditions", "arguments": map[string]any{
+					"workspace_id": "ws-1", "post_id": post.ID, "renditions": []map[string]any{{"social_account_id": accountID, "content": content}},
+				}}})
+				var out map[string]any
+				require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &out))
+				return out
+			}
+
+			require.NotContains(t, call(strings.Repeat("x", 2200)), "error")
+			over := call(strings.Repeat("y", 2201))
+			require.Contains(t, over["error"].(map[string]any)["message"], "2200 character limit")
+			var stored models.PostVariant
+			require.NoError(t, srv.db.NewSelect().Model(&stored).Where("post_id = ?", post.ID).Scan(context.Background()))
+			require.Equal(t, strings.Repeat("x", 2200), stored.Content)
+		})
+	}
 }
 
 func TestMCPCallSchedulePostRejectsProviderMediaErrors(t *testing.T) {

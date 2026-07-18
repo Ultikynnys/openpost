@@ -410,28 +410,21 @@ func resolveAccounts(cmd *cobra.Command, client *api.Client, workspaceID, csv st
 }
 
 func resolveMedia(cmd *cobra.Command, client *api.Client, workspaceID string, mediaValues, altValues []string) ([]string, error) {
-	expanded := make([]string, 0, len(mediaValues))
-	for _, value := range mediaValues {
-		expanded = append(expanded, splitCSV(value)...)
-	}
-	mediaValues = expanded
+	inputs := resolveMediaInputs(mediaValues, altValues)
 	existing := map[string]bool{}
 	list, _ := client.ListMedia(cmd.Context(), workspaceID, 200)
 	for _, item := range list {
 		existing[item.ID] = true
 	}
-	out := make([]string, 0, len(mediaValues))
-	for i, value := range mediaValues {
-		alt := ""
-		if i < len(altValues) {
-			alt = altValues[i]
-		}
+	out := make([]string, 0, len(inputs))
+	for _, input := range inputs {
+		value := input.value
 		if strings.HasPrefix(value, "med_") || existing[value] {
 			out = append(out, value)
 			continue
 		}
-		if st, err := os.Stat(value); err == nil && !st.IsDir() {
-			media, err := client.UploadMedia(cmd.Context(), workspaceID, value, alt)
+		if input.localFile {
+			media, err := client.UploadMedia(cmd.Context(), workspaceID, value, input.alt)
 			if err != nil {
 				return nil, err
 			}
@@ -441,6 +434,34 @@ func resolveMedia(cmd *cobra.Command, client *api.Client, workspaceID string, me
 		return nil, fmt.Errorf("media %q is not an existing file or known media id", value)
 	}
 	return out, nil
+}
+
+type mediaInput struct {
+	value     string
+	alt       string
+	localFile bool
+}
+
+func resolveMediaInputs(mediaValues, altValues []string) []mediaInput {
+	inputs := make([]mediaInput, 0, len(mediaValues))
+	for i, value := range mediaValues {
+		if st, err := os.Stat(value); err == nil && !st.IsDir() {
+			alt := ""
+			if i < len(altValues) {
+				alt = altValues[i]
+			}
+			inputs = append(inputs, mediaInput{value: value, alt: alt, localFile: true})
+			continue
+		}
+		for _, item := range splitCSV(value) {
+			st, err := os.Stat(item)
+			inputs = append(inputs, mediaInput{
+				value:     item,
+				localFile: err == nil && !st.IsDir(),
+			})
+		}
+	}
+	return inputs
 }
 
 func splitCSV(csv string) []string {

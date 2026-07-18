@@ -2,9 +2,7 @@ import { getPlatformKey, getPlatformName } from '$lib/utils';
 
 export const DEFAULT_PLATFORM_CHAR_LIMIT = 280;
 export const X_STANDARD_CHAR_LIMIT = 280;
-export const X_PREMIUM_CHAR_LIMIT = 25_000;
-
-export type AccountLimitProfile = 'standard' | 'x-premium';
+export type AccountLimitProfile = 'standard';
 
 type AccountLimitTarget = {
 	platform: string;
@@ -36,7 +34,7 @@ export const PLATFORM_LIMITS: Record<string, PlatformLimitDefinition> = {
 		name: 'X',
 		charLimit: X_STANDARD_CHAR_LIMIT,
 		media: 'Up to 4 images or 1 MP4 video',
-		note: 'Standard X posts use the 280-character API limit. X Premium longer posts can be up to 25,000 characters, but scheduled/API behavior should be verified per account.'
+		note: 'OpenPost enforces the standard 280-character API limit because connected accounts do not expose a verified long-post entitlement.'
 	},
 	mastodon: {
 		key: 'mastodon',
@@ -96,58 +94,13 @@ export const PLATFORM_LIMITS: Record<string, PlatformLimitDefinition> = {
 	}
 };
 
-function hasPremiumToken(value: unknown): boolean {
-	if (typeof value !== 'string') return false;
-	const normalized = value.toLowerCase().replace(/[\s-]+/g, '_');
-	return ['x_premium', 'premium', 'premium_plus', 'long_posts', 'longform'].includes(normalized);
-}
-
-function hasPremiumFlag(value: unknown): boolean {
-	if (!value || typeof value !== 'object') return false;
-	return Object.entries(value as Record<string, unknown>).some(([key, raw]) => {
-		const normalizedKey = key.toLowerCase().replace(/[\s-]+/g, '_');
-		if (
-			['x_premium', 'has_x_premium', 'premium', 'premium_plus', 'long_posts', 'longform'].includes(
-				normalizedKey
-			)
-		) {
-			return raw === true || hasPremiumToken(raw);
-		}
-		if (
-			['tier', 'profile', 'plan', 'subscription_tier', 'account_type', 'entitlement'].includes(
-				normalizedKey
-			)
-		) {
-			return hasPremiumToken(raw);
-		}
-		if (
-			Array.isArray(raw) &&
-			['capabilities', 'features', 'entitlements', 'permissions'].includes(normalizedKey)
-		) {
-			return raw.some(hasPremiumToken);
-		}
-		if (normalizedKey === 'metadata' || normalizedKey === 'settings') {
-			return hasPremiumFlag(raw);
-		}
-		return false;
-	});
-}
-
 export function accountHasXPremiumLongPosts(account: AccountLimitTarget): boolean {
-	if (getPlatformKey(account.platform) !== 'x') return false;
-	if (account.limit_profile === 'x-premium') return true;
-
-	const capabilityValues = Array.isArray(account.capabilities) ? account.capabilities : [];
-	if (capabilityValues.some(hasPremiumToken)) return true;
-
-	if (hasPremiumFlag(account.metadata)) return true;
-	if (hasPremiumFlag(account)) return true;
-
+	void account;
 	return false;
 }
 
 export function accountLimitProfile(account: AccountLimitTarget): AccountLimitProfile {
-	if (accountHasXPremiumLongPosts(account)) return 'x-premium';
+	void account;
 	return 'standard';
 }
 
@@ -155,7 +108,7 @@ export function platformCharacterLimit(
 	platform: string,
 	profile: AccountLimitProfile = 'standard'
 ): number {
-	if (getPlatformKey(platform) === 'x' && profile === 'x-premium') return X_PREMIUM_CHAR_LIMIT;
+	void profile;
 	return PLATFORM_LIMITS[getPlatformKey(platform)]?.charLimit ?? DEFAULT_PLATFORM_CHAR_LIMIT;
 }
 
@@ -181,7 +134,7 @@ export function uniquePlatformLimits(accounts: Array<AccountLimitTarget>): Platf
 			const key = getPlatformKey(account.platform);
 			const profile = accountLimitProfile(account);
 			return {
-				platform: profile === 'x-premium' ? 'X Premium' : getPlatformName(account.platform),
+				platform: getPlatformName(account.platform),
 				key,
 				profile,
 				limit: platformCharacterLimit(account.platform, profile),

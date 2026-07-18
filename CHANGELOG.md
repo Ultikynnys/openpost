@@ -28,6 +28,7 @@ All notable changes to this project are documented in this file.
 
 ### Fixed
 
+- Validated scheduled destination captions independently of publication profiles, kept X scheduling conservatively aligned at 280 characters without a verified premium entitlement, preserved comma-containing CLI media filenames, and kept direct-upload response metadata consistent for new and deduplicated media.
 - Opened an existing post on its actual destination rendition when every destination is customized, restoring provider-specific character limits and rendition-only media; media upload responses now include the persisted alt text and original filename.
 - Unified new and persisted draft composing: the first autosave now establishes the draft URL, draft editing keeps the normal schedule/publish controls, deletion lives in the composer toolbar, and the sidebar brand becomes the contextual New post action away from an empty homepage.
 - Unified every composer format under the same compact publishing toolbar, removed duplicate workspace controls, kept the authenticated app shell mounted during navigation, restored the collapsed-sidebar logo, and tightened the Social accounts layout.

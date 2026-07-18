@@ -194,7 +194,7 @@ func TestCompleteMediaUploadSessionFinalizesUploadedObject(t *testing.T) {
 
 	storage := newFakeDirectUploadStorage()
 	srv := newMediaDirectUploadTestServer(t, storage, entitlements.NewSelfHostedService())
-	mediaID := srv.createUploadSession(t, "copy.txt", "text/plain", 12)
+	mediaID := srv.createUploadSessionWithAlt(t, "copy.txt", "text/plain", 12, "Direct upload alt")
 	storage.objects[mediaID+".txt"] = []byte("hello direct")
 
 	resp := srv.postJSON(t, "/api/v1/media/upload-session/"+mediaID+"/complete", map[string]any{
@@ -208,6 +208,8 @@ func TestCompleteMediaUploadSessionFinalizesUploadedObject(t *testing.T) {
 	require.Equal(t, int64(12), out.Size)
 	require.False(t, out.Deduped)
 	require.Equal(t, "/media/"+mediaID, out.URL)
+	require.Equal(t, "Direct upload alt", out.AltText)
+	require.Equal(t, "copy.txt", out.OriginalFilename)
 
 	var media models.MediaAttachment
 	require.NoError(t, srv.db.NewSelect().Model(&media).Where("id = ?", mediaID).Scan(context.Background()))
@@ -238,6 +240,7 @@ func TestCompleteMediaUploadSessionDedupesExistingMedia(t *testing.T) {
 		ProcessingStatus: mediaReadyStatus,
 		Size:             int64(len(content)),
 		OriginalFilename: "existing.txt",
+		AltText:          "Existing alt",
 		FileHash:         hex.EncodeToString(hash[:]),
 		CreatedAt:        time.Now().UTC(),
 	}).Exec(context.Background())
@@ -254,6 +257,8 @@ func TestCompleteMediaUploadSessionDedupesExistingMedia(t *testing.T) {
 	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &out))
 	require.Equal(t, "existing-media", out.ID)
 	require.True(t, out.Deduped)
+	require.Equal(t, "Existing alt", out.AltText)
+	require.Equal(t, "existing.txt", out.OriginalFilename)
 	require.Contains(t, storage.deleted, mediaID+".txt")
 	pendingCount, err := srv.db.NewSelect().
 		Model((*models.MediaAttachment)(nil)).
@@ -267,6 +272,10 @@ func TestCompleteMediaUploadSessionDedupesExistingMedia(t *testing.T) {
 }
 
 func (s *mediaDirectUploadTestServer) createUploadSession(t *testing.T, filename string, mimeType string, size int64) string {
+	return s.createUploadSessionWithAlt(t, filename, mimeType, size, "")
+}
+
+func (s *mediaDirectUploadTestServer) createUploadSessionWithAlt(t *testing.T, filename string, mimeType string, size int64, altText string) string {
 	t.Helper()
 
 	resp := s.postJSON(t, "/api/v1/media/upload-session", map[string]any{
@@ -274,6 +283,7 @@ func (s *mediaDirectUploadTestServer) createUploadSession(t *testing.T, filename
 		"filename":     filename,
 		"mime_type":    mimeType,
 		"size":         size,
+		"alt_text":     altText,
 	})
 	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
 	var out map[string]any

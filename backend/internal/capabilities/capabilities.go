@@ -200,12 +200,31 @@ func All() []Capability {
 		defaultQueued(Capability{Provider: ProviderInstagram, Profile: models.ContentProfileStory, Label: "Instagram Story", Media: publicImages, RequiresPublicMedia: true, RequiresAppReview: true, Settings: instagramSettings()}),
 		defaultQueued(Capability{Provider: ProviderInstagram, Profile: models.ContentProfileShortVideo, Label: "Instagram Reel", TextLimit: 2200, Media: publicShortVideo, RequiresPublicMedia: true, Settings: instagramSettings()}),
 
-		defaultQueued(Capability{Provider: ProviderYouTube, Profile: models.ContentProfileShortVideo, Label: "YouTube Short", TitleRequired: true, DescriptionRequired: false, Media: shortVideo, Settings: youtubeSettings(), Caveats: []string{"Unaudited Google projects can force uploads private."}}),
-		defaultQueued(Capability{Provider: ProviderYouTube, Profile: models.ContentProfileLongVideo, Label: "YouTube video", TitleRequired: true, DescriptionRequired: false, Media: longVideo, Settings: youtubeSettings(), Caveats: []string{"Unaudited Google projects can force uploads private."}}),
+		defaultQueued(Capability{Provider: ProviderYouTube, Profile: models.ContentProfileShortVideo, Label: "YouTube Short", TextLimit: 5000, TitleRequired: true, DescriptionRequired: false, Media: shortVideo, Settings: youtubeSettings(), Caveats: []string{"Unaudited Google projects can force uploads private."}}),
+		defaultQueued(Capability{Provider: ProviderYouTube, Profile: models.ContentProfileLongVideo, Label: "YouTube video", TextLimit: 5000, TitleRequired: true, DescriptionRequired: false, Media: longVideo, Settings: youtubeSettings(), Caveats: []string{"Unaudited Google projects can force uploads private."}}),
 
 		defaultQueued(Capability{Provider: ProviderTikTok, Profile: models.ContentProfileShortVideo, Label: "TikTok video", TextLimit: 2200, Media: publicShortVideo, RequiresPublicMedia: true, RequiresAppReview: true, Settings: tiktokSettings()}),
 		defaultQueued(Capability{Provider: ProviderTikTok, Profile: models.ContentProfileCarousel, Label: "TikTok photo post", TextLimit: 4000, Media: tiktokPhotos, RequiresPublicMedia: true, RequiresAppReview: true, Settings: tiktokSettings()}),
 	}
+}
+
+// ProviderTextLimit returns the provider's generic post limit when short text is
+// supported, otherwise the conservative limit across its publication profiles.
+func ProviderTextLimit(provider string) (int, bool) {
+	provider = strings.ToLower(strings.TrimSpace(provider))
+	limit := 0
+	for _, capability := range All() {
+		if capability.Provider != provider || capability.TextLimit <= 0 {
+			continue
+		}
+		if capability.Profile == models.ContentProfileShortText {
+			return capability.TextLimit, true
+		}
+		if limit == 0 || capability.TextLimit < limit {
+			limit = capability.TextLimit
+		}
+	}
+	return limit, limit > 0
 }
 
 func Find(provider, profile string) (Capability, bool) {

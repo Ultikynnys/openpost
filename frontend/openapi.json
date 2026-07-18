@@ -2392,6 +2392,10 @@
 						"readOnly": true,
 						"type": "string"
 					},
+					"alt_text": {
+						"description": "Persisted alt text",
+						"type": "string"
+					},
 					"deduped": {
 						"description": "Whether an existing media attachment was reused",
 						"type": "boolean"
@@ -2404,6 +2408,10 @@
 						"description": "MIME type",
 						"type": "string"
 					},
+					"original_filename": {
+						"description": "Persisted original filename",
+						"type": "string"
+					},
 					"size": {
 						"description": "File size in bytes",
 						"format": "int64",
@@ -2414,7 +2422,7 @@
 						"type": "string"
 					}
 				},
-				"required": ["id", "mime_type", "url", "size", "deduped"],
+				"required": ["id", "mime_type", "url", "size", "deduped", "alt_text", "original_filename"],
 				"type": "object"
 			},
 			"MediaUsageItem": {

@@ -2737,12 +2737,16 @@ export interface components {
              * @example https://example.com/schemas/MediaUploadResult.json
              */
             readonly $schema?: string;
+            /** @description Persisted alt text */
+            alt_text: string;
             /** @description Whether an existing media attachment was reused */
             deduped: boolean;
             /** @description Media ID */
             id: string;
             /** @description MIME type */
             mime_type: string;
+            /** @description Persisted original filename */
+            original_filename: string;
             /**
              * Format: int64
              * @description File size in bytes
