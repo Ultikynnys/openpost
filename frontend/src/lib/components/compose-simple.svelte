@@ -1694,6 +1694,10 @@
 		return `${date.toLocaleDateString(getLocaleTag(), { month: 'short', day: 'numeric' })}${timeSuffix}`;
 	}
 
+	function scheduleButtonLabel(): string {
+		return m.compose_schedule_post({ schedule: formatScheduledDisplay() });
+	}
+
 	// --------------------------------------------------------------------------
 	// Snippets
 	// --------------------------------------------------------------------------
@@ -1738,6 +1742,7 @@
 							{#snippet child({ props })}
 								<Button
 									{...props}
+									data-testid="composer-account-control"
 									variant="outline"
 									size="sm"
 									class="h-11 shrink-0 gap-1 px-2.5 text-xs"
@@ -1786,8 +1791,8 @@
 						variant="outline"
 						size="icon"
 						class="ml-auto size-11 shrink-0"
-						title={formatScheduledDisplay()}
-						aria-label={formatScheduledDisplay()}
+						title={scheduleButtonLabel()}
+						aria-label={scheduleButtonLabel()}
 						onclick={openScheduleDialog}
 						disabled={isSubmitting || isSaving}
 					>
@@ -1808,8 +1813,8 @@
 						variant="outline"
 						size="icon"
 						class="ml-auto size-11 shrink-0"
-						title={formatScheduledDisplay()}
-						aria-label={formatScheduledDisplay()}
+						title={scheduleButtonLabel()}
+						aria-label={scheduleButtonLabel()}
 						onclick={openScheduleDialog}
 						disabled={isSubmitting || isSaving}
 					>
@@ -1939,7 +1944,10 @@
 			{/if}
 		</div>
 	{:else}
-		<div class="flex flex-wrap items-center justify-between gap-2 border-b px-4 py-3">
+		<div
+			class="flex flex-wrap items-center justify-between gap-2 border-b px-4 py-3"
+			data-testid="desktop-composer-controls"
+		>
 			<div class="flex flex-wrap items-center gap-2">
 				{#if modeControl}
 					{@render modeControl()}
@@ -1950,7 +1958,14 @@
 					<DropdownMenu.Root>
 						<DropdownMenu.Trigger>
 							{#snippet child({ props })}
-								<Button {...props} variant="ghost" size="sm" class="gap-1.5 text-xs">
+								<Button
+									{...props}
+									variant="ghost"
+									size="sm"
+									class="gap-1.5 text-xs"
+									aria-label={m.compose_publish_to()}
+									data-testid="composer-account-control"
+								>
 									<span class="hidden text-muted-foreground sm:inline">
 										{selectedAccountIds.length === accounts.length
 											? m.compose_all_accounts()
@@ -2654,7 +2669,7 @@
 															/>
 														{/if}
 														<div
-															class="absolute top-2 right-2 flex items-center gap-1 opacity-100 md:opacity-0 md:transition-opacity md:group-hover/media:opacity-100"
+															class="absolute top-2 right-2 flex items-center gap-1 opacity-100 md:opacity-0 md:transition-opacity md:group-focus-within/media:opacity-100 md:group-hover/media:opacity-100"
 															data-testid="composer-media-actions"
 														>
 															<button

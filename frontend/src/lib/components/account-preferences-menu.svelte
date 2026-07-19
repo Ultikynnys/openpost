@@ -7,8 +7,10 @@
 	import { IS_CAPACITOR } from '$lib/env';
 	import { m } from '$lib/paraglide/messages';
 	import { soundPreferences } from '$lib/stores/sound-preferences.svelte';
+	import { workspaceCtx } from '$lib/stores/workspace.svelte';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
 	import LanguageSwitcher from './language-switcher.svelte';
+	import WorkspaceMenuItems from './workspace-menu-items.svelte';
 	import AccountsIcon from 'lucide-svelte/icons/users';
 	import SettingsIcon from 'lucide-svelte/icons/settings';
 	import UserIcon from 'lucide-svelte/icons/user-round';
@@ -17,6 +19,8 @@
 	import ServerIcon from 'lucide-svelte/icons/server';
 	import CheckIcon from 'lucide-svelte/icons/check';
 	import Volume2Icon from 'lucide-svelte/icons/volume-2';
+	import BuildingIcon from 'lucide-svelte/icons/building-2';
+	import ChevronDownIcon from 'lucide-svelte/icons/chevron-down';
 	import { setMode, userPrefersMode } from 'mode-watcher';
 
 	type AppearanceMode = 'system' | 'light' | 'dark';
@@ -27,6 +31,7 @@
 	}
 
 	let { showDestinations = false, onNavigate }: Props = $props();
+	let workspacesExpanded = $state(false);
 	const menuItemClass = $derived(showDestinations ? 'min-h-11' : '');
 
 	function appearanceLabel(mode: AppearanceMode) {
@@ -62,13 +67,66 @@
 
 {#if showDestinations}
 	<DropdownMenu.Label>{m.sidebar_workspace()}</DropdownMenu.Label>
-	<DropdownMenu.Item class="min-h-11 gap-3" onclick={() => navigate('/accounts')}>
-		<AccountsIcon class="size-4 text-muted-foreground" />
-		{m.sidebar_accounts()}
+	<DropdownMenu.Item
+		class="min-h-11 gap-3"
+		aria-expanded={workspacesExpanded}
+		onSelect={(event) => {
+			event.preventDefault();
+			workspacesExpanded = !workspacesExpanded;
+		}}
+	>
+		<BuildingIcon class="size-4 text-muted-foreground" />
+		<div class="grid min-w-0 flex-1 text-start leading-tight">
+			<span class="truncate"
+				>{workspaceCtx.currentWorkspace?.name ?? m.sidebar_select_workspace()}</span
+			>
+			<span class="truncate text-xs text-muted-foreground">{m.sidebar_switch_workspace()}</span>
+		</div>
+		<ChevronDownIcon
+			class={`ml-auto size-4 text-muted-foreground transition-transform ${workspacesExpanded ? 'rotate-180' : ''}`}
+		/>
 	</DropdownMenu.Item>
-	<DropdownMenu.Item class="min-h-11 gap-3" onclick={() => navigate('/settings')}>
-		<SettingsIcon class="size-4 text-muted-foreground" />
-		{m.sidebar_settings()}
+	{#if workspacesExpanded}
+		<div
+			class="border-l border-border/60 pl-2"
+			role="group"
+			aria-label={m.sidebar_switch_workspace()}
+		>
+			<WorkspaceMenuItems
+				touchSize
+				showLabel={false}
+				onSelect={() => {
+					workspacesExpanded = false;
+					onNavigate?.();
+				}}
+			/>
+		</div>
+	{/if}
+	<DropdownMenu.Item>
+		{#snippet child({ props })}
+			<a
+				{...props}
+				class={[props.class, 'min-h-11 gap-3']}
+				href={resolve('/accounts' as '/')}
+				onclick={onNavigate}
+			>
+				<AccountsIcon class="size-4 text-muted-foreground" />
+				{m.sidebar_accounts()}
+			</a>
+		{/snippet}
+	</DropdownMenu.Item>
+	<DropdownMenu.Item>
+		{#snippet child({ props })}
+			<a
+				{...props}
+				class={[props.class, 'min-h-11 gap-3']}
+				href={resolve('/settings' as '/')}
+				onclick={onNavigate}
+			>
+				<SettingsIcon class="size-4 text-muted-foreground" />
+				{m.sidebar_settings()}
+			</a>
+		{/snippet}
 	</DropdownMenu.Item>
 	<DropdownMenu.Separator />
 {/if}

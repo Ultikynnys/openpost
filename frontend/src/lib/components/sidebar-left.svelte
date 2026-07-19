@@ -19,6 +19,7 @@
 	import Logo from './Logo.svelte';
 	import SidebarPlanner from './sidebar-planner.svelte';
 	import AccountPreferencesMenu from './account-preferences-menu.svelte';
+	import WorkspaceMenuItems from './workspace-menu-items.svelte';
 	import CalendarIcon from 'lucide-svelte/icons/calendar-days';
 	import ComposeIcon from 'lucide-svelte/icons/square-pen';
 	import PostsIcon from 'lucide-svelte/icons/files';
@@ -26,7 +27,6 @@
 	import AccountsIcon from 'lucide-svelte/icons/users';
 	import SettingsIcon from 'lucide-svelte/icons/settings';
 	import ChevronsUpDownIcon from 'lucide-svelte/icons/chevrons-up-down';
-	import CheckIcon from 'lucide-svelte/icons/check';
 	import type { Workspace } from '$lib/api/client';
 
 	let authState = $derived($auth);
@@ -108,12 +108,6 @@
 		return initials(workspace?.name || 'Workspace');
 	}
 
-	async function switchWorkspace(workspace: Workspace) {
-		if (workspace.id === workspaceCtx.currentWorkspace?.id) return;
-		await workspaceCtx.setWorkspace(workspace);
-		sidebar.setOpenMobile(false);
-	}
-
 	function navigate(href: string) {
 		sidebar.setOpenMobile(false);
 		if (href === '/') ui.startNewPost();
@@ -184,30 +178,7 @@
 				align="start"
 				sideOffset={6}
 			>
-				<DropdownMenu.Label>{m.sidebar_switch_workspace()}</DropdownMenu.Label>
-				{#each workspaceCtx.workspaces as workspace (workspace.id)}
-					<DropdownMenu.Item onclick={() => switchWorkspace(workspace)} class="gap-3 py-2">
-						<Avatar.Root class="size-8 rounded-md">
-							{@const avatarURL = workspaceAvatarURL(workspace)}
-							{#if avatarURL}<Avatar.Image src={avatarURL} alt={workspace.name} />{/if}
-							<Avatar.Fallback class="rounded-md bg-muted text-xs">
-								{workspaceInitials(workspace)}
-							</Avatar.Fallback>
-						</Avatar.Root>
-						<span class="min-w-0 flex-1 truncate">{workspace.name}</span>
-						{#if workspace.id === workspaceCtx.currentWorkspace?.id}
-							<CheckIcon class="size-4 text-primary" />
-						{/if}
-					</DropdownMenu.Item>
-				{/each}
-				{#if workspaceCtx.workspaces.length === 0}
-					<DropdownMenu.Item disabled>{m.sidebar_no_workspaces()}</DropdownMenu.Item>
-				{/if}
-				<DropdownMenu.Separator />
-				<DropdownMenu.Item onclick={() => navigate('/settings?tab=general')}>
-					<SettingsIcon class="mr-2 size-4 text-muted-foreground" />
-					{m.sidebar_workspace_settings()}
-				</DropdownMenu.Item>
+				<WorkspaceMenuItems onSelect={() => sidebar.setOpenMobile(false)} />
 			</DropdownMenu.Content>
 		</DropdownMenu.Root>
 	</Sidebar.Header>

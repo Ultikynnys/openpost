@@ -300,6 +300,7 @@
 	"compose_fill_next_slot": "Fill next available time slot",
 	"compose_suggest": "Suggest",
 	"compose_schedule": "Schedule",
+	"compose_schedule_post": "Schedule post: {schedule}",
 	"compose_publish_now": "Publish Now",
 	"compose_save_changes": "Save changes",
 	"compose_saving_changes": "Saving...",

@@ -110,7 +110,7 @@
 					{/snippet}
 				</DropdownMenu.Trigger>
 				<DropdownMenu.Content
-					class="mb-1 w-[min(22rem,calc(100vw-1rem))] p-1"
+					class="mb-1 max-h-[calc(100dvh-5rem-env(safe-area-inset-bottom))] w-[min(22rem,calc(100vw-1rem))] overflow-y-auto overscroll-contain p-1"
 					side="top"
 					align="end"
 					sideOffset={8}

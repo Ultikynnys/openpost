@@ -300,6 +300,7 @@
 	"compose_fill_next_slot": "Preencher a próxima slot disponível",
 	"compose_suggest": "Sugerir",
 	"compose_schedule": "Agendar",
+	"compose_schedule_post": "Agendar publicação: {schedule}",
 	"compose_publish_now": "Publicar agora",
 	"compose_save_changes": "Guardar alterações",
 	"compose_saving_changes": "A guardar...",

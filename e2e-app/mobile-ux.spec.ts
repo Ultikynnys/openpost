@@ -16,7 +16,10 @@ test("mobile shell and composer expose touch-first controls without overflow", a
     request,
     `mobile-shell-${unique}@example.com`,
   );
-  await createWorkspace(request, auth.token, "Mobile UX E2E");
+  const firstWorkspace = `Mobile UX ${unique}`;
+  const secondWorkspace = `Client UX ${unique}`;
+  await createWorkspace(request, auth.token, firstWorkspace);
+  await createWorkspace(request, auth.token, secondWorkspace);
   await authenticatePage(page, auth.token);
   await page.route("**/api/v1/accounts?**", async (route) => {
     await route.fulfill({
@@ -47,20 +50,63 @@ test("mobile shell and composer expose touch-first controls without overflow", a
   await expect(page.getByRole("menuitem", { name: "Accounts" })).toBeVisible();
   await expect(page.getByRole("menuitem", { name: "Settings" })).toBeVisible();
   await expect(
+    page.getByRole("menuitem", { name: "Accounts" }),
+  ).toHaveAttribute("href", "/accounts");
+  await expect(
+    page.getByRole("menuitem", { name: "Settings" }),
+  ).toHaveAttribute("href", "/settings");
+  await expect(
     page.getByRole("menuitem", { name: /Appearance/ }),
   ).toBeVisible();
   await expect(
     page.getByRole("menuitemcheckbox", { name: "Interface sounds" }),
   ).toBeVisible();
   await expect(page.getByRole("menuitem", { name: /Language/ })).toBeVisible();
+  const workspaceNames = [firstWorkspace, secondWorkspace];
+  const workspaceTrigger = page.getByRole("menuitem", {
+    name: new RegExp(`(?:${workspaceNames.join("|")}).*Switch workspace`),
+  });
+  const workspaceTriggerText = await workspaceTrigger.innerText();
+  const currentWorkspace = workspaceNames.find((name) =>
+    workspaceTriggerText.includes(name),
+  );
+  expect(currentWorkspace).toBeTruthy();
+  const nextWorkspace =
+    currentWorkspace === firstWorkspace ? secondWorkspace : firstWorkspace;
+  await expect(workspaceTrigger).toHaveAttribute("aria-expanded", "false");
+  await workspaceTrigger.click();
+  await expect(workspaceTrigger).toHaveAttribute("aria-expanded", "true");
+  await expect(page.getByRole("menuitem", { name: "Accounts" })).toBeVisible();
+  await page
+    .getByRole("group", { name: "Switch workspace" })
+    .getByRole("menuitem", { name: new RegExp(nextWorkspace) })
+    .click();
+  await more.click();
+  await expect(
+    page.getByRole("menuitem", { name: new RegExp(nextWorkspace) }),
+  ).toContainText(nextWorkspace);
   await page.keyboard.press("Escape");
 
   const controls = page.getByTestId("mobile-composer-controls");
   await expect(controls).toBeVisible();
-  const box = await controls.boundingBox();
-  expect(box).not.toBeNull();
-  expect(box!.x).toBeGreaterThanOrEqual(0);
-  expect(box!.x + box!.width).toBeLessThanOrEqual(390);
+  const overflow = await controls.evaluate((element) => ({
+    clientWidth: element.clientWidth,
+    scrollWidth: element.scrollWidth,
+    childRightEdges: Array.from(element.querySelectorAll("button")).map(
+      (child) => child.getBoundingClientRect().right,
+    ),
+  }));
+  expect(overflow.scrollWidth).toBeLessThanOrEqual(overflow.clientWidth);
+  expect(Math.max(...overflow.childRightEdges)).toBeLessThanOrEqual(390);
+
+  await expect(page.getByTestId("desktop-composer-controls")).toHaveCount(0);
+  await expect(page.getByTestId("composer-account-control")).toHaveCount(1);
+  await expect(
+    page.getByRole("button", { name: "Publish", exact: true }),
+  ).toHaveCount(1);
+  await expect(
+    page.getByRole("button", { name: /^Schedule post:/ }),
+  ).toHaveCount(1);
 
   const circles = page.locator(
     '[data-testid="mobile-rendition-all"], [data-testid="mobile-rendition-account"]',
@@ -72,6 +118,17 @@ test("mobile shell and composer expose touch-first controls without overflow", a
     expect(circleBox!.width).toBe(circleBox!.height);
     expect(circleBox!.width).toBeGreaterThanOrEqual(44);
   }
+
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await expect(page.getByTestId("mobile-composer-controls")).toHaveCount(0);
+  await expect(page.getByTestId("desktop-composer-controls")).toBeVisible();
+  await expect(page.getByTestId("composer-account-control")).toHaveCount(1);
+  await expect(
+    page.getByRole("button", { name: "Publish", exact: true }),
+  ).toHaveCount(1);
+  await expect(
+    page.getByRole("button", { name: "Schedule", exact: true }),
+  ).toHaveCount(1);
 });
 
 test("attached media actions are visible on touch and subtle on desktop", async ({
@@ -101,7 +158,7 @@ test("attached media actions are visible on touch and subtle on desktop", async 
     .getByRole("dialog")
     .getByRole("button", { name: "Upload" })
     .click();
-  await expect(page.getByText("File uploaded successfully")).toBeVisible();
+  await expect(page.getByRole("dialog")).toHaveCount(0, { timeout: 15_000 });
 
   const mediaResponse = await request.get(
     `/api/v1/media?workspace_id=${workspace.id}`,
@@ -141,6 +198,10 @@ test("attached media actions are visible on touch and subtle on desktop", async 
   await expect(page.getByRole("textbox", { name: "Alt text" })).toHaveCount(0);
 
   await page.setViewportSize({ width: 1280, height: 800 });
+  await expect(actions).toHaveCSS("opacity", "0");
+  await page.getByRole("button", { name: "Add alt text" }).focus();
+  await expect(actions).toHaveCSS("opacity", "1");
+  await page.getByRole("button", { name: "Add alt text" }).blur();
   await expect(actions).toHaveCSS("opacity", "0");
   await actions.locator("xpath=..").hover();
   await expect(actions).toHaveCSS("opacity", "1");
