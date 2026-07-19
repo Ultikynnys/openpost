@@ -2260,8 +2260,13 @@
 	{/if}
 
 	<Dialog.Root bind:open={showScheduleDialog}>
-		<Dialog.Content class="max-h-[calc(100vh-2rem)] overflow-y-auto p-0 sm:max-w-3xl">
-			<Dialog.Header class="border-b px-5 pt-5 pb-4 text-center">
+		<Dialog.Content
+			data-testid="schedule-dialog-shell"
+			class="flex max-h-[calc(100dvh-1rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-3xl"
+		>
+			<Dialog.Header
+				class="shrink-0 border-b px-5 pt-[max(1.25rem,env(safe-area-inset-top))] pb-4 text-center"
+			>
 				<Dialog.Title class="text-2xl font-semibold">{m.compose_schedule()}</Dialog.Title>
 				<Dialog.Description class="text-sm text-muted-foreground">
 					All times in <span class="rounded-md bg-muted px-1.5 py-0.5">{scheduleTimezoneLabel}</span
@@ -2270,7 +2275,7 @@
 				</Dialog.Description>
 			</Dialog.Header>
 
-			<div class="space-y-4 p-5">
+			<div data-testid="schedule-dialog-body" class="min-h-0 flex-1 space-y-4 overflow-y-auto p-5">
 				<form
 					class="space-y-2"
 					onsubmit={(event) => {
@@ -2350,7 +2355,7 @@
 						<div class="border-b px-3 py-2 text-center text-sm font-medium">
 							{m.compose_time()}
 						</div>
-						<div class="max-h-72 overflow-y-auto p-2">
+						<div data-testid="schedule-dialog-time-list" class="p-2 md:max-h-72 md:overflow-y-auto">
 							{#if timeSlots.length === 0}
 								<p class="px-2 py-6 text-center text-xs text-muted-foreground">
 									No remaining slots today.
@@ -2445,7 +2450,7 @@
 				</div>
 			</div>
 
-			<Dialog.Footer class="border-t px-5 py-4">
+			<Dialog.Footer class="shrink-0 border-t px-5 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
 				<Button type="button" variant="outline" onclick={closeScheduleDialog}
 					>{m.common_cancel()}</Button
 				>
