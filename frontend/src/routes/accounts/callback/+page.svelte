@@ -228,7 +228,7 @@
 						<CardTitle
 							>{loadingSelection ? 'Loading account choices' : 'Finishing connection'}</CardTitle
 						>
-						<CardDescription>Please wait while OpenPost checks this connection.</CardDescription>
+						<CardDescription>OpenPost is checking this connection.</CardDescription>
 					</CardHeader>
 				{:else if viewState === 'selection'}
 					<CardHeader>

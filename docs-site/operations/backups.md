@@ -69,7 +69,7 @@ pg_restore \
   "openpost-postgres-20260518.dump"
 ```
 
-Make sure the restore target runs the same or newer OpenPost migrations before
+Confirm that the same or newer OpenPost migrations have been applied to the restore target before
 you point traffic at it.
 
 ## S3-compatible media

@@ -72,7 +72,14 @@ When an AI agent is invoked to assist with this repository, it MUST adhere to th
 - Tokens for social accounts (Access Tokens, Refresh Tokens) MUST ALWAYS be encrypted at rest using the `TokenEncryptor` service (AES-256-GCM).
 - Do NOT hardcode cryptographic secrets in the codebase. Always load from environment variables (e.g., `OPENPOST_ENCRYPTION_KEY`, `OPENPOST_JWT_SECRET`).
 
-### D. Workflow for Feature Implementation
+### D. Writing and product copy
+- Avoid stock metaphors, similes, idioms, and other figures of speech. Prefer short, familiar words when they keep the exact meaning. Cut every word or section that adds no meaning.
+- Prefer active voice when it makes the actor and action clearer. Replace jargon, foreign phrases, and needless scientific or academic terms with everyday English.
+- Apply these rules in context, not as blind word replacements. Break them when accuracy, natural phrasing, tone, legal meaning, accessibility, or readability requires it.
+- Keep code, commands, API fields, proper nouns, citations, quotes, legal wording, and exact technical terms intact unless they are themselves copy being improved.
+- Finish every copy change with a line-by-line prose review for meaning, facts, voice, consistency, and useful detail.
+
+### E. Workflow for Feature Implementation
 1. **Model First:** If a feature requires data, update the `models.go` and `database.go` schema creation first.
 2. **Backend Logic:** Implement the Service and the Echo API Handler.
 3. **Frontend Implementation:** Write Svelte components and SvelteKit routes to interact with the new endpoint.

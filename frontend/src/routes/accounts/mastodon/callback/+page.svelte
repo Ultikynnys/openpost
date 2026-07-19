@@ -43,15 +43,15 @@
 
 	async function submitCode() {
 		if (!code.trim()) {
-			error = 'Please enter the authorization code';
+			error = 'Enter the authorization code.';
 			return;
 		}
 		if (!workspaceId) {
-			error = 'Workspace ID not found. Please start the connection from the accounts page.';
+			error = 'Workspace ID not found. Start the connection again from the accounts page.';
 			return;
 		}
 		if (!serverName && !instanceURL) {
-			error = 'Mastodon instance not found. Please start the connection from the accounts page.';
+			error = 'Mastodon instance not found. Start the connection again from the accounts page.';
 			return;
 		}
 

@@ -37,7 +37,7 @@ Email the maintainer at `openpost+security@rgo.pt` and include:
 - Run behind a reverse proxy with TLS.
 - Configure a proper firewall.
 - Do not expose the OpenPost port directly to the internet unless that is part of your deliberate reverse-proxy setup.
-- For Threads media publishing, make sure the public media endpoint is reachable by Meta.
+- For Threads media publishing, confirm that Meta can reach the public media endpoint.
 - Use HTTPS before configuring production OAuth callbacks for X, Mastodon, LinkedIn, or Threads.
 
 ### Data Protection

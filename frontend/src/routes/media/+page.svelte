@@ -245,7 +245,7 @@
 			: Array.from(batchFileInput?.files ?? []);
 		const files = selectedFiles.filter(isSupportedMediaFile);
 		if (files.length === 0) {
-			uploadError = 'Please select a file';
+			uploadError = 'Select a file.';
 			uploadLoading = false;
 			return;
 		}
@@ -532,7 +532,7 @@
 			<EmptyState
 				icon={ImageIcon}
 				title={m.media_empty_title()}
-				description="Upload some files to get started"
+				description="Upload files to build your media library."
 				actionLabel="Upload"
 				onAction={() => (uploadDialogOpen = true)}
 				variant="dashed"

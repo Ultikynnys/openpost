@@ -73,7 +73,7 @@ export function instanceStore() {
 
 		async setInstanceUrl(raw: string): Promise<{ success: boolean; error?: string }> {
 			const url = normalizeUrl(raw);
-			if (!url) return { success: false, error: 'Please enter a server URL' };
+			if (!url) return { success: false, error: 'Enter a server URL.' };
 
 			if (IS_CAPACITOR && (url.includes('localhost') || url.includes('127.0.0.1'))) {
 				return {

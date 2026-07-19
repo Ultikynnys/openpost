@@ -1,6 +1,6 @@
 ## Summary
 
-Brief description of what this PR does and why it's needed.
+Describe what this PR changes and why.
 
 ## Motivation
 

@@ -90,7 +90,7 @@ export const PLATFORM_LIMITS: Record<string, PlatformLimitDefinition> = {
 		name: 'YouTube',
 		charLimit: 5000,
 		media: 'Exactly one video',
-		note: 'Current adapter path uploads scheduled videos as private.'
+		note: 'The current adapter uploads scheduled videos as private.'
 	}
 };
 

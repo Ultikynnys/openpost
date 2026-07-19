@@ -133,7 +133,7 @@ export const platforms = [
 			`${PLATFORM_LIMITS.bluesky.charLimit} characters`,
 			PLATFORM_LIMITS.bluesky.media,
 			'AT Protocol replies',
-			'MP4 video path is partial'
+			'Limited MP4 video support'
 		]
 	},
 	{
@@ -170,8 +170,8 @@ export const platforms = [
 		slug: 'facebook',
 		name: 'Facebook Pages',
 		short: 'facebook',
-		tag: 'Pages first slice',
-		status: 'First slice',
+		tag: 'Early Pages support',
+		status: 'Early support',
 		description:
 			'Connect Facebook Pages through the provider app registry and schedule text or one media attachment.',
 		limits: [
@@ -186,7 +186,7 @@ export const platforms = [
 		name: 'Instagram Business',
 		short: 'instagram',
 		tag: 'Media-first',
-		status: 'First slice',
+		status: 'Early support',
 		description:
 			'Schedule one image or Reel-style video to Instagram Business accounts behind Facebook Pages.',
 		limits: [
@@ -201,7 +201,7 @@ export const platforms = [
 		name: 'TikTok',
 		short: 'tiktok',
 		tag: 'Video-first',
-		status: 'First slice',
+		status: 'Early support',
 		description:
 			'Schedule video-first TikTok posts through a public media URL and provider app configuration.',
 		limits: [
@@ -216,13 +216,13 @@ export const platforms = [
 		name: 'YouTube',
 		short: 'youtube',
 		tag: 'Private video upload',
-		status: 'First slice',
+		status: 'Early support',
 		description:
-			'Upload one scheduled video to a connected channel, private by default in the current adapter path.',
+			'Upload one scheduled video to a connected channel. The current adapter uploads it as private by default.',
 		limits: [
 			`${PLATFORM_LIMITS.youtube.charLimit.toLocaleString()} description characters`,
 			PLATFORM_LIMITS.youtube.media,
-			'Private upload path',
+			'Private uploads',
 			'YouTube Data API required'
 		]
 	}
@@ -233,16 +233,16 @@ export const platformLimitSummaries = publicPlatformLimits();
 export const productFeatures = [
 	{
 		eyebrow: 'Composer',
-		title: 'One base post, platform-specific variants when the copy needs to split.',
+		title: 'One base post, with account-specific variants when you need them.',
 		description:
-			'Draft the canonical message once, then adjust copy and media per account without losing the shared source.',
+			'Draft the shared post once, then adjust copy and media for each account without losing the shared version.',
 		icon: MessageSquareText,
 		image: '/assets/screenshots/main-dark.png',
 		alt: 'OpenPost composer and schedule calendar'
 	},
 	{
 		eyebrow: 'Preview',
-		title: 'See the destination shape before the queue sees it.',
+		title: 'Check each destination before scheduling.',
 		description:
 			'Previews render per selected account, and media warnings surface provider limits before scheduling.',
 		icon: PanelTop,
@@ -251,7 +251,7 @@ export const productFeatures = [
 	},
 	{
 		eyebrow: 'Media',
-		title: 'A reusable media library for scheduled work, not a throwaway upload field.',
+		title: 'A reusable media library for scheduled work, not just an upload field.',
 		description:
 			'Upload once, track usage, keep alt text, favorite useful assets, and avoid deleting media still tied to scheduled posts.',
 		icon: Library,
@@ -397,7 +397,7 @@ export const comparisons = [
 		slug: 'typefully',
 		name: 'Typefully',
 		bestFor: 'Creators focused on X-style writing and threads.',
-		openPostAngle: 'OpenPost broadens the workflow across workspaces, provider variants, media, CLI, MCP, and open-source deployment.',
+		openPostAngle: 'OpenPost covers a broader workflow with workspaces, provider variants, reusable media, CLI, MCP, and open-source deployment.',
 		pricing: 'Typefully is strongest for writing-first creator workflows. OpenPost focuses on multi-platform publishing operations.',
 		chooseOpenPost: [
 			'You need workspaces, account destinations, media reuse, and provider-specific previews.',
@@ -406,19 +406,19 @@ export const comparisons = [
 		],
 		chooseThem: [
 			'Your main workflow is writing and refining X/LinkedIn-style posts.',
-			'You want a polished creator-writing product more than an operations surface.'
+			'You want a polished creator-writing product more than a publishing operations tool.'
 		]
 	},
 	{
 		slug: 'postiz',
 		name: 'Postiz',
 		bestFor: 'Teams looking for an AI-heavy open source social suite.',
-		openPostAngle: 'OpenPost leads with a focused publishing workflow, visible queue behavior, and a small operational footprint.',
-		pricing: 'Both projects have open-source roots. OpenPost positions the managed app as the primary path while staying smaller in product scope.',
+		openPostAngle: 'OpenPost focuses on publishing, makes queue behavior visible, and has a small operational footprint.',
+		pricing: 'Both projects have open-source roots. OpenPost makes the managed app its main offering while keeping a smaller product scope.',
 		chooseOpenPost: [
-			'You want a quieter publishing app with fewer AI-first surfaces.',
+			'You want a quieter publishing app with fewer AI-first features.',
 			'You care about Go/SvelteKit, a compact service, and no Redis queue requirement.',
-			'You want honest provider caveats shown before scheduling.'
+			'You want provider limits and caveats shown before scheduling.'
 		],
 		chooseThem: [
 			'You want an AI-heavy social scheduler with broader growth tooling.',
@@ -429,8 +429,8 @@ export const comparisons = [
 		slug: 'post-bridge',
 		name: 'Post Bridge',
 		bestFor: 'Users who want an all-in-one hosted scheduler with many growth tools.',
-		openPostAngle: 'OpenPost keeps the core scheduler honest, technical, and open source, with self-hosting as a trust signal.',
-		pricing: 'Post Bridge leans into hosted growth utilities. OpenPost leans into scheduling, workspaces, automation, and open-source trust.',
+		openPostAngle: 'OpenPost documents scheduler limits, publishes its source, and supports self-hosting.',
+		pricing: 'Post Bridge focuses on hosted growth utilities. OpenPost focuses on scheduling, workspaces, automation, and the control that open source provides.',
 		chooseOpenPost: [
 			'You want to inspect or self-host the implementation if needed.',
 			'You want CLI/MCP workflows for technical operators.',
@@ -445,10 +445,10 @@ export const comparisons = [
 		slug: 'mixpost',
 		name: 'Mixpost',
 		bestFor: 'Self-hosted operators who want a larger PHP-based social publishing app.',
-		openPostAngle: 'OpenPost is Go and SvelteKit, one binary/container, no Redis queue, and built around a compact cloud path.',
-		pricing: 'Mixpost is a strong self-hosted comparison. OpenPost emphasizes the managed app first, while keeping the self-hosting path lightweight.',
+		openPostAngle: 'OpenPost uses Go and SvelteKit, runs as one binary or container, requires no Redis queue, and supports a compact cloud deployment.',
+		pricing: 'Mixpost is a strong self-hosted comparison. OpenPost emphasizes the managed app while remaining lightweight to self-host.',
 		chooseOpenPost: [
-			'You want the managed app as the primary path.',
+			'You want the managed app as the main offering.',
 			'You prefer Go/SvelteKit and a single binary/container deployment model.',
 			'You want queue, media, and automation primitives without operating Redis.'
 		],
@@ -536,7 +536,7 @@ export const faqs = [
 	{
 		question: 'Does video publishing work everywhere?',
 		answer:
-			'Video is provider-dependent. Some adapter paths exist, but each provider has different rules, review requirements, media limits, and public URL needs.'
+			'Video support depends on the provider. Some adapters support it, but each provider has different rules, review requirements, media limits, and public URL needs.'
 	},
 	{
 		question: 'Can I bring my own provider app credentials?',

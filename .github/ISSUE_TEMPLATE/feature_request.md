@@ -8,31 +8,31 @@ assignees: ''
 
 ## Summary
 
-A brief description of the feature or improvement you'd like to see.
+Describe the feature or improvement you want.
 
 ## Problem / Motivation
 
-Explain the problem you're trying to solve or the motivation behind this request.
+Explain the problem this change would solve.
 
 ### What are you trying to do?
 
-Describe what you're trying to accomplish.
+Describe the result you want.
 
 ### Why is this important?
 
-Explain why this feature would be valuable to users.
+Explain who would benefit and how.
 
 ## Proposed Solution
 
-Describe your proposed solution or approach.
+Describe your proposed approach.
 
 ## Alternatives Considered
 
-Describe any alternative solutions or approaches you've considered.
+Describe any alternatives you considered.
 
 ## Additional Context
 
-Add any other context, mockups, or screenshots about the feature request here.
+Add any other details, mockups, or screenshots needed to understand the request.
 
 ## Checklist
 

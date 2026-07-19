@@ -8,7 +8,7 @@ assignees: ''
 
 ## Description
 
-A clear and concise description of what the bug is.
+Describe the problem and its effect.
 
 ## Steps to Reproduce
 
@@ -27,7 +27,7 @@ What actually happened instead.
 
 ## Screenshots
 
-If applicable, add screenshots to help explain your problem.
+Add screenshots if they show the problem more clearly.
 
 ## Environment
 
@@ -45,7 +45,7 @@ Paste any relevant logs here
 
 ## Additional Context
 
-Add any other context about the problem here.
+Add any other details needed to understand or reproduce the problem.
 
 ## Affected Platforms
 

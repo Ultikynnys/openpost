@@ -41,7 +41,7 @@ Use `go install` if you already have Go 1.25 or newer:
 go install github.com/openpost/cli/cmd/openpost@latest
 ```
 
-Make sure `$(go env GOPATH)/bin` is on your `PATH`.
+Add `$(go env GOPATH)/bin` to your `PATH` if it is not already there.
 
 ## Build from source
 

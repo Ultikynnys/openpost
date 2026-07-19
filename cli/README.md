@@ -21,7 +21,7 @@ devenv shell -- bash -lc 'cd cli && go install ./cmd/openpost'
 devenv shell -- bash -lc 'cd cli && go install ./cmd/openpost-mcp'
 ```
 
-Make sure `$(go env GOPATH)/bin` is on your `PATH`.
+Add `$(go env GOPATH)/bin` to your `PATH` if it is not already there.
 
 ## Quickstart
 
