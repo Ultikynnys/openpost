@@ -156,11 +156,17 @@ test("mobile shell and composer expose touch-first controls without overflow", a
   const accountRow = page.getByTestId("composer-account-row");
   await expect(accountRow).toHaveCount(1);
   await expectMinimumTouchTarget(
+    page.getByTestId("composer-account-actions"),
+    "account actions",
+  );
+  await page.getByTestId("composer-account-actions").click();
+  await expectMinimumTouchTarget(
     page.getByTestId("composer-account-customize"),
     "account customization action",
   );
   await page.getByTestId("composer-account-customize").click();
   await accountControl.click();
+  await page.getByTestId("composer-account-actions").click();
   await expectMinimumTouchTarget(
     page.getByTestId("composer-account-reset"),
     "account reset action",

@@ -116,11 +116,9 @@ test("composer renders account-specific renditions", async ({
   );
   await accountControl.click();
   await expect(page.getByTestId("composer-account-row")).toHaveCount(2);
+  await expect(page.getByText("@openpost_main", { exact: true })).toBeVisible();
   await expect(
-    page.getByText("Bluesky @openpost_main", { exact: true }),
-  ).toBeVisible();
-  await expect(
-    page.getByText("Bluesky @openpost_studio", { exact: true }),
+    page.getByText("@openpost_studio", { exact: true }),
   ).toBeVisible();
   await page.keyboard.press("Escape");
   await page.getByRole("button", { name: "Save draft" }).click();

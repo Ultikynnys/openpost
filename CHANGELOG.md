@@ -41,6 +41,7 @@ All notable changes to this project are documented in this file.
 
 ### Fixed
 
+- Simplified the composer destination menu with a quieter icon summary, compact account rows, and one contextual menu for per-account content actions.
 - Kept REST and MCP publication scheduling atomic and future-only, preserved reply/job history during reschedules, and made schedule clearing return publications and renditions to draft without erasing unrelated fields.
 - Made built-in prompt seeding concurrency-safe and idempotent so simultaneous prompt and category requests cannot fail a fresh workspace.
 - Enforced workspace-scoped token boundaries on post and calendar reads, and derived default calendar months and UTC bounds from each workspace timezone.
