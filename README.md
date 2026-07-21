@@ -23,10 +23,8 @@
 </p>
 
 <div align="center">
-  <strong>
-    <h2>Self-hosted social media scheduling, without another monthly subscription.</h2>
-  </strong>
-  OpenPost is an open-source, self-hosted Typefully-like social media scheduler for people who want to write, customize, and schedule posts across platforms from their own server.
+  <h2>A focused workspace for every post.</h2>
+  OpenPost is an open-source social publishing workspace for drafting, adapting, scheduling, and automating posts across multiple platforms. Use the managed app or run the same product on your own infrastructure.
 </div>
 
 <div align="center">
@@ -55,13 +53,23 @@
     <source media="(prefers-color-scheme: dark)" srcset="./assets/logos/linkedin-white.svg">
     <img alt="LinkedIn" src="./assets/logos/linkedin.svg" width="24">
   </picture>
+  &nbsp;
+  <img alt="Facebook" src="./assets/logos/facebook.svg" width="24">
+  &nbsp;
+  <img alt="Instagram" src="./assets/logos/instagram.svg" width="24">
+  &nbsp;
+  <img alt="TikTok" src="./assets/logos/tiktok.svg" width="24">
+  &nbsp;
+  <img alt="YouTube" src="./assets/logos/youtube.svg" width="24">
 </div>
 
 <p align="center">
   <br/>
-  <a href="https://docs.openpost.social/"><strong>Documentation</strong></a>
+  <a href="https://app.openpost.social"><strong>Open app</strong></a>
   ·
-  <a href="https://docs.openpost.social/guide/quickstart"><strong>Quickstart</strong></a>
+  <a href="https://docs.openpost.social/usage/"><strong>User docs</strong></a>
+  ·
+  <a href="https://docs.openpost.social/self-hosting/"><strong>Self-hosting</strong></a>
   ·
   <a href="https://github.com/rodrgds/openpost/releases"><strong>Releases</strong></a>
 </p>
@@ -70,93 +78,115 @@
   <img alt="OpenPost main dashboard screenshot" src="./assets/screenshots/main-dark.png" width="960">
 </p>
 
-## Why OpenPost
+## What OpenPost includes
 
-OpenPost is for people who want the core social media scheduling workflow without relying on another hosted SaaS.
+OpenPost keeps the publishing workflow in one place without hiding provider differences or operational state.
 
-- **Typefully-like composer**: write once, customize per platform with account-specific variants
-- **Thread support**: publish multi-post threads in sequence
-- **Scheduling that stays queued**: plan posts ahead, queued posts survive restarts
-- **Workspaces**: separate brands, projects, or clients into different workspaces
-- **Media library**: upload, inspect, favorite, and clean up workspace media
-- **Self-hosted**: your data, schedules, and tokens stay on your server
+- **Focused composer:** draft a base post, then customize text, media, and settings per account.
+- **Eight publication profiles:** short text, threads, links, images, carousels, Stories, short video, and long video.
+- **Reliable scheduling:** calendar planning, workspace timezones, reusable posting slots, next-slot scheduling, and a durable database-backed job queue.
+- **Visible outcomes:** inspect drafts, scheduled work, destination renditions, published posts, failures, and retry state.
+- **Shared operations:** workspaces, role-based team access, connected accounts, reusable media, prompts, billing, and usage limits.
+- **Automation:** the web app, HTTP API, CLI, and MCP server use the same workspace and account boundaries.
+- **Portable deployment:** one Go binary or container with the SvelteKit app embedded; SQLite and local media are the defaults, with PostgreSQL and S3-compatible storage available.
+- **Android:** every GitHub release includes a Capacitor APK built from the same responsive web app.
 
-Built with Go, SvelteKit, and SQLite by default. Runs as a single binary or container with no Redis, no mandatory Postgres, and no external queue.
+OAuth tokens are encrypted at rest. OpenPost also supports revocable sessions, passkeys, TOTP two-factor authentication, and workspace roles.
 
-## Who is this for?
+## Platform support
 
-OpenPost is especially useful for:
+This table describes the profiles implemented by OpenPost, not every feature offered by each provider. Scheduling and account-specific variants are supported across all listed providers.
 
-- **Creators** who want scheduling without another SaaS subscription
-- **Indie hackers** who want a cheaper or free alternative to Typefully, Buffer, or Hootsuite
-- **Small teams** that want control over credentials and data
-- **Open-source maintainers** managing multiple platform presences
-- **Self-hosters** who want a lightweight tool instead of a full marketing suite
-- **Agencies** managing separate brand workspaces
+| Platform           | Implemented publishing profiles                              | Threads / replies           | Maturity and main caveat                                                         |
+| ------------------ | ------------------------------------------------------------ | --------------------------- | -------------------------------------------------------------------------------- |
+| X                  | Text, links, up to 4 images, short video                     | Reply chains                | Core; video, API quota, and account tier need live verification                  |
+| Mastodon           | Text, links, up to 4 image/video attachments                 | Reply chains                | Core; limits and OAuth setup vary by instance, and video needs live verification |
+| Bluesky            | Text, links, up to 4 images, one MP4 video                   | AT Protocol reply chains    | Core; video still needs live-account verification                                |
+| LinkedIn           | Text, links, image, document, short and long video           | Child posts become comments | Core; permissions, app review, and video need live verification                  |
+| Threads            | Text, image, video, and 2-10 item mixed carousels            | Reply chains                | Core; media must be available through a public HTTPS URL                         |
+| Facebook Pages     | Text, links, image, multi-photo, Story, short and long video | Comment operations          | Early; Page permissions, app review, and public media URLs apply                 |
+| Instagram Business | Feed image, carousel, Story, and Reel                        | Comment operations          | Early; requires a Page-backed professional account and public media URLs         |
+| TikTok             | Video and 1-35 image photo posts                             | No                          | Early; Content Posting API review or audit is required                           |
+| YouTube            | Shorts and long-form video                                   | No                          | Early; title required, with Google audit and quota constraints                   |
 
-## Feature Snapshot
+“Implemented” means the code path and validation exist. Provider approval, deployment configuration, quotas, and live-account verification can still affect production access. See the [provider matrix](https://docs.openpost.social/providers/platform-limits) for current limits.
 
-| Capability                                                                                   | Status                      |
-| -------------------------------------------------------------------------------------------- | --------------------------- |
-| Self-hosted                                                                                  | Yes                         |
-| Single binary                                                                                | Yes                         |
-| Docker support                                                                               | Yes                         |
-| Android app (Capacitor)                                                                      | Yes (APK in every release)  |
-| SQLite                                                                                       | Yes                         |
-| X, Mastodon, Bluesky, Threads, LinkedIn, Facebook Pages, Instagram Business, TikTok, YouTube | Yes                         |
-| Threads composer                                                                             | Yes                         |
-| Platform-specific variants                                                                   | Yes                         |
-| Media library                                                                                | Yes                         |
-| 2FA / TOTP                                                                                   | Yes                         |
-| Passkeys                                                                                     | Yes                         |
-| Video posts                                                                                  | Partial, provider-dependent |
-| Analytics                                                                                    | Not a launch feature        |
+## Run OpenPost
 
-## Current Limitations
-
-- **Video support is provider-dependent** — some platforms have implementation paths in the codebase, but not every provider is verified end to end
-- **No full feature parity guarantee** — each platform has different capabilities
-- **Advanced analytics are not the current focus** — engagement reporting is not a launch feature
-- **Enterprise approval workflows are not the current focus** — OpenPost is optimized for core scheduling workflows
-
-## Security And Operations
-
-OAuth tokens are encrypted at rest, and OpenPost supports account-level 2FA/TOTP and passkeys. In production, keep `OPENPOST_JWT_SECRET` and `OPENPOST_ENCRYPTION_KEY` unique and private, run behind HTTPS for OAuth callbacks, and back up the database, media directory, and secrets together.
-
-## Quickstart
+The managed app is available at [app.openpost.social](https://app.openpost.social). For self-hosting, copy the environment template, replace the two example secrets, set the public app URL, and start the container:
 
 ```bash
+cp .env.example .env
+# Edit .env: set OPENPOST_APP_URL and generate unique 32+ character secrets.
 docker compose up -d
 ```
 
-Set fresh values for `OPENPOST_JWT_SECRET` and `OPENPOST_ENCRYPTION_KEY` before using OpenPost. Both secrets are required and must be at least 32 characters long. The first account created on an instance becomes the instance admin automatically. For the full install path, reverse proxy setup, provider OAuth guides, and operations docs, use the docs site.
+The container listens on port `8080` and stores its SQLite database and media in the `openpost_data` volume. Put production instances behind HTTPS and back up the database, media, and secrets together.
 
-## Supported Platforms
+Other supported installation paths:
 
-- X
-- Mastodon
-- Bluesky
-- Threads
-- LinkedIn
-- Facebook Pages
-- Instagram Business
-- TikTok
-- YouTube
+- [Single binary](https://docs.openpost.social/installation/binary)
+- [Docker Compose](https://docs.openpost.social/installation/docker-compose)
+- [NixOS module](https://docs.openpost.social/installation/nix-module)
+- [Android APK](https://docs.openpost.social/installation/android)
+- [Build from source](https://docs.openpost.social/installation/build-from-source)
+
+## Automation surfaces
+
+- `openpost`: command-line client for authentication, workspaces, accounts, media, posts, publications, jobs, billing, and instance administration.
+- `openpost-mcp`: stdio MCP server for local clients; the web service also exposes authenticated Streamable HTTP MCP.
+- `/api/v1`: typed HTTP API used by the app and CLI.
+- OpenAPI and generated CLI reference: [docs.openpost.social/reference](https://docs.openpost.social/reference/api).
+
+Release binaries are available for Linux, macOS, and Windows where supported by each artifact. The Android APK is attached to the same GitHub release.
+
+## Repository layout
+
+| Path              | Purpose                                                                       |
+| ----------------- | ----------------------------------------------------------------------------- |
+| `backend/`        | Go API, embedded frontend, database, jobs, billing, and provider adapters     |
+| `frontend/`       | SvelteKit web app and Capacitor Android shell                                 |
+| `cli/`            | CLI and MCP binaries                                                          |
+| `marketing-site/` | Public OpenPost website                                                       |
+| `docs-site/`      | User, self-hosting, provider, CLI, MCP, and development documentation         |
+| `scripts/`        | Contract checks, asset synchronization, release tooling, and repository gates |
+
+## Development
+
+OpenPost uses the committed Devenv and pnpm lockfiles. After cloning:
+
+```bash
+direnv allow
+devenv shell -- install
+devenv shell -- setup
+devenv shell -- verify
+```
+
+`verify` runs checks, linting, backend/frontend/CLI tests, contract checks, and production builds. See the [development setup](https://docs.openpost.social/development/setup) and [contributing guide](https://docs.openpost.social/development/contributing) before sending changes.
+
+## Current limits
+
+- Provider capabilities are intentionally not flattened into one promise; formats, media limits, review requirements, and quota behavior differ.
+- Some video, Story, comment, and newer provider paths still need recent live-account verification before production use.
+- Advanced engagement analytics and enterprise approval workflows are not the current focus.
+- Self-hosted OAuth providers require correctly configured developer applications and exact HTTPS callback URLs.
 
 ## Documentation
 
-- [Landing and docs site](https://docs.openpost.social/)
+- [Documentation home](https://docs.openpost.social/)
 - [Quickstart](https://docs.openpost.social/guide/quickstart)
-- [Installation](https://docs.openpost.social/installation/docker-compose)
-- [Android app](https://docs.openpost.social/installation/android)
+- [Using OpenPost](https://docs.openpost.social/usage/)
+- [Self-hosting](https://docs.openpost.social/self-hosting/)
+- [Provider setup](https://docs.openpost.social/providers/overview)
+- [CLI](https://docs.openpost.social/cli/)
+- [MCP](https://docs.openpost.social/mcp/)
 - [Configuration](https://docs.openpost.social/configuration/environment-variables)
-- [Providers](https://docs.openpost.social/providers/overview)
 - [Operations](https://docs.openpost.social/operations/troubleshooting)
 - [Development](https://docs.openpost.social/development/setup)
 
 ## Contributing
 
-Use the development docs in the documentation site, the repo guidance in `AGENTS.md`, and the existing code patterns in `frontend/` and `backend/`.
+Use the development docs, the repository guidance in `AGENTS.md`, and the existing patterns in `frontend/`, `backend/`, and `cli/`.
 
 ## Security
 
@@ -164,6 +194,4 @@ Report security issues through [SECURITY.md](SECURITY.md).
 
 ## License
 
-OpenPost is open source under the [GNU Affero General Public License v3.0 only](LICENSE)
-(`AGPL-3.0-only`). You may inspect, run, modify, and self-host it. If you offer a modified
-version over a network, you must make the corresponding source code available to its users.
+OpenPost is available under the [GNU Affero General Public License v3.0 only](LICENSE) (`AGPL-3.0-only`). If you offer a modified version over a network, you must make its corresponding source code available to its users.
