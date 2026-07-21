@@ -10,6 +10,11 @@ All notable changes to this project are documented in this file.
 
 ### Changed
 
+- Unified authenticated page headers, section hierarchy, empty/error feedback, toasts, destructive confirmations, and content-shaped loading placeholders behind shared responsive components.
+- Standardized compact desktop controls and 44-pixel portrait touch targets across shared buttons, selects, tabs, composer actions, and mobile navigation.
+- Made the contextual sidebar brand and New post action exchange with a restrained push transition, including an instant reduced-motion fallback.
+- Removed disconnected composer/comment prototypes and consolidated duplicate workspace bootstrap, standalone-page, and loading styles.
+- Loaded Settings subsystems only when their section is opened instead of eagerly requesting every security, developer, team, billing, and schedule resource.
 - Made MCP post scheduling accept atomic destination-specific renditions and made status/list readback authoritative for rendition content and media; the CLI can inspect renditions and replace or clear source media on post updates.
 - Added restrained, optional interface sounds for publishing and media-upload outcomes, with a persistent mute control in the profile menu.
 - Collapsed Mastodon connection choices into one consistent provider card that asks for the server address in a focused dialog.
@@ -32,6 +37,15 @@ All notable changes to this project are documented in this file.
 
 ### Fixed
 
+- Kept REST and MCP publication scheduling atomic and future-only, preserved reply/job history during reschedules, and made schedule clearing return publications and renditions to draft without erasing unrelated fields.
+- Made built-in prompt seeding concurrency-safe and idempotent so simultaneous prompt and category requests cannot fail a fresh workspace.
+- Enforced workspace-scoped token boundaries on post and calendar reads, and derived default calendar months and UTC bounds from each workspace timezone.
+- Interpreted composer schedules, calendar grouping, drag-rescheduling, and date-filtered post queries in the active workspace timezone, including daylight-saving transitions and local-day UTC bounds.
+- Separated onboarding and invitation recovery from creation and acceptance, and added portrait-calendar creation for empty dates in the displayed month.
+- Kept developer-token and social-account/provider load failures distinct from real empty states, with localized retry controls.
+- Kept the calendar in an agenda layout until the content pane is wide enough, replaced its per-cell loading storm with one stable placeholder, and restored a single page-heading scale.
+- Made media selection and actions persistently reachable without hover, localized account callback and media workflows, and prevented stale or duplicate media, account, and Settings requests from winning after workspace or filter changes.
+- Replaced clipped portrait Settings tabs and posting-schedule grids with a section picker and touch-safe schedule cards, while keeping save feedback above the mobile navigation safe area.
 - Restored workspace switching in the mobile More menu, clarified icon-only schedule controls for assistive technology, and revealed desktop media actions on keyboard focus.
 - Validated scheduled destination captions independently of publication profiles, kept X scheduling conservatively aligned at 280 characters without a verified premium entitlement, preserved comma-containing CLI media filenames, and kept direct-upload response metadata consistent for new and deduplicated media.
 - Opened an existing post on its actual destination rendition when every destination is customized, restoring provider-specific character limits and rendition-only media; media upload responses now include the persisted alt text and original filename.
