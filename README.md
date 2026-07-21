@@ -67,6 +67,8 @@
   <br/>
   <a href="https://app.openpost.social"><strong>Open app</strong></a>
   ·
+  <a href="https://youtu.be/_mZf3HzQaN8"><strong>Watch demo</strong></a>
+  ·
   <a href="https://docs.openpost.social/usage/"><strong>User docs</strong></a>
   ·
   <a href="https://docs.openpost.social/self-hosting/"><strong>Self-hosting</strong></a>

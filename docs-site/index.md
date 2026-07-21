@@ -15,6 +15,9 @@ hero:
     - theme: alt
       text: View on GitHub
       link: https://github.com/rodrgds/openpost
+    - theme: alt
+      text: Watch Demo
+      link: https://youtu.be/_mZf3HzQaN8
 
 features:
   - title: Composer
@@ -67,7 +70,7 @@ volumes:
 ```
 
 ::: tip
-New to OpenPost? Start with the [Quickstart](/guide/quickstart) guide.
+New to OpenPost? [Watch the product demo](https://youtu.be/_mZf3HzQaN8) or start with the [Quickstart](/guide/quickstart) guide.
 :::
 
 ## Choose the right docs

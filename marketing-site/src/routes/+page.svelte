@@ -8,6 +8,8 @@
 	import VideoDemo from './_components/VideoDemo.svelte';
 	import {
 		appUrl,
+		demoVideoEmbedUrl,
+		demoVideoThumbnailUrl,
 		docsUrl,
 		faqs,
 		githubUrl,
@@ -129,7 +131,7 @@
 		</div>
 	</div>
 </section>
-<VideoDemo />
+<VideoDemo videoSrc={demoVideoEmbedUrl} thumbnailSrc={demoVideoThumbnailUrl} />
 
 <section class="section-pad">
 	<div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">

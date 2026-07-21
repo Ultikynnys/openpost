@@ -10,6 +10,7 @@ All notable changes to this project are documented in this file.
 
 ### Changed
 
+- Added the recorded product demo to the public landing page, app profile menu, user docs, and repository overview.
 - Consolidated account selection and per-account content customization into one icon-based composer menu across every post format.
 - Simplified the calendar day drawer with shorter copy, tighter previews, and destination icons instead of platform names.
 - Gave the public landing-page hero a warmer, shorter headline and removed the placeholder testimonial wall.

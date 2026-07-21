@@ -255,6 +255,7 @@
 								size="lg"
 								class="data-[state=open]:bg-sidebar-accent"
 								tooltipContent={m.sidebar_profile_appearance()}
+								data-testid="profile-menu-trigger"
 							>
 								<Avatar.Root class="size-8 rounded-full">
 									{#if userAvatarURL}<Avatar.Image src={userAvatarURL} alt={userDisplayName} />{/if}

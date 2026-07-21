@@ -11,7 +11,7 @@
 	let {
 		videoSrc = null,
 		thumbnailSrc = '/assets/screenshots/main-dark.png',
-		thumbnailAlt = 'OpenPost composer video thumbnail'
+		thumbnailAlt = 'OpenPost product demo video thumbnail'
 	}: Props = $props();
 
 	let open = $state(false);
@@ -32,15 +32,17 @@
 <svelte:window onkeydown={handleWindowKeydown} />
 
 <section class="section-pad border-y bg-muted/20">
-	<div class="mx-auto grid max-w-7xl gap-10 px-4 sm:px-6 lg:grid-cols-[0.72fr_1.28fr] lg:items-center lg:px-8">
+	<div
+		class="mx-auto grid max-w-7xl gap-10 px-4 sm:px-6 lg:grid-cols-[0.72fr_1.28fr] lg:items-center lg:px-8"
+	>
 		<div>
 			<Badge class="border-primary/25 bg-background text-muted-foreground">Product demo</Badge>
 			<h2 class="mt-5 max-w-2xl text-3xl leading-tight font-semibold text-balance sm:text-5xl">
-				See the composer, variants, previews, and queue in one pass.
+				See OpenPost from first draft to scheduled post.
 			</h2>
 			<p class="mt-5 max-w-xl text-lg leading-8 text-muted-foreground">
-				This space is ready for the recorded tour: draft once, adapt per destination, check limits,
-				attach media, and schedule from the same workflow.
+				Watch the recorded product tour for a complete look at the composer, account-specific
+				content, previews, media, and scheduling.
 			</p>
 		</div>
 
@@ -73,6 +75,7 @@
 					src={videoSrc}
 					title="OpenPost product video"
 					allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+					referrerpolicy="strict-origin-when-cross-origin"
 					allowfullscreen
 				></iframe>
 			{:else}
@@ -80,7 +83,7 @@
 					<img src={thumbnailSrc} alt="" />
 					<div>
 						<p>OpenPost product demo</p>
-						<span>Recording slot ready</span>
+						<span>Video unavailable</span>
 					</div>
 				</div>
 			{/if}

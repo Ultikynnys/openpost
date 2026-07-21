@@ -2,6 +2,8 @@
 
 Use these docs when you want to operate OpenPost as a product: connect accounts, draft posts, customize renditions, schedule publishing, automate from the CLI, or let an assistant help through MCP.
 
+For a visual introduction, [watch the OpenPost product demo](https://youtu.be/_mZf3HzQaN8).
+
 ## Web app
 
 The web app is the main editorial surface.

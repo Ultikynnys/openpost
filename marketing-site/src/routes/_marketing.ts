@@ -26,6 +26,10 @@ export const developerDocsUrl = 'https://docs.openpost.social/development/';
 export const docsUrl = userDocsUrl;
 export const githubUrl = 'https://github.com/rodrgds/openpost';
 export const siteUrl = 'https://openpost.social';
+export const demoVideoUrl = 'https://youtu.be/_mZf3HzQaN8';
+export const demoVideoEmbedUrl =
+	'https://www.youtube-nocookie.com/embed/_mZf3HzQaN8?autoplay=1&rel=0';
+export const demoVideoThumbnailUrl = 'https://i.ytimg.com/vi/_mZf3HzQaN8/maxresdefault.jpg';
 
 export const navItems = [
 	{ label: 'Pricing', href: '/#pricing' },

@@ -33,6 +33,18 @@ test("marketing index links to the app and documentation", async ({ page }) => {
   await expect(
     page.getByRole("link", { name: "GitHub source" }),
   ).toHaveAttribute("href", "https://github.com/rodrgds/openpost");
+
+  await page
+    .getByRole("button", { name: "Play OpenPost product video" })
+    .click();
+  await expect(
+    page
+      .getByRole("dialog", { name: "OpenPost product video" })
+      .locator("iframe"),
+  ).toHaveAttribute(
+    "src",
+    "https://www.youtube-nocookie.com/embed/_mZf3HzQaN8?autoplay=1&rel=0",
+  );
 });
 
 test("marketing index has no horizontal overflow", async ({ page }) => {

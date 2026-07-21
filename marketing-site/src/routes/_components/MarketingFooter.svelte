@@ -4,6 +4,7 @@
 	import {
 		comparisons,
 		developerDocsUrl,
+		demoVideoUrl,
 		githubUrl,
 		platforms,
 		selfHostingDocsUrl,
@@ -40,6 +41,7 @@
 		{
 			title: 'Resources',
 			links: [
+				{ label: 'Product demo', href: demoVideoUrl },
 				{ label: 'User docs', href: userDocsUrl },
 				{ label: 'Self-hosting docs', href: selfHostingDocsUrl },
 				{ label: 'Developer docs', href: developerDocsUrl },

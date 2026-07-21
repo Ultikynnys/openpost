@@ -4,6 +4,10 @@ test('docs homepage routes readers to distinct doc audiences', async ({ page }) 
 	await page.goto('/');
 
 	await expect(page.getByRole('heading', { name: 'Choose the right docs' })).toBeVisible();
+	await expect(page.getByRole('link', { name: 'Watch Demo' })).toHaveAttribute(
+		'href',
+		'https://youtu.be/_mZf3HzQaN8'
+	);
 	await expect(page.getByRole('link', { name: 'User-facing docs' })).toHaveAttribute(
 		'href',
 		'/usage/'
@@ -27,6 +31,10 @@ test('user docs stay focused on product workflows', async ({ page }) => {
 	await expect(main.getByRole('heading', { name: 'CLI' })).toBeVisible();
 	await expect(main.getByRole('heading', { name: 'MCP' })).toBeVisible();
 	await expect(main.getByRole('heading', { name: 'Where not to look' })).toBeVisible();
+	await expect(main.getByRole('link', { name: 'watch the OpenPost product demo' })).toHaveAttribute(
+		'href',
+		'https://youtu.be/_mZf3HzQaN8'
+	);
 	await expect(main.getByRole('link', { name: 'Self-Hosting' })).toHaveAttribute(
 		'href',
 		'/self-hosting/'

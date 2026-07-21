@@ -14,6 +14,12 @@ test("authenticated navigation keeps the app shell mounted", async ({
   await page.goto("/");
   await expect(page.getByTestId("app-sidebar")).toBeVisible();
 
+  await page.getByTestId("profile-menu-trigger").click();
+  await expect(
+    page.getByRole("menuitem", { name: "Watch product demo" }),
+  ).toHaveAttribute("href", "https://youtu.be/_mZf3HzQaN8");
+  await page.keyboard.press("Escape");
+
   await page.evaluate(() => {
     const shell = document.querySelector('[data-testid="app-sidebar"]');
     if (!shell) throw new Error("App sidebar was not mounted");
