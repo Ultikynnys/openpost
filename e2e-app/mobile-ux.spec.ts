@@ -1,10 +1,24 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Locator } from "@playwright/test";
 import { authenticatePage, createWorkspace, registerUser } from "./helpers";
 
 const tinyPNG = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
   "base64",
 );
+
+async function expectMinimumTouchTarget(locator: Locator, name: string) {
+  await expect(locator, `${name} should be visible`).toBeVisible();
+  const box = await locator.boundingBox();
+  expect(box, `${name} should have a measurable touch target`).not.toBeNull();
+  expect(
+    box!.width,
+    `${name} should be at least 44px wide`,
+  ).toBeGreaterThanOrEqual(44);
+  expect(
+    box!.height,
+    `${name} should be at least 44px tall`,
+  ).toBeGreaterThanOrEqual(44);
+}
 
 test("mobile shell and composer expose touch-first controls without overflow", async ({
   page,
@@ -107,6 +121,19 @@ test("mobile shell and composer expose touch-first controls without overflow", a
   await expect(
     page.getByRole("button", { name: /^Schedule post:/ }),
   ).toHaveCount(1);
+
+  await expectMinimumTouchTarget(
+    page.getByTestId("composer-mode-select"),
+    "post type selector",
+  );
+  await expectMinimumTouchTarget(
+    page.getByRole("button", { name: "Add post", exact: true }),
+    "add post button",
+  );
+  await expectMinimumTouchTarget(
+    page.locator('label:has(input[type="file"][accept="image/*,video/*"])'),
+    "media upload label",
+  );
 
   const circles = page.locator(
     '[data-testid="mobile-rendition-all"], [data-testid="mobile-rendition-account"]',

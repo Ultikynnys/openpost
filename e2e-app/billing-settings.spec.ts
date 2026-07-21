@@ -122,12 +122,10 @@ test("settings keeps the active mobile tab visible and exposes dismissible statu
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/settings?tab=plan");
 
-  const settingsNavigation = page.getByRole("navigation", {
+  const activeTab = page.locator("aside").getByRole("button", {
     name: "Settings",
   });
-  const activeTab = settingsNavigation.getByRole("button", {
-    name: "Plan & usage",
-  });
+  await expect(activeTab).toContainText("Plan & usage");
   await expect(activeTab).toBeInViewport();
 
   await page.goto("/settings?tab=profile");
@@ -169,11 +167,14 @@ test("settings lists and revokes active web sessions", async ({
     "E2E Other Browser",
   );
 
-  page.on("dialog", (dialog) => dialog.accept());
   const otherSession = page
     .getByTestId("auth-session-row")
     .filter({ hasText: "Browser on device" });
   await otherSession.getByRole("button", { name: "Revoke" }).click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Revoke" })
+    .click();
   await expect(page.getByTestId("auth-session-list")).not.toContainText(
     "Browser on device",
   );
@@ -197,8 +198,9 @@ test("settings creates MCP-scoped API tokens", async ({ page, request }) => {
 
   await expect(page.getByText("Copy this token now")).toBeVisible();
   await expect(page.getByText(/op_cli_[a-f0-9]{8}_/)).toBeVisible();
-  await expect(page.getByText("ChatGPT App E2E")).toBeVisible();
-  await expect(page.getByText(/mcp:full/)).toBeVisible();
+  const createdToken = page.getByText("ChatGPT App E2E").locator("..");
+  await expect(createdToken).toBeVisible();
+  await expect(createdToken).toContainText("MCP / ChatGPT App");
 });
 
 test("settings creates and accepts workspace invitations", async ({
@@ -254,7 +256,7 @@ test("settings creates and accepts workspace invitations", async ({
   ).toBeVisible();
   await expect(invitedPage.getByText("editor access")).toBeVisible();
 
-  await invitedPage.getByRole("button", { name: "Open Settings" }).click();
+  await invitedPage.getByRole("link", { name: "Open Settings" }).click();
   await expect(invitedPage).toHaveURL(/\/settings\?tab=members$/);
   await expect(
     invitedPage.locator("#team").getByRole("heading", { name: "Team" }),

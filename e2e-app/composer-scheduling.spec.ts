@@ -153,12 +153,32 @@ test("composer schedules a publication from the selected time", async ({
   await page.goto("/");
   await page.getByTestId("composer-mode-select").click();
   await page.getByRole("option", { name: "Short video" }).click();
-  await expect(page.getByRole("button", { name: "Target accounts" })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Target accounts" }),
+  ).toBeVisible();
   await page.getByLabel("Caption").fill(postContent);
   await page.getByRole("button", { name: "Schedule" }).first().click();
-  await page.getByRole("button", { name: "10:30" }).click();
-  await expect(page.getByRole("button", { name: "Schedule" })).toBeEnabled();
-  await page.getByRole("button", { name: "Schedule" }).click();
+  const futureDate = new Date();
+  futureDate.setDate(futureDate.getDate() + 2);
+  const futureDateLabel = new Intl.DateTimeFormat("en-US", {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  }).format(futureDate);
+  const schedulePopover = page.locator("[data-popover-content]");
+  await schedulePopover
+    .getByRole("button", { name: futureDateLabel, exact: true })
+    .click();
+  await schedulePopover
+    .getByRole("button", { name: "10:30", exact: true })
+    .click();
+  const confirmSchedule = schedulePopover.getByRole("button", {
+    name: "Schedule",
+    exact: true,
+  });
+  await expect(confirmSchedule).toBeEnabled();
+  await confirmSchedule.click();
 
   await expect(page.getByText("Publication scheduled")).toBeVisible();
   await expect.poll(() => publicationPayload).toBeTruthy();

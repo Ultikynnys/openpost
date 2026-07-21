@@ -61,12 +61,34 @@ test("first autosave establishes the draft URL and keeps draft actions in one co
   await authenticatePage(page, auth.token);
   await page.goto("/");
 
+  const sidebarHeader = page.getByTestId("app-sidebar");
+  const homeBrand = sidebarHeader.locator('a[aria-label="OpenPost home"]');
+  const newPostAction = sidebarHeader.locator('a[aria-label="New post"]');
+
   await expect(page.getByTestId("sidebar-home-brand")).toBeVisible();
   await expect(page.getByTestId("sidebar-new-post")).toHaveCount(0);
+  await expect(homeBrand).toHaveAttribute("data-swap-position", "active");
+  await expect(newPostAction).toHaveAttribute("data-swap-position", "after");
+  await expect(newPostAction).toHaveAttribute("inert", "");
+  await expect(homeBrand).toHaveCSS("transition-duration", "0.26s, 0.2s");
+
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await expect
+    .poll(() =>
+      homeBrand.evaluate((element) =>
+        Number.parseFloat(getComputedStyle(element).transitionDuration),
+      ),
+    )
+    .toBeLessThanOrEqual(0.001);
+  await page.emulateMedia({ reducedMotion: "no-preference" });
 
   await page.getByLabel("Post text").fill(content);
   await expect(page).toHaveURL(/\/posts\/[a-zA-Z0-9-]+$/, { timeout: 10_000 });
   await expect(page.getByTestId("sidebar-new-post")).toBeVisible();
+  await expect(homeBrand).toHaveAttribute("data-swap-position", "before");
+  await expect(homeBrand).toHaveAttribute("inert", "");
+  await expect(newPostAction).toHaveAttribute("data-swap-position", "active");
+  await expect(newPostAction).not.toHaveAttribute("inert", "");
   await expect(page.getByTestId("composer-delete")).toBeVisible();
   await expect(
     page.getByRole("button", { name: "Schedule", exact: true }).first(),

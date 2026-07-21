@@ -42,12 +42,16 @@ test("media library uploads and lists a local media file", async ({
     .getByRole("button", { name: "Upload" })
     .click();
 
-  await expect(page.getByText("File uploaded successfully")).toBeVisible();
+  await expect(
+    page.getByRole("status").getByText("Uploaded 1 file", { exact: true }),
+  ).toBeVisible();
   await expect(page.getByText("launch-card.png")).toBeVisible();
   await expect(
     page.locator("span").filter({ hasText: /^Unused$/ }),
   ).toBeVisible();
-  await expect(page.getByText("1 file")).toBeVisible();
+  await expect(
+    page.getByTestId("page-header").getByText("1 file", { exact: true }),
+  ).toBeVisible();
 
   const media = await request.get(
     `/api/v1/media?workspace_id=${workspaceBody.id}`,
