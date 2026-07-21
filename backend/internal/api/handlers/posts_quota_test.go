@@ -122,7 +122,7 @@ func (s *postQuotaTestServer) createThread(t *testing.T, scheduledAt *time.Time,
 func TestCreatePostRejectsScheduledPostQuota(t *testing.T) {
 	t.Parallel()
 
-	scheduledAt := time.Date(2026, 7, 10, 9, 0, 0, 0, time.UTC)
+	scheduledAt := time.Now().UTC().Add(24 * time.Hour).Truncate(time.Second)
 	srv := newPostQuotaTestServer(t, entitlements.NewStaticService(entitlements.PlanSnapshot{
 		Limits: map[entitlements.LimitKey]int64{
 			entitlements.LimitScheduledPostsMonthly: 1,
@@ -143,7 +143,7 @@ func TestCreatePostRejectsScheduledPostQuota(t *testing.T) {
 func TestCreatePostIncrementsScheduledUsage(t *testing.T) {
 	t.Parallel()
 
-	scheduledAt := time.Date(2026, 7, 10, 9, 0, 0, 0, time.UTC)
+	scheduledAt := time.Now().UTC().Add(24 * time.Hour).Truncate(time.Second)
 	srv := newPostQuotaTestServer(t, entitlements.NewSelfHostedService())
 
 	resp := srv.createPost(t, &scheduledAt)
@@ -170,7 +170,7 @@ func TestCreateDraftDoesNotIncrementScheduledUsage(t *testing.T) {
 func TestCreateThreadRejectsScheduledPostQuotaForAllThreadPosts(t *testing.T) {
 	t.Parallel()
 
-	scheduledAt := time.Date(2026, 7, 10, 9, 0, 0, 0, time.UTC)
+	scheduledAt := time.Now().UTC().Add(24 * time.Hour).Truncate(time.Second)
 	srv := newPostQuotaTestServer(t, entitlements.NewStaticService(entitlements.PlanSnapshot{
 		Limits: map[entitlements.LimitKey]int64{
 			entitlements.LimitScheduledPostsMonthly: 2,
@@ -189,7 +189,7 @@ func TestCreateThreadRejectsScheduledPostQuotaForAllThreadPosts(t *testing.T) {
 func TestCreateThreadIncrementsScheduledUsageForEachThreadPost(t *testing.T) {
 	t.Parallel()
 
-	scheduledAt := time.Date(2026, 7, 10, 9, 0, 0, 0, time.UTC)
+	scheduledAt := time.Now().UTC().Add(24 * time.Hour).Truncate(time.Second)
 	srv := newPostQuotaTestServer(t, entitlements.NewSelfHostedService())
 
 	resp := srv.createThread(t, &scheduledAt, 3)

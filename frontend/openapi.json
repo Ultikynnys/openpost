@@ -2805,6 +2805,10 @@
 						},
 						"type": ["array", "null"]
 					},
+					"parent_post_id": {
+						"description": "Previous post ID when this is a thread reply",
+						"type": "string"
+					},
 					"random_delay_minutes": {
 						"description": "Random delay in minutes (±N)",
 						"format": "int64",
@@ -2821,6 +2825,11 @@
 					"thread_draft": {
 						"description": "Set when this post is a thread-draft parent; contains the encoded thread JSON (with __openpost_thread__: prefix).",
 						"type": "string"
+					},
+					"thread_sequence": {
+						"description": "Zero-based position in a thread",
+						"format": "int64",
+						"type": "integer"
 					},
 					"workspace_id": {
 						"description": "Workspace ID",
@@ -3356,6 +3365,57 @@
 					"renditions",
 					"media"
 				],
+				"type": "object"
+			},
+			"PublicationUpdateBody": {
+				"additionalProperties": false,
+				"properties": {
+					"$schema": {
+						"description": "A URL to the JSON Schema for this object.",
+						"examples": ["https://example.com/schemas/PublicationUpdateBody.json"],
+						"format": "uri",
+						"readOnly": true,
+						"type": "string"
+					},
+					"audience": {
+						"description": "Target audience",
+						"type": "string"
+					},
+					"clear_schedule": {
+						"description": "Clear the saved schedule and cancel its pending publication job",
+						"type": "boolean"
+					},
+					"content_profile": {
+						"description": "Content profile",
+						"type": "string"
+					},
+					"goal": {
+						"description": "Publication goal",
+						"type": "string"
+					},
+					"metadata": {
+						"additionalProperties": {},
+						"description": "Publication metadata",
+						"type": "object"
+					},
+					"scheduled_at": {
+						"description": "Optional schedule time",
+						"format": "date-time",
+						"type": "string"
+					},
+					"source_text": {
+						"description": "Canonical source text",
+						"type": "string"
+					},
+					"source_url": {
+						"description": "Source URL",
+						"type": "string"
+					},
+					"title": {
+						"description": "Internal publication title",
+						"type": "string"
+					}
+				},
 				"type": "object"
 			},
 			"PublicationValidationOutputBody": {
@@ -4257,53 +4317,6 @@
 					"display_name": {
 						"description": "User display name",
 						"maxLength": 120,
-						"type": "string"
-					}
-				},
-				"type": "object"
-			},
-			"UpdatePublicationInputBody": {
-				"additionalProperties": false,
-				"properties": {
-					"$schema": {
-						"description": "A URL to the JSON Schema for this object.",
-						"examples": ["https://example.com/schemas/UpdatePublicationInputBody.json"],
-						"format": "uri",
-						"readOnly": true,
-						"type": "string"
-					},
-					"audience": {
-						"description": "Target audience",
-						"type": "string"
-					},
-					"content_profile": {
-						"description": "Content profile",
-						"type": "string"
-					},
-					"goal": {
-						"description": "Publication goal",
-						"type": "string"
-					},
-					"metadata": {
-						"additionalProperties": {},
-						"description": "Publication metadata",
-						"type": "object"
-					},
-					"scheduled_at": {
-						"description": "Optional schedule time",
-						"format": "date-time",
-						"type": "string"
-					},
-					"source_text": {
-						"description": "Canonical source text",
-						"type": "string"
-					},
-					"source_url": {
-						"description": "Source URL",
-						"type": "string"
-					},
-					"title": {
-						"description": "Internal publication title",
 						"type": "string"
 					}
 				},
@@ -10941,7 +10954,7 @@
 					"content": {
 						"application/json": {
 							"schema": {
-								"$ref": "#/components/schemas/UpdatePublicationInputBody"
+								"$ref": "#/components/schemas/PublicationUpdateBody"
 							}
 						}
 					},

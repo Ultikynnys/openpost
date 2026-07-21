@@ -24,6 +24,7 @@ func TestUpsertPublicationRenditionsReplacesOmittedRenditions(t *testing.T) {
 		(*models.Rendition)(nil),
 		(*models.RenditionMedia)(nil),
 		(*models.MediaAttachment)(nil),
+		(*models.Job)(nil),
 	)
 	ctx := context.Background()
 	now := time.Date(2026, time.July, 1, 9, 0, 0, 0, time.UTC)

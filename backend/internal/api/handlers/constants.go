@@ -21,6 +21,8 @@ const (
 	errMediaNotFound            = "media not found"
 	mediaSortSize               = "size"
 	postStatusPending           = "pending"
+	jobStatusPending            = "pending"
+	jobStatusProcessing         = "processing"
 	postIDKey                   = "post_id"
 	jobTypePublishPost          = "publish_post"
 	jobTypePublishPublication   = "publish_publication"

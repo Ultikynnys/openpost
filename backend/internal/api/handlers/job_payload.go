@@ -20,3 +20,8 @@ func publishPostJobPostIDWhere(db *bun.DB) string {
 func publishPublicationJobPublicationIDWhere(db *bun.DB) string {
 	return "type = ? AND " + jobPayloadTextExpr(db, "publication_id") + " = ?"
 }
+
+func primaryPublishPublicationJobWhere(db *bun.DB) string {
+	actionExpr := jobPayloadTextExpr(db, "action")
+	return publishPublicationJobPublicationIDWhere(db) + " AND (" + actionExpr + " IS NULL OR " + actionExpr + " = '')"
+}

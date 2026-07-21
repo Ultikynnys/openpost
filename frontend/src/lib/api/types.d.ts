@@ -2940,6 +2940,8 @@ export interface components {
             id: string;
             /** @description Attached media IDs */
             media_ids?: string[] | null;
+            /** @description Previous post ID when this is a thread reply */
+            parent_post_id?: string;
             /**
              * Format: int64
              * @description Random delay in minutes (±N)
@@ -2951,6 +2953,11 @@ export interface components {
             status: string;
             /** @description Set when this post is a thread-draft parent; contains the encoded thread JSON (with __openpost_thread__: prefix). */
             thread_draft?: string;
+            /**
+             * Format: int64
+             * @description Zero-based position in a thread
+             */
+            thread_sequence?: number;
             /** @description Workspace ID */
             workspace_id: string;
         };
@@ -3160,6 +3167,37 @@ export interface components {
             title: string;
             updated_at: string;
             workspace_id: string;
+        };
+        PublicationUpdateBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/PublicationUpdateBody.json
+             */
+            readonly $schema?: string;
+            /** @description Target audience */
+            audience?: string;
+            /** @description Clear the saved schedule and cancel its pending publication job */
+            clear_schedule?: boolean;
+            /** @description Content profile */
+            content_profile?: string;
+            /** @description Publication goal */
+            goal?: string;
+            /** @description Publication metadata */
+            metadata?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Format: date-time
+             * @description Optional schedule time
+             */
+            scheduled_at?: string;
+            /** @description Canonical source text */
+            source_text?: string;
+            /** @description Source URL */
+            source_url?: string;
+            /** @description Internal publication title */
+            title?: string;
         };
         PublicationValidationOutputBody: {
             /**
@@ -3610,35 +3648,6 @@ export interface components {
             avatar_url?: string;
             /** @description User display name */
             display_name?: string;
-        };
-        UpdatePublicationInputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/UpdatePublicationInputBody.json
-             */
-            readonly $schema?: string;
-            /** @description Target audience */
-            audience?: string;
-            /** @description Content profile */
-            content_profile?: string;
-            /** @description Publication goal */
-            goal?: string;
-            /** @description Publication metadata */
-            metadata?: {
-                [key: string]: unknown;
-            };
-            /**
-             * Format: date-time
-             * @description Optional schedule time
-             */
-            scheduled_at?: string;
-            /** @description Canonical source text */
-            source_text?: string;
-            /** @description Source URL */
-            source_url?: string;
-            /** @description Internal publication title */
-            title?: string;
         };
         UpdateWorkspaceSettingsInputBody: {
             /**
@@ -8795,7 +8804,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["UpdatePublicationInputBody"];
+                "application/json": components["schemas"]["PublicationUpdateBody"];
             };
         };
         responses: {

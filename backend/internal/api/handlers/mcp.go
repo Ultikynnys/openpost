@@ -1094,7 +1094,11 @@ func mcpUpdatePublicationTool() mcpOperationDefinition {
 				"source_text": map[string]any{"type": "string"}, "source_url": map[string]any{"type": "string"},
 				"goal": map[string]any{"type": "string"}, "audience": map[string]any{"type": "string"},
 				"scheduled_at": map[string]any{"type": "string", "format": "date-time"},
-				"metadata":     map[string]any{"type": "object", "additionalProperties": true},
+				"clear_schedule": map[string]any{
+					"type":        "boolean",
+					"description": "Clear the saved schedule and cancel its pending publication job. Do not combine with scheduled_at.",
+				},
+				"metadata": map[string]any{"type": "object", "additionalProperties": true},
 			},
 			"required": []string{"publication_id"}, "additionalProperties": false,
 		},
@@ -2504,7 +2508,8 @@ func (h *MCPHandler) createPublication(ctx context.Context, userID string, args 
 	if rpcErr := h.ensureWorkspaceEditAccess(ctx, userID, input.WorkspaceID); rpcErr != nil {
 		return nil, rpcErr
 	}
-	if rpcErr := validateMCPCreatePublicationInput(input); rpcErr != nil {
+	now := time.Now().UTC()
+	if rpcErr := validateMCPCreatePublicationInput(input, now); rpcErr != nil {
 		return nil, rpcErr
 	}
 
@@ -2525,7 +2530,6 @@ func (h *MCPHandler) createPublication(ctx context.Context, userID string, args 
 		return nil, &mcpError{Code: -32602, Message: err.Error()}
 	}
 
-	now := time.Now().UTC()
 	publication := newMCPPublication(input, userID, now)
 	err = h.db.RunInTx(ctx, &sql.TxOptions{}, func(txCtx context.Context, tx bun.Tx) error {
 		if _, err := tx.NewInsert().Model(publication).Exec(txCtx); err != nil {
@@ -2548,12 +2552,17 @@ func (h *MCPHandler) createPublication(ctx context.Context, userID string, args 
 	}, nil
 }
 
-func validateMCPCreatePublicationInput(input mcpCreatePublicationInput) *mcpError {
+func validateMCPCreatePublicationInput(input mcpCreatePublicationInput, now time.Time) *mcpError {
 	if strings.TrimSpace(input.ContentProfile) == "" {
 		return &mcpError{Code: -32602, Message: "content_profile is required"}
 	}
 	if strings.TrimSpace(input.SourceText) == "" {
 		return &mcpError{Code: -32602, Message: "source_text is required"}
+	}
+	if input.ScheduledAt != nil {
+		if err := validateFuturePublicationSchedule(*input.ScheduledAt, now); err != nil {
+			return &mcpError{Code: -32602, Message: err.Error()}
+		}
 	}
 	return nil
 }
@@ -2600,7 +2609,6 @@ func newMCPPublication(input mcpCreatePublicationInput, userID string, now time.
 	}
 	if input.ScheduledAt != nil {
 		publication.ScheduledAt = *input.ScheduledAt
-		publication.Status = models.PublicationStatusScheduled
 	}
 	return publication
 }
@@ -2673,10 +2681,11 @@ type mcpPublicationUpdateInput struct {
 	Goal           *string                 `json:"goal"`
 	Audience       *string                 `json:"audience"`
 	ScheduledAt    *time.Time              `json:"scheduled_at"`
+	ClearSchedule  bool                    `json:"clear_schedule"`
 	Metadata       *map[string]interface{} `json:"metadata"`
 }
 
-func applyMCPPublicationUpdate(publication *models.Publication, input mcpPublicationUpdateInput) bool {
+func applyMCPPublicationUpdate(publication *models.Publication, input mcpPublicationUpdateInput, now time.Time) (bool, bool, error) {
 	if input.Title != nil {
 		publication.Title = *input.Title
 	}
@@ -2695,15 +2704,20 @@ func applyMCPPublicationUpdate(publication *models.Publication, input mcpPublica
 	if input.Audience != nil {
 		publication.Audience = *input.Audience
 	}
-	rescheduleQueuedJob := input.ScheduledAt != nil && publication.Status == models.PublicationStatusScheduled
-	if input.ScheduledAt != nil {
-		publication.ScheduledAt = *input.ScheduledAt
+	clearQueuedSchedule, rescheduleQueuedJob, err := applyPublicationScheduleUpdate(
+		publication,
+		input.ScheduledAt,
+		input.ClearSchedule,
+		now,
+	)
+	if err != nil {
+		return false, false, err
 	}
 	if input.Metadata != nil {
 		publication.MetadataJSON, publication.ReleasePlanJSON = mustJSON(*input.Metadata), mustJSON(*input.Metadata)
 	}
 	publication.UpdatedAt = time.Now().UTC()
-	return rescheduleQueuedJob
+	return clearQueuedSchedule, rescheduleQueuedJob, nil
 }
 
 func (h *MCPHandler) updatePublication(ctx context.Context, userID string, args map[string]any) (any, *mcpError) {
@@ -2718,24 +2732,51 @@ func (h *MCPHandler) updatePublication(ctx context.Context, userID string, args 
 	if rpcErr := h.ensureWorkspaceEditAccess(ctx, userID, publication.WorkspaceID); rpcErr != nil {
 		return nil, rpcErr
 	}
-	if publication.Status != models.PublicationStatusDraft && publication.Status != models.PublicationStatusScheduled {
-		return nil, &mcpError{Code: -32602, Message: "publication is no longer editable"}
+	if !isPublicationEditable(publication.Status) {
+		return nil, &mcpError{Code: -32602, Message: errPublicationNotEditable.Error()}
 	}
-	rescheduleQueuedJob := applyMCPPublicationUpdate(&publication, input)
 	handler := &PublicationHandler{db: h.db}
 	if err := h.db.RunInTx(ctx, &sql.TxOptions{}, func(txCtx context.Context, tx bun.Tx) error {
-		if _, err := tx.NewUpdate().Model(&publication).Where("id = ?", publication.ID).Exec(txCtx); err != nil {
+		currentPublication, err := handler.loadEditablePublicationTx(txCtx, tx, publication.ID)
+		if err != nil {
+			return err
+		}
+		clearQueuedSchedule, rescheduleQueuedJob, err := applyMCPPublicationUpdate(currentPublication, input, time.Now().UTC())
+		if err != nil {
+			return err
+		}
+		if clearQueuedSchedule {
+			if err := handler.clearPublicationScheduleTx(txCtx, tx, currentPublication.ID, currentPublication.UpdatedAt); err != nil {
+				return err
+			}
+		}
+		if _, err := tx.NewUpdate().Model(currentPublication).Where("id = ?", currentPublication.ID).Exec(txCtx); err != nil {
 			return err
 		}
 		if rescheduleQueuedJob {
-			_, err := handler.replacePublicationJobTx(txCtx, tx, publication.ID, publication.ScheduledAt)
+			_, err := handler.replacePublicationJobTx(txCtx, tx, currentPublication.ID, currentPublication.ScheduledAt)
 			return err
 		}
 		return nil
 	}); err != nil {
-		return nil, &mcpError{Code: -32603, Message: "failed to update publication"}
+		return nil, publicationMutationMCPError(err, "failed to update publication")
 	}
 	return h.getPublication(ctx, userID, map[string]any{"publication_id": publication.ID})
+}
+
+func publicationMutationMCPError(err error, fallback string) *mcpError {
+	switch {
+	case errors.Is(err, errPublicationNotFound),
+		errors.Is(err, errPublicationAlreadyProcessing),
+		errors.Is(err, errPublicationNotEditable),
+		errors.Is(err, errPublicationScheduleConflict),
+		errors.Is(err, errPublicationScheduleFuture),
+		errors.Is(err, errPublicationValidationBlocked),
+		errors.Is(err, errPublicationScheduleRequired):
+		return &mcpError{Code: -32602, Message: err.Error()}
+	default:
+		return &mcpError{Code: -32603, Message: fallback}
+	}
 }
 
 func (h *MCPHandler) setPublicationRenditions(ctx context.Context, userID string, args map[string]any) (any, *mcpError) {
@@ -2753,8 +2794,8 @@ func (h *MCPHandler) setPublicationRenditions(ctx context.Context, userID string
 	if rpcErr := h.ensureWorkspaceEditAccess(ctx, userID, publication.WorkspaceID); rpcErr != nil {
 		return nil, rpcErr
 	}
-	if publication.Status != models.PublicationStatusDraft && publication.Status != models.PublicationStatusScheduled {
-		return nil, &mcpError{Code: -32602, Message: "publication is no longer editable"}
+	if !isPublicationEditable(publication.Status) {
+		return nil, &mcpError{Code: -32602, Message: errPublicationNotEditable.Error()}
 	}
 	handler := &PublicationHandler{db: h.db}
 	accounts, err := handler.loadAccounts(ctx, publication.WorkspaceID, renditionAccountIDs(input.Renditions))
@@ -2765,6 +2806,10 @@ func (h *MCPHandler) setPublicationRenditions(ctx context.Context, userID string
 		return nil, &mcpError{Code: -32602, Message: err.Error()}
 	}
 	if err := h.db.RunInTx(ctx, &sql.TxOptions{}, func(txCtx context.Context, tx bun.Tx) error {
+		currentPublication, err := handler.loadEditablePublicationTx(txCtx, tx, publication.ID)
+		if err != nil {
+			return err
+		}
 		var IDs []string
 		if err := tx.NewSelect().Model((*models.Rendition)(nil)).Column("id").Where("publication_id = ?", publication.ID).Scan(txCtx, &IDs); err != nil {
 			return err
@@ -2777,9 +2822,9 @@ func (h *MCPHandler) setPublicationRenditions(ctx context.Context, userID string
 				return err
 			}
 		}
-		return handler.insertRenditions(txCtx, tx, &publication, input.Renditions, nil, accounts)
+		return handler.insertRenditions(txCtx, tx, currentPublication, input.Renditions, nil, accounts)
 	}); err != nil {
-		return nil, &mcpError{Code: -32603, Message: "failed to update publication renditions"}
+		return nil, publicationMutationMCPError(err, "failed to update publication renditions")
 	}
 	return h.getPublication(ctx, userID, map[string]any{"publication_id": publication.ID})
 }
@@ -2866,23 +2911,10 @@ func (h *MCPHandler) schedulePublication(ctx context.Context, userID string, arg
 	if rpcErr != nil {
 		return nil, rpcErr
 	}
-	if publication.ScheduledAt.IsZero() {
-		return nil, &mcpError{Code: -32602, Message: "scheduled_at is required before scheduling"}
-	}
 	handler := &PublicationHandler{db: h.db}
-	issues, err := handler.validatePublicationByID(ctx, publication.ID)
+	jobID, err := handler.queueScheduledPublication(ctx, publication.ID)
 	if err != nil {
-		return nil, &mcpError{Code: -32603, Message: "failed to validate publication"}
-	}
-	if hasBlockingIssues(issues) {
-		return nil, &mcpError{Code: -32602, Message: "publication has blocking validation errors"}
-	}
-	jobID, err := handler.replacePublicationJob(ctx, publication.ID, publication.ScheduledAt)
-	if err != nil {
-		return nil, &mcpError{Code: -32603, Message: "failed to schedule publication"}
-	}
-	if err := handler.markPublicationQueued(ctx, publication.ID); err != nil {
-		return nil, &mcpError{Code: -32603, Message: "failed to mark publication scheduled"}
+		return nil, publicationMutationMCPError(err, "failed to schedule publication")
 	}
 	status, rpcErr := h.loadMCPPublicationStatus(ctx, publication.ID)
 	if rpcErr != nil {
@@ -2897,19 +2929,9 @@ func (h *MCPHandler) publishPublicationNow(ctx context.Context, userID string, a
 		return nil, rpcErr
 	}
 	handler := &PublicationHandler{db: h.db}
-	issues, err := handler.validatePublicationByID(ctx, publication.ID)
+	jobID, err := handler.queuePublicationNow(ctx, publication.ID)
 	if err != nil {
-		return nil, &mcpError{Code: -32603, Message: "failed to validate publication"}
-	}
-	if hasBlockingIssues(issues) {
-		return nil, &mcpError{Code: -32602, Message: "publication has blocking validation errors"}
-	}
-	jobID, err := handler.replacePublicationJob(ctx, publication.ID, time.Now().UTC())
-	if err != nil {
-		return nil, &mcpError{Code: -32603, Message: "failed to queue publication"}
-	}
-	if err := handler.markPublicationQueued(ctx, publication.ID); err != nil {
-		return nil, &mcpError{Code: -32603, Message: "failed to mark publication queued"}
+		return nil, publicationMutationMCPError(err, "failed to queue publication")
 	}
 	status, rpcErr := h.loadMCPPublicationStatus(ctx, publication.ID)
 	if rpcErr != nil {
@@ -2935,6 +2957,9 @@ func (h *MCPHandler) loadMCPPublicationForAction(ctx context.Context, userID str
 	}
 	if rpcErr := h.ensureWorkspaceEditAccess(ctx, userID, publication.WorkspaceID); rpcErr != nil {
 		return models.Publication{}, rpcErr
+	}
+	if !isPublicationEditable(publication.Status) {
+		return models.Publication{}, &mcpError{Code: -32602, Message: errPublicationNotEditable.Error()}
 	}
 	return publication, nil
 }

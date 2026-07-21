@@ -992,7 +992,11 @@ func (h *WorkspaceHandler) UpdateWorkspaceSettings(api huma.API) {
 		}
 
 		if input.Body.Timezone != nil {
-			workspace.Timezone = *input.Body.Timezone
+			timezone, valid := normalizedWorkspaceTimezone(*input.Body.Timezone)
+			if !valid {
+				return nil, huma.Error400BadRequest("timezone must be a valid IANA timezone")
+			}
+			workspace.Timezone = timezone
 		}
 		if input.Body.AvatarURL != nil {
 			avatarURL := strings.TrimSpace(*input.Body.AvatarURL)
@@ -1078,4 +1082,15 @@ func (h *WorkspaceHandler) UpdateWorkspaceSettings(api huma.API) {
 			SlotIntervalMinutes: workspace.SlotIntervalMinutes,
 		}}, nil
 	})
+}
+
+func normalizedWorkspaceTimezone(value string) (string, bool) {
+	timezone := strings.TrimSpace(value)
+	if timezone == "" || timezone == "Local" {
+		return "", false
+	}
+	if _, err := time.LoadLocation(timezone); err != nil {
+		return "", false
+	}
+	return timezone, true
 }

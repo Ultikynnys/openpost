@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"sort"
 	"strings"
@@ -17,6 +18,7 @@ import (
 	"github.com/openpost/backend/internal/services/entitlements"
 	"github.com/openpost/backend/internal/services/lifecycle"
 	"github.com/uptrace/bun"
+	"github.com/uptrace/bun/dialect"
 )
 
 const (
@@ -24,6 +26,16 @@ const (
 	publicationPathByID   = "/publications/{id}"
 	publicationPathValid  = "/publications/{id}/validate"
 	publicationEventsPath = "/publications/{id}/events"
+)
+
+var (
+	errPublicationScheduleConflict  = errors.New("scheduled_at and clear_schedule cannot be used together")
+	errPublicationScheduleFuture    = errors.New("scheduled_at must be in the future")
+	errPublicationNotEditable       = errors.New("publication is no longer editable")
+	errPublicationNotFound          = errors.New("publication not found")
+	errPublicationAlreadyProcessing = errors.New("publication is already being processed")
+	errPublicationValidationBlocked = errors.New("publication has blocking validation errors")
+	errPublicationScheduleRequired  = errors.New("scheduled_at is required before scheduling")
 )
 
 type PublicationHandler struct {
@@ -74,18 +86,21 @@ type CreatePublicationInput struct {
 	}
 }
 
+type PublicationUpdateBody struct {
+	Title          *string                `json:"title,omitempty" doc:"Internal publication title"`
+	ContentProfile *string                `json:"content_profile,omitempty" doc:"Content profile"`
+	SourceText     *string                `json:"source_text,omitempty" doc:"Canonical source text"`
+	SourceURL      *string                `json:"source_url,omitempty" doc:"Source URL"`
+	Goal           *string                `json:"goal,omitempty" doc:"Publication goal"`
+	Audience       *string                `json:"audience,omitempty" doc:"Target audience"`
+	ScheduledAt    *time.Time             `json:"scheduled_at,omitempty" doc:"Optional schedule time"`
+	ClearSchedule  bool                   `json:"clear_schedule,omitempty" doc:"Clear the saved schedule and cancel its pending publication job"`
+	Metadata       map[string]interface{} `json:"metadata,omitempty" doc:"Publication metadata"`
+}
+
 type UpdatePublicationInput struct {
 	PathID string `path:"id" doc:"Publication ID"`
-	Body   struct {
-		Title          string                 `json:"title,omitempty" doc:"Internal publication title"`
-		ContentProfile string                 `json:"content_profile,omitempty" doc:"Content profile"`
-		SourceText     string                 `json:"source_text,omitempty" doc:"Canonical source text"`
-		SourceURL      string                 `json:"source_url,omitempty" doc:"Source URL"`
-		Goal           string                 `json:"goal,omitempty" doc:"Publication goal"`
-		Audience       string                 `json:"audience,omitempty" doc:"Target audience"`
-		ScheduledAt    *time.Time             `json:"scheduled_at,omitempty" doc:"Optional schedule time"`
-		Metadata       map[string]interface{} `json:"metadata,omitempty" doc:"Publication metadata"`
-	}
+	Body   PublicationUpdateBody
 }
 
 type UpsertRenditionsInput struct {
@@ -278,6 +293,11 @@ func (h *PublicationHandler) createPublication(api huma.API) {
 		}
 
 		now := time.Now().UTC()
+		if input.Body.ScheduledAt != nil {
+			if err := validateFuturePublicationSchedule(*input.Body.ScheduledAt, now); err != nil {
+				return nil, huma.Error400BadRequest(err.Error())
+			}
+		}
 		metadataJSON := mustJSON(input.Body.Metadata)
 		publication := &models.Publication{
 			ID:              uuid.New().String(),
@@ -298,7 +318,6 @@ func (h *PublicationHandler) createPublication(api huma.API) {
 		}
 		if input.Body.ScheduledAt != nil {
 			publication.ScheduledAt = *input.Body.ScheduledAt
-			publication.Status = models.PublicationStatusScheduled
 		}
 
 		err = h.db.RunInTx(ctx, &sql.TxOptions{}, func(txCtx context.Context, tx bun.Tx) error {
@@ -424,33 +443,30 @@ func (h *PublicationHandler) updatePublication(api huma.API) {
 		Tags:        []string{tagPublications},
 		Middlewares: huma.Middlewares{middleware.AuthMiddleware(api, h.auth)},
 	}, func(ctx context.Context, input *UpdatePublicationInput) (*PublicationOutput, error) {
-		publication, err := h.loadPublicationForEdit(ctx, input.PathID, middleware.GetUserID(ctx))
-		if err != nil {
+		if _, err := h.loadPublicationForEdit(ctx, input.PathID, middleware.GetUserID(ctx)); err != nil {
 			return nil, err
 		}
-		if input.Body.Title != "" {
-			publication.Title = input.Body.Title
-		}
-		if input.Body.ContentProfile != "" {
-			publication.ContentProfile = input.Body.ContentProfile
-		}
-		if input.Body.SourceText != "" {
-			publication.SourceText = input.Body.SourceText
-			publication.SourceContent = input.Body.SourceText
-		}
-		publication.SourceURL = input.Body.SourceURL
-		publication.Goal = input.Body.Goal
-		publication.Audience = input.Body.Audience
-		rescheduleQueuedJob := input.Body.ScheduledAt != nil && publication.Status == models.PublicationStatusScheduled
-		if input.Body.ScheduledAt != nil {
-			publication.ScheduledAt = *input.Body.ScheduledAt
-		}
-		if input.Body.Metadata != nil {
-			publication.MetadataJSON = mustJSON(input.Body.Metadata)
-			publication.ReleasePlanJSON = publication.MetadataJSON
-		}
-		publication.UpdatedAt = time.Now().UTC()
 		if err := h.db.RunInTx(ctx, &sql.TxOptions{}, func(txCtx context.Context, tx bun.Tx) error {
+			publication, err := h.loadEditablePublicationTx(txCtx, tx, input.PathID)
+			if err != nil {
+				return err
+			}
+			clearQueuedSchedule, rescheduleQueuedJob, err := applyPublicationScheduleUpdate(
+				publication,
+				input.Body.ScheduledAt,
+				input.Body.ClearSchedule,
+				time.Now().UTC(),
+			)
+			if err != nil {
+				return err
+			}
+			applyPublicationFieldUpdates(publication, input.Body)
+			publication.UpdatedAt = time.Now().UTC()
+			if clearQueuedSchedule {
+				if err := h.clearPublicationScheduleTx(txCtx, tx, publication.ID, publication.UpdatedAt); err != nil {
+					return err
+				}
+			}
 			if _, err := tx.NewUpdate().Model(publication).Where("id = ?", publication.ID).Exec(txCtx); err != nil {
 				return err
 			}
@@ -460,14 +476,76 @@ func (h *PublicationHandler) updatePublication(api huma.API) {
 			}
 			return nil
 		}); err != nil {
-			return nil, huma.Error500InternalServerError("failed to update publication")
+			return nil, publicationMutationHTTPError(err, "failed to update publication")
 		}
-		resp, err := h.loadPublicationResponse(ctx, publication.ID, middleware.GetUserID(ctx))
+		resp, err := h.loadPublicationResponse(ctx, input.PathID, middleware.GetUserID(ctx))
 		if err != nil {
 			return nil, err
 		}
 		return &PublicationOutput{Body: resp}, nil
 	})
+}
+
+func applyPublicationScheduleUpdate(
+	publication *models.Publication,
+	scheduledAtInput *time.Time,
+	clearSchedule bool,
+	now time.Time,
+) (bool, bool, error) {
+	if scheduledAtInput != nil && clearSchedule {
+		return false, false, errPublicationScheduleConflict
+	}
+	if scheduledAtInput == nil && !clearSchedule {
+		return false, false, nil
+	}
+
+	wasScheduled := publication.Status == models.PublicationStatusScheduled
+	if clearSchedule {
+		publication.ScheduledAt = time.Time{}
+		if wasScheduled {
+			publication.Status = models.PublicationStatusDraft
+		}
+		return true, false, nil
+	}
+
+	if err := validateFuturePublicationSchedule(*scheduledAtInput, now); err != nil {
+		return false, false, err
+	}
+	publication.ScheduledAt = *scheduledAtInput
+	return false, wasScheduled, nil
+}
+
+func applyPublicationFieldUpdates(publication *models.Publication, input PublicationUpdateBody) {
+	if input.Title != nil {
+		publication.Title = *input.Title
+	}
+	if input.ContentProfile != nil {
+		publication.ContentProfile = *input.ContentProfile
+	}
+	if input.SourceText != nil {
+		publication.SourceText = *input.SourceText
+		publication.SourceContent = *input.SourceText
+	}
+	if input.SourceURL != nil {
+		publication.SourceURL = *input.SourceURL
+	}
+	if input.Goal != nil {
+		publication.Goal = *input.Goal
+	}
+	if input.Audience != nil {
+		publication.Audience = *input.Audience
+	}
+	if input.Metadata != nil {
+		publication.MetadataJSON = mustJSON(input.Metadata)
+		publication.ReleasePlanJSON = publication.MetadataJSON
+	}
+}
+
+func validateFuturePublicationSchedule(scheduledAt, now time.Time) error {
+	if !scheduledAt.After(now.UTC()) {
+		return errPublicationScheduleFuture
+	}
+	return nil
 }
 
 func (h *PublicationHandler) upsertRenditions(api huma.API) {
@@ -491,6 +569,10 @@ func (h *PublicationHandler) upsertRenditions(api huma.API) {
 			return nil, err
 		}
 		err = h.db.RunInTx(ctx, &sql.TxOptions{}, func(txCtx context.Context, tx bun.Tx) error {
+			currentPublication, err := h.loadEditablePublicationTx(txCtx, tx, publication.ID)
+			if err != nil {
+				return err
+			}
 			var existingIDs []string
 			if err := tx.NewSelect().
 				Model((*models.Rendition)(nil)).
@@ -513,10 +595,10 @@ func (h *PublicationHandler) upsertRenditions(api huma.API) {
 					return err
 				}
 			}
-			return h.insertRenditions(txCtx, tx, publication, input.Body.Renditions, nil, accountMap)
+			return h.insertRenditions(txCtx, tx, currentPublication, input.Body.Renditions, nil, accountMap)
 		})
 		if err != nil {
-			return nil, huma.Error500InternalServerError(err.Error())
+			return nil, publicationMutationHTTPError(err, "failed to update publication renditions")
 		}
 		resp, err := h.loadPublicationResponse(ctx, publication.ID, middleware.GetUserID(ctx))
 		if err != nil {
@@ -558,26 +640,12 @@ func (h *PublicationHandler) schedulePublication(api huma.API) {
 		Tags:        []string{tagPublications},
 		Middlewares: huma.Middlewares{middleware.AuthMiddleware(api, h.auth)},
 	}, func(ctx context.Context, input *PublicationActionInput) (*ActionOutput, error) {
-		publication, err := h.loadPublicationForEdit(ctx, input.PathID, middleware.GetUserID(ctx))
+		if _, err := h.loadPublicationForEdit(ctx, input.PathID, middleware.GetUserID(ctx)); err != nil {
+			return nil, err
+		}
+		jobID, err := h.queueScheduledPublication(ctx, input.PathID)
 		if err != nil {
-			return nil, err
-		}
-		if publication.ScheduledAt.IsZero() {
-			return nil, huma.Error400BadRequest("scheduled_at is required before scheduling")
-		}
-		issues, err := h.validatePublicationByID(ctx, publication.ID)
-		if err != nil {
-			return nil, err
-		}
-		if hasBlockingIssues(issues) {
-			return nil, huma.Error400BadRequest("publication has blocking validation errors")
-		}
-		jobID, err := h.replacePublicationJob(ctx, publication.ID, publication.ScheduledAt)
-		if err != nil {
-			return nil, err
-		}
-		if err := h.markPublicationQueued(ctx, publication.ID); err != nil {
-			return nil, err
+			return nil, publicationMutationHTTPError(err, "failed to enqueue publication")
 		}
 		return actionMessage("publication scheduled", jobID), nil
 	})
@@ -592,23 +660,12 @@ func (h *PublicationHandler) publishNow(api huma.API) {
 		Tags:        []string{tagPublications},
 		Middlewares: huma.Middlewares{middleware.AuthMiddleware(api, h.auth)},
 	}, func(ctx context.Context, input *PublicationActionInput) (*ActionOutput, error) {
-		publication, err := h.loadPublicationForEdit(ctx, input.PathID, middleware.GetUserID(ctx))
+		if _, err := h.loadPublicationForEdit(ctx, input.PathID, middleware.GetUserID(ctx)); err != nil {
+			return nil, err
+		}
+		jobID, err := h.queuePublicationNow(ctx, input.PathID)
 		if err != nil {
-			return nil, err
-		}
-		issues, err := h.validatePublicationByID(ctx, publication.ID)
-		if err != nil {
-			return nil, err
-		}
-		if hasBlockingIssues(issues) {
-			return nil, huma.Error400BadRequest("publication has blocking validation errors")
-		}
-		jobID, err := h.replacePublicationJob(ctx, publication.ID, time.Now().UTC())
-		if err != nil {
-			return nil, err
-		}
-		if err := h.markPublicationQueued(ctx, publication.ID); err != nil {
-			return nil, err
+			return nil, publicationMutationHTTPError(err, "failed to enqueue publication")
 		}
 		return actionMessage("publication queued", jobID), nil
 	})
@@ -740,7 +797,83 @@ func (h *PublicationHandler) loadPublicationForEdit(ctx context.Context, publica
 	if err := h.checkWorkspaceEditAccess(ctx, publication.WorkspaceID, userID); err != nil {
 		return nil, err
 	}
+	if !isPublicationEditable(publication.Status) {
+		return nil, huma.Error400BadRequest(errPublicationNotEditable.Error())
+	}
 	return publication, nil
+}
+
+func (h *PublicationHandler) loadEditablePublicationTx(ctx context.Context, tx bun.Tx, publicationID string) (*models.Publication, error) {
+	if err := lockPublicationMutationTx(ctx, tx, publicationID); err != nil {
+		return nil, err
+	}
+	var publication models.Publication
+	if err := tx.NewSelect().Model(&publication).Where("id = ?", publicationID).Scan(ctx); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, errPublicationNotFound
+		}
+		return nil, err
+	}
+	if !isPublicationEditable(publication.Status) {
+		return nil, errPublicationNotEditable
+	}
+	if err := h.lockActivePrimaryPublicationJobsTx(ctx, tx, publicationID); err != nil {
+		return nil, err
+	}
+	if err := h.rejectProcessingPrimaryPublicationJobTx(ctx, tx, publicationID); err != nil {
+		return nil, err
+	}
+	return &publication, nil
+}
+
+func lockPublicationMutationTx(ctx context.Context, tx bun.Tx, publicationID string) error {
+	if primaryPublicationQueueUsesRowLock(tx.Dialect().Name()) {
+		if err := lockPrimaryPublicationQueueTx(ctx, tx, publicationID); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return errPublicationNotFound
+			}
+			return err
+		}
+		return nil
+	}
+
+	result, err := tx.NewUpdate().
+		Model((*models.Publication)(nil)).
+		Set("id = id").
+		Where("id = ?", publicationID).
+		Exec(ctx)
+	if err != nil {
+		return err
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return errPublicationNotFound
+	}
+	return nil
+}
+
+func publicationMutationHTTPError(err error, fallback string) error {
+	switch {
+	case errors.Is(err, errPublicationNotFound):
+		return huma.Error404NotFound(errPublicationNotFound.Error())
+	case errors.Is(err, errPublicationAlreadyProcessing):
+		return huma.Error409Conflict(errPublicationAlreadyProcessing.Error())
+	case errors.Is(err, errPublicationNotEditable),
+		errors.Is(err, errPublicationScheduleConflict),
+		errors.Is(err, errPublicationScheduleFuture),
+		errors.Is(err, errPublicationValidationBlocked),
+		errors.Is(err, errPublicationScheduleRequired):
+		return huma.Error400BadRequest(err.Error())
+	default:
+		return huma.Error500InternalServerError(fallback)
+	}
+}
+
+func isPublicationEditable(status string) bool {
+	return status == models.PublicationStatusDraft || status == models.PublicationStatusScheduled
 }
 
 func (h *PublicationHandler) loadRenditionWithPublication(ctx context.Context, renditionID, userID string) (*models.Rendition, *models.Publication, error) {
@@ -767,6 +900,10 @@ func (h *PublicationHandler) loadRenditionWithPublicationForEdit(ctx context.Con
 }
 
 func (h *PublicationHandler) loadRenditionMedia(ctx context.Context, ids []string) (map[string][]MediaSummary, []MediaSummary, error) {
+	return h.loadRenditionMediaWithDB(ctx, h.db, ids)
+}
+
+func (h *PublicationHandler) loadRenditionMediaWithDB(ctx context.Context, db bun.IDB, ids []string) (map[string][]MediaSummary, []MediaSummary, error) {
 	out := map[string][]MediaSummary{}
 	publicationMedia := []MediaSummary{}
 	if len(ids) == 0 {
@@ -780,7 +917,7 @@ func (h *PublicationHandler) loadRenditionMedia(ctx context.Context, ids []strin
 		ThumbnailTimestampMS int    `bun:"thumbnail_timestamp_ms"`
 		models.MediaAttachment
 	}
-	if err := h.db.NewSelect().
+	if err := db.NewSelect().
 		TableExpr("rendition_media AS rm").
 		ColumnExpr("rm.rendition_id, rm.role, rm.display_order, rm.alt_text, rm.thumbnail_timestamp_ms").
 		ColumnExpr("m.*").
@@ -804,15 +941,19 @@ func (h *PublicationHandler) loadRenditionMedia(ctx context.Context, ids []strin
 }
 
 func (h *PublicationHandler) validatePublicationByID(ctx context.Context, publicationID string) ([]capabilities.ValidationIssue, error) {
+	return h.validatePublicationByIDWithDB(ctx, h.db, publicationID)
+}
+
+func (h *PublicationHandler) validatePublicationByIDWithDB(ctx context.Context, db bun.IDB, publicationID string) ([]capabilities.ValidationIssue, error) {
 	var renditions []models.Rendition
-	if err := h.db.NewSelect().Model(&renditions).Where("publication_id = ?", publicationID).Scan(ctx); err != nil {
+	if err := db.NewSelect().Model(&renditions).Where("publication_id = ?", publicationID).Scan(ctx); err != nil {
 		return nil, huma.Error500InternalServerError("failed to load renditions")
 	}
-	mediaByRendition, _, err := h.loadRenditionMedia(ctx, renditionIDs(renditions))
+	mediaByRendition, _, err := h.loadRenditionMediaWithDB(ctx, db, renditionIDs(renditions))
 	if err != nil {
 		return nil, err
 	}
-	accountsByID, err := h.loadValidationAccounts(ctx, renditionAccountIDsFromModels(renditions))
+	accountsByID, err := h.loadValidationAccountsWithDB(ctx, db, renditionAccountIDsFromModels(renditions))
 	if err != nil {
 		return nil, err
 	}
@@ -846,13 +987,13 @@ func (h *PublicationHandler) validatePublicationByID(ctx context.Context, public
 	return issues, nil
 }
 
-func (h *PublicationHandler) loadValidationAccounts(ctx context.Context, accountIDs []string) (map[string]models.SocialAccount, error) {
+func (h *PublicationHandler) loadValidationAccountsWithDB(ctx context.Context, db bun.IDB, accountIDs []string) (map[string]models.SocialAccount, error) {
 	uniqueIDs := uniqueNonEmpty(accountIDs)
 	if len(uniqueIDs) == 0 {
 		return map[string]models.SocialAccount{}, nil
 	}
 	var accounts []models.SocialAccount
-	if err := h.db.NewSelect().
+	if err := db.NewSelect().
 		Model(&accounts).
 		Where("id IN (?)", bun.List(uniqueIDs)).
 		Where("is_active = ?", true).
@@ -977,49 +1118,182 @@ func (h *PublicationHandler) defaultRenditionInputs(accountIDs []string, profile
 	return out
 }
 
-func (h *PublicationHandler) replacePublicationJob(ctx context.Context, publicationID string, runAt time.Time) (string, error) {
+func (h *PublicationHandler) queuePublication(ctx context.Context, publicationID string, runAt time.Time) (string, error) {
+	return h.queuePublicationWithRunAt(ctx, publicationID, func(_ *models.Publication, _ time.Time) (time.Time, error) {
+		return runAt, nil
+	})
+}
+
+func (h *PublicationHandler) queueScheduledPublication(ctx context.Context, publicationID string) (string, error) {
+	return h.queuePublicationWithRunAt(ctx, publicationID, func(publication *models.Publication, now time.Time) (time.Time, error) {
+		if publication.ScheduledAt.IsZero() {
+			return time.Time{}, errPublicationScheduleRequired
+		}
+		if err := validateFuturePublicationSchedule(publication.ScheduledAt, now); err != nil {
+			return time.Time{}, err
+		}
+		return publication.ScheduledAt, nil
+	})
+}
+
+func (h *PublicationHandler) queuePublicationNow(ctx context.Context, publicationID string) (string, error) {
+	return h.queuePublicationWithRunAt(ctx, publicationID, func(_ *models.Publication, now time.Time) (time.Time, error) {
+		return now, nil
+	})
+}
+
+func (h *PublicationHandler) queuePublicationWithRunAt(
+	ctx context.Context,
+	publicationID string,
+	resolveRunAt func(*models.Publication, time.Time) (time.Time, error),
+) (string, error) {
 	var jobID string
 	err := h.db.RunInTx(ctx, &sql.TxOptions{}, func(txCtx context.Context, tx bun.Tx) error {
-		var err error
+		publication, err := h.loadEditablePublicationTx(txCtx, tx, publicationID)
+		if err != nil {
+			return err
+		}
+		issues, err := h.validatePublicationByIDWithDB(txCtx, tx, publicationID)
+		if err != nil {
+			return err
+		}
+		if hasBlockingIssues(issues) {
+			return errPublicationValidationBlocked
+		}
+		now := time.Now().UTC()
+		runAt, err := resolveRunAt(publication, now)
+		if err != nil {
+			return err
+		}
 		jobID, err = h.replacePublicationJobTx(txCtx, tx, publicationID, runAt)
-		return err
+		if err != nil {
+			return err
+		}
+		return h.markPublicationQueuedTx(txCtx, tx, publicationID, now)
 	})
 	if err != nil {
-		return "", huma.Error500InternalServerError("failed to enqueue publication")
+		return "", err
 	}
 	return jobID, nil
 }
 
 func (h *PublicationHandler) replacePublicationJobTx(ctx context.Context, tx bun.Tx, publicationID string, runAt time.Time) (string, error) {
-	if _, err := tx.NewDelete().
-		Model((*models.Job)(nil)).
-		Where(publishPublicationJobPublicationIDWhere(h.db), jobTypePublishPublication, publicationID).
-		Exec(ctx); err != nil {
+	if err := lockPrimaryPublicationQueueTx(ctx, tx, publicationID); err != nil {
+		return "", err
+	}
+	if err := h.lockActivePrimaryPublicationJobsTx(ctx, tx, publicationID); err != nil {
+		return "", err
+	}
+	if err := h.rejectProcessingPrimaryPublicationJobTx(ctx, tx, publicationID); err != nil {
+		return "", err
+	}
+	if err := h.deletePendingPrimaryPublicationJobsTx(ctx, tx, publicationID); err != nil {
 		return "", err
 	}
 	payload := mustJSON(map[string]string{"publication_id": publicationID})
-	job := &models.Job{ID: uuid.New().String(), Type: jobTypePublishPublication, Payload: payload, Status: "pending", RunAt: runAt, MaxAttempts: 3}
+	job := &models.Job{ID: uuid.New().String(), Type: jobTypePublishPublication, Payload: payload, Status: jobStatusPending, RunAt: runAt, MaxAttempts: 3}
 	if _, err := tx.NewInsert().Model(job).Exec(ctx); err != nil {
 		return "", err
 	}
 	return job.ID, nil
 }
 
-func (h *PublicationHandler) markPublicationQueued(ctx context.Context, publicationID string) error {
-	if _, err := h.db.NewUpdate().Model((*models.Publication)(nil)).
+func lockPrimaryPublicationQueueTx(ctx context.Context, tx bun.Tx, publicationID string) error {
+	if !primaryPublicationQueueUsesRowLock(tx.Dialect().Name()) {
+		return nil
+	}
+	var lockedID string
+	return primaryPublicationQueueLockQuery(tx, publicationID).Scan(ctx, &lockedID)
+}
+
+func primaryPublicationQueueUsesRowLock(name dialect.Name) bool {
+	return name == dialect.PG
+}
+
+func primaryPublicationQueueLockQuery(db bun.IDB, publicationID string) *bun.SelectQuery {
+	return db.NewSelect().
+		TableExpr("publications").
+		Column("id").
+		Where("id = ?", publicationID).
+		For("UPDATE")
+}
+
+func (h *PublicationHandler) lockActivePrimaryPublicationJobsTx(ctx context.Context, tx bun.Tx, publicationID string) error {
+	if !primaryPublicationQueueUsesRowLock(tx.Dialect().Name()) {
+		return nil
+	}
+	var jobIDs []string
+	return tx.NewSelect().
+		Model((*models.Job)(nil)).
+		Column("id").
+		Where(primaryPublishPublicationJobWhere(h.db), jobTypePublishPublication, publicationID).
+		Where("status IN (?)", bun.List([]string{jobStatusPending, jobStatusProcessing})).
+		For("UPDATE").
+		Scan(ctx, &jobIDs)
+}
+
+func (h *PublicationHandler) deletePendingPrimaryPublicationJobsTx(ctx context.Context, tx bun.Tx, publicationID string) error {
+	_, err := tx.NewDelete().
+		Model((*models.Job)(nil)).
+		Where(primaryPublishPublicationJobWhere(h.db), jobTypePublishPublication, publicationID).
+		Where("status = ?", jobStatusPending).
+		Exec(ctx)
+	return err
+}
+
+func (h *PublicationHandler) rejectProcessingPrimaryPublicationJobTx(ctx context.Context, tx bun.Tx, publicationID string) error {
+	count, err := tx.NewSelect().
+		Model((*models.Job)(nil)).
+		Where(primaryPublishPublicationJobWhere(h.db), jobTypePublishPublication, publicationID).
+		Where("status = ?", jobStatusProcessing).
+		Count(ctx)
+	if err != nil {
+		return err
+	}
+	if count > 0 {
+		return errPublicationAlreadyProcessing
+	}
+	return nil
+}
+
+func (h *PublicationHandler) clearPublicationScheduleTx(ctx context.Context, tx bun.Tx, publicationID string, updatedAt time.Time) error {
+	if err := lockPublicationMutationTx(ctx, tx, publicationID); err != nil {
+		return err
+	}
+	if err := h.lockActivePrimaryPublicationJobsTx(ctx, tx, publicationID); err != nil {
+		return err
+	}
+	if err := h.rejectProcessingPrimaryPublicationJobTx(ctx, tx, publicationID); err != nil {
+		return err
+	}
+	if err := h.deletePendingPrimaryPublicationJobsTx(ctx, tx, publicationID); err != nil {
+		return err
+	}
+	_, err := tx.NewUpdate().
+		Model((*models.Rendition)(nil)).
+		Set("status = ?", models.RenditionStatusDraft).
+		Set("updated_at = ?", updatedAt).
+		Where("publication_id = ?", publicationID).
+		Where("status = ?", models.RenditionStatusScheduled).
+		Exec(ctx)
+	return err
+}
+
+func (h *PublicationHandler) markPublicationQueuedTx(ctx context.Context, tx bun.Tx, publicationID string, updatedAt time.Time) error {
+	if _, err := tx.NewUpdate().Model((*models.Publication)(nil)).
 		Set("status = ?", models.PublicationStatusScheduled).
-		Set("updated_at = ?", time.Now().UTC()).
+		Set("updated_at = ?", updatedAt).
 		Where("id = ?", publicationID).
 		Exec(ctx); err != nil {
-		return huma.Error500InternalServerError("failed to update publication")
+		return err
 	}
-	if _, err := h.db.NewUpdate().Model((*models.Rendition)(nil)).
+	if _, err := tx.NewUpdate().Model((*models.Rendition)(nil)).
 		Set("status = ?", models.RenditionStatusScheduled).
-		Set("updated_at = ?", time.Now().UTC()).
+		Set("updated_at = ?", updatedAt).
 		Where("publication_id = ?", publicationID).
 		Where("status NOT IN (?)", bun.List([]string{models.RenditionStatusPublished, models.RenditionStatusPublishing})).
 		Exec(ctx); err != nil {
-		return huma.Error500InternalServerError("failed to update renditions")
+		return err
 	}
 	return nil
 }

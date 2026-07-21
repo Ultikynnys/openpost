@@ -14,7 +14,6 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/google/uuid"
 	"github.com/openpost/backend/internal/api/middleware"
-	dbexpr "github.com/openpost/backend/internal/database"
 	"github.com/openpost/backend/internal/models"
 	"github.com/openpost/backend/internal/services/entitlements"
 	postservice "github.com/openpost/backend/internal/services/posts"
@@ -23,9 +22,13 @@ import (
 )
 
 const (
-	statusDraft       = "draft"
-	statusScheduled   = "scheduled"
-	workspaceIDClause = " AND p.workspace_id = ?"
+	statusDraft     = "draft"
+	statusScheduled = "scheduled"
+)
+
+var (
+	errPostScheduleFuture = errors.New("scheduled_at must be in the future")
+	errPostRunAtFuture    = errors.New("random delay must keep actual_run_at in the future")
 )
 
 type PostHandler struct {
@@ -89,6 +92,8 @@ type PostResponse struct {
 	ID                 string                    `json:"id" doc:"Post ID"`
 	WorkspaceID        string                    `json:"workspace_id" doc:"Workspace ID"`
 	CreatedByID        string                    `json:"created_by" doc:"Creator user ID"`
+	ParentPostID       string                    `json:"parent_post_id,omitempty" doc:"Previous post ID when this is a thread reply"`
+	ThreadSequence     int                       `json:"thread_sequence,omitempty" doc:"Zero-based position in a thread"`
 	Content            string                    `json:"content" doc:"Post content"`
 	Status             string                    `json:"status" doc:"Post status (draft, scheduled, publishing, published, failed)"`
 	ScheduledAt        string                    `json:"scheduled_at" doc:"Scheduled time (ISO 8601)"`
@@ -132,6 +137,19 @@ type ScheduleDay struct {
 	Count      int                    `json:"count" doc:"Number of scheduled posts"`
 	Platforms  []ScheduleDayPlatform  `json:"platforms" doc:"Per-platform breakdown"`
 	Workspaces []ScheduleDayWorkspace `json:"workspaces" doc:"Per-workspace breakdown"`
+}
+
+type scheduleDayCounts struct {
+	count      int
+	platforms  map[string]int
+	workspaces map[string]int
+}
+
+type scheduleOverviewPeriod struct {
+	year  int
+	month time.Month
+	start time.Time
+	end   time.Time
 }
 
 type ScheduleOverviewInput struct {
@@ -283,6 +301,7 @@ func (h *PostHandler) CreatePost(api huma.API) {
 		}
 
 		status := statusDraft
+		var jobRunAt time.Time
 		if input.Body.ScheduledAt != nil {
 			status = statusScheduled
 		}
@@ -293,8 +312,14 @@ func (h *PostHandler) CreatePost(api huma.API) {
 			if err := h.checkScheduledPostQuota(ctx, input.Body.WorkspaceID, 1, *input.Body.ScheduledAt); err != nil {
 				return nil, err
 			}
+			var err error
+			jobRunAt, err = resolveFuturePostRunAt(*input.Body.ScheduledAt, input.Body.RandomDelayMinutes, time.Now().UTC())
+			if err != nil {
+				return nil, huma.Error400BadRequest(err.Error())
+			}
 		}
 
+		now := time.Now().UTC()
 		post := &models.Post{
 			ID:                 uuid.New().String(),
 			WorkspaceID:        input.Body.WorkspaceID,
@@ -302,7 +327,7 @@ func (h *PostHandler) CreatePost(api huma.API) {
 			Content:            input.Body.Content,
 			Status:             status,
 			RandomDelayMinutes: input.Body.RandomDelayMinutes,
-			CreatedAt:          time.Now().UTC(),
+			CreatedAt:          now,
 		}
 		if input.Body.ScheduledAt != nil {
 			post.ScheduledAt = *input.Body.ScheduledAt
@@ -353,8 +378,6 @@ func (h *PostHandler) CreatePost(api huma.API) {
 				if err != nil {
 					return fmt.Errorf("failed to marshal job payload: %w", err)
 				}
-				// Apply random delay to job run time
-				jobRunAt := postservice.ApplyRandomDelay(post.ScheduledAt, post.RandomDelayMinutes)
 				post.ActualRunAt = jobRunAt
 				job := &models.Job{
 					ID:      uuid.New().String(),
@@ -388,6 +411,8 @@ func (h *PostHandler) CreatePost(api huma.API) {
 			ID:                 post.ID,
 			WorkspaceID:        post.WorkspaceID,
 			CreatedByID:        post.CreatedByID,
+			ParentPostID:       post.ParentPostID,
+			ThreadSequence:     post.ThreadSequence,
 			Content:            post.Content,
 			Status:             post.Status,
 			ScheduledAt:        post.ScheduledAt.Format(time.RFC3339),
@@ -426,21 +451,19 @@ func (h *PostHandler) listPosts(ctx context.Context, input *ListPostsInput) (*Li
 	if len(workspaceIDs) == 0 {
 		return listPostsOutput([]PostResponse{}, 0, limit, input.Offset), nil
 	}
-
-	totalQuery, err := h.listPostsQuery((*models.Post)(nil), input, workspaceIDs)
+	dateRange, err := h.listPostsDateRange(ctx, input)
 	if err != nil {
 		return nil, err
 	}
+
+	totalQuery := h.listPostsQuery((*models.Post)(nil), input, workspaceIDs, dateRange)
 	total, err := totalQuery.Count(ctx)
 	if err != nil {
 		return nil, huma.Error500InternalServerError("failed to count posts")
 	}
 
 	var posts []models.Post
-	query, err := h.listPostsQuery(&posts, input, workspaceIDs)
-	if err != nil {
-		return nil, err
-	}
+	query := h.listPostsQuery(&posts, input, workspaceIDs, dateRange)
 	if err := applyListPostsOrder(query).Limit(limit).Offset(input.Offset).Scan(ctx); err != nil {
 		return nil, huma.Error500InternalServerError("failed to list posts")
 	}
@@ -450,6 +473,70 @@ func (h *PostHandler) listPosts(ctx context.Context, input *ListPostsInput) (*Li
 		return nil, err
 	}
 	return listPostsOutput(result, total, limit, input.Offset), nil
+}
+
+type listPostsDateRange struct {
+	start time.Time
+	end   time.Time
+}
+
+func (h *PostHandler) listPostsDateRange(ctx context.Context, input *ListPostsInput) (*listPostsDateRange, error) {
+	if input.Date == "" {
+		return nil, nil
+	}
+
+	parsed, err := time.Parse("2006-01-02", input.Date)
+	if err != nil {
+		return nil, huma.Error400BadRequest("date must be in YYYY-MM-DD format")
+	}
+
+	location := time.UTC
+	workspaceID := strings.TrimSpace(input.WorkspaceID)
+	if workspaceID == "" {
+		workspaceID = strings.TrimSpace(middleware.GetWorkspaceID(ctx))
+	}
+	if workspaceID != "" {
+		var workspace struct {
+			Timezone string `bun:"timezone"`
+		}
+		if err := h.db.NewSelect().TableExpr("workspaces").Column("timezone").Where("id = ?", workspaceID).Scan(ctx, &workspace); err != nil {
+			return nil, huma.Error500InternalServerError("failed to load workspace timezone")
+		}
+		if workspace.Timezone != "" {
+			if workspaceLocation, err := time.LoadLocation(workspace.Timezone); err == nil {
+				location = workspaceLocation
+			}
+		}
+	}
+
+	dayStart := time.Date(parsed.Year(), parsed.Month(), parsed.Day(), 0, 0, 0, 0, location)
+	dayEnd := dayStart.AddDate(0, 0, 1)
+	return &listPostsDateRange{start: dayStart.UTC(), end: dayEnd.UTC()}, nil
+}
+
+func resolveFuturePostRunAt(scheduledAt time.Time, randomDelayMinutes int, now time.Time) (time.Time, error) {
+	now = now.UTC()
+	if !scheduledAt.After(now) {
+		return time.Time{}, errPostScheduleFuture
+	}
+
+	if randomDelayMinutes > 0 {
+		const maxDurationMinutes = (1<<63 - 1) / int64(time.Minute)
+		delayMinutes := int64(randomDelayMinutes)
+		if delayMinutes > maxDurationMinutes {
+			return time.Time{}, errPostRunAtFuture
+		}
+		earliestRunAt := scheduledAt.Add(-time.Duration(delayMinutes) * time.Minute)
+		if !earliestRunAt.After(now) {
+			return time.Time{}, errPostRunAtFuture
+		}
+	}
+
+	actualRunAt := postservice.ApplyRandomDelay(scheduledAt, randomDelayMinutes)
+	if !actualRunAt.After(now) {
+		return time.Time{}, errPostRunAtFuture
+	}
+	return actualRunAt, nil
 }
 
 func listPostsLimit(input *ListPostsInput) (int, error) {
@@ -470,6 +557,12 @@ func (h *PostHandler) listPostWorkspaceIDs(ctx context.Context, requestedWorkspa
 		}
 		return []string{requestedWorkspaceID}, nil
 	}
+	if scopedWorkspaceID := strings.TrimSpace(middleware.GetWorkspaceID(ctx)); scopedWorkspaceID != "" {
+		if err := h.checkWorkspaceAccess(ctx, scopedWorkspaceID, userID); err != nil {
+			return nil, err
+		}
+		return []string{scopedWorkspaceID}, nil
+	}
 
 	var workspaceMembers []models.WorkspaceMember
 	err := h.db.NewSelect().
@@ -487,7 +580,7 @@ func (h *PostHandler) listPostWorkspaceIDs(ctx context.Context, requestedWorkspa
 	return workspaceIDs, nil
 }
 
-func (h *PostHandler) listPostsQuery(model interface{}, input *ListPostsInput, workspaceIDs []string) (*bun.SelectQuery, error) {
+func (h *PostHandler) listPostsQuery(model interface{}, input *ListPostsInput, workspaceIDs []string, dateRange *listPostsDateRange) *bun.SelectQuery {
 	query := h.db.NewSelect().
 		Model(model).
 		Where("workspace_id IN (?)", bun.List(workspaceIDs))
@@ -495,17 +588,10 @@ func (h *PostHandler) listPostsQuery(model interface{}, input *ListPostsInput, w
 	if input.Status != "" {
 		query = query.Where("status = ?", input.Status)
 	}
-	if input.Date == "" {
-		return query, nil
+	if dateRange != nil {
+		query = query.Where("scheduled_at >= ? AND scheduled_at < ?", dateRange.start, dateRange.end)
 	}
-
-	parsed, err := time.Parse("2006-01-02", input.Date)
-	if err != nil {
-		return nil, huma.Error400BadRequest("date must be in YYYY-MM-DD format")
-	}
-	dayStart := parsed.UTC()
-	dayEnd := dayStart.AddDate(0, 0, 1)
-	return query.Where("scheduled_at >= ? AND scheduled_at < ?", dayStart, dayEnd), nil
+	return query
 }
 
 func (h *PostHandler) postResponsesForList(ctx context.Context, posts []models.Post) ([]PostResponse, error) {
@@ -595,6 +681,8 @@ func postResponseForList(p models.Post, destinations []PostDestinationResponse, 
 		ID:                 p.ID,
 		WorkspaceID:        p.WorkspaceID,
 		CreatedByID:        p.CreatedByID,
+		ParentPostID:       p.ParentPostID,
+		ThreadSequence:     p.ThreadSequence,
 		Content:            p.Content,
 		Status:             p.Status,
 		ScheduledAt:        p.ScheduledAt.Format(time.RFC3339),
@@ -636,27 +724,21 @@ func (h *PostHandler) GetScheduleOverview(api huma.API) {
 		Errors:      []int{400, 403},
 	}, func(ctx context.Context, input *ScheduleOverviewInput) (*ScheduleOverviewOutput, error) {
 		userID := middleware.GetUserID(ctx)
-
-		var monthStart time.Time
-		if input.Month == "" {
-			now := time.Now().UTC()
-			monthStart = time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
-		} else {
-			parsed, err := time.Parse("2006-01", input.Month)
-			if err != nil {
-				return nil, huma.Error400BadRequest("month must be in YYYY-MM format")
-			}
-			monthStart = parsed.UTC()
+		scopedWorkspaceID := strings.TrimSpace(middleware.GetWorkspaceID(ctx))
+		if input.WorkspaceID != "" && !middleware.WorkspaceScopeAllows(ctx, input.WorkspaceID) {
+			return nil, huma.Error403Forbidden("workspace not accessible")
 		}
-		monthEnd := monthStart.AddDate(0, 1, 0)
 
 		var workspaces []models.Workspace
-		err := h.db.NewSelect().
+		workspaceQuery := h.db.NewSelect().
 			Model(&workspaces).
 			Join("JOIN workspace_members AS wm ON wm.workspace_id = workspace.id").
 			Where("wm.user_id = ?", userID).
-			Order("workspace.created_at DESC").
-			Scan(ctx)
+			Order("workspace.created_at DESC")
+		if scopedWorkspaceID != "" {
+			workspaceQuery = workspaceQuery.Where("workspace.id = ?", scopedWorkspaceID)
+		}
+		err := workspaceQuery.Scan(ctx)
 		if err != nil {
 			return nil, huma.Error500InternalServerError("failed to fetch workspaces")
 		}
@@ -679,44 +761,20 @@ func (h *PostHandler) GetScheduleOverview(api huma.API) {
 			}
 		}
 
-		// Load the selected workspace to get its timezone for date conversion
-		var workspaceTzModifier string
+		location := time.UTC
 		if selectedWorkspaceID != "" {
-			var ws models.Workspace
-			if err := h.db.NewSelect().Model(&ws).Where("id = ?", selectedWorkspaceID).Scan(ctx); err == nil && ws.Timezone != "" {
-				if loc, err := time.LoadLocation(ws.Timezone); err == nil {
-					// Get offset at the month start to handle DST (use monthStart UTC)
-					_, offsetSecs := monthStart.In(loc).Zone()
-					offsetHours := offsetSecs / 3600
-					offsetMins := ((offsetSecs % 3600) + 3600) % 3600 / 60
-					workspaceTzModifier = fmt.Sprintf("%+03d:%02d", offsetHours, offsetMins)
+			for _, workspace := range workspaces {
+				if workspace.ID == selectedWorkspaceID && workspace.Timezone != "" {
+					if workspaceLocation, loadErr := time.LoadLocation(workspace.Timezone); loadErr == nil {
+						location = workspaceLocation
+					}
+					break
 				}
 			}
 		}
-
-		// Compute a database-portable date expression. If we have a
-		// workspace timezone modifier, apply it before grouping.
-		dateFn := dbexpr.DateExpr(h.db, "p.scheduled_at", workspaceTzModifier)
-
-		// Expand month boundaries to account for timezone offsets
-		// so we capture posts whose local date falls in the target month
-		queryMonthStart := monthStart
-		queryMonthEnd := monthEnd
-		if workspaceTzModifier != "" {
-			var sign byte
-			var h, m int
-			if _, err := fmt.Sscanf(workspaceTzModifier, "%c%02d:%02d", &sign, &h, &m); err == nil {
-				offsetDur := time.Duration(h)*time.Hour + time.Duration(m)*time.Minute
-				if sign == '-' {
-					offsetDur = -offsetDur
-				}
-				queryMonthStart = monthStart.Add(-offsetDur)
-				queryMonthEnd = monthEnd.Add(-offsetDur)
-				if queryMonthEnd.Sub(queryMonthStart) > 40*24*time.Hour {
-					queryMonthStart = monthStart.AddDate(0, 0, -1)
-					queryMonthEnd = monthEnd.AddDate(0, 0, 1)
-				}
-			}
+		period, err := resolveScheduleOverviewPeriod(input.Month, location, time.Now())
+		if err != nil {
+			return nil, huma.Error400BadRequest("month must be in YYYY-MM format")
 		}
 
 		selectedPlatform := input.Platform
@@ -724,17 +782,17 @@ func (h *PostHandler) GetScheduleOverview(api huma.API) {
 		var platformRows []struct {
 			Platform string `bun:"platform"`
 		}
-		platformQuery := h.db.NewSelect().
-			TableExpr("social_accounts AS sa").
-			ColumnExpr("DISTINCT sa.platform AS platform").
-			Join("JOIN workspace_members AS wm ON wm.workspace_id = sa.workspace_id").
-			Where("wm.user_id = ?", userID).
-			Where("sa.is_active = ?", true)
 		if selectedWorkspaceID != "" {
-			platformQuery = platformQuery.Where("sa.workspace_id = ?", selectedWorkspaceID)
-		}
-		if err = platformQuery.Scan(ctx, &platformRows); err != nil {
-			return nil, huma.Error500InternalServerError("failed to fetch platforms")
+			if err = h.db.NewSelect().
+				TableExpr("social_accounts AS sa").
+				ColumnExpr("DISTINCT sa.platform AS platform").
+				Join("JOIN workspace_members AS wm ON wm.workspace_id = sa.workspace_id").
+				Where("wm.user_id = ?", userID).
+				Where("sa.is_active = ?", true).
+				Where("sa.workspace_id = ?", selectedWorkspaceID).
+				Scan(ctx, &platformRows); err != nil {
+				return nil, huma.Error500InternalServerError("failed to fetch platforms")
+			}
 		}
 
 		platforms := make([]string, 0, len(platformRows))
@@ -758,141 +816,48 @@ func (h *PostHandler) GetScheduleOverview(api huma.API) {
 			}
 		}
 
-		// Query daily counts
-		var dayRows []struct {
-			Date  string `bun:"date"`
-			Count int    `bun:"count"`
-		}
-
-		dayQuery := fmt.Sprintf(`
-			SELECT %s AS date, COUNT(DISTINCT p.id) AS count
-			FROM posts AS p
-			JOIN workspace_members AS wm ON wm.workspace_id = p.workspace_id
-		`, dateFn)
-		dayArgs := []interface{}{userID, queryMonthStart, queryMonthEnd}
-
-		if selectedPlatform != "" {
-			dayQuery += `
-				JOIN post_destinations AS pd ON pd.post_id = p.id
-				JOIN social_accounts AS sa ON sa.id = pd.social_account_id
-			`
-		}
-
-		dayQuery += `
-			WHERE wm.user_id = ?
-				AND p.scheduled_at >= ?
-				AND p.scheduled_at < ?
-				AND p.status IN ('scheduled', 'publishing', 'published')
-		`
-
+		var scheduledPosts []models.Post
 		if selectedWorkspaceID != "" {
-			dayQuery += workspaceIDClause
-			dayArgs = append(dayArgs, selectedWorkspaceID)
-		}
-		if selectedPlatform != "" {
-			dayQuery += ` AND sa.platform = ?`
-			dayArgs = append(dayArgs, selectedPlatform)
-		}
-
-		dayQuery += fmt.Sprintf(` GROUP BY %s ORDER BY %s`, dateFn, dateFn)
-
-		if err = h.db.NewRaw(dayQuery, dayArgs...).Scan(ctx, &dayRows); err != nil {
-			return nil, huma.Error500InternalServerError("failed to fetch schedule days")
-		}
-
-		days := make([]ScheduleDay, 0, len(dayRows))
-		dayIndexByDate := make(map[string]int, len(dayRows))
-		for _, row := range dayRows {
-			dayIndexByDate[row.Date] = len(days)
-			days = append(days, ScheduleDay{
-				Date:       row.Date,
-				Count:      row.Count,
-				Platforms:  []ScheduleDayPlatform{},
-				Workspaces: []ScheduleDayWorkspace{},
-			})
-		}
-
-		// Combined query: fetch per-platform and per-workspace counts in a single call (UNION ALL)
-		var combinedRows []struct {
-			Date        string `bun:"date"`
-			Platform    string `bun:"platform"`
-			WorkspaceID string `bun:"workspace_id"`
-			Count       int    `bun:"count"`
-		}
-
-		var combinedQuery string
-		combinedArgs := make([]interface{}, 0) //nolint:prealloc
-
-		// Platform counts part (only includes posts that have destinations/platforms)
-		platformPart := fmt.Sprintf(`
-            SELECT %s AS date, sa.platform AS platform, NULL AS workspace_id, COUNT(DISTINCT p.id) AS count
-            FROM posts AS p
-            JOIN workspace_members AS wm ON wm.workspace_id = p.workspace_id
-            JOIN post_destinations AS pd ON pd.post_id = p.id
-            JOIN social_accounts AS sa ON sa.id = pd.social_account_id
-            WHERE wm.user_id = ?
-                AND p.scheduled_at >= ?
-                AND p.scheduled_at < ?
-                AND p.status IN ('scheduled', 'publishing', 'published')
-        `, dateFn)
-		platformArgs := []interface{}{userID, queryMonthStart, queryMonthEnd}
-		if selectedWorkspaceID != "" {
-			platformPart += workspaceIDClause
-			platformArgs = append(platformArgs, selectedWorkspaceID)
-		}
-		if selectedPlatform != "" {
-			platformPart += ` AND sa.platform = ?`
-			platformArgs = append(platformArgs, selectedPlatform)
-		}
-		platformPart += fmt.Sprintf(` GROUP BY %s, sa.platform`, dateFn)
-
-		// Workspace counts part
-		workspacePart := fmt.Sprintf(`
-            SELECT %s AS date, NULL AS platform, p.workspace_id AS workspace_id, COUNT(DISTINCT p.id) AS count
-            FROM posts AS p
-            JOIN workspace_members AS wm ON wm.workspace_id = p.workspace_id
-            WHERE wm.user_id = ?
-                AND p.scheduled_at >= ?
-                AND p.scheduled_at < ?
-                AND p.status IN ('scheduled', 'publishing', 'published')
-        `, dateFn)
-		workspaceArgs := []interface{}{userID, queryMonthStart, queryMonthEnd}
-		if selectedWorkspaceID != "" {
-			workspacePart += workspaceIDClause
-			workspaceArgs = append(workspaceArgs, selectedWorkspaceID)
-		}
-		workspacePart += fmt.Sprintf(` GROUP BY %s, p.workspace_id`, dateFn)
-
-		combinedQuery = platformPart + ` UNION ALL ` + workspacePart + ` ORDER BY date`
-		combinedArgs = append(combinedArgs, platformArgs...)
-		combinedArgs = append(combinedArgs, workspaceArgs...)
-
-		if err = h.db.NewRaw(combinedQuery, combinedArgs...).Scan(ctx, &combinedRows); err != nil {
-			return nil, huma.Error500InternalServerError("failed to fetch schedule details")
-		}
-
-		for _, row := range combinedRows {
-			idx, ok := dayIndexByDate[row.Date]
-			if !ok {
-				continue
-			}
-			if row.Platform != "" {
-				days[idx].Platforms = append(days[idx].Platforms, ScheduleDayPlatform{
-					Platform: row.Platform,
-					Count:    row.Count,
-				})
-			}
-			if row.WorkspaceID != "" {
-				days[idx].Workspaces = append(days[idx].Workspaces, ScheduleDayWorkspace{
-					WorkspaceID: row.WorkspaceID,
-					Count:       row.Count,
-				})
+			if err = h.db.NewSelect().
+				Model(&scheduledPosts).
+				Where("workspace_id = ?", selectedWorkspaceID).
+				Where("scheduled_at >= ?", period.start).
+				Where("scheduled_at < ?", period.end).
+				Where("status IN (?)", bun.List([]string{"scheduled", "publishing", "published"})).
+				Where("(parent_post_id IS NULL OR parent_post_id = '')").
+				Scan(ctx); err != nil {
+				return nil, huma.Error500InternalServerError("failed to fetch schedule days")
 			}
 		}
+
+		platformsByPost := make(map[string][]string, len(scheduledPosts))
+		if len(scheduledPosts) > 0 {
+			postIDs := make([]string, 0, len(scheduledPosts))
+			for _, post := range scheduledPosts {
+				postIDs = append(postIDs, post.ID)
+			}
+			var destinationRows []struct {
+				PostID   string `bun:"post_id"`
+				Platform string `bun:"platform"`
+			}
+			if err = h.db.NewSelect().
+				TableExpr("post_destinations AS pd").
+				ColumnExpr("pd.post_id, sa.platform").
+				Join("JOIN social_accounts AS sa ON sa.id = pd.social_account_id").
+				Where("pd.post_id IN (?)", bun.List(postIDs)).
+				Scan(ctx, &destinationRows); err != nil {
+				return nil, huma.Error500InternalServerError("failed to fetch schedule details")
+			}
+			for _, row := range destinationRows {
+				platformsByPost[row.PostID] = append(platformsByPost[row.PostID], row.Platform)
+			}
+		}
+
+		days := buildScheduleOverviewDays(scheduledPosts, platformsByPost, location, selectedPlatform)
 
 		resp := &ScheduleOverviewOutput{}
-		resp.Body.Year = monthStart.Year()
-		resp.Body.Month = int(monthStart.Month())
+		resp.Body.Year = period.year
+		resp.Body.Month = int(period.month)
 		resp.Body.SelectedWorkspaceID = selectedWorkspaceID
 		resp.Body.SelectedPlatform = selectedPlatform
 		resp.Body.Workspaces = make([]WorkspaceResp, len(workspaces))
@@ -907,6 +872,126 @@ func (h *PostHandler) GetScheduleOverview(api huma.API) {
 		resp.Body.Days = days
 		return resp, nil
 	})
+}
+
+func resolveScheduleOverviewPeriod(month string, location *time.Location, now time.Time) (scheduleOverviewPeriod, error) {
+	if location == nil {
+		location = time.UTC
+	}
+
+	localNow := now.In(location)
+	year, resolvedMonth := localNow.Year(), localNow.Month()
+	if month != "" {
+		parsed, err := time.Parse("2006-01", month)
+		if err != nil {
+			return scheduleOverviewPeriod{}, err
+		}
+		year, resolvedMonth = parsed.Year(), parsed.Month()
+	}
+
+	localStart := time.Date(year, resolvedMonth, 1, 0, 0, 0, 0, location)
+	return scheduleOverviewPeriod{
+		year:  year,
+		month: resolvedMonth,
+		start: localStart.UTC(),
+		end:   localStart.AddDate(0, 1, 0).UTC(),
+	}, nil
+}
+
+func buildScheduleOverviewDays(
+	posts []models.Post,
+	platformsByPost map[string][]string,
+	location *time.Location,
+	selectedPlatform string,
+) []ScheduleDay {
+	if location == nil {
+		location = time.UTC
+	}
+	countsByDate := make(map[string]*scheduleDayCounts)
+	for _, post := range posts {
+		if post.ParentPostID != "" || post.ScheduledAt.IsZero() {
+			continue
+		}
+		platforms, matches := schedulePlatformsForPost(platformsByPost[post.ID], selectedPlatform)
+		if !matches {
+			continue
+		}
+
+		date := post.ScheduledAt.In(location).Format("2006-01-02")
+		counts := countsByDate[date]
+		if counts == nil {
+			counts = &scheduleDayCounts{
+				platforms:  make(map[string]int),
+				workspaces: make(map[string]int),
+			}
+			countsByDate[date] = counts
+		}
+		counts.count++
+		counts.workspaces[post.WorkspaceID]++
+		for _, platform := range platforms {
+			counts.platforms[platform]++
+		}
+	}
+
+	dates := sortedCountKeys(countsByDate)
+	days := make([]ScheduleDay, 0, len(dates))
+	for _, date := range dates {
+		days = append(days, scheduleDayFromCounts(date, countsByDate[date]))
+	}
+	return days
+}
+
+func schedulePlatformsForPost(platforms []string, selectedPlatform string) ([]string, bool) {
+	platformSet := make(map[string]struct{})
+	for _, platform := range platforms {
+		if platform != "" {
+			platformSet[platform] = struct{}{}
+		}
+	}
+	if selectedPlatform != "" {
+		if _, matches := platformSet[selectedPlatform]; !matches {
+			return nil, false
+		}
+		return []string{selectedPlatform}, true
+	}
+
+	platformNames := make([]string, 0, len(platformSet))
+	for platform := range platformSet {
+		platformNames = append(platformNames, platform)
+	}
+	sort.Strings(platformNames)
+	return platformNames, true
+}
+
+func sortedCountKeys[T any](counts map[string]T) []string {
+	keys := make([]string, 0, len(counts))
+	for key := range counts {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func scheduleDayFromCounts(date string, counts *scheduleDayCounts) ScheduleDay {
+	day := ScheduleDay{
+		Date:       date,
+		Count:      counts.count,
+		Platforms:  make([]ScheduleDayPlatform, 0, len(counts.platforms)),
+		Workspaces: make([]ScheduleDayWorkspace, 0, len(counts.workspaces)),
+	}
+	for _, platform := range sortedCountKeys(counts.platforms) {
+		day.Platforms = append(day.Platforms, ScheduleDayPlatform{
+			Platform: platform,
+			Count:    counts.platforms[platform],
+		})
+	}
+	for _, workspaceID := range sortedCountKeys(counts.workspaces) {
+		day.Workspaces = append(day.Workspaces, ScheduleDayWorkspace{
+			WorkspaceID: workspaceID,
+			Count:       counts.workspaces[workspaceID],
+		})
+	}
+	return day
 }
 
 type ThreadPostInput struct {
@@ -965,6 +1050,7 @@ func (h *PostHandler) CreateThread(api huma.API) {
 		}
 
 		status := statusDraft
+		var jobRunAt time.Time
 		if input.Body.ScheduledAt != nil {
 			status = statusScheduled
 		}
@@ -976,6 +1062,11 @@ func (h *PostHandler) CreateThread(api huma.API) {
 			}
 			if err := h.checkScheduledPostQuota(ctx, input.Body.WorkspaceID, int64(len(input.Body.Posts)), *input.Body.ScheduledAt); err != nil {
 				return nil, err
+			}
+			var err error
+			jobRunAt, err = resolveFuturePostRunAt(*input.Body.ScheduledAt, input.Body.RandomDelayMinutes, time.Now().UTC())
+			if err != nil {
+				return nil, huma.Error400BadRequest(err.Error())
 			}
 		}
 
@@ -1038,8 +1129,6 @@ func (h *PostHandler) CreateThread(api huma.API) {
 			}
 			if status == statusScheduled {
 				payload, _ := json.Marshal(map[string]string{postIDKey: posts[0].ID})
-				// Apply random delay to job run time (using first post's delay setting)
-				jobRunAt := postservice.ApplyRandomDelay(*input.Body.ScheduledAt, input.Body.RandomDelayMinutes)
 				// Update all posts with actual_run_at
 				for _, post := range posts {
 					post.ActualRunAt = jobRunAt
@@ -1310,9 +1399,11 @@ func (h *PostHandler) UpdatePost(api huma.API) {
 			}
 		}
 
+		scheduledAtText := ""
 		willBeScheduled := post.Status == statusScheduled
 		if input.Body.ScheduledAt != nil {
-			willBeScheduled = strings.TrimSpace(*input.Body.ScheduledAt) != ""
+			scheduledAtText = strings.TrimSpace(*input.Body.ScheduledAt)
+			willBeScheduled = scheduledAtText != ""
 		}
 		if willBeScheduled {
 			accountIDs := input.Body.SocialAccountIDs
@@ -1333,6 +1424,31 @@ func (h *PostHandler) UpdatePost(api huma.API) {
 			}
 			if err := h.posts.ValidateScheduledProviderMedia(ctx, post.WorkspaceID, accountIDs, mediaIDs); err != nil {
 				return nil, postServiceError(err, "failed to validate provider media")
+			}
+		}
+
+		var nextScheduledAt time.Time
+		var nextJobRunAt time.Time
+		if input.Body.ScheduledAt != nil && scheduledAtText != "" {
+			parsed, parseErr := time.Parse(time.RFC3339, scheduledAtText)
+			if parseErr != nil {
+				return nil, huma.Error400BadRequest("scheduled_at must be an RFC3339 timestamp")
+			}
+			randomDelayMinutes := post.RandomDelayMinutes
+			if input.Body.RandomDelayMinutes != nil {
+				randomDelayMinutes = *input.Body.RandomDelayMinutes
+			}
+			var scheduleErr error
+			nextJobRunAt, scheduleErr = resolveFuturePostRunAt(parsed, randomDelayMinutes, time.Now().UTC())
+			if scheduleErr != nil {
+				return nil, huma.Error400BadRequest(scheduleErr.Error())
+			}
+			nextScheduledAt = parsed
+		} else if input.Body.ScheduledAt == nil && input.Body.RandomDelayMinutes != nil && post.Status == statusScheduled {
+			var scheduleErr error
+			nextJobRunAt, scheduleErr = resolveFuturePostRunAt(post.ScheduledAt, *input.Body.RandomDelayMinutes, time.Now().UTC())
+			if scheduleErr != nil {
+				return nil, huma.Error400BadRequest(scheduleErr.Error())
 			}
 		}
 
@@ -1364,7 +1480,7 @@ func (h *PostHandler) UpdatePost(api huma.API) {
 			// 1. Handle scheduling changes
 			// ------------------------------------------------------------------
 			if input.Body.ScheduledAt != nil {
-				if *input.Body.ScheduledAt == "" {
+				if scheduledAtText == "" {
 					// Unschedule (make draft)
 					post.Status = statusDraft
 					post.ScheduledAt = time.Time{}
@@ -1383,18 +1499,13 @@ func (h *PostHandler) UpdatePost(api huma.API) {
 					}
 				} else {
 					// Reschedule
-					parsed, parseErr := time.Parse(time.RFC3339, *input.Body.ScheduledAt)
-					if parseErr != nil {
-						return fmt.Errorf("invalid scheduled_at format: %w", parseErr)
-					}
 					oldScheduledAt := post.ScheduledAt
-					post.ScheduledAt = parsed
+					post.ScheduledAt = nextScheduledAt
 					post.Status = statusScheduled
 					if input.Body.RandomDelayMinutes != nil {
 						post.RandomDelayMinutes = *input.Body.RandomDelayMinutes
 					}
-					jobRunAt := postservice.ApplyRandomDelay(post.ScheduledAt, post.RandomDelayMinutes)
-					post.ActualRunAt = jobRunAt
+					post.ActualRunAt = nextJobRunAt
 					if _, err := tx.NewUpdate().Model(&post).Column("content", "status", "scheduled_at", "random_delay_minutes", "actual_run_at").Where("id = ?", post.ID).Exec(txCtx); err != nil {
 						return fmt.Errorf("failed to update post: %w", err)
 					}
@@ -1408,7 +1519,7 @@ func (h *PostHandler) UpdatePost(api huma.API) {
 						ID:      uuid.New().String(),
 						Type:    jobTypePublishPost,
 						Payload: string(payload),
-						RunAt:   jobRunAt,
+						RunAt:   nextJobRunAt,
 					}
 					if _, err := tx.NewInsert().Model(job).Exec(txCtx); err != nil {
 						return fmt.Errorf("failed to create job: %w", err)
@@ -1420,8 +1531,7 @@ func (h *PostHandler) UpdatePost(api huma.API) {
 				// only the random delay can change here.
 				if input.Body.RandomDelayMinutes != nil && post.Status == statusScheduled {
 					post.RandomDelayMinutes = *input.Body.RandomDelayMinutes
-					jobRunAt := postservice.ApplyRandomDelay(post.ScheduledAt, post.RandomDelayMinutes)
-					post.ActualRunAt = jobRunAt
+					post.ActualRunAt = nextJobRunAt
 					if _, err := tx.NewUpdate().Model(&post).Column("random_delay_minutes", "actual_run_at").Where("id = ?", post.ID).Exec(txCtx); err != nil {
 						return fmt.Errorf("failed to update random delay: %w", err)
 					}
@@ -1433,7 +1543,7 @@ func (h *PostHandler) UpdatePost(api huma.API) {
 						ID:      uuid.New().String(),
 						Type:    jobTypePublishPost,
 						Payload: string(payload),
-						RunAt:   jobRunAt,
+						RunAt:   nextJobRunAt,
 					}
 					if _, err := tx.NewInsert().Model(job).Exec(txCtx); err != nil {
 						return fmt.Errorf("failed to create job: %w", err)
