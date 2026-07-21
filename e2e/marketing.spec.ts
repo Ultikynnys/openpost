@@ -8,9 +8,10 @@ test("marketing index links to the app and documentation", async ({ page }) => {
   );
   await expect(
     page.getByRole("heading", {
-      name: "The open social publishing workspace without the enterprise bloat.",
+      name: "A focused workspace for every post.",
     }),
   ).toBeVisible();
+  await expect(page.getByText("Testimonials", { exact: true })).toHaveCount(0);
   await expect(
     page.getByText("Open-source publishing, ready to use"),
   ).toBeVisible();

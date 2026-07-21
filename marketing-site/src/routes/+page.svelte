@@ -1,17 +1,10 @@
 <script lang="ts">
-	import {
-		ArrowRight,
-		ChevronRight,
-		Command,
-		Database,
-		Terminal
-	} from 'lucide-svelte';
+	import { ArrowRight, ChevronRight, Command, Database, Terminal } from 'lucide-svelte';
 	import { Badge } from '$lib/components/ui/badge';
 	import { Button } from '$lib/components/ui/button';
 	import PlatformIcon from '$lib/components/platform-icon.svelte';
 	import FaqSection from './_components/FaqSection.svelte';
 	import PricingComparison from './_components/PricingComparison.svelte';
-	import TestimonialWall from './_components/TestimonialWall.svelte';
 	import VideoDemo from './_components/VideoDemo.svelte';
 	import {
 		appUrl,
@@ -23,7 +16,6 @@
 		securityItems,
 		selfHostingDocsUrl,
 		siteUrl,
-		testimonials,
 		workflowBlocks
 	} from './_marketing';
 
@@ -68,13 +60,13 @@
 					Open-source publishing, ready to use
 				</Badge>
 				<h1
-					class="mt-6 max-w-3xl text-4xl leading-[1.02] font-semibold tracking-tight text-balance sm:text-5xl xl:text-6xl"
+					class="mt-6 max-w-2xl text-4xl leading-[1.05] font-semibold tracking-tight text-balance sm:text-5xl"
 				>
-					The open social publishing workspace without the enterprise bloat.
+					A focused workspace for every post.
 				</h1>
 				<p class="mt-6 max-w-2xl text-lg leading-8 text-pretty text-muted-foreground sm:text-xl">
-					OpenPost gives creators, indie teams, and small agencies one focused place to draft,
-					adapt, preview, schedule, and automate social posts across modern platforms.
+					Draft once, adapt for each account, preview the result, and keep every scheduled post
+					visible from one place.
 				</p>
 				<div class="mt-8 flex flex-wrap gap-3">
 					<Button href={appUrl} size="lg">
@@ -148,9 +140,9 @@
 					Everything important happens before the post is sent.
 				</h2>
 				<p class="mt-5 max-w-xl text-lg leading-8 text-muted-foreground">
-					OpenPost is not trying to become a giant social command center. It focuses on the
-					work that makes publishing reliable: writing, adapting, previewing, scheduling, and
-					seeing what happened.
+					OpenPost is not trying to become a giant social command center. It focuses on the work
+					that makes publishing reliable: writing, adapting, previewing, scheduling, and seeing what
+					happened.
 				</p>
 			</div>
 			<div class="grid gap-4 sm:grid-cols-2">
@@ -159,7 +151,9 @@
 					<article class="rounded-lg border bg-card p-5">
 						<Icon class="size-5 text-primary" />
 						<h3 class="mt-4 font-semibold">{block.title}</h3>
-						<p class="mt-2 text-sm leading-6 text-muted-foreground">{block.description}</p>
+						<p class="mt-2 text-sm leading-6 text-muted-foreground">
+							{block.description}
+						</p>
 					</article>
 				{/each}
 			</div>
@@ -176,8 +170,12 @@
 						<h3 class="mt-4 text-2xl leading-tight font-semibold text-balance sm:text-4xl">
 							{feature.title}
 						</h3>
-						<p class="mt-4 text-base leading-7 text-muted-foreground">{feature.description}</p>
-						<div class="mt-6 inline-flex items-center gap-2 rounded-full border px-3 py-2 text-sm text-muted-foreground">
+						<p class="mt-4 text-base leading-7 text-muted-foreground">
+							{feature.description}
+						</p>
+						<div
+							class="mt-6 inline-flex items-center gap-2 rounded-full border px-3 py-2 text-sm text-muted-foreground"
+						>
 							<Icon class="size-4 text-primary" />
 							<span>{feature.eyebrow} workflow</span>
 						</div>
@@ -207,8 +205,8 @@
 					Web app for editorial work. CLI and MCP for everything around it.
 				</h2>
 				<p class="mt-5 text-lg leading-8 text-muted-foreground">
-					Use the app to review content, then let scripts, CI, cron, or assistants create
-					drafts, upload media, select accounts, and schedule approved posts.
+					Use the app to review content, then let scripts, CI, cron, or assistants create drafts,
+					upload media, select accounts, and schedule approved posts.
 				</p>
 				<div class="mt-8 flex flex-wrap gap-3">
 					<Button href="/tools" variant="secondary">
@@ -221,7 +219,10 @@
 			<div class="grid gap-4">
 				<div class="rounded-lg border bg-card p-5 font-mono text-sm leading-7">
 					<p class="text-muted-foreground">$ openpost auth login https://app.openpost.social</p>
-					<p class="text-muted-foreground">$ openpost post create --accounts x,linkedin --content 'Launch day.' --schedule next-slot</p>
+					<p class="text-muted-foreground">
+						$ openpost post create --accounts x,linkedin --content 'Launch day.' --schedule
+						next-slot
+					</p>
 					<p class="mt-3 text-primary">scheduled for the next workspace slot</p>
 				</div>
 				<div class="grid gap-4 sm:grid-cols-3">
@@ -240,8 +241,6 @@
 </section>
 
 <PricingComparison />
-
-<TestimonialWall {testimonials} />
 
 <section class="section-pad">
 	<div class="mx-auto grid max-w-7xl gap-10 px-4 sm:px-6 lg:grid-cols-[0.85fr_1.15fr] lg:px-8">
@@ -262,7 +261,9 @@
 				<article class="rounded-lg border bg-card p-5">
 					<Icon class="size-5 text-primary" />
 					<h3 class="mt-4 font-semibold">{item.title}</h3>
-					<p class="mt-2 text-sm leading-6 text-muted-foreground">{item.description}</p>
+					<p class="mt-2 text-sm leading-6 text-muted-foreground">
+						{item.description}
+					</p>
 				</article>
 			{/each}
 		</div>
@@ -270,7 +271,9 @@
 </section>
 
 <section class="border-y bg-primary text-primary-foreground">
-	<div class="mx-auto grid max-w-7xl gap-8 px-4 py-12 sm:px-6 lg:grid-cols-[1fr_auto] lg:items-center lg:px-8">
+	<div
+		class="mx-auto grid max-w-7xl gap-8 px-4 py-12 sm:px-6 lg:grid-cols-[1fr_auto] lg:items-center lg:px-8"
+	>
 		<div>
 			<h2 class="text-3xl font-semibold text-balance">Prefer to run it yourself?</h2>
 			<p class="mt-3 max-w-2xl text-base leading-7 text-primary-foreground/75">
@@ -280,7 +283,11 @@
 		</div>
 		<div class="flex flex-wrap gap-3">
 			<Button href={selfHostingDocsUrl} variant="secondary">Self-hosting docs</Button>
-			<Button href={githubUrl} variant="outline" class="border-primary-foreground/25 text-primary-foreground hover:bg-primary-foreground/10">
+			<Button
+				href={githubUrl}
+				variant="outline"
+				class="border-primary-foreground/25 text-primary-foreground hover:bg-primary-foreground/10"
+			>
 				View GitHub
 			</Button>
 		</div>

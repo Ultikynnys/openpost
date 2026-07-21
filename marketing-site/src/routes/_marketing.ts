@@ -170,14 +170,14 @@ export const platforms = [
 		slug: 'facebook',
 		name: 'Facebook Pages',
 		short: 'facebook',
-		tag: 'Early Pages support',
+		tag: 'Pages and Stories',
 		status: 'Early support',
 		description:
-			'Connect Facebook Pages through the provider app registry and schedule text or one media attachment.',
+			'Connect Facebook Pages and schedule text, photo, multi-photo, Story, and video publications.',
 		limits: [
 			`${PLATFORM_LIMITS.facebook.charLimit.toLocaleString()} characters`,
 			PLATFORM_LIMITS.facebook.media,
-			'No thread support',
+			'Multi-photo, Story, and video profiles',
 			'Live-account verification matters'
 		]
 	},
@@ -188,10 +188,11 @@ export const platforms = [
 		tag: 'Media-first',
 		status: 'Early support',
 		description:
-			'Schedule one image or Reel-style video to Instagram Business accounts behind Facebook Pages.',
+			'Schedule feed images, carousels, Stories, and Reels to Instagram Business accounts behind Facebook Pages.',
 		limits: [
 			`${PLATFORM_LIMITS.instagram.charLimit.toLocaleString()} caption characters`,
 			PLATFORM_LIMITS.instagram.media,
+			'Feed, carousel, Story, and Reel profiles',
 			'Business accounts only',
 			'No text-only posts'
 		]
@@ -200,14 +201,14 @@ export const platforms = [
 		slug: 'tiktok',
 		name: 'TikTok',
 		short: 'tiktok',
-		tag: 'Video-first',
+		tag: 'Video and photo posts',
 		status: 'Early support',
 		description:
-			'Schedule video-first TikTok posts through a public media URL and provider app configuration.',
+			'Schedule video or photo posts through TikTok publishing flows and public media URLs.',
 		limits: [
 			`${PLATFORM_LIMITS.tiktok.charLimit.toLocaleString()} caption characters`,
 			PLATFORM_LIMITS.tiktok.media,
-			'No image posts',
+			'Photo posts support 1-35 JPEG or WebP images',
 			'Provider review may apply'
 		]
 	},
@@ -272,22 +273,26 @@ export const productFeatures = [
 export const workflowBlocks = [
 	{
 		title: 'Workspaces',
-		description: 'Separate brands, clients, products, media, prompts, schedules, accounts, and team access.',
+		description:
+			'Separate brands, clients, products, media, prompts, schedules, accounts, and team access.',
 		icon: UsersRound
 	},
 	{
 		title: 'Posting slots',
-		description: 'Use workspace timezones, next-slot scheduling, week starts, draft gaps, and natural delays.',
+		description:
+			'Use workspace timezones, next-slot scheduling, week starts, draft gaps, and natural delays.',
 		icon: CalendarClock
 	},
 	{
 		title: 'Account destinations',
-		description: 'Select connected accounts explicitly and tailor per-account variants before publishing.',
+		description:
+			'Select connected accounts explicitly and tailor per-account variants before publishing.',
 		icon: Workflow
 	},
 	{
 		title: 'CLI and MCP',
-		description: 'Create posts from scripts, cron, CI, or assistants using revocable API and MCP tokens.',
+		description:
+			'Create posts from scripts, cron, CI, or assistants using revocable API and MCP tokens.',
 		icon: Terminal
 	}
 ] as const;
@@ -305,12 +310,14 @@ export const securityItems = [
 	},
 	{
 		title: 'Revocable automation',
-		description: 'CLI, CI, cron, and MCP clients use dedicated tokens with workspace-aware boundaries.',
+		description:
+			'CLI, CI, cron, and MCP clients use dedicated tokens with workspace-aware boundaries.',
 		icon: KeyRound
 	},
 	{
 		title: 'Open implementation',
-		description: 'The API, queue, billing, storage, and provider adapter code are inspectable in the repo.',
+		description:
+			'The API, queue, billing, storage, and provider adapter code are inspectable in the repo.',
 		icon: Code2
 	}
 ] as const;
@@ -347,15 +354,13 @@ export const tools = [
 	{
 		slug: 'linkedin-text-formatter',
 		name: 'LinkedIn text formatter',
-		description:
-			'Prepare readable LinkedIn copy with lightweight formatting and length awareness.',
+		description: 'Prepare readable LinkedIn copy with lightweight formatting and length awareness.',
 		icon: MessageSquareText
 	},
 	{
 		slug: 'best-time-to-post-calculator',
 		name: 'Best time to post calculator',
-		description:
-			'Translate timezone and cadence preferences into reusable posting slots.',
+		description: 'Translate timezone and cadence preferences into reusable posting slots.',
 		icon: Clock3
 	}
 ] as const;
@@ -365,8 +370,10 @@ export const comparisons = [
 		slug: 'buffer',
 		name: 'Buffer',
 		bestFor: 'Teams that want a mature hosted suite with analytics.',
-		openPostAngle: 'OpenPost focuses on a cleaner composer, open-source trust, automation, and lower app plans.',
-		pricing: 'Buffer commonly scales by channel and team needs; OpenPost plans scale by workspaces, accounts, scheduled posts, and media.',
+		openPostAngle:
+			'OpenPost focuses on a cleaner composer, open-source trust, automation, and lower app plans.',
+		pricing:
+			'Buffer commonly scales by channel and team needs; OpenPost plans scale by workspaces, accounts, scheduled posts, and media.',
 		chooseOpenPost: [
 			'You want a focused scheduler without a broad engagement suite.',
 			'You care about an open-source implementation and self-hosting as a fallback.',
@@ -381,8 +388,10 @@ export const comparisons = [
 		slug: 'hootsuite',
 		name: 'Hootsuite',
 		bestFor: 'Larger teams that need a broad enterprise social management suite.',
-		openPostAngle: 'OpenPost is intentionally lighter: scheduling, workspaces, media, CLI/MCP, and fewer enterprise layers.',
-		pricing: 'Hootsuite is built for larger social teams and procurement. OpenPost keeps plan choices smaller and easier to reason about.',
+		openPostAngle:
+			'OpenPost is intentionally lighter: scheduling, workspaces, media, CLI/MCP, and fewer enterprise layers.',
+		pricing:
+			'Hootsuite is built for larger social teams and procurement. OpenPost keeps plan choices smaller and easier to reason about.',
 		chooseOpenPost: [
 			'You publish across a few brands, clients, or products and want less process.',
 			'You want queue visibility, workspaces, and automation without enterprise overhead.',
@@ -397,8 +406,10 @@ export const comparisons = [
 		slug: 'typefully',
 		name: 'Typefully',
 		bestFor: 'Creators focused on X-style writing and threads.',
-		openPostAngle: 'OpenPost covers a broader workflow with workspaces, provider variants, reusable media, CLI, MCP, and open-source deployment.',
-		pricing: 'Typefully is strongest for writing-first creator workflows. OpenPost focuses on multi-platform publishing operations.',
+		openPostAngle:
+			'OpenPost covers a broader workflow with workspaces, provider variants, reusable media, CLI, MCP, and open-source deployment.',
+		pricing:
+			'Typefully is strongest for writing-first creator workflows. OpenPost focuses on multi-platform publishing operations.',
 		chooseOpenPost: [
 			'You need workspaces, account destinations, media reuse, and provider-specific previews.',
 			'You publish beyond X-style threads.',
@@ -413,8 +424,10 @@ export const comparisons = [
 		slug: 'postiz',
 		name: 'Postiz',
 		bestFor: 'Teams looking for an AI-heavy open source social suite.',
-		openPostAngle: 'OpenPost focuses on publishing, makes queue behavior visible, and has a small operational footprint.',
-		pricing: 'Both projects have open-source roots. OpenPost makes the managed app its main offering while keeping a smaller product scope.',
+		openPostAngle:
+			'OpenPost focuses on publishing, makes queue behavior visible, and has a small operational footprint.',
+		pricing:
+			'Both projects have open-source roots. OpenPost makes the managed app its main offering while keeping a smaller product scope.',
 		chooseOpenPost: [
 			'You want a quieter publishing app with fewer AI-first features.',
 			'You care about Go/SvelteKit, a compact service, and no Redis queue requirement.',
@@ -429,8 +442,10 @@ export const comparisons = [
 		slug: 'post-bridge',
 		name: 'Post Bridge',
 		bestFor: 'Users who want an all-in-one hosted scheduler with many growth tools.',
-		openPostAngle: 'OpenPost documents scheduler limits, publishes its source, and supports self-hosting.',
-		pricing: 'Post Bridge focuses on hosted growth utilities. OpenPost focuses on scheduling, workspaces, automation, and the control that open source provides.',
+		openPostAngle:
+			'OpenPost documents scheduler limits, publishes its source, and supports self-hosting.',
+		pricing:
+			'Post Bridge focuses on hosted growth utilities. OpenPost focuses on scheduling, workspaces, automation, and the control that open source provides.',
 		chooseOpenPost: [
 			'You want to inspect or self-host the implementation if needed.',
 			'You want CLI/MCP workflows for technical operators.',
@@ -445,8 +460,10 @@ export const comparisons = [
 		slug: 'mixpost',
 		name: 'Mixpost',
 		bestFor: 'Self-hosted operators who want a larger PHP-based social publishing app.',
-		openPostAngle: 'OpenPost uses Go and SvelteKit, runs as one binary or container, requires no Redis queue, and supports a compact cloud deployment.',
-		pricing: 'Mixpost is a strong self-hosted comparison. OpenPost emphasizes the managed app while remaining lightweight to self-host.',
+		openPostAngle:
+			'OpenPost uses Go and SvelteKit, runs as one binary or container, requires no Redis queue, and supports a compact cloud deployment.',
+		pricing:
+			'Mixpost is a strong self-hosted comparison. OpenPost emphasizes the managed app while remaining lightweight to self-host.',
 		chooseOpenPost: [
 			'You want the managed app as the main offering.',
 			'You prefer Go/SvelteKit and a single binary/container deployment model.',
@@ -456,69 +473,6 @@ export const comparisons = [
 			'You specifically want Mixpost’s PHP/Laravel ecosystem.',
 			'You want a larger self-hosted social-management app.'
 		]
-	}
-] as const;
-
-export const testimonials = [
-	{
-		id: 'mara',
-		name: 'Mara Lopes',
-		role: 'Indie SaaS founder',
-		avatar:
-			'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=160&h=160&q=80',
-		content:
-			'OpenPost feels like the scheduler I wanted after outgrowing manual posting. The workspace split keeps product launches and personal channels from bleeding into each other.',
-		source: 'X'
-	},
-	{
-		id: 'eli',
-		name: 'Eli Mercer',
-		role: 'Developer advocate',
-		avatar:
-			'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=160&h=160&q=80',
-		content:
-			'I like that it does not pretend every provider works the same. The preview and warning model is exactly what I want before scheduling a week of posts.',
-		source: 'LinkedIn'
-	},
-	{
-		id: 'nina',
-		name: 'Nina Costa',
-		role: 'Content operator',
-		avatar:
-			'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=160&h=160&q=80',
-		content:
-			'Account destinations and next-slot scheduling are the details that make it feel fast. I can queue the same update across a few accounts and still tailor each rendition.',
-		source: 'Mastodon'
-	},
-	{
-		id: 'sam',
-		name: 'Samir Patel',
-		role: 'Agency operator',
-		avatar:
-			'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=160&h=160&q=80',
-		content:
-			'The product is small in the right way. Workspaces, media, schedules, and team invites are there, but it does not feel like an enterprise tool got dropped on a tiny team.',
-		source: 'Bluesky'
-	},
-	{
-		id: 'jules',
-		name: 'Jules Armand',
-		role: 'Open-source maintainer',
-		avatar:
-			'https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&w=160&h=160&q=80',
-		content:
-			'The CLI and MCP angle is the reason I keep coming back. Publishing from release scripts and letting an assistant prepare drafts against real account boundaries is useful.',
-		source: 'GitHub'
-	},
-	{
-		id: 'lena',
-		name: 'Lena Wright',
-		role: 'Creator',
-		avatar:
-			'https://images.unsplash.com/photo-1487412720507-e7ab37603c6f?auto=format&fit=crop&w=160&h=160&q=80',
-		content:
-			'It is refreshing to see a scheduler that is direct about analytics and video limits instead of selling a wall of checkmarks. The core writing flow is what I needed first.',
-		source: 'X'
 	}
 ] as const;
 
