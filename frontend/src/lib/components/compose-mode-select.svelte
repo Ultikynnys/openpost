@@ -32,9 +32,10 @@
 		selectedMode: ComposerModeKey;
 		onModeChange: (mode: ComposerModeKey) => void;
 		class?: string;
+		compactOnNarrow?: boolean;
 	}
 
-	let { selectedMode, onModeChange, class: className }: Props = $props();
+	let { selectedMode, onModeChange, class: className, compactOnNarrow = false }: Props = $props();
 	const selectedModeMeta = $derived(composerMode(selectedMode));
 	const SelectedIcon = $derived(modeIcons[selectedMode] ?? AlignLeftIcon);
 
@@ -46,13 +47,20 @@
 
 <Select.Root type="single" value={selectedMode} onValueChange={handleValueChange}>
 	<Select.Trigger
-		class={cn('h-8 w-32 max-w-32 min-w-0 text-xs', className)}
+		class={cn(
+			'h-8 w-32 max-w-32 min-w-0 text-xs',
+			compactOnNarrow &&
+				'max-[430px]:w-11 max-[430px]:max-w-11 max-[430px]:justify-center max-[430px]:px-2 max-[430px]:[&>svg:last-of-type]:hidden',
+			className
+		)}
 		aria-label={m.compose_post_type()}
 		data-testid="composer-mode-select"
 	>
 		<span class="flex min-w-0 items-center gap-1.5">
 			<SelectedIcon class="size-3.5 text-muted-foreground" />
-			<span class="truncate">{selectedModeMeta.label}</span>
+			<span class={cn('truncate', compactOnNarrow && 'max-[430px]:sr-only')}
+				>{selectedModeMeta.label}</span
+			>
 		</span>
 	</Select.Trigger>
 	<Select.Content

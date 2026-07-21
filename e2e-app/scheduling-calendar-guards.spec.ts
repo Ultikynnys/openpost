@@ -20,7 +20,11 @@ type ScheduledPost = {
   scheduled_at: string;
   created_at: string;
   random_delay_minutes: number;
-  destinations: never[];
+  destinations: Array<{
+    platform: string;
+    social_account_id: string;
+    status: string;
+  }>;
   media_ids: never[];
   parent_post_id?: string;
   thread_sequence?: number;
@@ -393,4 +397,105 @@ test("a scheduled thread renders only its parent as a calendar item", async ({
   await expect(
     page.getByRole("button", { name: "Open Thread reply", exact: true }),
   ).toHaveCount(0);
+});
+
+test("the day drawer keeps scheduled posts compact and icon-led", async ({
+  page,
+  request,
+}, testInfo) => {
+  const seed = `drawer-${Date.now().toString(36)}-${testInfo.workerIndex}`;
+  const { workspace } = await createAuthenticatedWorkspace(page, request, seed);
+  await page.clock.setFixedTime(new Date("2030-06-15T12:00:00.000Z"));
+  await page.setViewportSize({ width: 1280, height: 800 });
+
+  const post = scheduledPost(
+    "drawer-post",
+    workspace.id,
+    "A deliberately long scheduled post preview that should stay compact in the day drawer instead of taking over the entire panel with several lines of copy.",
+    "2030-06-20T10:00:00.000Z",
+  );
+  post.destinations = [
+    {
+      platform: "bluesky",
+      social_account_id: "drawer-bluesky",
+      status: "scheduled",
+    },
+    {
+      platform: "linkedin",
+      social_account_id: "drawer-linkedin",
+      status: "scheduled",
+    },
+    {
+      platform: "threads",
+      social_account_id: "drawer-threads",
+      status: "scheduled",
+    },
+  ];
+
+  await mockCalendarData(page, [post]);
+  await page.route("**/api/v1/posts/schedule-overview?**", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        year: 2030,
+        month: 6,
+        selected_workspace_id: workspace.id,
+        selected_platform: "",
+        days: [
+          {
+            date: "2030-06-20",
+            count: 1,
+            platforms: [
+              { platform: "bluesky", count: 1 },
+              { platform: "linkedin", count: 1 },
+              { platform: "threads", count: 1 },
+            ],
+            workspaces: [{ workspace_id: workspace.id, count: 1 }],
+          },
+        ],
+        platforms: ["bluesky", "linkedin", "threads"],
+        workspaces: [],
+      },
+    });
+  });
+
+  await page.goto("/");
+  const planner = page.getByTestId("desktop-sidebar-planner");
+  await expect(planner).toBeVisible();
+  await planner.getByRole("button", { name: /June 20, 2030/ }).click();
+
+  const drawer = page.getByTestId("day-posts-drawer");
+  await expect(drawer).toBeVisible();
+  await expect(
+    drawer.getByRole("heading", { name: "Thu, Jun 20" }),
+  ).toBeVisible();
+  await expect(drawer.getByText("Scheduled: 1", { exact: true })).toBeVisible();
+  await expect(
+    drawer.getByRole("button", { name: "New post", exact: true }),
+  ).toBeVisible();
+  await expect(
+    drawer.getByText(/A deliberately long scheduled post preview/),
+  ).toBeVisible();
+
+  const destinations = drawer.getByTestId("day-post-destinations");
+  await expect(destinations).toHaveAttribute("aria-label", "Destinations: 3");
+  await expect(destinations.locator("svg")).toHaveCount(3);
+  await expect(
+    drawer.getByText("Bluesky", { exact: true }),
+  ).not.toBeVisible();
+  await expect(
+    drawer.getByText("LinkedIn", { exact: true }),
+  ).not.toBeVisible();
+  await expect(
+    drawer.getByText("Threads", { exact: true }),
+  ).not.toBeVisible();
+
+  const drawerBox = await drawer.boundingBox();
+  expect(drawerBox).not.toBeNull();
+  expect(drawerBox!.width).toBeGreaterThanOrEqual(500);
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  const portraitDrawerBox = await drawer.boundingBox();
+  expect(portraitDrawerBox).not.toBeNull();
+  expect(portraitDrawerBox!.width).toBe(390);
 });

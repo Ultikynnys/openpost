@@ -10,6 +10,8 @@ All notable changes to this project are documented in this file.
 
 ### Changed
 
+- Consolidated account selection and per-account content customization into one icon-based composer menu across every post format.
+- Simplified the calendar day drawer with shorter copy, tighter previews, and destination icons instead of platform names.
 - Gave the public landing-page hero a warmer, shorter headline and removed the placeholder testimonial wall.
 - Reworked the README around the current app, automation, deployment, and per-provider publishing capabilities.
 - Unified authenticated page headers, section hierarchy, empty/error feedback, toasts, destructive confirmations, and content-shaped loading placeholders behind shared responsive components.

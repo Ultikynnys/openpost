@@ -109,12 +109,20 @@ test("composer renders account-specific renditions", async ({
   await expect(page.locator('[data-testid="instagram-preview"]')).toHaveCount(
     0,
   );
+  await expect(page.getByLabel(/Remove .* from targets/)).toHaveCount(0);
+  const accountControl = page.getByTestId("composer-account-control");
+  await expect(accountControl.getByTestId("composer-account-icon")).toHaveCount(
+    2,
+  );
+  await accountControl.click();
+  await expect(page.getByTestId("composer-account-row")).toHaveCount(2);
   await expect(
-    page.getByLabel("Remove @openpost_main from targets"),
+    page.getByText("Bluesky @openpost_main", { exact: true }),
   ).toBeVisible();
   await expect(
-    page.getByLabel("Remove @openpost_studio from targets"),
+    page.getByText("Bluesky @openpost_studio", { exact: true }),
   ).toBeVisible();
+  await page.keyboard.press("Escape");
   await page.getByRole("button", { name: "Save draft" }).click();
   await expect(page.getByText("Draft saved")).toBeVisible();
   await expect.poll(() => publicationPayload).toBeTruthy();

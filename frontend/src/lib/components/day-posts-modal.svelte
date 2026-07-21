@@ -46,8 +46,8 @@
 	const formattedDate = $derived.by(() => {
 		if (!currentDate) return '';
 		return currentDate.toDate(viewerTimeZone).toLocaleDateString(getLocaleTag(), {
-			weekday: 'long',
-			month: 'long',
+			weekday: 'short',
+			month: 'short',
 			day: 'numeric',
 			timeZone: viewerTimeZone
 		});
@@ -109,7 +109,7 @@
 
 	function postExcerpt(post: Post) {
 		const text = post.content || m.calendar_untitled_post();
-		return text.length > 130 ? `${text.slice(0, 130).trim()}…` : text;
+		return text.length > 100 ? `${text.slice(0, 100).trim()}…` : text;
 	}
 
 	function statusLabel(status: string) {
@@ -172,14 +172,11 @@
 </script>
 
 <Sheet.Root {open} onOpenChange={handleOpenChange}>
-	<Sheet.Content side="right" class="w-full p-0 sm:max-w-md">
-		<Sheet.Header class="border-b p-5 pr-14">
-			<div class="flex items-start justify-between gap-4">
-				<div>
-					<Sheet.Title class="flex items-center gap-2 text-base font-semibold">
-						<CalendarIcon class="size-4 text-primary" />
-						{formattedDate}
-					</Sheet.Title>
+	<Sheet.Content side="right" class="w-full! p-0 sm:max-w-lg!" data-testid="day-posts-drawer">
+		<Sheet.Header class="border-b px-4 py-4 pr-14 sm:px-5">
+			<div class="flex items-center justify-between gap-3">
+				<div class="min-w-0">
+					<Sheet.Title class="truncate text-base font-semibold">{formattedDate}</Sheet.Title>
 					<Sheet.Description class="mt-1 text-sm">
 						{m.day_posts_scheduled_count({ count: posts.length })}
 					</Sheet.Description>
@@ -193,7 +190,7 @@
 			</div>
 		</Sheet.Header>
 
-		<div class="min-h-0 flex-1 overflow-y-auto px-5 py-2">
+		<div class="min-h-0 flex-1 overflow-y-auto px-4 py-2 sm:px-5">
 			{#if loading}
 				<PageLoading layout="list" label={m.common_loading()} items={3} />
 			{:else if error}
@@ -217,6 +214,9 @@
 			{:else}
 				<div class="divide-y">
 					{#each posts as post (post.id)}
+						{@const destinations = post.destinations ?? []}
+						{@const visibleDestinations = destinations.slice(0, 5)}
+						{@const hiddenDestinationCount = Math.max(0, destinations.length - 5)}
 						<article class="flex items-start gap-3 py-4">
 							<time
 								class="w-12 shrink-0 pt-0.5 font-mono text-xs font-medium text-muted-foreground"
@@ -228,7 +228,7 @@
 								class="min-w-0 flex-1 text-left focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
 								onclick={() => handleEdit(post.id)}
 							>
-								<p class="text-sm leading-6">{postExcerpt(post)}</p>
+								<p class="line-clamp-2 text-sm leading-6">{postExcerpt(post)}</p>
 								<div class="mt-2 flex flex-wrap items-center gap-2">
 									<span
 										class={[
@@ -236,12 +236,29 @@
 											getStatusColor(post.status)
 										]}>{statusLabel(post.status)}</span
 									>
-									{#each post.destinations ?? [] as destination (destination.social_account_id)}
-										<span class="inline-flex items-center gap-1 text-xs text-muted-foreground">
-											<PlatformIcon platform={destination.platform} class="size-3.5" />
-											<span class="capitalize">{destination.platform}</span>
+									{#if destinations.length > 0}
+										<span
+											class="flex items-center -space-x-1"
+											role="img"
+											aria-label={m.day_posts_destination_count({ count: destinations.length })}
+											data-testid="day-post-destinations"
+										>
+											{#each visibleDestinations as destination (destination.social_account_id)}
+												<span
+													class="flex size-6 items-center justify-center rounded-full border border-border bg-background ring-2 ring-background"
+												>
+													<PlatformIcon platform={destination.platform} class="size-3.5" />
+												</span>
+											{/each}
+											{#if hiddenDestinationCount > 0}
+												<span
+													class="flex size-6 items-center justify-center rounded-full border border-border bg-muted text-[10px] font-medium text-muted-foreground ring-2 ring-background"
+												>
+													+{hiddenDestinationCount}
+												</span>
+											{/if}
 										</span>
-									{/each}
+									{/if}
 								</div>
 							</button>
 							<DropdownMenu.Root>
@@ -251,6 +268,7 @@
 											{...props}
 											variant="ghost"
 											size="icon"
+											class="size-11"
 											aria-label={m.day_posts_actions()}><MoreIcon class="size-4" /></Button
 										>
 									{/snippet}

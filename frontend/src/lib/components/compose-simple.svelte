@@ -17,6 +17,7 @@
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
 	import * as Select from '$lib/components/ui/select';
 	import * as Tooltip from '$lib/components/ui/tooltip';
+	import ComposerAccountMenu from './composer-account-menu.svelte';
 	import PlatformIcon from './platform-icon.svelte';
 	import { Badge } from '$lib/components/ui/badge';
 	import { getPlatformKey, getPlatformName } from '$lib/utils';
@@ -28,9 +29,7 @@
 	import LightbulbIcon from 'lucide-svelte/icons/lightbulb';
 	import ShuffleIcon from 'lucide-svelte/icons/shuffle';
 	import ImageIcon from 'lucide-svelte/icons/image';
-	import ChevronDownIcon from 'lucide-svelte/icons/chevron-down';
 	import UnlinkIcon from 'lucide-svelte/icons/unlink';
-	import Link2Icon from 'lucide-svelte/icons/link-2';
 	import GripVerticalIcon from 'lucide-svelte/icons/grip-vertical';
 	import Trash2Icon from 'lucide-svelte/icons/trash-2';
 	import TypeIcon from 'lucide-svelte/icons/type';
@@ -1735,6 +1734,14 @@
 		scheduleAutoSave();
 	}
 
+	function editAccountVersion(accountId: string) {
+		if (variants.has(accountId)) {
+			activateVariantTab(accountId);
+			return;
+		}
+		unsyncAccount(accountId);
+	}
+
 	function resyncAccount(accountId: string) {
 		if (!variants.has(accountId)) return;
 		const nextVariants = new SvelteMap(variants);
@@ -1973,9 +1980,7 @@
 		>
 			<div class="flex min-w-0 items-center gap-1.5">
 				{#if modeControl}
-					<div
-						class="min-w-0 flex-1 [&_[data-testid=composer-mode-select]]:h-11 [&_[data-testid=composer-mode-select]]:w-full [&_[data-testid=composer-mode-select]]:max-w-none"
-					>
+					<div class="shrink-0 [&_[data-testid=composer-mode-select]]:h-11">
 						{@render modeControl()}
 					</div>
 				{/if}
@@ -1992,54 +1997,56 @@
 						<LoaderIcon class="size-4 animate-spin" />
 					</Button>
 				{:else if accounts.length > 0}
-					<DropdownMenu.Root>
-						<DropdownMenu.Trigger>
-							{#snippet child({ props })}
-								<Button
-									{...props}
-									data-testid="composer-account-control"
-									variant="outline"
-									size="sm"
-									class="h-11 shrink-0 gap-1 px-2.5 text-xs"
-									aria-label={m.compose_publish_to()}
-								>
-									<span class="tabular-nums">{selectedAccountIds.length}/{accounts.length}</span>
-									<ChevronDownIcon class="size-3" />
-								</Button>
-							{/snippet}
-						</DropdownMenu.Trigger>
-						<DropdownMenu.Content class="w-72 max-w-[calc(100vw-1rem)]" align="start">
-							<div class="flex items-center justify-between px-2 py-1.5">
-								<span class="text-sm font-medium text-muted-foreground"
-									>{m.compose_publish_to()}</span
-								>
-								<div class="flex gap-1">
-									<Button variant="ghost" size="sm" onclick={selectAllAccounts}
-										>{m.common_all()}</Button
-									>
-									<Button variant="ghost" size="sm" onclick={clearAllAccounts}
-										>{m.common_none()}</Button
-									>
-								</div>
-							</div>
-							<DropdownMenu.Separator />
-							{#each accounts as account (account.id)}
-								<DropdownMenu.CheckboxItem
-									class="min-h-11 gap-2"
-									checked={selectedAccountIds.includes(account.id)}
-									onCheckedChange={() => toggleAccount(account.id)}
-								>
-									<PlatformIcon platform={getPlatformKey(account.platform)} class="size-4" />
-									<span class="min-w-0 truncate"
-										>{getPlatformName(account.platform)}{account.account_username
-											? ` @${account.account_username}`
-											: ''}</span
-									>
-								</DropdownMenu.CheckboxItem>
-							{/each}
-						</DropdownMenu.Content>
-					</DropdownMenu.Root>
+					<ComposerAccountMenu
+						{accounts}
+						{selectedAccountIds}
+						customAccountIds={[...variants.keys()]}
+						activeAccountId={activeVariantAccountId}
+						triggerLabel={m.compose_publish_to()}
+						triggerVariant="outline"
+						triggerClass="h-11 px-2.5"
+						onToggle={(account) => toggleAccount(account.id)}
+						onSelectAll={selectAllAccounts}
+						onClearAll={clearAllAccounts}
+						onEditShared={() => activateVariantTab(null)}
+						onCustomize={(account) => editAccountVersion(account.id)}
+						onReset={(account) => resyncAccount(account.id)}
+					/>
 				{/if}
+				<DropdownMenu.Root>
+					<DropdownMenu.Trigger>
+						{#snippet child({ props })}
+							<Button
+								{...props}
+								type="button"
+								variant="outline"
+								size="icon"
+								class="size-11 shrink-0"
+								aria-label={m.sidebar_more()}
+							>
+								<MoreHorizontalIcon class="size-4" />
+							</Button>
+						{/snippet}
+					</DropdownMenu.Trigger>
+					<DropdownMenu.Content class="w-56" align="end">
+						<DropdownMenu.Item
+							class="min-h-11"
+							onclick={() => (showPromptCard ? dismissPrompt() : fetchRandomPrompt())}
+						>
+							<LightbulbIcon class="mr-2 size-4" />
+							{showPromptCard ? m.compose_dismiss_inspiration() : m.compose_need_inspiration()}
+						</DropdownMenu.Item>
+						{#if draftId}
+							<DropdownMenu.Item
+								class="min-h-11 text-destructive focus:text-destructive"
+								onclick={() => (showDeleteConfirm = true)}
+								disabled={isDeleting || isSaving || isSubmitting}
+							>
+								<Trash2Icon class="mr-2 size-4" />{m.common_delete()}
+							</DropdownMenu.Item>
+						{/if}
+					</DropdownMenu.Content>
+				</DropdownMenu.Root>
 				{#if isEditMode && !autoSavesDraft}
 					<Button
 						type="button"
@@ -2087,97 +2094,6 @@
 					</Button>
 				{/if}
 			</div>
-			<div class="mt-2 flex min-w-0 items-center gap-1.5 border-t border-border/70 pt-2">
-				<div
-					class="flex min-w-0 flex-1 [scrollbar-width:none] items-center gap-2 overflow-x-auto overflow-y-hidden px-0.5 py-0.5 [&::-webkit-scrollbar]:hidden"
-					data-testid="mobile-rendition-scroller"
-				>
-					{#if selectedAccounts.length > 0}
-						<button
-							type="button"
-							class={[
-								'flex aspect-square size-11 min-h-11 max-w-11 min-w-11 flex-none shrink-0 items-center justify-center rounded-full border',
-								activeVariantAccountId === null
-									? 'border-foreground bg-foreground text-background'
-									: 'border-border bg-background text-foreground'
-							]}
-							onclick={() => activateVariantTab(null)}
-							title={m.compose_all_synced()}
-							aria-label={m.compose_all_synced()}
-							data-testid="mobile-rendition-all"
-						>
-							<Link2Icon class="size-4" />
-						</button>
-						{#each selectedAccounts as account (account.id)}
-							{@const isUnsynced = variants.has(account.id)}
-							<button
-								type="button"
-								class={[
-									'relative flex aspect-square size-11 min-h-11 max-w-11 min-w-11 flex-none shrink-0 items-center justify-center rounded-full border',
-									activeVariantAccountId === account.id
-										? isUnsynced
-											? 'border-amber-500/70 bg-amber-500/12 text-amber-700'
-											: 'border-foreground bg-foreground text-background'
-										: 'border-border bg-background text-foreground'
-								]}
-								onclick={() => activateVariantTab(account.id)}
-								title={`${getPlatformName(account.platform)}${account.account_username ? ` @${account.account_username}` : ''}`}
-								aria-label={`${getPlatformName(account.platform)}${account.account_username ? ` @${account.account_username}` : ''} · ${isUnsynced ? m.compose_custom_state() : m.compose_synced_state()}`}
-								data-testid="mobile-rendition-account"
-							>
-								<PlatformIcon platform={getPlatformKey(account.platform)} class="size-4" />
-								{#if isUnsynced}<span
-										class="absolute -right-0.5 -bottom-0.5 flex size-4 items-center justify-center rounded-full bg-amber-500 text-white ring-2 ring-background"
-										><UnlinkIcon class="size-2.5" /></span
-									>{/if}
-							</button>
-						{/each}
-					{/if}
-				</div>
-				{#if activeVariantAccount}
-					<button
-						type="button"
-						class="flex aspect-square size-11 min-h-11 min-w-11 flex-none items-center justify-center rounded-full border bg-background"
-						onclick={() =>
-							activeVariantIsUnsynced
-								? resyncAccount(activeVariantAccount.id)
-								: unsyncAccount(activeVariantAccount.id)}
-						title={activeVariantIsUnsynced ? m.compose_sync_back() : m.compose_unsync()}
-						aria-label={activeVariantIsUnsynced ? m.compose_sync_back() : m.compose_unsync()}
-					>
-						{#if activeVariantIsUnsynced}<Link2Icon class="size-4" />{:else}<UnlinkIcon
-								class="size-4"
-							/>{/if}
-					</button>
-				{/if}
-				<DropdownMenu.Root>
-					<DropdownMenu.Trigger>
-						{#snippet child({ props })}
-							<button
-								{...props}
-								type="button"
-								class="flex aspect-square size-11 min-h-11 min-w-11 flex-none items-center justify-center rounded-full border bg-background"
-								aria-label={m.sidebar_more()}><MoreHorizontalIcon class="size-4" /></button
-							>
-						{/snippet}
-					</DropdownMenu.Trigger>
-					<DropdownMenu.Content class="w-56" align="end">
-						<DropdownMenu.Item
-							class="min-h-11"
-							onclick={() => (showPromptCard ? dismissPrompt() : fetchRandomPrompt())}
-							><LightbulbIcon class="mr-2 size-4" />{showPromptCard
-								? m.compose_dismiss_inspiration()
-								: m.compose_need_inspiration()}</DropdownMenu.Item
-						>
-						{#if draftId}<DropdownMenu.Item
-								class="min-h-11 text-destructive focus:text-destructive"
-								onclick={() => (showDeleteConfirm = true)}
-								disabled={isDeleting || isSaving || isSubmitting}
-								><Trash2Icon class="mr-2 size-4" />{m.common_delete()}</DropdownMenu.Item
-							>{/if}
-					</DropdownMenu.Content>
-				</DropdownMenu.Root>
-			</div>
 		</div>
 	{:else}
 		<div
@@ -2203,174 +2119,23 @@
 						{m.compose_accounts_loading()}
 					</Button>
 				{:else if accounts.length > 0}
-					<DropdownMenu.Root>
-						<DropdownMenu.Trigger>
-							{#snippet child({ props })}
-								<Button
-									{...props}
-									variant="ghost"
-									size="sm"
-									class="gap-1.5 text-xs"
-									aria-label={m.compose_publish_to()}
-									data-testid="composer-account-control"
-								>
-									<span class="hidden text-muted-foreground sm:inline">
-										{selectedAccountIds.length === accounts.length
-											? m.compose_all_accounts()
-											: m.compose_account_count({ count: selectedAccountIds.length })}
-									</span>
-									<span class="text-muted-foreground sm:hidden"
-										>{selectedAccountIds.length}/{accounts.length}</span
-									>
-									<ChevronDownIcon class="h-3 w-3" />
-								</Button>
-							{/snippet}
-						</DropdownMenu.Trigger>
-						<DropdownMenu.Content class="w-64" align="start">
-							<div class="flex items-center justify-between px-2 py-1.5">
-								<span class="text-sm font-medium text-muted-foreground"
-									>{m.compose_publish_to()}</span
-								>
-								<div class="flex gap-1">
-									<Button variant="ghost" size="xs" onclick={selectAllAccounts} class="h-5 text-xs"
-										>{m.common_all()}</Button
-									>
-									<Button variant="ghost" size="xs" onclick={clearAllAccounts} class="h-5 text-xs"
-										>{m.common_none()}</Button
-									>
-								</div>
-							</div>
-							<DropdownMenu.Separator />
-							{#each accounts as account (account.id)}
-								{@const isSelected = selectedAccountIds.includes(account.id)}
-								{@const isUnsynced = variants.has(account.id)}
-								<DropdownMenu.CheckboxItem
-									checked={isSelected}
-									onCheckedChange={() => toggleAccount(account.id)}
-									class="gap-2"
-								>
-									<PlatformIcon platform={getPlatformKey(account.platform)} class="h-4 w-4" />
-									<div class="flex flex-1 items-center gap-1.5">
-										<span class="text-sm">{getPlatformName(account.platform)}</span>
-										{#if account.account_username}<span class="text-xs text-muted-foreground"
-												>@{account.account_username}</span
-											>{/if}
-									</div>
-									{#if isUnsynced}<span class="text-xs text-amber-500">{m.compose_custom()}</span
-										>{/if}
-								</DropdownMenu.CheckboxItem>
-							{/each}
-						</DropdownMenu.Content>
-					</DropdownMenu.Root>
+					<ComposerAccountMenu
+						{accounts}
+						{selectedAccountIds}
+						customAccountIds={[...variants.keys()]}
+						activeAccountId={activeVariantAccountId}
+						triggerLabel={m.compose_publish_to()}
+						onToggle={(account) => toggleAccount(account.id)}
+						onSelectAll={selectAllAccounts}
+						onClearAll={clearAllAccounts}
+						onEditShared={() => activateVariantTab(null)}
+						onCustomize={(account) => editAccountVersion(account.id)}
+						onReset={(account) => resyncAccount(account.id)}
+					/>
 				{/if}
 			</div>
 
 			<div class="flex flex-wrap items-center gap-1.5 md:gap-2">
-				<!-- Per-account customization tabs -->
-				{#if selectedAccounts.length > 0}
-					<div
-						class="flex max-w-[min(62vw,30rem)] [scrollbar-width:none] items-center gap-1 overflow-x-auto overflow-y-hidden py-1 pr-2 pl-1 [-ms-overflow-style:none] sm:max-w-[min(58vw,34rem)] lg:max-w-[40rem] lg:pr-3 [&::-webkit-scrollbar]:hidden"
-					>
-						<Tooltip.Root>
-							<Tooltip.Trigger>
-								{#snippet child({ props })}
-									<button
-										{...props}
-										type="button"
-										class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border transition-colors {activeVariantAccountId ===
-										null
-											? 'border-foreground bg-foreground text-background'
-											: 'border-border bg-background text-foreground hover:border-foreground/30'}"
-										onclick={() => activateVariantTab(null)}
-										title={m.compose_all_synced()}
-										aria-label={m.compose_all_synced()}
-									>
-										<Link2Icon class="h-3.5 w-3.5" />
-									</button>
-								{/snippet}
-							</Tooltip.Trigger>
-							<Tooltip.Content><p class="text-sm">{m.compose_all_synced()}</p></Tooltip.Content>
-						</Tooltip.Root>
-
-						{#each selectedAccounts as account (account.id)}
-							{@const isUnsynced = variants.has(account.id)}
-							<Tooltip.Root>
-								<Tooltip.Trigger>
-									{#snippet child({ props })}
-										<button
-											{...props}
-											type="button"
-											class="relative z-0 flex h-8 w-8 shrink-0 items-center justify-center overflow-visible rounded-full border transition-colors {activeVariantAccountId ===
-											account.id
-												? isUnsynced
-													? 'border-amber-500/70 bg-amber-500/12 text-amber-700'
-													: 'border-foreground bg-foreground text-background'
-												: 'border-border bg-background text-foreground hover:border-foreground/30'}"
-											onclick={() => activateVariantTab(account.id)}
-											title={getPlatformName(account.platform)}
-											aria-label={`${getPlatformName(account.platform)}${account.account_username ? ` @${account.account_username}` : ''} · ${isUnsynced ? m.compose_custom_state() : m.compose_synced_state()}`}
-										>
-											<PlatformIcon
-												platform={getPlatformKey(account.platform)}
-												class="h-3.5 w-3.5"
-											/>
-											{#if isUnsynced}
-												<span
-													class="absolute -right-1 -bottom-1 z-10 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-amber-500 text-white shadow-sm ring-2 ring-background"
-												>
-													<UnlinkIcon class="h-2 w-2" />
-												</span>
-											{/if}
-										</button>
-									{/snippet}
-								</Tooltip.Trigger>
-								<Tooltip.Content>
-									<p class="text-sm">
-										{getPlatformName(account.platform)}{account.account_username
-											? ` @${account.account_username}`
-											: ''}{isUnsynced
-											? ` · ${m.compose_custom_state()}`
-											: ` · ${m.compose_synced_state()}`}
-									</p>
-								</Tooltip.Content>
-							</Tooltip.Root>
-						{/each}
-					</div>
-
-					{#if activeVariantAccount}
-						<Tooltip.Root>
-							<Tooltip.Trigger>
-								{#snippet child({ props })}
-									<button
-										{...props}
-										type="button"
-										class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-border bg-background text-foreground transition-colors hover:border-foreground/30"
-										onclick={() =>
-											activeVariantIsUnsynced
-												? resyncAccount(activeVariantAccount.id)
-												: unsyncAccount(activeVariantAccount.id)}
-										title={activeVariantIsUnsynced ? m.compose_sync_back() : m.compose_unsync()}
-										aria-label={activeVariantIsUnsynced
-											? m.compose_sync_back()
-											: m.compose_unsync()}
-									>
-										{#if activeVariantIsUnsynced}
-											<Link2Icon class="h-3.5 w-3.5" />
-										{:else}
-											<UnlinkIcon class="h-3.5 w-3.5" />
-										{/if}
-									</button>
-								{/snippet}
-							</Tooltip.Trigger>
-							<Tooltip.Content>
-								<p class="text-sm">
-									{activeVariantIsUnsynced ? m.compose_sync_back() : m.compose_unsync()}
-								</p>
-							</Tooltip.Content>
-						</Tooltip.Root>
-					{/if}
-				{/if}
-
 				<!-- Prompt -->
 				<Tooltip.Root>
 					<Tooltip.Trigger>

@@ -135,16 +135,37 @@ test("mobile shell and composer expose touch-first controls without overflow", a
     "media upload label",
   );
 
-  const circles = page.locator(
-    '[data-testid="mobile-rendition-all"], [data-testid="mobile-rendition-account"]',
+  await expect(
+    page.locator(
+      '[data-testid="mobile-rendition-all"], [data-testid="mobile-rendition-account"]',
+    ),
+  ).toHaveCount(0);
+
+  const compactModeBox = await page
+    .getByTestId("composer-mode-select")
+    .boundingBox();
+  expect(compactModeBox).not.toBeNull();
+  expect(compactModeBox!.width).toBe(44);
+
+  const accountControl = page.getByTestId("composer-account-control");
+  await expectMinimumTouchTarget(accountControl, "account control");
+  await expect(accountControl.getByTestId("composer-account-icon")).toHaveCount(
+    1,
   );
-  await expect(circles).toHaveCount(2);
-  for (const circle of await circles.all()) {
-    const circleBox = await circle.boundingBox();
-    expect(circleBox).not.toBeNull();
-    expect(circleBox!.width).toBe(circleBox!.height);
-    expect(circleBox!.width).toBeGreaterThanOrEqual(44);
-  }
+  await accountControl.click();
+  const accountRow = page.getByTestId("composer-account-row");
+  await expect(accountRow).toHaveCount(1);
+  await expectMinimumTouchTarget(
+    page.getByTestId("composer-account-customize"),
+    "account customization action",
+  );
+  await page.getByTestId("composer-account-customize").click();
+  await accountControl.click();
+  await expectMinimumTouchTarget(
+    page.getByTestId("composer-account-reset"),
+    "account reset action",
+  );
+  await page.keyboard.press("Escape");
 
   await page.setViewportSize({ width: 1280, height: 800 });
   await expect(page.getByTestId("mobile-composer-controls")).toHaveCount(0);

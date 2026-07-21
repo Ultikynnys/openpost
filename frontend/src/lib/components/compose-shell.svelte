@@ -47,7 +47,11 @@
 					onThreadStateChange={handleThreadStateChange}
 				>
 					{#snippet modeControl()}
-						<ComposeModeSelect {selectedMode} onModeChange={(mode) => (selectedMode = mode)} />
+						<ComposeModeSelect
+							{selectedMode}
+							compactOnNarrow
+							onModeChange={(mode) => (selectedMode = mode)}
+						/>
 					{/snippet}
 				</ComposeSimple>
 			</div>
@@ -55,7 +59,11 @@
 			{#key selectedMode}
 				<ComposeFocusedPublication mode={selectedMode}>
 					{#snippet modeControl()}
-						<ComposeModeSelect {selectedMode} onModeChange={(mode) => (selectedMode = mode)} />
+						<ComposeModeSelect
+							{selectedMode}
+							compactOnNarrow
+							onModeChange={(mode) => (selectedMode = mode)}
+						/>
 					{/snippet}
 				</ComposeFocusedPublication>
 			{/key}

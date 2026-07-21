@@ -9,9 +9,9 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Calendar } from '$lib/components/ui/calendar';
 	import { Input } from '$lib/components/ui/input';
-	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
 	import * as Popover from '$lib/components/ui/popover';
 	import { Textarea } from '$lib/components/ui/textarea';
+	import ComposerAccountMenu from './composer-account-menu.svelte';
 	import InlineNotice from './inline-notice.svelte';
 	import PageLoading from './page-loading.svelte';
 	import PlatformIcon from './platform-icon.svelte';
@@ -117,11 +117,6 @@
 	const selectedAccounts = $derived(
 		accounts.filter((account) => selectedAccountIds.includes(account.id))
 	);
-	const selectedAccountSummary = $derived.by(() => {
-		if (selectedAccountIds.length === 0) return m.compose_no_accounts();
-		if (selectedAccountIds.length === compatibleAccounts.length) return m.compose_all_accounts();
-		return m.compose_account_count({ count: selectedAccountIds.length });
-	});
 	const roleFields = $derived(roleFieldsForMode(mode, selectedAccounts));
 	const selectedCapabilities = $derived(
 		selectedAccounts
@@ -921,76 +916,22 @@
 							{m.common_cancel()}
 						</Button>
 					{/if}
-					<DropdownMenu.Root>
-						<DropdownMenu.Trigger>
-							{#snippet child({ props })}
-								<Button
-									{...props}
-									variant="ghost"
-									size="sm"
-									class="h-8 gap-1.5 px-2 text-xs text-muted-foreground"
-									aria-label={m.compose_target_accounts()}
-									disabled={loading || accountsLoading || accounts.length === 0}
-								>
-									<span class="max-w-28 truncate">{selectedAccountSummary}</span>
-								</Button>
-							{/snippet}
-						</DropdownMenu.Trigger>
-						<DropdownMenu.Content class="w-72" align="start">
-							<div class="flex items-center justify-between gap-3 px-2 py-1.5">
-								<div>
-									<p class="text-sm font-medium">{m.compose_publish_to()}</p>
-									<p class="text-xs text-muted-foreground">
-										{m.compose_accounts_compatible({ format: modeMeta.label })}
-									</p>
-								</div>
-								<div class="flex gap-1">
-									<Button variant="ghost" size="xs" class="h-6 text-xs" onclick={selectAllAccounts}
-										>{m.compose_all()}</Button
-									>
-									<Button variant="ghost" size="xs" class="h-6 text-xs" onclick={clearAllAccounts}
-										>{m.compose_none()}</Button
-									>
-								</div>
-							</div>
-							<DropdownMenu.Separator />
-							{#each accounts as account (account.id)}
-								{@const compatible = isAccountCompatible(account)}
-								<DropdownMenu.CheckboxItem
-									checked={selectedAccountIds.includes(account.id)}
-									disabled={!compatible}
-									onCheckedChange={() => toggleAccount(account)}
-									class="gap-2"
-								>
-									<PlatformIcon platform={account.platform} class="size-4" />
-									<span class="min-w-0 flex-1 truncate">{accountLabel(account)}</span>
-									<span class="text-xs text-muted-foreground">
-										{getPlatformName(account.platform)}
-									</span>
-								</DropdownMenu.CheckboxItem>
-							{/each}
-						</DropdownMenu.Content>
-					</DropdownMenu.Root>
+					{#if accounts.length > 0}
+						<ComposerAccountMenu
+							{accounts}
+							{selectedAccountIds}
+							compatibleAccountIds={compatibleAccounts.map((account) => account.id)}
+							triggerLabel={m.compose_target_accounts()}
+							triggerClass="h-11 md:h-8"
+							description={m.compose_accounts_compatible({ format: modeMeta.label })}
+							onToggle={toggleAccount}
+							onSelectAll={selectAllAccounts}
+							onClearAll={clearAllAccounts}
+						/>
+					{/if}
 				</div>
 
 				<div class="flex min-w-0 flex-wrap items-center justify-end gap-1.5 md:gap-2">
-					{#if selectedAccounts.length > 0}
-						<div class="hidden max-w-48 items-center gap-1 overflow-x-auto lg:flex">
-							{#each selectedAccounts as account (account.id)}
-								<button
-									type="button"
-									class="flex size-8 shrink-0 items-center justify-center rounded-full border bg-background text-foreground transition-colors hover:border-primary/60 hover:text-primary focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-									aria-label={m.compose_remove_target({
-										account: `@${accountLabel(account).replace(/^@/, '')}`
-									})}
-									title={`${accountLabel(account)} · ${getPlatformName(account.platform)}`}
-									onclick={() => toggleAccount(account)}
-								>
-									<PlatformIcon platform={account.platform} class="size-4" />
-								</button>
-							{/each}
-						</div>
-					{/if}
 					<Button
 						variant="ghost"
 						size="sm"
