@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/danielgtaylor/huma/v2"
@@ -18,6 +19,7 @@ import (
 type PromptHandler struct {
 	db             *bun.DB
 	auth           middleware.Authenticator
+	seedMu         sync.Mutex
 	seeded         bool
 	builtinPrompts []models.Prompt
 }
@@ -119,22 +121,25 @@ func NewPromptHandler(db *bun.DB, authenticator middleware.Authenticator) *Promp
 }
 
 func (h *PromptHandler) seedBuiltInPrompts(ctx context.Context) error {
+	h.seedMu.Lock()
+	defer h.seedMu.Unlock()
+
 	if h.seeded {
 		return nil
 	}
 
-	for _, prompt := range h.builtinPrompts {
-		var existing models.Prompt
-		err := h.db.NewSelect().
-			Model(&existing).
-			Where("id = ?", prompt.ID).
-			Scan(ctx)
-
-		if errors.Is(err, sql.ErrNoRows) {
-			prompt.CreatedAt = time.Now().UTC()
-			if _, err := h.db.NewInsert().Model(&prompt).Exec(ctx); err != nil {
-				return err
-			}
+	now := time.Now().UTC()
+	prompts := make([]models.Prompt, len(h.builtinPrompts))
+	copy(prompts, h.builtinPrompts)
+	for index := range prompts {
+		prompts[index].CreatedAt = now
+	}
+	if len(prompts) > 0 {
+		if _, err := h.db.NewInsert().
+			Model(&prompts).
+			On("CONFLICT (id) DO NOTHING").
+			Exec(ctx); err != nil {
+			return err
 		}
 	}
 
