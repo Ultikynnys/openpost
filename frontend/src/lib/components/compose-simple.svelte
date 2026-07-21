@@ -20,7 +20,7 @@
 	import PlatformIcon from './platform-icon.svelte';
 	import { Badge } from '$lib/components/ui/badge';
 	import { getPlatformKey, getPlatformName } from '$lib/utils';
-	import { CalendarDate, getLocalTimeZone, today, isEqualDay } from '@internationalized/date';
+	import { CalendarDate, isEqualDay } from '@internationalized/date';
 	import ArrowRightIcon from 'lucide-svelte/icons/arrow-right';
 	import LoaderIcon from 'lucide-svelte/icons/loader-2';
 	import PlusIcon from 'lucide-svelte/icons/plus';
@@ -54,7 +54,14 @@
 	import { minimumAccountCharacterLimit, uniquePlatformLimits } from './compose/platform-limits';
 	import { editorAccountIdAfterVariantLoad } from './compose/editor-target';
 	import { parseNaturalScheduleInput } from './compose/schedule-language';
+	import {
+		workspaceClock,
+		workspaceScheduleFromISO,
+		workspaceScheduleToISO
+	} from './compose/schedule-timezone';
 	import { soundPreferences } from '$lib/stores/sound-preferences.svelte';
+	import InlineNotice from './inline-notice.svelte';
+	import DestructiveConfirmDialog from './destructive-confirm-dialog.svelte';
 
 	// --------------------------------------------------------------------------
 	// Types
@@ -70,6 +77,13 @@
 		media: Array<{ media_id: string; mime_type?: string; alt_text?: string }>;
 		destinations: Array<{ social_account_id: string; platform: string }>;
 	}
+
+	type PersistedVariant = {
+		social_account_id: string;
+		content: string;
+		media_ids: string;
+		is_unsynced: boolean;
+	};
 
 	interface Props {
 		initialPost?: InitialPost;
@@ -114,6 +128,16 @@
 	let selectedAccountIds = $state<string[]>([]);
 	let loadingWorkspaces = $state(true);
 	let loadingAccounts = $state(false);
+	let workspaceLoadError = $state('');
+	let workspaceSettingsError = $state('');
+	let workspaceChangeNotice = $state('');
+	let accountLoadError = $state('');
+	let accountsWorkspaceId = $state('');
+	let accountRetryIds: string[] | undefined = undefined;
+	let workspaceRequestSequence = 0;
+	let accountRequestSequence = 0;
+	let nextSlotRequestSequence = 0;
+	let saveGeneration = 0;
 
 	let selectedDate = $state<CalendarDate | undefined>(undefined);
 	let selectedTime = $state<string | null>(null);
@@ -142,13 +166,20 @@
 	let lastSavedSnapshot = $state('');
 	let appliedInitialContextKey = $state('');
 	const textareaRefs = new SvelteMap<number, HTMLTextAreaElement>();
-	const scheduleInputPlaceholder = 'Write any time, e.g. "tomorrow at 9am" or "in 3 hours"';
 	const randomDelayOptions = [0, 5, 10, 15, 30, 45, 60];
 	const desktopComposerControls = new MediaQuery('min-width: 768px');
+	const accountControlLoading = $derived(loadingWorkspaces || loadingAccounts);
+	const selectedWorkspaceSettingsReady = $derived(
+		Boolean(selectedWorkspaceId) &&
+			workspaceCtx.currentWorkspace?.id === selectedWorkspaceId &&
+			workspaceCtx.settingsReady
+	);
 
 	// --------------------------------------------------------------------------
 	// Constants & derived values
 	// --------------------------------------------------------------------------
+	const scheduleTimezoneLabel = $derived(workspaceCtx.settings.timezone || 'UTC');
+
 	// Generate time slots dynamically from workspace settings
 	const allTimeSlots = $derived.by(() => {
 		const start = workspaceCtx.settings.slot_start_hour;
@@ -164,25 +195,15 @@
 		return slots;
 	});
 
-	const isToday = $derived(
-		selectedDate ? isEqualDay(selectedDate, today(getLocalTimeZone())) : false
-	);
-
-	const timeSlots = $derived.by(() => {
-		if (!isToday) return allTimeSlots;
-		const now = new Date();
-		const currentMinutes = now.getHours() * 60 + now.getMinutes();
-		return allTimeSlots.filter((slot) => {
-			const [h, m] = slot.split(':').map(Number);
-			return h * 60 + m > currentMinutes;
-		});
-	});
+	const timeSlots = $derived(selectedDate ? slotsForDate(selectedDate) : allTimeSlots);
 
 	function slotsForDate(date: CalendarDate): string[] {
-		if (!isEqualDay(date, today(getLocalTimeZone()))) return allTimeSlots;
-		const now = new Date();
-		const currentMinutes = now.getHours() * 60 + now.getMinutes();
-		return allTimeSlots.filter((slot) => {
+		const validSlots = allTimeSlots.filter((slot) =>
+			Boolean(workspaceScheduleToISO(date, slot, scheduleTimezoneLabel))
+		);
+		if (!isEqualDay(date, workspaceClock(scheduleTimezoneLabel).date)) return validSlots;
+		const currentMinutes = workspaceClock(scheduleTimezoneLabel).minutes;
+		return validSlots.filter((slot) => {
 			const [hours, minutes] = slot.split(':').map(Number);
 			return hours * 60 + minutes > currentMinutes;
 		});
@@ -249,7 +270,6 @@
 	const editorMaxChars = $derived.by(() => {
 		return minimumAccountCharacterLimit(editorLimitAccounts);
 	});
-	const scheduleTimezoneLabel = $derived(workspaceCtx.settings.timezone || getLocalTimeZone());
 	const effectiveRandomDelayMinutes = $derived.by(() => {
 		if (randomDelayOverride === 'default') return workspaceCtx.settings.random_delay_minutes;
 		const value = Number(randomDelayOverride);
@@ -286,10 +306,10 @@
 	}
 
 	function formatRandomDelay(minutes: number): string {
-		if (!Number.isFinite(minutes) || minutes <= 0) return 'Exact time';
-		if (minutes === 1) return '±1 minute';
-		if (minutes === 60) return '±1 hour';
-		return `±${minutes} minutes`;
+		if (!Number.isFinite(minutes) || minutes <= 0) return m.compose_exact_time();
+		if (minutes === 1) return m.compose_random_delay_one_minute();
+		if (minutes === 60) return m.compose_random_delay_one_hour();
+		return m.compose_random_delay_minutes({ minutes });
 	}
 
 	function normalizeRandomDelayValue(value: number | null | undefined): string {
@@ -317,10 +337,39 @@
 	function applyInitialScheduleDate(dateParam: string | null) {
 		const date = parseScheduleDateParam(dateParam);
 		if (!date) return;
+		if (date.compare(workspaceClock(scheduleTimezoneLabel).date) < 0) {
+			error = m.compose_schedule_future();
+			return;
+		}
 		selectedDate = date;
 		selectedTime = slotsForDate(date)[0] ?? allTimeSlots[0] ?? '09:00';
 		scheduleInput = '';
 		scheduleInputError = '';
+	}
+
+	async function ensureComposerWorkspace(workspaceId: string) {
+		const workspace = workspaces.find((candidate) => candidate.id === workspaceId);
+		if (!workspace) throw new Error(m.compose_load_workspaces_failed());
+
+		if (workspaceCtx.currentWorkspace?.id !== workspaceId) {
+			await workspaceCtx.setWorkspace(workspace);
+		} else if (!workspaceCtx.settingsReady) {
+			await workspaceCtx.loadSettings(workspaceId);
+		}
+
+		if (!workspaceCtx.settingsReady || workspaceCtx.currentWorkspace?.id !== workspaceId) {
+			throw new Error(m.compose_load_workspace_settings_failed());
+		}
+		workspaceSettingsError = '';
+	}
+
+	async function retryComposerWorkspaceSettings() {
+		if (!selectedWorkspaceId || workspaceCtx.currentWorkspace?.id !== selectedWorkspaceId) return;
+		workspaceSettingsError = '';
+		await workspaceCtx.loadSettings(selectedWorkspaceId);
+		if (!workspaceCtx.settingsReady) {
+			workspaceSettingsError = m.compose_load_workspace_settings_failed();
+		}
 	}
 
 	async function applyInitialComposerContext(
@@ -340,11 +389,28 @@
 			workspaceParam && workspaces.some((workspace) => workspace.id === workspaceParam)
 				? workspaceParam
 				: '';
-		if (nextWorkspaceId && nextWorkspaceId !== selectedWorkspaceId) {
-			selectedWorkspaceId = nextWorkspaceId;
-			variants = new Map();
-			activeVariantAccountId = null;
-			await loadAccounts(nextWorkspaceId);
+		if (
+			nextWorkspaceId &&
+			(nextWorkspaceId !== selectedWorkspaceId ||
+				workspaceCtx.currentWorkspace?.id !== nextWorkspaceId ||
+				!workspaceCtx.settingsReady)
+		) {
+			try {
+				await ensureComposerWorkspace(nextWorkspaceId);
+			} catch (cause) {
+				appliedInitialContextKey = '';
+				workspaceLoadError =
+					cause instanceof Error ? cause.message : m.compose_load_workspace_settings_failed();
+				return;
+			}
+			if (nextWorkspaceId !== selectedWorkspaceId) {
+				selectedWorkspaceId = nextWorkspaceId;
+				variants = new Map();
+				activeVariantAccountId = null;
+				await loadAccounts(nextWorkspaceId);
+			} else if (accountsWorkspaceId !== nextWorkspaceId) {
+				await loadAccounts(nextWorkspaceId);
+			}
 		}
 
 		applyInitialScheduleDate(dateParam);
@@ -404,10 +470,7 @@
 
 	function getScheduledAt(): string | undefined {
 		if (!selectedDate || !selectedTime) return undefined;
-		const [hours, minutes] = selectedTime.split(':').map(Number);
-		const date = selectedDate.toDate(getLocalTimeZone());
-		date.setHours(hours, minutes, 0, 0);
-		return date.toISOString();
+		return workspaceScheduleToISO(selectedDate, selectedTime, scheduleTimezoneLabel);
 	}
 
 	function getSaveSnapshot(): string {
@@ -451,6 +514,20 @@
 		return Object.fromEntries(
 			Array.from(variants.entries()).map(([accountId, values]) => [accountId, values])
 		);
+	}
+
+	function getPersistedVariantPayload(
+		sourceVariants: Map<string, Record<string, VariantPost>>,
+		sourcePosts: PostItem[]
+	): PersistedVariant[] {
+		const firstPost = sourcePosts[0];
+		if (!firstPost) return [];
+		return Array.from(sourceVariants.entries()).map(([accountId, values]) => ({
+			social_account_id: accountId,
+			content: values[firstPost.key]?.content ?? firstPost.content,
+			media_ids: JSON.stringify(values[firstPost.key]?.mediaIds ?? firstPost.mediaIds),
+			is_unsynced: true
+		}));
 	}
 
 	function makeVariantRecord(sourcePosts: PostItem[]): Record<string, VariantPost> {
@@ -569,11 +646,13 @@
 			randomDelayOverride = 'default';
 			if (workspaces.length > 0) {
 				selectedWorkspaceId = workspaceCtx.currentWorkspace?.id ?? workspaces[0].id;
+				await ensureComposerWorkspace(selectedWorkspaceId);
 				await loadAccounts(selectedWorkspaceId);
 			}
 			return;
 		}
 
+		await ensureComposerWorkspace(post.workspace_id);
 		draftId = post.id;
 		lastInitializedPostId = post.id;
 		selectedWorkspaceId = post.workspace_id;
@@ -633,9 +712,9 @@
 		activeVariantAccountId = null;
 
 		if (post.scheduled_at && post.scheduled_at !== '0001-01-01T00:00:00Z') {
-			const date = new Date(post.scheduled_at);
-			selectedDate = new CalendarDate(date.getFullYear(), date.getMonth() + 1, date.getDate());
-			selectedTime = `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
+			const schedule = workspaceScheduleFromISO(post.scheduled_at, scheduleTimezoneLabel);
+			selectedDate = schedule?.date;
+			selectedTime = schedule?.time ?? null;
 		} else {
 			selectedDate = undefined;
 			selectedTime = null;
@@ -648,17 +727,32 @@
 		lastSavedSnapshot = getSaveSnapshot();
 	}
 
-	onMount(async () => {
+	async function initializeComposer() {
+		const requestSequence = ++workspaceRequestSequence;
+		loadingWorkspaces = true;
+		workspaceLoadError = '';
+
 		try {
-			const { data, error: err } = await client.GET('/workspaces');
-			if (err || !data) throw new Error('Failed to load workspaces');
-			workspaces = data;
+			if (workspaceCtx.workspaces.length === 0) {
+				await workspaceCtx.initialize();
+			}
+			if (requestSequence !== workspaceRequestSequence) return;
+			workspaces = [...workspaceCtx.workspaces];
 			await initializeFromPost(initialPost);
 		} catch (e) {
 			console.error('Failed to load workspaces:', e);
+			if (requestSequence === workspaceRequestSequence) {
+				workspaceLoadError = m.compose_load_workspaces_failed();
+			}
 		} finally {
-			loadingWorkspaces = false;
+			if (requestSequence === workspaceRequestSequence) {
+				loadingWorkspaces = false;
+			}
 		}
+	}
+
+	onMount(() => {
+		void initializeComposer();
 	});
 
 	$effect(() => {
@@ -679,13 +773,23 @@
 	$effect(() => {
 		const workspaceId = workspaceCtx.currentWorkspace?.id ?? '';
 		if (
-			!loadingWorkspaces &&
 			!isEditMode &&
 			!initialWorkspaceId &&
 			workspaceId &&
-			workspaceId !== selectedWorkspaceId
+			workspaceId !== selectedWorkspaceId &&
+			(!loadingWorkspaces || Boolean(selectedWorkspaceId))
 		) {
 			void handleWorkspaceChange(workspaceId);
+		}
+	});
+
+	$effect(() => {
+		const workspaceId = workspaceCtx.currentWorkspace?.id ?? '';
+		const settingsFailed = workspaceCtx.settingsError;
+		if (workspaceId && workspaceId === selectedWorkspaceId && settingsFailed) {
+			workspaceSettingsError = m.compose_load_workspace_settings_failed();
+		} else if (workspaceCtx.settingsReady && workspaceId === selectedWorkspaceId) {
+			workspaceSettingsError = '';
 		}
 	});
 
@@ -777,35 +881,105 @@
 		workspaceId: string,
 		preferredAccountIds: string[] | undefined = undefined
 	) {
-		if (!workspaceId) return;
+		const requestSequence = ++accountRequestSequence;
+		if (!workspaceId) {
+			accountsWorkspaceId = '';
+			accounts = [];
+			selectedAccountIds = [];
+			accountLoadError = '';
+			loadingAccounts = false;
+			return;
+		}
+
+		const workspaceChanged = accountsWorkspaceId !== workspaceId;
+		const selectionToPreserve = preferredAccountIds
+			? [...preferredAccountIds]
+			: workspaceChanged
+				? undefined
+				: [...selectedAccountIds];
+		accountRetryIds = selectionToPreserve;
+		accountsWorkspaceId = workspaceId;
+		accountLoadError = '';
+		loadingAccounts = true;
+
+		if (workspaceChanged) {
+			accounts = [];
+			selectedAccountIds = [];
+			activeVariantAccountId = null;
+			if (preferredAccountIds === undefined) {
+				variants = new Map();
+			}
+		}
+
 		try {
 			const { data, error: err } = await client.GET('/accounts', {
 				params: { query: { workspace_id: workspaceId } }
 			});
-			accounts = data ?? [];
-			if (preferredAccountIds && preferredAccountIds.length > 0) {
-				const validIds = accounts.map((a) => a.id);
-				selectedAccountIds = preferredAccountIds.filter((id) => validIds.includes(id));
+			if (err) throw new Error(err.detail || m.compose_load_accounts_failed());
+			if (requestSequence !== accountRequestSequence || selectedWorkspaceId !== workspaceId) {
+				return;
+			}
+
+			const nextAccounts = data ?? [];
+			accounts = nextAccounts;
+			if (selectionToPreserve && selectionToPreserve.length > 0) {
+				const validIds = nextAccounts.map((account) => account.id);
+				selectedAccountIds = selectionToPreserve.filter((id) => validIds.includes(id));
 				if (selectedAccountIds.length === 0) {
-					selectedAccountIds = accounts.map((a) => a.id);
+					selectedAccountIds = nextAccounts.map((account) => account.id);
 				}
 			} else {
-				selectedAccountIds = accounts.map((a) => a.id);
+				selectedAccountIds = nextAccounts.map((account) => account.id);
 			}
-			sanitizeSelectedAccounts(accounts);
+			sanitizeSelectedAccounts(nextAccounts);
 		} catch (e) {
 			console.error('Failed to load accounts:', e);
-			accounts = [];
-			selectedAccountIds = [];
-			sanitizeSelectedAccounts([]);
+			if (requestSequence !== accountRequestSequence || selectedWorkspaceId !== workspaceId) {
+				return;
+			}
+			accountLoadError = m.compose_load_accounts_failed();
+		} finally {
+			if (requestSequence === accountRequestSequence && selectedWorkspaceId === workspaceId) {
+				loadingAccounts = false;
+			}
 		}
 	}
 
 	function handleWorkspaceChange(value: string) {
+		if (!value || value === selectedWorkspaceId) return;
+		const resetWorkspaceState = Boolean(
+			draftId ||
+			hasContent ||
+			selectedDate ||
+			selectedTime ||
+			posts.some((post) => post.mediaIds.length > 0)
+		);
+		clearAutoSaveTimer();
+		saveGeneration += 1;
+		nextSlotRequestSequence += 1;
+		suggestingSlot = false;
+		draftId = null;
+		lastSavedSnapshot = '';
+		isSaving = false;
+		showDeleteConfirm = false;
+		selectedDate = undefined;
+		selectedTime = null;
+		showScheduleDialog = false;
+		scheduleInput = '';
+		scheduleInputError = '';
+		randomDelayOverride = 'default';
+		posts = posts.map((post) => ({ ...post, mediaIds: [] }));
+		mediaAltTexts = new Map();
+		mediaMimeTypes = new Map();
+		mediaSizes = new Map();
 		selectedWorkspaceId = value;
+		accounts = [];
+		selectedAccountIds = [];
 		variants = new Map();
 		activeVariantAccountId = null;
-		loadAccounts(value);
+		accountLoadError = '';
+		workspaceChangeNotice = resetWorkspaceState ? m.compose_workspace_context_reset() : '';
+		void loadAccounts(value);
 	}
 
 	function toggleAccount(id: string) {
@@ -852,10 +1026,13 @@
 
 	async function saveDraft() {
 		if (!selectedWorkspaceId || !hasContent) return;
+		const generation = saveGeneration;
+		const workspaceId = selectedWorkspaceId;
+		const startingDraftId = draftId;
+		const snapshot = getSaveSnapshot();
 		isSaving = true;
 		error = '';
 
-		let createdDraftId: string | null = null;
 		try {
 			// Threads: store the encoded draft in the new dedicated
 			// `thread_draft` field, and put the first post's text in
@@ -864,55 +1041,71 @@
 			// server side; the prefix is no longer stored on the
 			// post row.
 			const isThreadDraft_ = isThread;
+			const sourcePosts = posts.map((post) => ({ ...post, mediaIds: [...post.mediaIds] }));
+			const sourceVariants = new Map(variants);
 			const threadDraft = isThreadDraft_
-				? encodeThreadDraft(posts, getVariantPayloadForSave())
+				? encodeThreadDraft(sourcePosts, getVariantPayloadForSave())
 				: null;
-			const draftContent = posts[0].content;
-			const draftMediaIds = isThreadDraft_ ? posts.flatMap((p) => p.mediaIds) : posts[0].mediaIds;
+			const draftContent = sourcePosts[0].content;
+			const draftMediaIds = isThreadDraft_
+				? sourcePosts.flatMap((post) => post.mediaIds)
+				: sourcePosts[0].mediaIds;
+			const variantPayload = getPersistedVariantPayload(sourceVariants, sourcePosts);
 
 			const defaultDelay = effectiveRandomDelayMinutes;
 			const body = {
-				workspace_id: selectedWorkspaceId,
+				workspace_id: workspaceId,
 				content: draftContent,
-				social_account_ids: selectedAccountIds,
+				social_account_ids: [...selectedAccountIds],
 				media_ids: draftMediaIds,
 				random_delay_minutes: defaultDelay,
 				...(threadDraft ? { thread_draft: threadDraft } : {})
 			};
-			if (draftId) {
+			let savedDraftId = startingDraftId;
+			if (startingDraftId) {
 				const { error: patchErr } = await client.PATCH('/posts/{id}', {
-					params: { path: { id: draftId } },
+					params: { path: { id: startingDraftId } },
 					body: {
 						content: draftContent,
 						scheduled_at: '',
-						social_account_ids: selectedAccountIds,
+						social_account_ids: body.social_account_ids,
 						media_ids: draftMediaIds,
 						random_delay_minutes: defaultDelay,
 						...(threadDraft ? { thread_draft: threadDraft } : {})
 					}
 				});
-				if (patchErr) throw new Error((patchErr as any).detail || 'Failed to update draft');
+				if (patchErr) throw new Error((patchErr as any).detail || m.compose_update_draft_failed());
 			} else {
 				const { data, error: postErr } = await client.POST('/posts', { body });
-				if (postErr) throw new Error((postErr as any).detail || 'Failed to save draft');
-				if (data?.id) {
-					draftId = data.id;
-					createdDraftId = data.id;
-				}
+				if (postErr) throw new Error((postErr as any).detail || m.compose_save_draft_failed());
+				savedDraftId = data?.id ?? null;
 			}
 
-			if (draftId && !isThread) {
-				await persistVariants(draftId);
+			if (savedDraftId && !isThreadDraft_) {
+				await persistVariants(savedDraftId, variantPayload);
 			}
 
-			lastSavedSnapshot = getSaveSnapshot();
+			if (
+				generation !== saveGeneration ||
+				selectedWorkspaceId !== workspaceId ||
+				draftId !== startingDraftId
+			) {
+				return;
+			}
+			const createdDraftId = startingDraftId ? null : savedDraftId;
+			if (createdDraftId) draftId = createdDraftId;
+			lastSavedSnapshot = snapshot;
 			ui.triggerRefresh();
 			if (createdDraftId) onDraftCreated?.(createdDraftId);
 		} catch (e) {
 			console.error('Failed to auto-save draft:', e);
-			error = (e as Error).message || 'Failed to save draft';
+			if (generation === saveGeneration && selectedWorkspaceId === workspaceId) {
+				error = (e as Error).message || m.compose_save_draft_failed();
+			}
 		} finally {
-			isSaving = false;
+			if (generation === saveGeneration && selectedWorkspaceId === workspaceId) {
+				isSaving = false;
+			}
 		}
 	}
 
@@ -925,7 +1118,7 @@
 			const { error: deleteErr } = await client.DELETE('/posts/{id}', {
 				params: { path: { id: draftId } }
 			});
-			if (deleteErr) throw new Error((deleteErr as any).detail || 'Failed to delete post');
+			if (deleteErr) throw new Error((deleteErr as any).detail || m.compose_delete_post_failed());
 
 			ui.triggerRefresh();
 			posts = [makeEmptyPost()];
@@ -940,7 +1133,7 @@
 			showDeleteConfirm = false;
 			onDeleted?.();
 		} catch (e) {
-			error = (e as Error).message || 'Failed to delete post';
+			error = (e as Error).message || m.compose_delete_post_failed();
 			soundPreferences.play('error');
 		} finally {
 			isDeleting = false;
@@ -968,7 +1161,16 @@
 			error = m.compose_select_date_time();
 			return;
 		}
+		if (selectedDate && selectedTime && !selectedWorkspaceSettingsReady) {
+			error = m.compose_load_workspace_settings_failed();
+			workspaceSettingsError = error;
+			return;
+		}
 		const scheduledAt = getScheduledAt();
+		if (selectedDate && selectedTime && !scheduledAt) {
+			error = m.compose_invalid_timezone_time();
+			return;
+		}
 		const isThreadDraft_ = isThread;
 		const threadDraft = isThreadDraft_ ? encodeThreadDraft(posts, getVariantPayloadForSave()) : '';
 		const draftContent = posts[0]?.content ?? '';
@@ -1002,7 +1204,7 @@
 					thread_draft: threadDraft
 				}
 			});
-			if (patchErr) throw new Error((patchErr as any).detail || 'Failed to save changes');
+			if (patchErr) throw new Error((patchErr as any).detail || m.compose_save_changes_failed());
 
 			if (!isThreadDraft_) {
 				await persistVariants(draftId);
@@ -1017,7 +1219,7 @@
 				setTimeout(() => onSuccess(), 500);
 			}
 		} catch (e) {
-			error = (e as Error).message || 'Failed to save changes';
+			error = (e as Error).message || m.compose_save_changes_failed();
 			soundPreferences.play('error');
 		} finally {
 			isSaving = false;
@@ -1049,7 +1251,7 @@
 				}))
 			}
 		});
-		if (createErr) throw new Error((createErr as any).detail || 'Failed to schedule thread');
+		if (createErr) throw new Error((createErr as any).detail || m.compose_schedule_thread_failed());
 		if (data?.post_ids && variants.size > 0) {
 			await persistThreadVariants(data.post_ids, validPosts);
 		}
@@ -1087,9 +1289,21 @@
 		if (publishNow) {
 			scheduledAt = new Date().toISOString();
 		} else {
+			if (!selectedWorkspaceSettingsReady) {
+				error = m.compose_load_workspace_settings_failed();
+				workspaceSettingsError = error;
+				return;
+			}
 			scheduledAt = getScheduledAt();
 			if (!scheduledAt) {
-				error = m.compose_select_date_time();
+				error =
+					selectedDate && selectedTime
+						? m.compose_invalid_timezone_time()
+						: m.compose_select_date_time();
+				return;
+			}
+			if (new Date(scheduledAt).getTime() <= Date.now()) {
+				error = m.compose_schedule_future();
 				return;
 			}
 		}
@@ -1126,7 +1340,7 @@
 						}))
 					}
 				});
-				if (err) throw new Error((err as any).detail || 'Failed to create thread');
+				if (err) throw new Error((err as any).detail || m.compose_create_thread_failed());
 				if (data?.post_ids && variants.size > 0) {
 					await persistThreadVariants(data.post_ids, validPosts);
 				}
@@ -1150,7 +1364,7 @@
 							...(clearThreadDraft !== undefined ? { thread_draft: clearThreadDraft } : {})
 						}
 					});
-					if (patchErr) throw new Error((patchErr as any).detail || 'Failed to update post');
+					if (patchErr) throw new Error((patchErr as any).detail || m.compose_update_post_failed());
 				} else {
 					const { data, error: postErr } = await client.POST('/posts', {
 						body: {
@@ -1162,7 +1376,7 @@
 							random_delay_minutes: randomDelay
 						}
 					});
-					if (postErr) throw new Error((postErr as any).detail || 'Failed to create post');
+					if (postErr) throw new Error((postErr as any).detail || m.compose_create_post_failed());
 					if (data?.id) draftId = data.id;
 				}
 
@@ -1191,7 +1405,7 @@
 				setTimeout(() => (success = ''), 3000);
 			}
 		} catch (e) {
-			error = (e as Error).message || 'Failed to publish';
+			error = (e as Error).message || m.compose_publish_failed();
 			soundPreferences.play('error');
 		} finally {
 			isSubmitting = false;
@@ -1267,7 +1481,7 @@
 			if (uploadedCount > 0) soundPreferences.play('success');
 		} catch (e) {
 			console.error('Failed to upload media:', e);
-			error = (e as Error).message || 'Failed to upload media';
+			error = (e as Error).message || m.compose_upload_failed();
 			soundPreferences.play('error');
 		} finally {
 			isUploading = false;
@@ -1488,30 +1702,24 @@
 		}
 	}
 
-	async function persistVariants(postId: string) {
-		if (isThread) return;
-
+	async function persistVariants(
+		postId: string,
+		variantPayload = getPersistedVariantPayload(variants, posts)
+	) {
 		const { error: deleteErr } = await client.DELETE('/posts/{id}/variants', {
 			params: { path: { id: postId } }
 		});
 		if (deleteErr) {
-			throw new Error((deleteErr as any).detail || 'Failed to reset variants');
+			throw new Error((deleteErr as any).detail || m.compose_reset_variants_failed());
 		}
 
-		if (variants.size === 0) return;
-
-		const variantPayload = Array.from(variants.entries()).map(([accountId, values]) => ({
-			social_account_id: accountId,
-			content: values[posts[0]?.key ?? '']?.content ?? posts[0]?.content ?? '',
-			media_ids: JSON.stringify(values[posts[0]?.key ?? '']?.mediaIds ?? posts[0]?.mediaIds ?? []),
-			is_unsynced: true
-		}));
+		if (variantPayload.length === 0) return;
 		const { error: upsertErr } = await client.PUT('/posts/{id}/variants', {
 			params: { path: { id: postId } },
 			body: { variants: variantPayload }
 		});
 		if (upsertErr) {
-			throw new Error((upsertErr as any).detail || 'Failed to save variants');
+			throw new Error((upsertErr as any).detail || m.compose_save_variants_failed());
 		}
 	}
 
@@ -1552,7 +1760,7 @@
 				body: { variants: payload }
 			});
 			if (upsertErr) {
-				throw new Error((upsertErr as any).detail || 'Failed to save thread variants');
+				throw new Error((upsertErr as any).detail || m.compose_save_thread_variants_failed());
 			}
 		}
 	}
@@ -1567,9 +1775,13 @@
 			return true;
 		}
 
-		const parsed = parseNaturalScheduleInput(trimmed);
+		const parsed = parseNaturalScheduleInput(trimmed, new Date(), scheduleTimezoneLabel);
 		if (!parsed) {
-			scheduleInputError = 'Could not understand that time.';
+			scheduleInputError = m.compose_parse_time_failed();
+			return false;
+		}
+		if (!workspaceScheduleToISO(parsed.date, parsed.time, scheduleTimezoneLabel)) {
+			scheduleInputError = m.compose_invalid_timezone_time();
 			return false;
 		}
 
@@ -1590,6 +1802,11 @@
 	}
 
 	function openScheduleDialog() {
+		if (!selectedWorkspaceSettingsReady) {
+			error = m.compose_load_workspace_settings_failed();
+			workspaceSettingsError = error;
+			return;
+		}
 		scheduleInput = '';
 		scheduleInputError = '';
 		showScheduleDialog = true;
@@ -1607,13 +1824,28 @@
 
 	async function fillNextSlot(showComposerError = false): Promise<boolean> {
 		if (!selectedWorkspaceId) return false;
+		if (!selectedWorkspaceSettingsReady) {
+			workspaceSettingsError = m.compose_load_workspace_settings_failed();
+			if (showComposerError) error = workspaceSettingsError;
+			return false;
+		}
+		const requestSequence = ++nextSlotRequestSequence;
+		const workspaceId = selectedWorkspaceId;
+		const timeZone = scheduleTimezoneLabel;
 		suggestingSlot = true;
 		try {
 			const { data, error: err } = await client.GET('/posting-schedules/next-slot', {
 				params: {
-					query: { workspace_id: selectedWorkspaceId }
+					query: { workspace_id: workspaceId }
 				}
 			});
+			if (
+				requestSequence !== nextSlotRequestSequence ||
+				selectedWorkspaceId !== workspaceId ||
+				scheduleTimezoneLabel !== timeZone
+			) {
+				return false;
+			}
 			if (err) throw err;
 			if (data?.slot_time) {
 				// Parse date directly from ISO string to avoid timezone conversion issues
@@ -1627,27 +1859,34 @@
 				selectedTime = `${rawHours.toString().padStart(2, '0')}:${rawMinutes.toString().padStart(2, '0')}`;
 
 				// Guard: if the slot is in the past, advance by one day
-				const slotDateTime = selectedDate.toDate(getLocalTimeZone());
-				slotDateTime.setHours(rawHours, rawMinutes, 0, 0);
-				if (slotDateTime.getTime() <= Date.now()) {
+				const slotInstant = workspaceScheduleToISO(selectedDate, selectedTime, timeZone);
+				if (!slotInstant) {
+					scheduleInputError = m.compose_invalid_timezone_time();
+					if (showComposerError) error = scheduleInputError;
+					return false;
+				}
+				if (slotInstant && new Date(slotInstant).getTime() <= Date.now()) {
 					selectedDate = selectedDate.add({ days: 1 });
 				}
 				scheduleInput = '';
 				scheduleInputError = '';
 				return true;
 			}
-			scheduleInputError = 'No free queue slot found.';
+			scheduleInputError = m.compose_no_free_slot();
 			if (showComposerError) {
 				error = scheduleInputError;
 			}
 		} catch (e) {
+			if (requestSequence !== nextSlotRequestSequence || selectedWorkspaceId !== workspaceId) {
+				return false;
+			}
 			console.error('Failed to get next available slot:', e);
-			scheduleInputError = 'Could not find the next free slot.';
+			scheduleInputError = m.compose_next_free_slot_failed();
 			if (showComposerError) {
 				error = scheduleInputError;
 			}
 		} finally {
-			suggestingSlot = false;
+			if (requestSequence === nextSlotRequestSequence) suggestingSlot = false;
 		}
 		return false;
 	}
@@ -1684,14 +1923,18 @@
 
 	function formatScheduledDisplay(): string {
 		if (!selectedDate) return m.compose_schedule();
-		const now = today(getLocalTimeZone());
+		const now = workspaceClock(scheduleTimezoneLabel).date;
 		const diffDays = selectedDate.compare(now);
 		const timeSuffix = selectedTime ? ` ${selectedTime}` : '';
 
 		if (diffDays === 0) return `${m.common_today()}${timeSuffix}`;
 		if (diffDays === 1) return `${m.common_tomorrow()}${timeSuffix}`;
-		const date = selectedDate.toDate(getLocalTimeZone());
-		return `${date.toLocaleDateString(getLocaleTag(), { month: 'short', day: 'numeric' })}${timeSuffix}`;
+		const date = selectedDate.toDate(scheduleTimezoneLabel);
+		return `${date.toLocaleDateString(getLocaleTag(), {
+			month: 'short',
+			day: 'numeric',
+			timeZone: scheduleTimezoneLabel
+		})}${timeSuffix}`;
 	}
 
 	function scheduleButtonLabel(): string {
@@ -1731,12 +1974,24 @@
 			<div class="flex min-w-0 items-center gap-1.5">
 				{#if modeControl}
 					<div
-						class="min-w-0 flex-1 [&_[data-testid=composer-mode-select]]:w-full [&_[data-testid=composer-mode-select]]:max-w-none"
+						class="min-w-0 flex-1 [&_[data-testid=composer-mode-select]]:h-11 [&_[data-testid=composer-mode-select]]:w-full [&_[data-testid=composer-mode-select]]:max-w-none"
 					>
 						{@render modeControl()}
 					</div>
 				{/if}
-				{#if accounts.length > 0}
+				{#if accountControlLoading}
+					<Button
+						type="button"
+						variant="outline"
+						size="icon"
+						class="size-11 shrink-0"
+						disabled
+						aria-label={m.compose_accounts_loading()}
+						data-testid="composer-account-loading"
+					>
+						<LoaderIcon class="size-4 animate-spin" />
+					</Button>
+				{:else if accounts.length > 0}
 					<DropdownMenu.Root>
 						<DropdownMenu.Trigger>
 							{#snippet child({ props })}
@@ -1923,25 +2178,6 @@
 					</DropdownMenu.Content>
 				</DropdownMenu.Root>
 			</div>
-			{#if showDeleteConfirm && draftId}
-				<div
-					class="mt-2 flex min-h-11 items-center justify-end gap-2 border-t border-border/70 pt-2"
-					data-testid="mobile-composer-delete-confirmation"
-				>
-					<span class="mr-auto text-xs text-destructive">{m.day_posts_delete_confirm()}</span>
-					<Button
-						variant="ghost"
-						size="sm"
-						onclick={() => (showDeleteConfirm = false)}
-						disabled={isDeleting}>{m.common_cancel()}</Button
-					>
-					<Button variant="destructive" size="sm" onclick={deleteDraft} disabled={isDeleting}
-						>{#if isDeleting}<LoaderIcon
-								class="size-3 animate-spin"
-							/>{/if}{m.common_delete()}</Button
-					>
-				</div>
-			{/if}
 		</div>
 	{:else}
 		<div
@@ -1954,7 +2190,19 @@
 				{/if}
 
 				<!-- Account selector -->
-				{#if accounts.length > 0}
+				{#if accountControlLoading}
+					<Button
+						type="button"
+						variant="ghost"
+						size="sm"
+						class="gap-1.5 text-xs"
+						disabled
+						data-testid="composer-account-loading"
+					>
+						<LoaderIcon class="size-3.5 animate-spin" />
+						{m.compose_accounts_loading()}
+					</Button>
+				{:else if accounts.length > 0}
 					<DropdownMenu.Root>
 						<DropdownMenu.Trigger>
 							{#snippet child({ props })}
@@ -1969,7 +2217,7 @@
 									<span class="hidden text-muted-foreground sm:inline">
 										{selectedAccountIds.length === accounts.length
 											? m.compose_all_accounts()
-											: `${selectedAccountIds.length} account${selectedAccountIds.length !== 1 ? 's' : ''}`}
+											: m.compose_account_count({ count: selectedAccountIds.length })}
 									</span>
 									<span class="text-muted-foreground sm:hidden"
 										>{selectedAccountIds.length}/{accounts.length}</span
@@ -2035,6 +2283,7 @@
 											: 'border-border bg-background text-foreground hover:border-foreground/30'}"
 										onclick={() => activateVariantTab(null)}
 										title={m.compose_all_synced()}
+										aria-label={m.compose_all_synced()}
 									>
 										<Link2Icon class="h-3.5 w-3.5" />
 									</button>
@@ -2059,6 +2308,7 @@
 												: 'border-border bg-background text-foreground hover:border-foreground/30'}"
 											onclick={() => activateVariantTab(account.id)}
 											title={getPlatformName(account.platform)}
+											aria-label={`${getPlatformName(account.platform)}${account.account_username ? ` @${account.account_username}` : ''} · ${isUnsynced ? m.compose_custom_state() : m.compose_synced_state()}`}
 										>
 											<PlatformIcon
 												platform={getPlatformKey(account.platform)}
@@ -2100,6 +2350,9 @@
 												? resyncAccount(activeVariantAccount.id)
 												: unsyncAccount(activeVariantAccount.id)}
 										title={activeVariantIsUnsynced ? m.compose_sync_back() : m.compose_unsync()}
+										aria-label={activeVariantIsUnsynced
+											? m.compose_sync_back()
+											: m.compose_unsync()}
 									>
 										{#if activeVariantIsUnsynced}
 											<Link2Icon class="h-3.5 w-3.5" />
@@ -2126,8 +2379,14 @@
 								{...props}
 								variant="ghost"
 								size="icon"
-								class="h-8 w-8 {showPromptCard ? 'text-amber-500' : ''}"
+								class={showPromptCard ? 'text-amber-500' : ''}
 								onclick={() => (showPromptCard ? dismissPrompt() : fetchRandomPrompt())}
+								title={showPromptCard
+									? m.compose_dismiss_inspiration()
+									: m.compose_need_inspiration()}
+								aria-label={showPromptCard
+									? m.compose_dismiss_inspiration()
+									: m.compose_need_inspiration()}
 							>
 								<LightbulbIcon class="h-4 w-4" />
 							</Button>
@@ -2141,52 +2400,25 @@
 				</Tooltip.Root>
 
 				{#if draftId}
-					{#if showDeleteConfirm}
-						<div class="flex items-center gap-1" data-testid="composer-delete-confirmation">
-							<span class="hidden text-xs text-destructive sm:inline"
-								>{m.day_posts_delete_confirm()}</span
-							>
-							<Button
-								variant="ghost"
-								size="xs"
-								class="h-7 text-xs"
-								onclick={() => (showDeleteConfirm = false)}
-								disabled={isDeleting}
-							>
-								{m.common_cancel()}
-							</Button>
-							<Button
-								variant="destructive"
-								size="xs"
-								class="h-7 gap-1 text-xs"
-								onclick={deleteDraft}
-								disabled={isDeleting}
-							>
-								{#if isDeleting}<LoaderIcon class="size-3 animate-spin" />{/if}
-								{m.common_delete()}
-							</Button>
-						</div>
-					{:else}
-						<Tooltip.Root>
-							<Tooltip.Trigger>
-								{#snippet child({ props })}
-									<Button
-										{...props}
-										variant="ghost"
-										size="icon"
-										class="h-8 w-8 text-muted-foreground hover:text-destructive"
-										aria-label={m.common_delete()}
-										data-testid="composer-delete"
-										onclick={() => (showDeleteConfirm = true)}
-										disabled={isDeleting || isSaving || isSubmitting}
-									>
-										<Trash2Icon class="size-4" />
-									</Button>
-								{/snippet}
-							</Tooltip.Trigger>
-							<Tooltip.Content><p class="text-sm">{m.common_delete()}</p></Tooltip.Content>
-						</Tooltip.Root>
-					{/if}
+					<Tooltip.Root>
+						<Tooltip.Trigger>
+							{#snippet child({ props })}
+								<Button
+									{...props}
+									variant="ghost"
+									size="icon"
+									class="h-8 w-8 text-muted-foreground hover:text-destructive"
+									aria-label={m.common_delete()}
+									data-testid="composer-delete"
+									onclick={() => (showDeleteConfirm = true)}
+									disabled={isDeleting || isSaving || isSubmitting}
+								>
+									<Trash2Icon class="size-4" />
+								</Button>
+							{/snippet}
+						</Tooltip.Trigger>
+						<Tooltip.Content><p class="text-sm">{m.common_delete()}</p></Tooltip.Content>
+					</Tooltip.Root>
 				{/if}
 
 				{#if isEditMode && !autoSavesDraft}
@@ -2269,9 +2501,7 @@
 			>
 				<Dialog.Title class="text-2xl font-semibold">{m.compose_schedule()}</Dialog.Title>
 				<Dialog.Description class="text-sm text-muted-foreground">
-					All times in <span class="rounded-md bg-muted px-1.5 py-0.5">{scheduleTimezoneLabel}</span
-					>
-					timezone.
+					{m.compose_schedule_timezone({ timezone: scheduleTimezoneLabel })}
 				</Dialog.Description>
 			</Dialog.Header>
 
@@ -2285,7 +2515,7 @@
 				>
 					<Input
 						bind:value={scheduleInput}
-						placeholder={scheduleInputPlaceholder}
+						placeholder={m.compose_schedule_input_placeholder()}
 						class="h-10 bg-muted/40 text-base"
 						aria-label={m.compose_schedule_time()}
 					/>
@@ -2307,28 +2537,32 @@
 						{:else}
 							<ArrowRightIcon class="h-4 w-4" />
 						{/if}
-						Next free slot
+						{m.compose_next_free_slot()}
 					</Button>
 					<Button
 						type="button"
 						variant="secondary"
 						class="h-10 justify-center"
 						onclick={() => {
-							const next = today(getLocalTimeZone()).add({ days: 1 });
+							const next = workspaceClock(scheduleTimezoneLabel).date.add({ days: 1 });
 							selectedDate = new CalendarDate(next.year, next.month, next.day);
 							selectedTime = '09:00';
 							scheduleInput = '';
 							scheduleInputError = '';
 						}}
 					>
-						Tomorrow 09:00
+						{m.compose_tomorrow_time({ time: '09:00' })}
 					</Button>
 					<Button
 						type="button"
 						variant="secondary"
 						class="h-10 justify-center"
 						onclick={() => {
-							const parsed = parseNaturalScheduleInput('in 3 hours');
+							const parsed = parseNaturalScheduleInput(
+								'in 3 hours',
+								new Date(),
+								scheduleTimezoneLabel
+							);
 							if (!parsed) return;
 							selectedDate = parsed.date;
 							selectedTime = parsed.time;
@@ -2336,7 +2570,7 @@
 							scheduleInputError = '';
 						}}
 					>
-						In 3 hours
+						{m.compose_in_three_hours()}
 					</Button>
 				</div>
 
@@ -2345,7 +2579,7 @@
 						<Calendar
 							type="single"
 							bind:value={selectedDate}
-							minValue={today(getLocalTimeZone())}
+							minValue={workspaceClock(scheduleTimezoneLabel).date}
 							class="bg-transparent p-0 [--cell-size:--spacing(9)]"
 							weekdayFormat="short"
 							weekStartsOn={workspaceCtx.weekStartsOn}
@@ -2358,7 +2592,7 @@
 						<div data-testid="schedule-dialog-time-list" class="p-2 md:max-h-72 md:overflow-y-auto">
 							{#if timeSlots.length === 0}
 								<p class="px-2 py-6 text-center text-xs text-muted-foreground">
-									No remaining slots today.
+									{m.compose_no_remaining_slots_today()}
 								</p>
 							{:else}
 								<div class="grid grid-cols-2 gap-1.5 md:grid-cols-1">
@@ -2369,7 +2603,7 @@
 											size="sm"
 											onclick={() => {
 												if (!selectedDate) {
-													const date = today(getLocalTimeZone());
+													const date = workspaceClock(scheduleTimezoneLabel).date;
 													selectedDate = new CalendarDate(date.year, date.month, date.day);
 												}
 												selectedTime = time;
@@ -2392,8 +2626,10 @@
 						<div class="space-y-1">
 							<div class="text-sm font-medium">{m.compose_randomize_time()}</div>
 							<div class="text-xs text-muted-foreground">
-								Workspace default: {formatRandomDelay(workspaceCtx.settings.random_delay_minutes)}.
-								Applies only to this post.
+								{m.compose_workspace_default({
+									delay: formatRandomDelay(workspaceCtx.settings.random_delay_minutes)
+								})}.
+								{m.compose_delay_applies_to_post()}
 							</div>
 						</div>
 						<Select.Root
@@ -2403,18 +2639,18 @@
 						>
 							<Select.Trigger class="w-full sm:w-52">
 								{#if randomDelayOverride === 'default'}
-									Workspace default ({formatRandomDelay(
-										workspaceCtx.settings.random_delay_minutes
-									)})
+									{m.compose_workspace_default({
+										delay: formatRandomDelay(workspaceCtx.settings.random_delay_minutes)
+									})}
 								{:else}
 									{formatRandomDelay(effectiveRandomDelayMinutes)}
 								{/if}
 							</Select.Trigger>
 							<Select.Content>
 								<Select.Item value="default">
-									Workspace default ({formatRandomDelay(
-										workspaceCtx.settings.random_delay_minutes
-									)})
+									{m.compose_workspace_default({
+										delay: formatRandomDelay(workspaceCtx.settings.random_delay_minutes)
+									})}
 								</Select.Item>
 								{#each randomDelaySelectOptions as minutes (minutes)}
 									<Select.Item value={String(minutes)}>{formatRandomDelay(minutes)}</Select.Item>
@@ -2427,9 +2663,9 @@
 				<div class="flex flex-wrap items-center justify-between gap-3 text-sm">
 					<div class="text-muted-foreground">
 						{#if selectedDate && selectedTime}
-							Selected <span class="font-medium text-foreground">{formatScheduledDisplay()}</span>
+							{m.compose_selected_schedule({ schedule: formatScheduledDisplay() })}
 						{:else}
-							Choose a date and time before scheduling.
+							{m.compose_select_date_time()}
 						{/if}
 					</div>
 					{#if selectedDate || selectedTime}
@@ -2472,19 +2708,78 @@
 	<!-- ====================================================================== -->
 	<!-- Messages -->
 	<!-- ====================================================================== -->
-	{#if error}
-		<div
-			class="mx-3 mt-2 rounded-md border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive md:mx-4 md:mt-3"
-		>
-			{error}
+	{#if workspaceLoadError}
+		<div class="contents" data-testid="composer-workspaces-load-error">
+			<InlineNotice tone="error" message={workspaceLoadError} class="mx-3 mt-2 md:mx-4 md:mt-3">
+				{#snippet actions()}
+					<Button
+						variant="outline"
+						size="sm"
+						onclick={initializeComposer}
+						disabled={loadingWorkspaces}
+					>
+						{m.common_retry()}
+					</Button>
+				{/snippet}
+			</InlineNotice>
+		</div>
+	{:else if workspaceSettingsError}
+		<div class="contents" data-testid="composer-workspace-settings-error">
+			<InlineNotice tone="error" message={workspaceSettingsError} class="mx-3 mt-2 md:mx-4 md:mt-3">
+				{#snippet actions()}
+					<Button
+						variant="outline"
+						size="sm"
+						onclick={retryComposerWorkspaceSettings}
+						disabled={workspaceCtx.settingsLoading}
+					>
+						{m.common_retry()}
+					</Button>
+				{/snippet}
+			</InlineNotice>
+		</div>
+	{:else if accountLoadError}
+		<div class="contents" data-testid="composer-accounts-load-error">
+			<InlineNotice tone="error" message={accountLoadError} class="mx-3 mt-2 md:mx-4 md:mt-3">
+				{#snippet actions()}
+					<Button
+						variant="outline"
+						size="sm"
+						onclick={() => loadAccounts(selectedWorkspaceId, accountRetryIds)}
+						disabled={loadingAccounts}
+					>
+						{m.common_retry()}
+					</Button>
+				{/snippet}
+			</InlineNotice>
 		</div>
 	{/if}
+	{#if workspaceChangeNotice}
+		<InlineNotice
+			tone="info"
+			message={workspaceChangeNotice}
+			class="mx-3 mt-2 md:mx-4 md:mt-3"
+			onDismiss={() => (workspaceChangeNotice = '')}
+			dismissLabel={m.common_dismiss()}
+		/>
+	{/if}
+	{#if error}
+		<InlineNotice
+			tone="error"
+			message={error}
+			class="mx-3 mt-2 md:mx-4 md:mt-3"
+			onDismiss={() => (error = '')}
+			dismissLabel={m.common_dismiss()}
+		/>
+	{/if}
 	{#if success}
-		<div
-			class="mx-3 mt-2 rounded-md border border-green-500/20 bg-green-500/10 px-3 py-2 text-sm text-green-600 md:mx-4 md:mt-3"
-		>
-			{success}
-		</div>
+		<InlineNotice
+			tone="success"
+			message={success}
+			class="mx-3 mt-2 md:mx-4 md:mt-3"
+			onDismiss={() => (success = '')}
+			dismissLabel={m.common_dismiss()}
+		/>
 	{/if}
 	{#if mediaCapabilityWarnings.length > 0}
 		<div
@@ -2508,25 +2803,29 @@
 			<div class="mx-auto w-full max-w-2xl px-3 py-4 md:px-6 md:py-6">
 				<!-- Prompt Card -->
 				{#if showPromptCard}
-					<div class="relative mb-5 rounded border bg-muted/30 p-4">
+					<div class="relative mb-5 rounded border bg-muted/30 p-4 pr-24">
 						<div class="absolute top-2 right-2 flex items-center gap-1">
-							<button
-								type="button"
-								class="rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+							<Button
+								variant="ghost"
+								size="icon"
+								class="text-muted-foreground"
 								onclick={fetchRandomPrompt}
 								disabled={loadingPrompt}
 								title={m.compose_shuffle()}
+								aria-label={m.compose_shuffle()}
 							>
-								<ShuffleIcon class="h-3.5 w-3.5" />
-							</button>
-							<button
-								type="button"
-								class="rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+								<ShuffleIcon class="size-4" />
+							</Button>
+							<Button
+								variant="ghost"
+								size="icon"
+								class="text-muted-foreground"
 								onclick={dismissPrompt}
 								title={m.compose_close()}
+								aria-label={m.compose_close()}
 							>
-								<XIcon class="h-3.5 w-3.5" />
-							</button>
+								<XIcon class="size-4" />
+							</Button>
 						</div>
 						{#if loadingPrompt}
 							<div class="space-y-2 py-2">
@@ -2771,7 +3070,7 @@
 													}}
 												/>
 												<div
-													class="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+													class="flex size-11 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground md:size-7"
 												>
 													<ImageIcon class="h-3.5 w-3.5" />
 												</div>
@@ -2826,7 +3125,7 @@
 												<Tooltip.Content>
 													<div class="space-y-1">
 														<p class="text-xs font-medium text-muted-foreground">
-															Character limits
+															{m.compose_character_limits()}
 														</p>
 														{#each editorPlatformLimits as pl (pl.key)}
 															<div class="flex items-center justify-between gap-2 text-xs">
@@ -2850,7 +3149,7 @@
 
 											<button
 												type="button"
-												class="flex items-center gap-1.5 text-xs text-muted-foreground/60 transition-colors hover:text-foreground"
+												class="-mx-2 flex min-h-11 items-center gap-1.5 px-2 text-xs text-muted-foreground/60 transition-colors hover:text-foreground md:mx-0 md:min-h-7 md:px-0"
 												onclick={addPost}
 											>
 												<PlusIcon class="h-3 w-3" />{m.compose_add_post()}
@@ -2878,3 +3177,10 @@
 		</div>
 	</div>
 </div>
+
+<DestructiveConfirmDialog
+	bind:open={showDeleteConfirm}
+	title={m.sidebar_delete_draft_confirm()}
+	description={m.compose_delete_draft_body()}
+	onConfirm={deleteDraft}
+/>

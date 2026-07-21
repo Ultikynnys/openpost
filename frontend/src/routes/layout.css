@@ -51,6 +51,7 @@
 
 :root {
 	--radius: 0.75rem;
+	--mobile-bottom-nav-clearance: calc(4.5rem + env(safe-area-inset-bottom));
 	--background: oklch(0.985 0.002 80);
 	--foreground: oklch(0.2 0.01 50);
 	--card: oklch(1 0 0);
@@ -219,5 +220,13 @@
 	[role='menuitem'],
 	[role='option'] {
 		min-height: 44px;
+	}
+
+	button,
+	[data-slot='button'],
+	[role='button'],
+	[role='menuitem'],
+	[role='option'] {
+		min-width: 44px;
 	}
 }

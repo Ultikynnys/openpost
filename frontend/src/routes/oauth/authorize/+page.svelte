@@ -1,26 +1,25 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import { page } from '$app/stores';
 	import { Button } from '$lib/components/ui/button';
 	import { Badge } from '$lib/components/ui/badge';
 	import * as Select from '$lib/components/ui/select';
-	import {
-		Card,
-		CardContent,
-		CardDescription,
-		CardHeader,
-		CardTitle
-	} from '$lib/components/ui/card';
+	import InlineNotice from '$lib/components/inline-notice.svelte';
+	import StandaloneShell from '$lib/components/standalone-shell.svelte';
 	import { client } from '$lib/api/client';
 	import { auth } from '$lib/stores/auth';
 	import { workspaceCtx } from '$lib/stores/workspace.svelte';
+	import { m } from '$lib/paraglide/messages';
 	import BotIcon from 'lucide-svelte/icons/bot';
+	import LoaderIcon from 'lucide-svelte/icons/loader-2';
 	import ShieldCheckIcon from 'lucide-svelte/icons/shield-check';
 	import XIcon from 'lucide-svelte/icons/x';
 
 	let authState = $derived($auth);
 	let error = $state('');
 	let submitting = $state(false);
+	let pendingDecision = $state<boolean | null>(null);
 	let oauthWorkspaceScope = $state('current');
 
 	let params = $derived({
@@ -47,13 +46,14 @@
 	const oauthWorkspaceOptions = $derived([
 		{
 			value: 'current',
-			label: 'Current workspace',
-			description: workspaceCtx.currentWorkspace?.name ?? 'Selected workspace only.'
+			label: m.oauth_authorize_current_workspace(),
+			description:
+				workspaceCtx.currentWorkspace?.name ?? m.oauth_authorize_current_workspace_description()
 		},
 		{
 			value: 'all',
-			label: 'All workspaces',
-			description: 'Every workspace you can access.'
+			label: m.oauth_authorize_all_workspaces(),
+			description: m.oauth_authorize_all_workspaces_description()
 		}
 	]);
 	const selectedOAuthWorkspaceScope = $derived(
@@ -70,7 +70,7 @@
 	}
 
 	function clientDisplayName(clientID: string) {
-		if (!clientID) return 'MCP client';
+		if (!clientID) return m.oauth_authorize_default_client();
 		const host = hostname(clientID);
 		if (host) return host;
 		return clientID;
@@ -85,11 +85,11 @@
 	}
 
 	function validateRequest() {
-		if (params.response_type !== 'code') return 'This OAuth request is missing response_type=code.';
-		if (!params.client_id) return 'This OAuth request is missing a client ID.';
-		if (!params.redirect_uri) return 'This OAuth request is missing a redirect URI.';
-		if (!params.code_challenge) return 'This OAuth request is missing a PKCE challenge.';
-		if (params.code_challenge_method !== 'S256') return 'This OAuth request must use PKCE S256.';
+		if (params.response_type !== 'code') return m.oauth_authorize_missing_response_type();
+		if (!params.client_id) return m.oauth_authorize_missing_client_id();
+		if (!params.redirect_uri) return m.oauth_authorize_missing_redirect_uri();
+		if (!params.code_challenge) return m.oauth_authorize_missing_pkce_challenge();
+		if (params.code_challenge_method !== 'S256') return m.oauth_authorize_pkce_s256_required();
 		return '';
 	}
 
@@ -104,6 +104,7 @@
 		}
 
 		submitting = true;
+		pendingDecision = approved;
 		error = '';
 		const workspaceID =
 			approved && oauthWorkspaceScope === 'current'
@@ -115,111 +116,114 @@
 				body: { ...params, approved, ...(workspaceID ? { workspace_id: workspaceID } : {}) }
 			});
 			if (apiError || !data?.redirect_url) {
-				throw new Error(apiError?.detail ?? 'Failed to finish OAuth authorization');
+				throw new Error(apiError?.detail ?? m.oauth_authorize_failed());
 			}
 			window.location.href = data.redirect_url;
 		} catch (e) {
 			error = (e as Error).message;
 		} finally {
 			submitting = false;
+			pendingDecision = null;
 		}
 	}
 
 	$effect(() => {
 		if (authState.isLoading) return;
 		if (!authState.user && !authState.isAuthenticated) {
-			goto(loginRedirect());
+			goto(resolve(loginRedirect() as '/'));
 			return;
 		}
 	});
 </script>
 
 <svelte:head>
-	<title>Authorize OpenPost MCP</title>
+	<title>{m.oauth_authorize_title()}</title>
 </svelte:head>
 
-<div class="flex min-h-[80vh] flex-col items-center justify-center px-4 py-10">
-	<Card class="w-full max-w-lg">
-		<CardHeader class="space-y-3 text-center">
-			<div class="mx-auto flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
-				<BotIcon class="h-6 w-6 text-primary" />
-			</div>
-			<CardTitle class="text-lg font-semibold">Authorize OpenPost MCP</CardTitle>
-			<CardDescription>
-				{clientLabel} wants to connect to your OpenPost assistant tools.
-			</CardDescription>
-		</CardHeader>
-		<CardContent>
-			{#if error || requestError}
-				<div
-					class="mb-4 rounded-md border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive"
-				>
-					{error || requestError}
-				</div>
+{#snippet botIcon()}
+	<BotIcon class="size-6" />
+{/snippet}
+
+<StandaloneShell
+	title={m.oauth_authorize_heading()}
+	description={m.oauth_authorize_description({ client: clientLabel })}
+	icon={botIcon}
+	maxWidth="lg"
+>
+	{#if error || requestError}
+		<InlineNotice tone="error" message={error || requestError} class="mb-4" />
+	{/if}
+
+	<div class="space-y-5">
+		<div class="rounded-md border bg-muted/30 p-4">
+			<div class="text-base font-semibold">{clientLabel}</div>
+			{#if redirectHost}
+				<p class="mt-1 text-sm text-muted-foreground">
+					{m.oauth_authorize_redirects_to({ host: redirectHost })}
+				</p>
 			{/if}
+		</div>
 
-			<div class="space-y-5">
-				<div class="rounded-md border bg-muted/30 p-4">
-					<div class="text-xl font-semibold">{clientLabel}</div>
-					{#if redirectHost}
-						<p class="mt-1 text-sm text-muted-foreground">Redirects to {redirectHost}</p>
-					{/if}
-				</div>
-
-				<div class="space-y-2">
-					<p class="text-sm font-medium">Requested access</p>
-					<div class="flex flex-wrap gap-2">
-						{#each scopes as scope (scope)}
-							<Badge>{scope}</Badge>
-						{:else}
-							<Badge>mcp:full</Badge>
-						{/each}
-					</div>
-				</div>
-
-				<div class="space-y-2">
-					<p class="text-sm font-medium">Access boundary</p>
-					<Select.Root
-						type="single"
-						value={oauthWorkspaceScope}
-						onValueChange={(value) => value && (oauthWorkspaceScope = value)}
-					>
-						<Select.Trigger class="w-full">{selectedOAuthWorkspaceScope.label}</Select.Trigger>
-						<Select.Content>
-							{#each oauthWorkspaceOptions as option (option.value)}
-								<Select.Item value={option.value}>
-									<div class="flex flex-col gap-0.5 text-left">
-										<span>{option.label}</span>
-										<span class="text-xs text-muted-foreground">{option.description}</span>
-									</div>
-								</Select.Item>
-							{/each}
-						</Select.Content>
-					</Select.Root>
-				</div>
-
-				<div class="flex flex-col gap-2 sm:flex-row">
-					<Button
-						class="w-full gap-2"
-						onclick={() => submit(true)}
-						disabled={submitting ||
-							!!requestError ||
-							(oauthWorkspaceScope === 'current' && !workspaceCtx.currentWorkspace)}
-					>
-						<ShieldCheckIcon class="h-4 w-4" />
-						Authorize
-					</Button>
-					<Button
-						variant="outline"
-						class="w-full gap-2"
-						onclick={() => submit(false)}
-						disabled={submitting || !params.redirect_uri}
-					>
-						<XIcon class="h-4 w-4" />
-						Deny
-					</Button>
-				</div>
+		<div class="space-y-2">
+			<p class="text-sm font-medium">{m.oauth_authorize_requested_access()}</p>
+			<div class="flex flex-wrap gap-2">
+				{#each scopes as scope (scope)}
+					<Badge>{scope}</Badge>
+				{:else}
+					<Badge>mcp:full</Badge>
+				{/each}
 			</div>
-		</CardContent>
-	</Card>
-</div>
+		</div>
+
+		<div class="space-y-2">
+			<p class="text-sm font-medium">{m.oauth_authorize_access_boundary()}</p>
+			<Select.Root
+				type="single"
+				value={oauthWorkspaceScope}
+				onValueChange={(value) => value && (oauthWorkspaceScope = value)}
+			>
+				<Select.Trigger class="w-full">{selectedOAuthWorkspaceScope.label}</Select.Trigger>
+				<Select.Content>
+					{#each oauthWorkspaceOptions as option (option.value)}
+						<Select.Item value={option.value}>
+							<div class="flex flex-col gap-0.5 text-left">
+								<span>{option.label}</span>
+								<span class="text-xs text-muted-foreground">{option.description}</span>
+							</div>
+						</Select.Item>
+					{/each}
+				</Select.Content>
+			</Select.Root>
+		</div>
+
+		<div class="flex flex-col gap-2 sm:flex-row">
+			<Button
+				class="w-full gap-2"
+				onclick={() => submit(true)}
+				disabled={submitting ||
+					!!requestError ||
+					(oauthWorkspaceScope === 'current' && !workspaceCtx.currentWorkspace)}
+			>
+				{#if pendingDecision === true}
+					<LoaderIcon class="size-4 animate-spin" />
+				{:else}
+					<ShieldCheckIcon class="h-4 w-4" />
+				{/if}
+				{pendingDecision === true ? m.oauth_authorize_authorizing() : m.oauth_authorize_approve()}
+			</Button>
+			<Button
+				variant="outline"
+				class="w-full gap-2"
+				onclick={() => submit(false)}
+				disabled={submitting || !params.redirect_uri || !params.client_id}
+			>
+				{#if pendingDecision === false}
+					<LoaderIcon class="size-4 animate-spin" />
+				{:else}
+					<XIcon class="h-4 w-4" />
+				{/if}
+				{pendingDecision === false ? m.oauth_authorize_denying() : m.oauth_authorize_deny()}
+			</Button>
+		</div>
+	</div>
+</StandaloneShell>

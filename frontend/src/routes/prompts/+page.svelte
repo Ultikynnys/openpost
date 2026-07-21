@@ -5,7 +5,13 @@
 	import { ui } from '$lib/stores/ui.svelte';
 	import { Button } from '$lib/components/ui/button';
 	import * as Select from '$lib/components/ui/select';
+	import * as Dialog from '$lib/components/ui/dialog';
 	import PageContainer from '$lib/components/page-container.svelte';
+	import PageLoading from '$lib/components/page-loading.svelte';
+	import EmptyState from '$lib/components/empty-state.svelte';
+	import InlineNotice from '$lib/components/inline-notice.svelte';
+	import AppToast from '$lib/components/app-toast.svelte';
+	import DestructiveConfirmDialog from '$lib/components/destructive-confirm-dialog.svelte';
 	import LoaderIcon from 'lucide-svelte/icons/loader-2';
 	import LightbulbIcon from 'lucide-svelte/icons/lightbulb';
 	import PlusIcon from 'lucide-svelte/icons/plus';
@@ -13,6 +19,7 @@
 	import ShuffleIcon from 'lucide-svelte/icons/shuffle';
 	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
 	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import { m } from '$lib/paraglide/messages';
 
 	interface Prompt {
@@ -29,51 +36,71 @@
 	let categories = $state<string[]>([]);
 	let loading = $state(false);
 	let loadingCategories = $state(false);
+	let categoriesError = $state('');
 	let selectedCategory = $state<string>('all');
 	let showAddPrompt = $state(false);
 	let newPromptText = $state('');
 	let newPromptCategory = $state('');
 	let submitting = $state(false);
 	let toastMessage = $state('');
+	let toastTone = $state<'success' | 'error'>('success');
+	let error = $state('');
+	let hasLoaded = $state(false);
+	let deleteDialogOpen = $state(false);
+	let promptToDelete = $state.raw<Prompt | null>(null);
+	let promptsRequestSequence = 0;
+	let categoriesRequested = false;
 
 	interface PromptsQueryParams {
 		workspace_id: string;
 		category?: string;
 	}
 
-	async function loadPrompts() {
-		if (!workspaceCtx.currentWorkspace) return;
+	async function loadPrompts(
+		workspaceID = workspaceCtx.currentWorkspace?.id ?? '',
+		category = selectedCategory
+	) {
+		if (!workspaceID) return;
+		const requestSequence = ++promptsRequestSequence;
 		loading = true;
+		error = '';
 		try {
-			const params: PromptsQueryParams = { workspace_id: workspaceCtx.currentWorkspace.id };
-			if (selectedCategory !== 'all') {
-				params.category = selectedCategory;
+			const params: PromptsQueryParams = { workspace_id: workspaceID };
+			if (category !== 'all') {
+				params.category = category;
 			}
 			const { data, error: err } = await client.GET('/prompts', {
 				params: { query: params }
 			});
-			if (!err && data) {
-				prompts = data;
-			}
+			if (err) throw new Error(err.detail || m.prompts_load_failed());
+			if (requestSequence !== promptsRequestSequence) return;
+			prompts = data ?? [];
 		} catch (e) {
+			if (requestSequence !== promptsRequestSequence) return;
 			console.error('Failed to load prompts:', e);
+			error = (e as Error).message || m.prompts_load_failed();
+			prompts = [];
 		} finally {
-			loading = false;
+			if (requestSequence === promptsRequestSequence) {
+				loading = false;
+				hasLoaded = true;
+			}
 		}
 	}
 
 	async function loadCategories() {
 		loadingCategories = true;
+		categoriesError = '';
 		try {
 			const { data, error: err } = await client.GET('/prompts/categories');
-			if (!err && data) {
-				categories = data.categories ?? [];
-				if (categories.length > 0 && !newPromptCategory) {
-					newPromptCategory = categories[0];
-				}
+			if (err) throw new Error(err.detail || m.prompts_load_failed());
+			categories = data?.categories ?? [];
+			if (categories.length > 0 && !newPromptCategory) {
+				newPromptCategory = categories[0];
 			}
 		} catch (e) {
 			console.error('Failed to load categories:', e);
+			categoriesError = (e as Error).message || m.prompts_load_failed();
 		} finally {
 			loadingCategories = false;
 		}
@@ -93,25 +120,36 @@
 			if (err) throw err;
 			showAddPrompt = false;
 			newPromptText = '';
-			toastMessage = 'Prompt created successfully';
+			toastTone = 'success';
+			toastMessage = m.prompts_created();
 			await loadPrompts();
 		} catch (e) {
-			toastMessage = (e as Error).message || 'Failed to create prompt';
+			toastTone = 'error';
+			toastMessage = (e as Error).message || m.prompts_create_failed();
 		} finally {
 			submitting = false;
 		}
 	}
 
-	async function deletePrompt(id: string) {
+	function requestDeletePrompt(prompt: Prompt) {
+		promptToDelete = prompt;
+		deleteDialogOpen = true;
+	}
+
+	async function deletePrompt() {
+		const prompt = promptToDelete;
+		if (!prompt) return;
 		try {
 			const { error: err } = await client.DELETE('/prompts/{id}', {
-				params: { path: { id } }
+				params: { path: { id: prompt.id } }
 			});
 			if (err) throw err;
-			toastMessage = 'Prompt deleted successfully';
+			toastTone = 'success';
+			toastMessage = m.prompts_deleted();
 			await loadPrompts();
 		} catch (e) {
-			toastMessage = (e as Error).message || 'Failed to delete prompt';
+			toastTone = 'error';
+			toastMessage = (e as Error).message || m.prompts_delete_failed();
 		}
 	}
 
@@ -125,24 +163,31 @@
 			const { data, error: err } = await client.GET('/prompts/random', {
 				params: { query: params }
 			});
-			if (!err && data) {
-				ui.setPrompt(data.text);
-				goto('/');
-			}
+			if (err) throw new Error(err.detail || m.prompts_random_failed());
+			if (!data) throw new Error(m.prompts_random_failed());
+			ui.setPrompt(data.text);
+			goto(resolve('/'));
 		} catch (e) {
 			console.error('Failed to get random prompt:', e);
+			toastTone = 'error';
+			toastMessage = (e as Error).message || m.prompts_random_failed();
 		}
 	}
 
 	function usePrompt(text: string) {
 		ui.setPrompt(text);
-		goto('/');
+		goto(resolve('/'));
 	}
 
 	$effect(() => {
-		if (workspaceCtx.currentWorkspace) {
-			loadPrompts();
-			loadCategories();
+		const workspaceID = workspaceCtx.currentWorkspace?.id ?? '';
+		const category = selectedCategory;
+		if (workspaceID) {
+			void loadPrompts(workspaceID, category);
+			if (!categoriesRequested) {
+				categoriesRequested = true;
+				void loadCategories();
+			}
 		}
 	});
 </script>
@@ -152,82 +197,87 @@
 </svelte:head>
 
 {#if toastMessage}
-	<div
-		class="pointer-events-auto fixed right-4 bottom-4 z-50 mb-4 flex items-center gap-2 rounded-lg border bg-background px-4 py-3 shadow-lg"
-	>
-		<span class="text-sm">{toastMessage}</span>
-		<button onclick={() => (toastMessage = '')}>
-			<span class="sr-only">{m.common_close()}</span>
-			<svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-				<path d="M18 6L6 18M6 6l12 12" />
-			</svg>
-		</button>
-	</div>
+	<AppToast
+		message={toastMessage}
+		tone={toastTone}
+		dismissLabel={m.common_close()}
+		onDismiss={() => (toastMessage = '')}
+	/>
 {/if}
 
 <PageContainer
 	title={m.prompts_title()}
-	description="Get inspired with writing prompts for your social media content"
+	description={m.prompts_description()}
 	icon={LightbulbIcon}
-	loading={!workspaceCtx.currentWorkspace}
-	loadingMessage="Loading workspace..."
+	loading={!workspaceCtx.currentWorkspace || (!hasLoaded && loading)}
+	loadingMessage={m.common_loading()}
+	loadingLayout="grid"
+	loadingActionCount={3}
 >
+	{#snippet actions()}
+		{#if loadingCategories}
+			<Skeleton class="h-9 w-32" />
+		{:else}
+			<Select.Root
+				type="single"
+				value={selectedCategory}
+				onValueChange={(value) => {
+					selectedCategory = value;
+				}}
+			>
+				<Select.Trigger class="w-40">
+					{selectedCategory === 'all' ? m.prompts_all_categories() : selectedCategory}
+				</Select.Trigger>
+				<Select.Content>
+					<Select.Item value="all">{m.prompts_all_categories()}</Select.Item>
+					{#each categories as category (category)}
+						<Select.Item value={category}>{category}</Select.Item>
+					{/each}
+				</Select.Content>
+			</Select.Root>
+		{/if}
+		<Button onclick={getRandomPrompt} variant="outline" class="gap-2">
+			<ShuffleIcon class="size-4" />
+			{m.prompts_random()}
+		</Button>
+		<Button onclick={() => (showAddPrompt = true)} class="gap-2">
+			<PlusIcon class="size-4" />
+			{m.prompts_add()}
+		</Button>
+	{/snippet}
+
 	<div class="space-y-6">
-		<!-- Header Actions -->
-		<div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-			<div class="flex items-center gap-2">
-				{#if loadingCategories}
-					<div class="h-9 w-32 animate-pulse rounded-md bg-muted"></div>
-				{:else}
-					<Select.Root
-						type="single"
-						value={selectedCategory}
-						onValueChange={(v) => {
-							selectedCategory = v;
-							loadPrompts();
-						}}
-					>
-						<Select.Trigger class="w-40">
-							{selectedCategory === 'all' ? m.prompts_all_categories() : selectedCategory}
-						</Select.Trigger>
-						<Select.Content>
-							<Select.Item value="all">{m.prompts_all_categories()}</Select.Item>
-							{#each categories as category (category)}
-								<Select.Item value={category}>{category}</Select.Item>
-							{/each}
-						</Select.Content>
-					</Select.Root>
-				{/if}
-			</div>
-			<div class="flex gap-2">
-				<Button onclick={getRandomPrompt} variant="outline" class="gap-2">
-					<ShuffleIcon class="h-4 w-4" />
-					{m.prompts_random()}
-				</Button>
-				<Button onclick={() => (showAddPrompt = true)} class="gap-2">
-					<PlusIcon class="h-4 w-4" />
-					{m.prompts_add()}
-				</Button>
-			</div>
-		</div>
+		{#if categoriesError}
+			<InlineNotice tone="error" message={categoriesError}>
+				{#snippet actions()}
+					<Button variant="outline" size="sm" onclick={loadCategories}>
+						{m.common_retry()}
+					</Button>
+				{/snippet}
+			</InlineNotice>
+		{/if}
+		{#if error}
+			<InlineNotice
+				tone="error"
+				message={error}
+				dismissLabel={m.common_close()}
+				onDismiss={() => (error = '')}
+			/>
+		{/if}
 
 		<!-- Prompts Grid -->
-		{#if loading}
-			<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-				{#each Array(6) as _, index (index)}
-					<div class="h-32 rounded-lg bg-muted">
-						<Skeleton class="h-full w-full" />
-					</div>
-				{/each}
-			</div>
-		{:else if prompts.length === 0}
-			<div class="rounded-lg border border-dashed p-12 text-center">
-				<LightbulbIcon class="mx-auto h-12 w-12 text-muted-foreground" />
-				<h3 class="mt-4 text-base font-semibold">{m.prompts_empty()}</h3>
-				<p class="mt-2 text-sm text-muted-foreground">
-					{m.prompts_empty_body()}
-				</p>
-			</div>
+		{#if loading && hasLoaded}
+			<PageLoading layout="grid" label={m.common_loading()} items={8} />
+		{:else if !error && prompts.length === 0}
+			<EmptyState
+				icon={LightbulbIcon}
+				title={m.prompts_empty()}
+				description={m.prompts_empty_body()}
+				actionLabel={m.prompts_add()}
+				onAction={() => (showAddPrompt = true)}
+				variant="dashed"
+				size="lg"
+			/>
 		{:else}
 			{@const groupedPrompts = prompts.reduce(
 				(acc, prompt) => {
@@ -246,41 +296,39 @@
 						</h2>
 						<div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
 							{#each categoryPrompts as prompt (prompt.id)}
-								<div
-									role="button"
-									tabindex="0"
-									class="group relative flex cursor-pointer flex-col items-start rounded-md border bg-card p-3 text-left transition-all hover:border-accent hover:bg-accent"
-									onclick={() => usePrompt(prompt.text)}
-									onkeydown={(e) => {
-										if (e.key === 'Enter' || e.key === ' ') {
-											e.preventDefault();
-											usePrompt(prompt.text);
-										}
-									}}
+								<article
+									class="group flex flex-col rounded-md border bg-card transition-colors hover:border-accent"
 								>
-									<p
-										class="line-clamp-4 text-sm leading-relaxed text-foreground/80 group-hover:text-foreground"
+									<button
+										type="button"
+										class="min-h-24 flex-1 rounded-t-md p-3 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+										onclick={() => usePrompt(prompt.text)}
 									>
-										{prompt.text}
-									</p>
-									<div class="mt-2 flex w-full items-center justify-between">
+										<p
+											class="line-clamp-4 text-sm leading-relaxed text-foreground/80 group-hover:text-foreground"
+										>
+											{prompt.text}
+										</p>
+									</button>
+									<div
+										class="flex min-h-10 w-full items-center justify-between border-t px-3 py-1.5"
+									>
 										<span class="text-xs text-muted-foreground">
-											{prompt.is_built_in ? 'Built-in' : 'Custom'}
+											{prompt.is_built_in ? m.prompts_built_in() : m.prompts_custom()}
 										</span>
 										{#if !prompt.is_built_in}
-											<button
-												type="button"
-												class="text-xs text-muted-foreground hover:text-destructive"
-												onclick={(e) => {
-													e.stopPropagation();
-													deletePrompt(prompt.id);
-												}}
+											<Button
+												variant="ghost"
+												size="icon-sm"
+												class="text-muted-foreground hover:text-destructive"
+												onclick={() => requestDeletePrompt(prompt)}
+												aria-label={m.prompts_delete()}
 											>
-												<TrashIcon class="h-3.5 w-3.5" />
-											</button>
+												<TrashIcon class="size-3.5" />
+											</Button>
 										{/if}
 									</div>
-								</div>
+								</article>
 							{/each}
 						</div>
 					</section>
@@ -288,21 +336,19 @@
 			</div>
 		{/if}
 
-		<!-- Add Prompt Modal -->
-		{#if showAddPrompt}
-			<div
-				role="presentation"
-				class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-				onclick={(e) => {
-					if (e.target === e.currentTarget) showAddPrompt = false;
-				}}
-				onkeydown={(e) => {
-					if (e.key === 'Escape') showAddPrompt = false;
-				}}
-			>
-				<div class="w-full max-w-md rounded-lg border bg-background p-6 shadow-lg">
-					<h3 class="mb-4 text-lg font-semibold">{m.prompts_add_title()}</h3>
-					<div class="space-y-4">
+		<Dialog.Root bind:open={showAddPrompt}>
+			<Dialog.Content class="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-md">
+				<form
+					onsubmit={(event) => {
+						event.preventDefault();
+						void addPrompt();
+					}}
+				>
+					<Dialog.Header>
+						<Dialog.Title>{m.prompts_add_title()}</Dialog.Title>
+						<Dialog.Description>{m.prompts_description()}</Dialog.Description>
+					</Dialog.Header>
+					<div class="space-y-4 py-4">
 						<div class="space-y-2">
 							<label class="text-sm font-medium" for="prompt-text">{m.prompts_text()}</label>
 							<textarea
@@ -317,7 +363,7 @@
 							<label class="text-sm font-medium" for="prompt-category">{m.prompts_category()}</label
 							>
 							{#if loadingCategories}
-								<div class="h-9 animate-pulse rounded-md bg-muted"></div>
+								<Skeleton class="h-9 w-full" />
 							{:else}
 								<Select.Root
 									type="single"
@@ -336,22 +382,30 @@
 							{/if}
 						</div>
 					</div>
-					<div class="mt-6 flex justify-end gap-2">
+					<Dialog.Footer>
 						<Button onclick={() => (showAddPrompt = false)} variant="outline"
 							>{m.common_cancel()}</Button
 						>
 						<Button
-							onclick={addPrompt}
+							type="submit"
 							disabled={!newPromptText.trim() || !newPromptCategory || submitting}
 						>
 							{#if submitting}
 								<LoaderIcon class="mr-2 h-4 w-4 animate-spin" />
 							{/if}
-							Add Prompt
+							{m.prompts_add()}
 						</Button>
-					</div>
-				</div>
-			</div>
-		{/if}
+					</Dialog.Footer>
+				</form>
+			</Dialog.Content>
+		</Dialog.Root>
 	</div>
 </PageContainer>
+
+<DestructiveConfirmDialog
+	bind:open={deleteDialogOpen}
+	title={m.prompts_delete_title()}
+	description={m.prompts_delete_body()}
+	confirmLabel={m.prompts_delete()}
+	onConfirm={deletePrompt}
+/>

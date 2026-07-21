@@ -11,26 +11,32 @@
 	import { goto, replaceState } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import PageContainer from '$lib/components/page-container.svelte';
+	import PageLoading from '$lib/components/page-loading.svelte';
 	import EmptyState from '$lib/components/empty-state.svelte';
+	import SectionHeader from '$lib/components/section-header.svelte';
+	import InlineNotice from '$lib/components/inline-notice.svelte';
+	import AppToast from '$lib/components/app-toast.svelte';
+	import DestructiveConfirmDialog from '$lib/components/destructive-confirm-dialog.svelte';
 	import MoreHorizontalIcon from 'lucide-svelte/icons/ellipsis';
 	import { getPlatformName, getPlatformColor } from '$lib/utils';
 	import PlatformIcon from '$lib/components/platform-icon.svelte';
 	import LoaderIcon from 'lucide-svelte/icons/loader-2';
 	import UsersIcon from 'lucide-svelte/icons/users';
-	import XIcon from 'lucide-svelte/icons/x';
-	import { Skeleton } from '$lib/components/ui/skeleton';
 	import { m } from '$lib/paraglide/messages';
 
-	let workspaces = $state<Workspace[] | null>(null);
-	let selectedWorkspaceId = $state('');
+	let workspaces = $derived<Workspace[]>(workspaceCtx.workspaces);
+	let selectedWorkspaceId = $derived(workspaceCtx.currentWorkspace?.id ?? '');
 	let loading = $state(true);
 	let error = $state('');
 
 	let accounts = $state<SocialAccount[]>([]);
 	let accountsLoading = $state(false);
+	let accountsLoadError = $state('');
+	let accountsRequestSequence = 0;
 
 	let providerEntries = $state.raw<ProviderInfo[]>([]);
 	let providersLoading = $state(false);
+	let providersLoadError = $state('');
 	let mastodonModalOpen = $state(false);
 	let customMastodonInstance = $state('');
 	let customMastodonLoading = $state(false);
@@ -52,6 +58,7 @@
 	let toastMessage = $state('');
 	let toastActionHref = $state('');
 	let toastActionLabel = $state('');
+	let toastTone = $state<'neutral' | 'error'>('neutral');
 
 	let blueskyModalOpen = $state(false);
 	let blueskyHandle = $state('');
@@ -64,19 +71,27 @@
 	let editAccountSlug = $state('');
 	let editAccountLoading = $state(false);
 	let editAccountError = $state('');
+	let disconnectDialogOpen = $state(false);
+	let accountToDisconnect = $state.raw<SocialAccount | null>(null);
 	const accountSlugPattern = '[a-z0-9][a-z0-9-]{0,62}';
 
 	function clearToast() {
 		toastMessage = '';
 		toastActionHref = '';
 		toastActionLabel = '';
+		toastTone = 'neutral';
 	}
 
-	function showToast(message: string, action?: { href: string; label: string }) {
+	function showToast(
+		message: string,
+		action?: { href: string; label: string },
+		tone: 'neutral' | 'error' = 'error'
+	) {
 		error = '';
 		toastMessage = message;
 		toastActionHref = action?.href ?? '';
 		toastActionLabel = action?.label ?? '';
+		toastTone = tone;
 	}
 
 	function connectErrorMessage(value: unknown, fallback: string): string {
@@ -99,44 +114,69 @@
 		);
 	}
 
-	async function loadAccounts() {
-		if (!selectedWorkspaceId) return;
+	async function loadAccounts(workspaceID = selectedWorkspaceId) {
+		if (!workspaceID) {
+			accountsRequestSequence++;
+			accountsLoading = false;
+			accountsLoadError = '';
+			accounts = [];
+			return;
+		}
+		const requestSequence = ++accountsRequestSequence;
+		const isCurrentRequest = () =>
+			requestSequence === accountsRequestSequence && selectedWorkspaceId === workspaceID;
 		accountsLoading = true;
+		accountsLoadError = '';
+		accounts = [];
 		try {
 			const { data, error: err } = await client.GET('/accounts', {
-				params: { query: { workspace_id: selectedWorkspaceId } }
+				params: { query: { workspace_id: workspaceID } }
 			});
+			if (err) throw new Error(err.detail || m.accounts_load_failed());
+			if (!isCurrentRequest()) return;
 			accounts = data ?? [];
 		} catch (e) {
+			if (!isCurrentRequest()) return;
 			console.error('Failed to load accounts:', e);
-			accounts = [];
+			accountsLoadError = (e as Error).message;
 		} finally {
-			accountsLoading = false;
+			if (isCurrentRequest()) accountsLoading = false;
 		}
 	}
 
 	async function loadProviders() {
 		providersLoading = true;
+		providersLoadError = '';
 		try {
 			const { data, error: err } = await client.GET('/accounts/providers');
-			if (err) throw new Error(err.detail ?? 'Failed to load account providers');
+			if (err) throw new Error(err.detail ?? m.accounts_providers_load_failed());
 			providerEntries = data ?? [];
 		} catch (e) {
 			console.error('Failed to load account providers:', e);
+			providersLoadError =
+				e instanceof Error && e.message ? e.message : m.accounts_providers_load_failed();
 			providerEntries = [];
 		} finally {
 			providersLoading = false;
 		}
 	}
 
-	async function disconnectAccount(accountId: string) {
+	function requestDisconnectAccount(account: SocialAccount) {
+		accountToDisconnect = account;
+		disconnectDialogOpen = true;
+	}
+
+	async function disconnectAccount() {
+		const account = accountToDisconnect;
+		if (!account) return;
 		try {
-			await client.DELETE('/accounts/{account_id}', {
-				params: { path: { account_id: accountId } }
+			const { error: err } = await client.DELETE('/accounts/{account_id}', {
+				params: { path: { account_id: account.id } }
 			});
+			if (err) throw new Error(err.detail || m.accounts_disconnect_failed());
 			await loadAccounts();
 		} catch (e) {
-			error = (e as Error).message;
+			error = e instanceof Error && e.message ? e.message : m.accounts_disconnect_failed();
 		}
 	}
 
@@ -180,7 +220,8 @@
 			editingAccount = null;
 			await loadAccounts();
 		} catch (e) {
-			editAccountError = (e as Error).message;
+			editAccountError =
+				e instanceof Error && e.message ? e.message : m.accounts_update_slug_failed();
 		} finally {
 			editAccountLoading = false;
 		}
@@ -202,16 +243,6 @@
 					if (workspaceCtx.workspaces.length === 0) {
 						await workspaceCtx.initialize();
 					}
-					const { data, error: err } = await client.GET('/workspaces');
-					if (err) throw new Error(err.detail ?? 'Failed to load workspaces');
-					workspaces = data ?? [];
-					if (workspaces && workspaces.length > 0) {
-						const currentWorkspace = workspaces.find(
-							(workspace) => workspace.id === workspaceCtx.currentWorkspace?.id
-						);
-						selectedWorkspaceId = (currentWorkspace ?? workspaces[0]).id;
-						await loadAccounts();
-					}
 					await loadProviders();
 				} catch (e) {
 					console.error('Failed to load workspaces:', e);
@@ -224,11 +255,8 @@
 	});
 
 	$effect(() => {
-		if (selectedWorkspaceId) {
-			loadAccounts();
-		} else {
-			accounts = [];
-		}
+		const workspaceID = selectedWorkspaceId;
+		void loadAccounts(workspaceID);
 	});
 
 	async function connectTwitter() {
@@ -240,8 +268,9 @@
 			const { data, error: err } = await client.GET('/accounts/{platform}/auth-url', {
 				params: { path: { platform: 'x' }, query: { workspace_id: selectedWorkspaceId } }
 			});
-			if (err) throw new Error((err as any).detail || 'Failed to get X auth URL');
-			if (data?.url) window.location.href = data.url;
+			if (err) throw new Error((err as any).detail || m.accounts_x_connection_start_failed());
+			if (!data?.url) throw new Error(m.accounts_x_connection_start_failed());
+			window.location.href = data.url;
 		} catch (e) {
 			showConnectError(e);
 		}
@@ -317,7 +346,7 @@
 			blueskyModalOpen = false;
 			await loadAccounts();
 		} catch (e) {
-			blueskyError = (e as Error).message;
+			blueskyError = e instanceof Error && e.message ? e.message : m.accounts_login_failed();
 			showConnectError(e, m.accounts_login_failed());
 		} finally {
 			blueskyLoading = false;
@@ -338,7 +367,8 @@
 				}
 			});
 			if (err) throw new Error((err as any).detail || m.accounts_connect_failed());
-			if (data?.url) window.location.href = data.url;
+			if (!data?.url) throw new Error(m.accounts_connect_failed());
+			window.location.href = data.url;
 		} catch (e) {
 			showConnectError(e);
 		}
@@ -505,7 +535,9 @@
 			const { error: err } = await client.GET('/accounts/{platform}/auth-url', {
 				params: { path: { platform: 'mastodon' }, query }
 			});
-			if (err) throw new Error((err as any).detail || 'Could not start Mastodon connection');
+			if (err) {
+				throw new Error((err as any).detail || m.accounts_mastodon_connection_start_failed());
+			}
 			return true;
 		} catch (e) {
 			mastodonError = connectErrorMessage(e, m.accounts_connect_failed());
@@ -559,86 +591,78 @@
 </svelte:head>
 
 {#if toastMessage}
-	<div
-		class="pointer-events-auto fixed right-4 bottom-4 z-50 mb-4 flex max-w-md items-center gap-3 rounded-lg border bg-background px-4 py-3 shadow-lg"
-	>
-		<span class="text-sm" role="status" aria-live="polite">{toastMessage}</span>
-		{#if toastActionHref && toastActionLabel}
-			<Button href={toastActionHref} variant="outline" size="sm">{toastActionLabel}</Button>
-		{/if}
-		<button
-			onclick={clearToast}
-			class="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-			aria-label={m.common_dismiss()}
-		>
-			<XIcon class="size-4" />
-		</button>
-	</div>
+	<AppToast
+		message={toastMessage}
+		tone={toastTone}
+		onDismiss={clearToast}
+		dismissLabel={m.common_dismiss()}
+		actionHref={toastActionHref || undefined}
+		actionLabel={toastActionLabel || undefined}
+	/>
 {/if}
 
-{#if loading}
-	<div class="mx-auto w-full max-w-6xl px-4 py-6 lg:px-8">
-		<div class="mb-6 flex items-center gap-2">
-			<Skeleton class="h-8 w-8 rounded-md" />
-			<Skeleton class="h-7 w-48" />
-		</div>
-		<div class="mb-6"><Skeleton class="h-9 w-40 rounded-md" /></div>
-		<div class="mb-8 space-y-3">
-			<Skeleton class="h-6 w-32" />
-			<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-				<Skeleton class="h-28 rounded-lg" />
-				<Skeleton class="h-28 rounded-lg" />
-			</div>
-		</div>
-		<div class="space-y-3">
-			<Skeleton class="h-6 w-40" />
-			<Skeleton class="h-40 rounded-lg" />
-		</div>
-	</div>
-{:else if !workspaces || workspaces.length === 0}
-	<div class="mx-auto max-w-md px-4 py-16 text-center">
-		<h2 class="mb-2 text-xl font-semibold">{m.accounts_no_workspaces_title()}</h2>
-		<p class="mb-4 text-sm text-muted-foreground">
-			{m.accounts_no_workspaces_body()}
-		</p>
-		<Button href="/">{m.accounts_create_workspace()}</Button>
-	</div>
-{:else}
-	<PageContainer
-		title={m.accounts_heading()}
-		description={m.accounts_description()}
-		icon={UsersIcon}
-	>
+<PageContainer
+	title={m.accounts_heading()}
+	description={m.accounts_description()}
+	icon={UsersIcon}
+	{loading}
+	loadingLayout="sections"
+	loadingMessage={m.common_loading()}
+>
+	{#if !workspaces || workspaces.length === 0}
+		<EmptyState
+			icon={UsersIcon}
+			title={m.accounts_no_workspaces_title()}
+			description={m.accounts_no_workspaces_body()}
+			actionLabel={m.accounts_create_workspace()}
+			actionHref="/"
+			variant="muted"
+		/>
+	{:else}
 		{#if error}
-			<div
-				class="mb-4 flex items-center gap-2 rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive"
-			>
-				{error}
-				<Button variant="ghost" size="sm" onclick={() => (error = '')}>{m.common_dismiss()}</Button>
-			</div>
+			<InlineNotice
+				tone="error"
+				message={error}
+				dismissLabel={m.common_dismiss()}
+				onDismiss={() => (error = '')}
+				class="mb-6"
+			/>
 		{/if}
 
 		<!-- Connected Accounts -->
 		<div class="mb-10">
-			<div class="mb-4 flex flex-wrap items-end justify-between gap-3">
-				<div>
-					<h2 class="text-base font-semibold">{m.accounts_connected_channels()}</h2>
-					<p class="mt-1 text-sm text-muted-foreground">
-						{m.accounts_connection_summary({
+			<SectionHeader
+				title={m.accounts_connected_channels()}
+				description={accountsLoadError
+					? undefined
+					: m.accounts_connection_summary({
 							count: accounts.length,
 							workspace: selectedWorkspaceName
 						})}
-					</p>
-				</div>
-				<Button href="/" size="sm">{m.accounts_create_post()}</Button>
-			</div>
+				class="mb-4"
+			>
+				{#snippet actions()}
+					<Button href="/" size="sm">{m.accounts_create_post()}</Button>
+				{/snippet}
+			</SectionHeader>
 
-			{#if accountsLoading}
-				<div class="space-y-3">
-					<Skeleton class="h-12 rounded-lg" />
-					<Skeleton class="h-12 rounded-lg" />
-					<Skeleton class="h-12 rounded-lg" />
+			{#if accountsLoadError}
+				<div data-testid="accounts-load-error">
+					<InlineNotice tone="error" message={accountsLoadError}>
+						{#snippet actions()}
+							<Button
+								variant="outline"
+								size="sm"
+								onclick={() => void loadAccounts()}
+								disabled={accountsLoading}
+							>
+								{m.common_retry()}
+							</Button>
+						{/snippet}
+					</InlineNotice>
 				</div>
+			{:else if accountsLoading}
+				<PageLoading layout="grid" label={m.common_loading()} items={3} />
 			{:else if !accounts || accounts.length === 0}
 				<EmptyState
 					icon={UsersIcon}
@@ -646,6 +670,7 @@
 					description={m.accounts_empty_body()}
 					variant="muted"
 					size="md"
+					headingLevel={3}
 				/>
 			{:else}
 				<div
@@ -699,7 +724,7 @@
 										<DropdownMenu.Separator />
 										<DropdownMenu.Item
 											class="text-destructive"
-											onclick={() => disconnectAccount(account.id)}
+											onclick={() => requestDisconnectAccount(account)}
 											>{m.common_disconnect()}</DropdownMenu.Item
 										>
 									</DropdownMenu.Content>
@@ -732,18 +757,31 @@
 
 		<!-- Connect a Platform -->
 		<div>
-			<h2 class="mb-1 text-base font-semibold">{m.accounts_add_channel()}</h2>
-			<p class="mb-4 text-sm text-muted-foreground">
-				{m.accounts_add_channel_body()}
-			</p>
+			<SectionHeader
+				title={m.accounts_add_channel()}
+				description={m.accounts_add_channel_body()}
+				class="mb-4"
+			/>
 
-			<div class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-				{#if providersLoading}
-					<Skeleton class="h-20 rounded-lg" />
-					<Skeleton class="h-20 rounded-lg" />
-					<Skeleton class="h-20 rounded-lg" />
-					<Skeleton class="h-20 rounded-lg" />
-				{:else}
+			{#if providersLoadError}
+				<div data-testid="providers-load-error">
+					<InlineNotice tone="error" message={providersLoadError}>
+						{#snippet actions()}
+							<Button
+								variant="outline"
+								size="sm"
+								onclick={() => void loadProviders()}
+								disabled={providersLoading}
+							>
+								{m.common_retry()}
+							</Button>
+						{/snippet}
+					</InlineNotice>
+				</div>
+			{:else if providersLoading}
+				<PageLoading layout="grid" label={m.common_loading()} items={4} />
+			{:else}
+				<div class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
 					{#each connectionProviderEntries as provider (providerKey(provider))}
 						<div
 							data-testid={`provider-card-${provider.platform}`}
@@ -787,11 +825,21 @@
 							</Button>
 						</div>
 					{/each}
-				{/if}
-			</div>
+				</div>
+			{/if}
 		</div>
-	</PageContainer>
-{/if}
+	{/if}
+</PageContainer>
+
+<DestructiveConfirmDialog
+	bind:open={disconnectDialogOpen}
+	title={m.accounts_disconnect_title()}
+	description={m.accounts_disconnect_body({
+		account: accountToDisconnect ? accountDisplayName(accountToDisconnect) : ''
+	})}
+	confirmLabel={m.common_disconnect()}
+	onConfirm={disconnectAccount}
+/>
 
 <Dialog.Root bind:open={mastodonModalOpen}>
 	<Dialog.Content class="sm:max-w-md">
@@ -820,12 +868,12 @@
 				/>
 			</div>
 			{#if mastodonError}
-				<div
-					role="alert"
-					class="rounded-md border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive"
-				>
-					{mastodonError}
-				</div>
+				<InlineNotice
+					tone="error"
+					message={mastodonError}
+					dismissLabel={m.common_dismiss()}
+					onDismiss={() => (mastodonError = '')}
+				/>
 			{/if}
 			<div class="flex flex-wrap justify-end gap-2">
 				<Dialog.Close>
@@ -887,11 +935,12 @@
 				/>
 			</div>
 			{#if blueskyError}
-				<div
-					class="rounded-md border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive"
-				>
-					{blueskyError}
-				</div>
+				<InlineNotice
+					tone="error"
+					message={blueskyError}
+					dismissLabel={m.common_dismiss()}
+					onDismiss={() => (blueskyError = '')}
+				/>
 			{/if}
 			<div class="flex justify-end gap-2">
 				<Dialog.Close>
@@ -955,11 +1004,12 @@
 					</div>
 				</div>
 				{#if editAccountError}
-					<div
-						class="rounded-md border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive"
-					>
-						{editAccountError}
-					</div>
+					<InlineNotice
+						tone="error"
+						message={editAccountError}
+						dismissLabel={m.common_dismiss()}
+						onDismiss={() => (editAccountError = '')}
+					/>
 				{/if}
 				<div class="flex justify-end gap-2">
 					<Dialog.Close>

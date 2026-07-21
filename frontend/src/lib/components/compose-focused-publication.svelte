@@ -11,11 +11,18 @@
 	import { Input } from '$lib/components/ui/input';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
 	import * as Popover from '$lib/components/ui/popover';
-	import { Skeleton } from '$lib/components/ui/skeleton';
 	import { Textarea } from '$lib/components/ui/textarea';
+	import InlineNotice from './inline-notice.svelte';
+	import PageLoading from './page-loading.svelte';
 	import PlatformIcon from './platform-icon.svelte';
+	import { getLocaleTag } from '$lib/i18n';
 	import { getPlatformKey, getPlatformName } from '$lib/utils';
-	import { CalendarDate, getLocalTimeZone, isEqualDay, today } from '@internationalized/date';
+	import { CalendarDate, isEqualDay } from '@internationalized/date';
+	import {
+		workspaceClock,
+		workspaceScheduleFromISO,
+		workspaceScheduleToISO
+	} from './compose/schedule-timezone';
 	import {
 		buildFocusedPublicationPayload,
 		composerMode,
@@ -24,6 +31,13 @@
 		type FocusedComposerFields,
 		type FocusedFieldKey
 	} from './compose/modes';
+	import {
+		defaultFocusedSchedulingSettings,
+		isFocusedProviderReadinessReady,
+		isFutureSchedule,
+		snapshotFocusedSchedulingSettings,
+		type FocusedSchedulingSettings
+	} from './compose/focused-workspace';
 	import AlertCircleIcon from 'lucide-svelte/icons/alert-circle';
 	import CalendarClockIcon from 'lucide-svelte/icons/calendar-clock';
 	import ImagePlusIcon from 'lucide-svelte/icons/image-plus';
@@ -69,6 +83,9 @@
 	let selectedAccountIds = $state<string[]>([]);
 	let capabilities = $state<Capability[]>([]);
 	let providerReadiness = $state<ProviderReadinessItem[]>([]);
+	let providerReadinessWorkspaceId = $state('');
+	let providerReadinessLoading = $state(false);
+	let providerReadinessError = $state('');
 	let fields = $state<FocusedComposerFields>({});
 	let media = $state<FocusedMedia[]>([]);
 	let thumbnailMedia = $state<FocusedMedia | null>(null);
@@ -86,6 +103,14 @@
 	let saving = $state(false);
 	let error = $state('');
 	let success = $state('');
+	let schedulingSettings = $state<FocusedSchedulingSettings>(defaultFocusedSchedulingSettings());
+	let schedulingSettingsWorkspaceId = $state('');
+	let workspaceChangeSequence = 0;
+	let accountsRequestSequence = 0;
+	let readinessRequestSequence = 0;
+	let mediaUploadRequestSequence = 0;
+	let thumbnailUploadRequestSequence = 0;
+	let publicationContextRequestId = '';
 
 	const modeMeta = $derived(composerMode(mode));
 	const compatibleAccounts = $derived(accounts.filter(isAccountCompatible));
@@ -110,15 +135,36 @@
 	const warningIssues = $derived(validationIssues.filter((issue) => issue.severity === 'warning'));
 	const localBlockers = $derived(formBlockers());
 	const canSaveDraft = $derived(Boolean(selectedWorkspaceId) && !saving);
-	const canQueue = $derived(canSaveDraft && localBlockers.length === 0);
+	const selectedReadinessProviders = $derived(
+		selectedAccounts.map((account) => getPlatformKey(account.platform))
+	);
+	const loadedReadinessProviders = $derived(providerReadiness.map((item) => item.provider));
+	const selectedProviderReadinessReady = $derived(
+		isFocusedProviderReadinessReady(
+			selectedWorkspaceId,
+			providerReadinessWorkspaceId,
+			providerReadinessLoading,
+			providerReadinessError,
+			selectedReadinessProviders,
+			loadedReadinessProviders
+		)
+	);
+	const canQueue = $derived(
+		canSaveDraft && selectedProviderReadinessReady && localBlockers.length === 0
+	);
 	const isEditMode = $derived(Boolean(initialPublication?.id));
+	const selectedWorkspaceSettingsReady = $derived(
+		Boolean(selectedWorkspaceId) && schedulingSettingsWorkspaceId === selectedWorkspaceId
+	);
+	const canSchedule = $derived(canQueue && selectedWorkspaceSettingsReady);
+	const scheduleTimezoneLabel = $derived(schedulingSettings.timezone);
 	const isToday = $derived(
-		selectedDate ? isEqualDay(selectedDate, today(getLocalTimeZone())) : false
+		selectedDate ? isEqualDay(selectedDate, workspaceClock(scheduleTimezoneLabel).date) : false
 	);
 	const allTimeSlots = $derived.by(() => {
-		const start = workspaceCtx.settings.slot_start_hour;
-		const end = workspaceCtx.settings.slot_end_hour;
-		const interval = workspaceCtx.settings.slot_interval_minutes;
+		const start = schedulingSettings.slotStartHour;
+		const end = schedulingSettings.slotEndHour;
+		const interval = Math.max(1, schedulingSettings.slotIntervalMinutes);
 		const slots: string[] = [];
 		for (let hour = start; hour <= end; hour++) {
 			for (let minute = 0; minute < 60; minute += interval) {
@@ -129,23 +175,32 @@
 		return slots;
 	});
 	const timeSlots = $derived.by(() => {
-		if (!isToday) return allTimeSlots;
-		const now = new Date();
-		const currentMinutes = now.getHours() * 60 + now.getMinutes();
-		return allTimeSlots.filter((slot) => {
+		const date = selectedDate;
+		if (!date) return allTimeSlots;
+		const validSlots = allTimeSlots.filter((slot) =>
+			Boolean(workspaceScheduleToISO(date, slot, scheduleTimezoneLabel))
+		);
+		if (!isToday) return validSlots;
+		const currentMinutes = workspaceClock(scheduleTimezoneLabel).minutes;
+		return validSlots.filter((slot) => {
 			const [hour, minute] = slot.split(':').map(Number);
 			return hour * 60 + minute > currentMinutes;
 		});
 	});
 
 	onMount(async () => {
-		if (initialPublication) hydrateInitialPublication(initialPublication);
 		await loadInitialData();
 	});
 
 	$effect(() => {
-		if (initialPublication && initialPublication.id !== hydratedPublicationId) {
-			hydrateInitialPublication(initialPublication);
+		if (
+			!loading &&
+			initialPublication &&
+			initialPublication.id !== hydratedPublicationId &&
+			initialPublication.id !== publicationContextRequestId
+		) {
+			publicationContextRequestId = initialPublication.id;
+			void loadInitialPublicationContext(initialPublication);
 		}
 	});
 
@@ -160,13 +215,24 @@
 		loading = true;
 		error = '';
 		try {
+			if (initialPublication) {
+				publicationContextRequestId = initialPublication.id;
+				selectedWorkspaceId = initialPublication.workspace_id;
+				await loadSchedulingSettings(selectedWorkspaceId);
+				hydrateInitialPublication(initialPublication);
+			}
 			const { data: capabilityData, error: capError } = await client.GET('/capabilities', {});
 			if (capError) throw new Error(capError.detail || m.compose_load_capabilities_failed());
 			capabilities = capabilityData?.capabilities ?? [];
 			selectedWorkspaceId = selectedWorkspaceId || workspaceCtx.currentWorkspace?.id || '';
 			if (selectedWorkspaceId) {
-				await loadAccounts();
-				await loadProviderReadiness();
+				if (schedulingSettingsWorkspaceId !== selectedWorkspaceId) {
+					await loadSchedulingSettings(selectedWorkspaceId);
+				}
+				await Promise.all([
+					loadAccounts(selectedWorkspaceId),
+					loadProviderReadiness(selectedWorkspaceId)
+				]);
 			}
 		} catch (err) {
 			error = err instanceof Error ? err.message : m.compose_load_composer_failed();
@@ -175,34 +241,104 @@
 		}
 	}
 
-	async function loadAccounts() {
-		if (!selectedWorkspaceId) return;
+	async function loadInitialPublicationContext(publication: Publication) {
+		loading = true;
+		selectedWorkspaceId = publication.workspace_id;
+		hydratedPublicationId = '';
+		resetWorkspaceScopedState();
+		fields = {};
+		try {
+			const settingsReady = await loadSchedulingSettings(publication.workspace_id);
+			if (!settingsReady || initialPublication?.id !== publication.id) return;
+			hydrateInitialPublication(publication);
+			await Promise.all([
+				loadAccounts(publication.workspace_id),
+				loadProviderReadiness(publication.workspace_id)
+			]);
+		} catch (err) {
+			if (initialPublication?.id === publication.id) {
+				error = err instanceof Error ? err.message : m.compose_load_composer_failed();
+			}
+		} finally {
+			loading = false;
+		}
+	}
+
+	async function loadSchedulingSettings(workspaceId: string): Promise<boolean> {
+		await ensureSchedulingWorkspace(workspaceId);
+		if (selectedWorkspaceId !== workspaceId) return false;
+
+		schedulingSettings = snapshotFocusedSchedulingSettings(workspaceCtx.settings);
+		schedulingSettingsWorkspaceId = workspaceId;
+		return true;
+	}
+
+	async function ensureSchedulingWorkspace(workspaceId: string) {
+		const workspace = workspaceCtx.workspaces.find((candidate) => candidate.id === workspaceId);
+		if (!workspace) throw new Error(m.compose_load_workspaces_failed());
+
+		if (workspaceCtx.currentWorkspace?.id !== workspaceId) {
+			await workspaceCtx.setWorkspace(workspace);
+		} else if (!workspaceCtx.settingsReady) {
+			await workspaceCtx.loadSettings(workspaceId);
+		}
+
+		if (!workspaceCtx.settingsReady || workspaceCtx.currentWorkspace?.id !== workspaceId) {
+			throw new Error(m.compose_load_workspace_settings_failed());
+		}
+	}
+
+	async function loadAccounts(workspaceId = selectedWorkspaceId) {
+		if (!workspaceId) return;
+		const requestSequence = ++accountsRequestSequence;
 		accountsLoading = true;
 		try {
 			const { data, error: err } = await client.GET('/accounts', {
-				params: { query: { workspace_id: selectedWorkspaceId } }
+				params: { query: { workspace_id: workspaceId } }
 			});
 			if (err) throw new Error(err.detail || m.compose_load_accounts_failed());
+			if (requestSequence !== accountsRequestSequence || selectedWorkspaceId !== workspaceId)
+				return;
 			accounts = (data ?? []).filter((account) => account.is_active);
 			normalizeSelectedAccounts();
 			settingsByAccount = normalizeAllAccountSettings(settingsByAccount);
 		} catch (err) {
-			error = err instanceof Error ? err.message : m.compose_load_accounts_failed();
+			if (requestSequence === accountsRequestSequence && selectedWorkspaceId === workspaceId) {
+				error = err instanceof Error ? err.message : m.compose_load_accounts_failed();
+			}
 		} finally {
-			accountsLoading = false;
+			if (requestSequence === accountsRequestSequence && selectedWorkspaceId === workspaceId) {
+				accountsLoading = false;
+			}
 		}
 	}
 
-	async function loadProviderReadiness() {
-		if (!selectedWorkspaceId) return;
+	async function loadProviderReadiness(workspaceId = selectedWorkspaceId) {
+		if (!workspaceId) return;
+		const requestSequence = ++readinessRequestSequence;
+		providerReadiness = [];
+		providerReadinessWorkspaceId = '';
+		providerReadinessLoading = true;
+		providerReadinessError = '';
 		try {
 			const { data, error: err } = await client.GET('/provider-readiness', {
-				params: { query: { workspace_id: selectedWorkspaceId } }
+				params: { query: { workspace_id: workspaceId } }
 			});
 			if (err) throw new Error(err.detail || m.compose_load_readiness_failed());
+			if (requestSequence !== readinessRequestSequence || selectedWorkspaceId !== workspaceId)
+				return;
 			providerReadiness = data?.providers ?? [];
+			providerReadinessWorkspaceId = workspaceId;
 		} catch (err) {
-			error = err instanceof Error ? err.message : m.compose_load_readiness_failed();
+			if (requestSequence === readinessRequestSequence && selectedWorkspaceId === workspaceId) {
+				providerReadinessError =
+					err instanceof Error ? err.message : m.compose_load_readiness_failed();
+				error = providerReadinessError;
+			}
+		} finally {
+			if (requestSequence === readinessRequestSequence && selectedWorkspaceId === workspaceId) {
+				providerReadinessLoading = false;
+			}
 		}
 	}
 
@@ -251,20 +387,60 @@
 			selectedTime = null;
 			return;
 		}
-		const date = new Date(scheduledAt);
-		selectedDate = new CalendarDate(date.getFullYear(), date.getMonth() + 1, date.getDate());
-		selectedTime = `${date.getHours().toString().padStart(2, '0')}:${date
-			.getMinutes()
-			.toString()
-			.padStart(2, '0')}`;
+		const schedule = workspaceScheduleFromISO(scheduledAt, scheduleTimezoneLabel);
+		selectedDate = schedule?.date;
+		selectedTime = schedule?.time ?? null;
 	}
 
 	async function changeWorkspace(workspaceId: string) {
+		const changeSequence = ++workspaceChangeSequence;
 		selectedWorkspaceId = workspaceId;
+		resetWorkspaceScopedState();
+		try {
+			const settingsReady = await loadSchedulingSettings(workspaceId);
+			if (
+				!settingsReady ||
+				changeSequence !== workspaceChangeSequence ||
+				selectedWorkspaceId !== workspaceId
+			) {
+				return;
+			}
+			await Promise.all([loadAccounts(workspaceId), loadProviderReadiness(workspaceId)]);
+		} catch (err) {
+			if (changeSequence === workspaceChangeSequence && selectedWorkspaceId === workspaceId) {
+				error = err instanceof Error ? err.message : m.compose_load_workspace_settings_failed();
+			}
+		}
+	}
+
+	function resetWorkspaceScopedState() {
+		accountsRequestSequence += 1;
+		readinessRequestSequence += 1;
+		mediaUploadRequestSequence += 1;
+		thumbnailUploadRequestSequence += 1;
+		publicationId = '';
+		accounts = [];
 		selectedAccountIds = [];
+		providerReadiness = [];
+		providerReadinessWorkspaceId = '';
+		providerReadinessLoading = false;
+		providerReadinessError = '';
 		customizeAccountId = '';
-		await loadAccounts();
-		await loadProviderReadiness();
+		media = [];
+		thumbnailMedia = null;
+		thumbnailMediaId = '';
+		settingsByAccount = {};
+		selectedDate = undefined;
+		selectedTime = null;
+		showSchedulePopover = false;
+		validationIssues = [];
+		schedulingSettings = defaultFocusedSchedulingSettings();
+		schedulingSettingsWorkspaceId = '';
+		accountsLoading = false;
+		uploading = false;
+		uploadingThumbnail = false;
+		error = '';
+		success = '';
 	}
 
 	function selectAllAccounts() {
@@ -347,11 +523,16 @@
 		if (!files || !selectedWorkspaceId) return;
 		const selected = Array.from(files).filter(isSupportedMediaFile);
 		if (selected.length === 0) return;
+		const workspaceId = selectedWorkspaceId;
+		const requestSequence = ++mediaUploadRequestSequence;
 		uploading = true;
 		error = '';
 		try {
 			for (const file of selected) {
-				const uploaded = await uploadMediaFile({ workspaceId: selectedWorkspaceId, file });
+				const uploaded = await uploadMediaFile({ workspaceId, file });
+				if (requestSequence !== mediaUploadRequestSequence || selectedWorkspaceId !== workspaceId) {
+					return;
+				}
 				media = [
 					...media,
 					{
@@ -365,9 +546,13 @@
 			}
 			validationIssues = [];
 		} catch (err) {
-			error = err instanceof Error ? err.message : m.compose_upload_failed();
+			if (requestSequence === mediaUploadRequestSequence && selectedWorkspaceId === workspaceId) {
+				error = err instanceof Error ? err.message : m.compose_upload_failed();
+			}
 		} finally {
-			uploading = false;
+			if (requestSequence === mediaUploadRequestSequence && selectedWorkspaceId === workspaceId) {
+				uploading = false;
+			}
 		}
 	}
 
@@ -378,10 +563,18 @@
 			error = m.compose_choose_thumbnail();
 			return;
 		}
+		const workspaceId = selectedWorkspaceId;
+		const requestSequence = ++thumbnailUploadRequestSequence;
 		uploadingThumbnail = true;
 		error = '';
 		try {
-			const uploaded = await uploadMediaFile({ workspaceId: selectedWorkspaceId, file });
+			const uploaded = await uploadMediaFile({ workspaceId, file });
+			if (
+				requestSequence !== thumbnailUploadRequestSequence ||
+				selectedWorkspaceId !== workspaceId
+			) {
+				return;
+			}
 			thumbnailMedia = {
 				id: uploaded.id,
 				mime_type: uploaded.mime_type,
@@ -393,9 +586,19 @@
 			thumbnailMediaId = uploaded.id;
 			validationIssues = [];
 		} catch (err) {
-			error = err instanceof Error ? err.message : m.compose_thumbnail_upload_failed();
+			if (
+				requestSequence === thumbnailUploadRequestSequence &&
+				selectedWorkspaceId === workspaceId
+			) {
+				error = err instanceof Error ? err.message : m.compose_thumbnail_upload_failed();
+			}
 		} finally {
-			uploadingThumbnail = false;
+			if (
+				requestSequence === thumbnailUploadRequestSequence &&
+				selectedWorkspaceId === workspaceId
+			) {
+				uploadingThumbnail = false;
+			}
 		}
 	}
 
@@ -411,17 +614,18 @@
 	}
 
 	function getScheduledAt(): string | undefined {
-		if (!selectedDate || !selectedTime) return undefined;
-		const [hours, minutes] = selectedTime.split(':').map(Number);
-		const date = selectedDate.toDate(getLocalTimeZone());
-		date.setHours(hours, minutes, 0, 0);
-		return date.toISOString();
+		if (!selectedWorkspaceSettingsReady || !selectedDate || !selectedTime) return undefined;
+		return workspaceScheduleToISO(selectedDate, selectedTime, scheduleTimezoneLabel);
 	}
 
 	function scheduleLabel(): string {
 		if (!selectedDate || !selectedTime) return m.compose_schedule();
-		const date = selectedDate.toDate(getLocalTimeZone());
-		return `${date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} ${selectedTime}`;
+		const date = selectedDate.toDate(scheduleTimezoneLabel);
+		return `${date.toLocaleDateString(getLocaleTag(), {
+			month: 'short',
+			day: 'numeric',
+			timeZone: scheduleTimezoneLabel
+		})} ${selectedTime}`;
 	}
 
 	function clearSchedule() {
@@ -558,7 +762,9 @@
 					content_profile: payload.content_profile,
 					source_text: payload.source_text,
 					source_url: payload.source_url ?? '',
-					scheduled_at: payload.scheduled_at,
+					...(payload.scheduled_at
+						? { scheduled_at: payload.scheduled_at }
+						: { clear_schedule: true }),
 					metadata: payload.metadata
 				}
 			});
@@ -589,15 +795,33 @@
 	}
 
 	async function runAction(action: 'draft' | 'validate' | 'schedule' | 'publish') {
+		if (action === 'schedule' && !selectedWorkspaceSettingsReady) {
+			error = m.compose_load_workspace_settings_failed();
+			success = '';
+			return;
+		}
+		if (action !== 'draft' && !selectedProviderReadinessReady) {
+			error = providerReadinessError || m.compose_load_readiness_failed();
+			success = '';
+			return;
+		}
 		if (action !== 'draft' && localBlockers.length > 0) {
 			error = localBlockers[0];
 			success = '';
 			return;
 		}
-		if (action === 'schedule' && !getScheduledAt()) {
-			error = m.compose_choose_schedule();
-			success = '';
-			return;
+		if (action === 'schedule') {
+			const scheduledAt = getScheduledAt();
+			if (!scheduledAt) {
+				error = m.compose_choose_schedule();
+				success = '';
+				return;
+			}
+			if (!isFutureSchedule(scheduledAt)) {
+				error = m.compose_schedule_future();
+				success = '';
+				return;
+			}
 		}
 		saving = true;
 		error = '';
@@ -610,17 +834,17 @@
 			} else if (action === 'schedule') {
 				const issues = await validatePublication(id);
 				if (issues.some((issue) => issue.severity === 'error')) {
-					throw new Error('Fix blocking issues before scheduling.');
+					throw new Error(m.compose_fix_before_scheduling());
 				}
 				const { data, error: scheduleError } = await client.POST('/publications/{id}/schedule', {
 					params: { path: { id } }
 				});
 				if (scheduleError) throw new Error(scheduleError.detail || m.compose_schedule_failed());
-				success = data?.message ?? 'Publication scheduled';
+				success = data?.message ?? m.compose_publication_scheduled();
 			} else if (action === 'publish') {
 				const issues = await validatePublication(id);
 				if (issues.some((issue) => issue.severity === 'error')) {
-					throw new Error('Fix blocking issues before publishing.');
+					throw new Error(m.compose_fix_before_publishing());
 				}
 				const { data, error: publishError } = await client.POST('/publications/{id}/publish-now', {
 					params: { path: { id } }
@@ -685,207 +909,193 @@
 </script>
 
 <div class="flex min-h-0 flex-1 flex-col bg-background" data-testid="focused-composer">
-	<div class="border-b bg-background px-3 py-2 md:px-4 md:py-3">
-		<div class="flex flex-wrap items-center justify-between gap-2">
-			<div class="flex min-w-0 flex-wrap items-center gap-2">
-				{#if modeControl}
-					{@render modeControl()}
-				{/if}
-				{#if onCancel}
-					<Button variant="ghost" size="sm" class="h-8" onclick={onCancel} disabled={saving}>
-						{m.common_cancel()}
-					</Button>
-				{/if}
-				<DropdownMenu.Root>
-					<DropdownMenu.Trigger>
-						{#snippet child({ props })}
-							<Button
-								{...props}
-								variant="ghost"
-								size="sm"
-								class="h-8 gap-1.5 px-2 text-xs text-muted-foreground"
-								aria-label={m.compose_target_accounts()}
-								disabled={loading || accountsLoading || accounts.length === 0}
-							>
-								<span class="max-w-28 truncate">{selectedAccountSummary}</span>
-							</Button>
-						{/snippet}
-					</DropdownMenu.Trigger>
-					<DropdownMenu.Content class="w-72" align="start">
-						<div class="flex items-center justify-between gap-3 px-2 py-1.5">
-							<div>
-								<p class="text-sm font-medium">{m.compose_publish_to()}</p>
-								<p class="text-xs text-muted-foreground">
-									{m.compose_accounts_compatible({ format: modeMeta.label })}
-								</p>
-							</div>
-							<div class="flex gap-1">
-								<Button variant="ghost" size="xs" class="h-6 text-xs" onclick={selectAllAccounts}
-									>{m.compose_all()}</Button
-								>
-								<Button variant="ghost" size="xs" class="h-6 text-xs" onclick={clearAllAccounts}
-									>{m.compose_none()}</Button
-								>
-							</div>
-						</div>
-						<DropdownMenu.Separator />
-						{#each accounts as account (account.id)}
-							{@const compatible = isAccountCompatible(account)}
-							<DropdownMenu.CheckboxItem
-								checked={selectedAccountIds.includes(account.id)}
-								disabled={!compatible}
-								onCheckedChange={() => toggleAccount(account)}
-								class="gap-2"
-							>
-								<PlatformIcon platform={account.platform} class="size-4" />
-								<span class="min-w-0 flex-1 truncate">{accountLabel(account)}</span>
-								<span class="text-xs text-muted-foreground">
-									{getPlatformName(account.platform)}
-								</span>
-							</DropdownMenu.CheckboxItem>
-						{/each}
-					</DropdownMenu.Content>
-				</DropdownMenu.Root>
-			</div>
-
-			<div class="flex min-w-0 flex-wrap items-center justify-end gap-1.5 md:gap-2">
-				{#if selectedAccounts.length > 0}
-					<div class="hidden max-w-48 items-center gap-1 overflow-x-auto lg:flex">
-						{#each selectedAccounts as account (account.id)}
-							<button
-								type="button"
-								class="flex size-8 shrink-0 items-center justify-center rounded-full border bg-background text-foreground transition-colors hover:border-primary/60 hover:text-primary focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-								aria-label={m.compose_remove_target({
-									account: `@${accountLabel(account).replace(/^@/, '')}`
-								})}
-								title={`${accountLabel(account)} · ${getPlatformName(account.platform)}`}
-								onclick={() => toggleAccount(account)}
-							>
-								<PlatformIcon platform={account.platform} class="size-4" />
-							</button>
-						{/each}
-					</div>
-				{/if}
-				<Button
-					variant="ghost"
-					size="sm"
-					class="h-8 gap-1.5"
-					disabled={!canSaveDraft}
-					onclick={() => runAction('draft')}
-				>
-					{#if saving}
-						<LoaderIcon class="h-3.5 w-3.5 animate-spin" />
-					{:else}
-						<SaveIcon class="h-3.5 w-3.5" />
+	{#if !loading}
+		<div class="border-b bg-background px-3 py-2 md:px-4 md:py-3">
+			<div class="flex flex-wrap items-center justify-between gap-2">
+				<div class="flex min-w-0 flex-wrap items-center gap-2">
+					{#if modeControl}
+						{@render modeControl()}
 					{/if}
-					{isEditMode ? m.compose_save_changes() : m.compose_save_draft()}
-				</Button>
-				<Popover.Root bind:open={showSchedulePopover}>
-					<Popover.Trigger>
-						{#snippet child({ props })}
-							<Button {...props} size="sm" class="h-8 gap-1.5" disabled={saving}>
-								<CalendarClockIcon class="h-3.5 w-3.5" />
-								{scheduleLabel()}
-							</Button>
-						{/snippet}
-					</Popover.Trigger>
-					<Popover.Content class="w-auto max-w-[calc(100vw-2rem)] p-0" align="end">
-						<div class="p-3">
-							<Calendar
-								type="single"
-								bind:value={selectedDate}
-								minValue={today(getLocalTimeZone())}
-								class="bg-transparent p-0 [--cell-size:--spacing(8)]"
-								weekdayFormat="short"
-								weekStartsOn={workspaceCtx.weekStartsOn}
-							/>
-							<div class="mt-3 max-h-48 overflow-y-auto">
-								<div class="grid grid-cols-3 gap-1.5 sm:grid-cols-4">
-									{#each timeSlots as time (time)}
+					{#if onCancel}
+						<Button variant="ghost" size="sm" class="h-8" onclick={onCancel} disabled={saving}>
+							{m.common_cancel()}
+						</Button>
+					{/if}
+					<DropdownMenu.Root>
+						<DropdownMenu.Trigger>
+							{#snippet child({ props })}
+								<Button
+									{...props}
+									variant="ghost"
+									size="sm"
+									class="h-8 gap-1.5 px-2 text-xs text-muted-foreground"
+									aria-label={m.compose_target_accounts()}
+									disabled={loading || accountsLoading || accounts.length === 0}
+								>
+									<span class="max-w-28 truncate">{selectedAccountSummary}</span>
+								</Button>
+							{/snippet}
+						</DropdownMenu.Trigger>
+						<DropdownMenu.Content class="w-72" align="start">
+							<div class="flex items-center justify-between gap-3 px-2 py-1.5">
+								<div>
+									<p class="text-sm font-medium">{m.compose_publish_to()}</p>
+									<p class="text-xs text-muted-foreground">
+										{m.compose_accounts_compatible({ format: modeMeta.label })}
+									</p>
+								</div>
+								<div class="flex gap-1">
+									<Button variant="ghost" size="xs" class="h-6 text-xs" onclick={selectAllAccounts}
+										>{m.compose_all()}</Button
+									>
+									<Button variant="ghost" size="xs" class="h-6 text-xs" onclick={clearAllAccounts}
+										>{m.compose_none()}</Button
+									>
+								</div>
+							</div>
+							<DropdownMenu.Separator />
+							{#each accounts as account (account.id)}
+								{@const compatible = isAccountCompatible(account)}
+								<DropdownMenu.CheckboxItem
+									checked={selectedAccountIds.includes(account.id)}
+									disabled={!compatible}
+									onCheckedChange={() => toggleAccount(account)}
+									class="gap-2"
+								>
+									<PlatformIcon platform={account.platform} class="size-4" />
+									<span class="min-w-0 flex-1 truncate">{accountLabel(account)}</span>
+									<span class="text-xs text-muted-foreground">
+										{getPlatformName(account.platform)}
+									</span>
+								</DropdownMenu.CheckboxItem>
+							{/each}
+						</DropdownMenu.Content>
+					</DropdownMenu.Root>
+				</div>
+
+				<div class="flex min-w-0 flex-wrap items-center justify-end gap-1.5 md:gap-2">
+					{#if selectedAccounts.length > 0}
+						<div class="hidden max-w-48 items-center gap-1 overflow-x-auto lg:flex">
+							{#each selectedAccounts as account (account.id)}
+								<button
+									type="button"
+									class="flex size-8 shrink-0 items-center justify-center rounded-full border bg-background text-foreground transition-colors hover:border-primary/60 hover:text-primary focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+									aria-label={m.compose_remove_target({
+										account: `@${accountLabel(account).replace(/^@/, '')}`
+									})}
+									title={`${accountLabel(account)} · ${getPlatformName(account.platform)}`}
+									onclick={() => toggleAccount(account)}
+								>
+									<PlatformIcon platform={account.platform} class="size-4" />
+								</button>
+							{/each}
+						</div>
+					{/if}
+					<Button
+						variant="ghost"
+						size="sm"
+						class="h-8 gap-1.5"
+						disabled={!canSaveDraft}
+						onclick={() => runAction('draft')}
+					>
+						{#if saving}
+							<LoaderIcon class="h-3.5 w-3.5 animate-spin" />
+						{:else}
+							<SaveIcon class="h-3.5 w-3.5" />
+						{/if}
+						{isEditMode ? m.compose_save_changes() : m.compose_save_draft()}
+					</Button>
+					<Popover.Root bind:open={showSchedulePopover}>
+						<Popover.Trigger>
+							{#snippet child({ props })}
+								<Button
+									{...props}
+									size="sm"
+									class="h-8 gap-1.5"
+									disabled={saving || !selectedWorkspaceSettingsReady}
+								>
+									<CalendarClockIcon class="h-3.5 w-3.5" />
+									{scheduleLabel()}
+								</Button>
+							{/snippet}
+						</Popover.Trigger>
+						<Popover.Content class="w-auto max-w-[calc(100vw-2rem)] p-0" align="end">
+							<div class="p-3">
+								<Calendar
+									type="single"
+									bind:value={selectedDate}
+									minValue={workspaceClock(scheduleTimezoneLabel).date}
+									class="bg-transparent p-0 [--cell-size:--spacing(8)]"
+									weekdayFormat="short"
+									weekStartsOn={schedulingSettings.weekStartsOn}
+								/>
+								<div class="mt-3 max-h-48 overflow-y-auto">
+									<div class="grid grid-cols-3 gap-1.5 sm:grid-cols-4">
+										{#each timeSlots as time (time)}
+											<Button
+												variant={selectedTime === time ? 'default' : 'outline'}
+												size="sm"
+												class="h-8 text-xs"
+												onclick={() => {
+													if (!selectedDate) {
+														selectedDate = workspaceClock(scheduleTimezoneLabel).date;
+													}
+													selectedTime = time;
+												}}
+											>
+												{time}
+											</Button>
+										{/each}
+									</div>
+								</div>
+								{#if selectedDate || selectedTime}
+									<div class="mt-3 flex gap-2 border-t pt-3">
+										<Button variant="ghost" size="sm" class="flex-1 text-xs" onclick={clearSchedule}
+											>{m.compose_clear()}</Button
+										>
 										<Button
-											variant={selectedTime === time ? 'default' : 'outline'}
 											size="sm"
-											class="h-8 text-xs"
+											class="flex-1 text-xs"
+											disabled={!canSchedule || !getScheduledAt()}
 											onclick={() => {
-												if (!selectedDate) {
-													const date = today(getLocalTimeZone());
-													selectedDate = new CalendarDate(date.year, date.month, date.day);
-												}
-												selectedTime = time;
+												showSchedulePopover = false;
+												runAction('schedule');
 											}}
 										>
-											{time}
+											{m.compose_schedule()}
 										</Button>
-									{/each}
-								</div>
+									</div>
+								{/if}
 							</div>
-							{#if selectedDate || selectedTime}
-								<div class="mt-3 flex gap-2 border-t pt-3">
-									<Button variant="ghost" size="sm" class="flex-1 text-xs" onclick={clearSchedule}
-										>{m.compose_clear()}</Button
-									>
-									<Button
-										size="sm"
-										class="flex-1 text-xs"
-										disabled={!canQueue || !getScheduledAt()}
-										onclick={() => {
-											showSchedulePopover = false;
-											runAction('schedule');
-										}}
-									>
-										{m.compose_schedule()}
-									</Button>
-								</div>
-							{/if}
-						</div>
-					</Popover.Content>
-				</Popover.Root>
-				<Button
-					variant="outline"
-					size="sm"
-					class="h-8 gap-1.5"
-					disabled={!canQueue}
-					onclick={() => runAction('publish')}
-				>
-					<SendIcon class="h-3.5 w-3.5" />
-					{m.compose_publish_now()}
-				</Button>
+						</Popover.Content>
+					</Popover.Root>
+					<Button
+						variant="outline"
+						size="sm"
+						class="h-8 gap-1.5"
+						disabled={!canQueue}
+						onclick={() => runAction('publish')}
+					>
+						<SendIcon class="h-3.5 w-3.5" />
+						{m.compose_publish_now()}
+					</Button>
+				</div>
 			</div>
 		</div>
-	</div>
+	{/if}
 
 	{#if loading}
-		<main class="min-h-0 flex-1 overflow-y-auto">
-			<div class="mx-auto w-full max-w-3xl space-y-6 px-4 py-5 md:px-6">
-				<div class="flex gap-2">
-					<Skeleton class="h-8 w-24 rounded-md" />
-					<Skeleton class="h-8 w-28 rounded-md" />
-					<Skeleton class="h-8 w-24 rounded-md" />
-				</div>
-				<Skeleton class="h-32 rounded-lg" />
-				<div class="space-y-2">
-					<Skeleton class="h-4 w-24 rounded" />
-					<Skeleton class="h-40 rounded-lg" />
-					<Skeleton class="h-3 w-52 rounded" />
-				</div>
-			</div>
-		</main>
+		<div class="min-h-0 flex-1 overflow-y-auto" aria-busy="true">
+			<PageLoading layout="composer" label={m.common_loading()} />
+		</div>
 	{:else}
-		<main class="min-h-0 flex-1 overflow-y-auto">
+		<div class="min-h-0 flex-1 overflow-y-auto">
 			<div class="mx-auto w-full max-w-3xl space-y-6 px-4 py-5 md:px-6">
 				{#if error}
-					<div
-						class="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
-					>
-						{error}
-					</div>
+					<InlineNotice tone="error" message={error} />
 				{/if}
 				{#if success}
-					<div
-						class="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-700 dark:text-emerald-300"
-					>
-						{success}
-					</div>
+					<InlineNotice tone="success" message={success} />
 				{/if}
 
 				{#if accounts.length === 0}
@@ -899,7 +1109,7 @@
 						<div class="rounded-md border border-dashed bg-muted/20 p-4">
 							<div class="flex flex-wrap items-center gap-3">
 								<label
-									class="inline-flex h-9 cursor-pointer items-center gap-2 rounded-md border bg-background px-3 text-sm font-medium"
+									class="inline-flex h-11 cursor-pointer items-center gap-2 rounded-md border bg-background px-3 text-sm font-medium"
 								>
 									{#if uploading}
 										<LoaderIcon class="h-4 w-4 animate-spin" />
@@ -968,7 +1178,7 @@
 							<div class="rounded-md border bg-background p-4">
 								<div class="flex flex-wrap items-center gap-3">
 									<label
-										class="inline-flex h-9 cursor-pointer items-center gap-2 rounded-md border bg-background px-3 text-sm font-medium"
+										class="inline-flex h-11 cursor-pointer items-center gap-2 rounded-md border bg-background px-3 text-sm font-medium"
 									>
 										{#if uploadingThumbnail}
 											<LoaderIcon class="h-4 w-4 animate-spin" />
@@ -1172,6 +1382,6 @@
 					</section>
 				{/if}
 			</div>
-		</main>
+		</div>
 	{/if}
 </div>

@@ -2,8 +2,6 @@
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import { fly } from 'svelte/transition';
-	import { quintOut } from 'svelte/easing';
 	import { auth } from '$lib/stores/auth';
 	import { workspaceCtx } from '$lib/stores/workspace.svelte';
 	import { ui } from '$lib/stores/ui.svelte';
@@ -115,34 +113,42 @@
 	}
 </script>
 
-<Sidebar.Root collapsible="icon">
+<Sidebar.Root collapsible="icon" class="pt-[env(safe-area-inset-top)]">
 	<Sidebar.Header class="gap-2 border-b border-sidebar-border p-2" data-testid="app-sidebar">
 		<div class="relative h-10 overflow-hidden rounded-md">
-			{#key showHomeBrand}
-				{#if showHomeBrand}
-					<a
-						href={resolve('/')}
-						class="absolute inset-0 flex items-center gap-2 rounded-md px-2 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0 focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-none"
-						aria-label={m.sidebar_openpost_home()}
-						data-testid="sidebar-home-brand"
-						transition:fly={{ x: -12, duration: 180, easing: quintOut }}
-					>
-						<Logo width={26} height={26} showText={sidebar.state !== 'collapsed'} />
-					</a>
-				{:else}
-					<a
-						href={resolve('/')}
-						class="absolute inset-0 flex items-center gap-2 rounded-md bg-primary px-3 text-sm font-semibold text-primary-foreground shadow-xs group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0 hover:bg-primary/90 focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-none"
-						aria-label={m.sidebar_new_post()}
-						data-testid="sidebar-new-post"
-						onclick={() => ui.startNewPost()}
-						transition:fly={{ x: 12, duration: 180, easing: quintOut }}
-					>
-						<ComposeIcon class="size-4" />
-						{#if sidebar.state !== 'collapsed'}<span>{m.sidebar_new_post()}</span>{/if}
-					</a>
-				{/if}
-			{/key}
+			<a
+				href={resolve('/')}
+				class={[
+					'sidebar-context-swap absolute inset-0 flex items-center gap-2 rounded-md px-2 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0 focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-none',
+					!showHomeBrand && 'pointer-events-none'
+				]}
+				data-swap-position={showHomeBrand ? 'active' : 'before'}
+				aria-label={m.sidebar_openpost_home()}
+				aria-hidden={!showHomeBrand}
+				tabindex={showHomeBrand ? undefined : -1}
+				inert={!showHomeBrand}
+				data-testid={showHomeBrand ? 'sidebar-home-brand' : undefined}
+			>
+				<Logo width={26} height={26} showText={sidebar.state !== 'collapsed'} />
+			</a>
+
+			<a
+				href={resolve('/')}
+				class={[
+					'sidebar-context-swap absolute inset-0 flex items-center gap-2 rounded-md bg-primary px-3 text-sm font-semibold text-primary-foreground shadow-xs group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0 hover:bg-primary/90 focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-none',
+					showHomeBrand && 'pointer-events-none'
+				]}
+				data-swap-position={showHomeBrand ? 'after' : 'active'}
+				aria-label={m.sidebar_new_post()}
+				aria-hidden={showHomeBrand}
+				tabindex={showHomeBrand ? -1 : undefined}
+				inert={showHomeBrand}
+				data-testid={!showHomeBrand ? 'sidebar-new-post' : undefined}
+				onclick={() => ui.startNewPost()}
+			>
+				<ComposeIcon class="size-4" />
+				{#if sidebar.state !== 'collapsed'}<span>{m.sidebar_new_post()}</span>{/if}
+			</a>
 		</div>
 
 		<DropdownMenu.Root>
@@ -282,3 +288,32 @@
 	</Sidebar.Footer>
 	<Sidebar.Rail />
 </Sidebar.Root>
+
+<style>
+	.sidebar-context-swap {
+		transition:
+			transform 260ms cubic-bezier(0.22, 1, 0.36, 1),
+			opacity 200ms cubic-bezier(0.22, 1, 0.36, 1);
+	}
+
+	.sidebar-context-swap[data-swap-position='active'] {
+		transform: translateX(0);
+		opacity: 1;
+	}
+
+	.sidebar-context-swap[data-swap-position='before'] {
+		transform: translateX(-100%);
+		opacity: 0;
+	}
+
+	.sidebar-context-swap[data-swap-position='after'] {
+		transform: translateX(100%);
+		opacity: 0;
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.sidebar-context-swap {
+			transition: none;
+		}
+	}
+</style>

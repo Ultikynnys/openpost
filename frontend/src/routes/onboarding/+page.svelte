@@ -2,16 +2,17 @@
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import { auth } from '$lib/stores/auth';
 	import { client } from '$lib/api/client';
+	import { workspaceCtx } from '$lib/stores/workspace.svelte';
 	import { Button } from '$lib/components/ui/button';
-	import { Card, CardContent } from '$lib/components/ui/card';
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
-	import Logo from '$lib/components/Logo.svelte';
+	import StandaloneShell from '$lib/components/standalone-shell.svelte';
+	import InlineNotice from '$lib/components/inline-notice.svelte';
 	import RocketIcon from 'lucide-svelte/icons/rocket';
 	import LoaderIcon from 'lucide-svelte/icons/loader-2';
-	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
 	import { m } from '$lib/paraglide/messages';
 	import {
 		hostedPlanFromSearchParams,
@@ -21,9 +22,12 @@
 
 	let workspaceName = $state('Personal');
 	let isLoading = $state(false);
-	let error = $state('');
+	let loadError = $state('');
+	let createError = $state('');
 	let authReady = $state(false);
 	let pageLoading = $state(true);
+	let createdWorkspaceID = '';
+	let onboardingLoadSequence = 0;
 
 	function selectedPlanID() {
 		return hostedPlanFromSearchParams(page.url.searchParams);
@@ -42,7 +46,7 @@
 			if (!state.isLoading && !authReady) {
 				authReady = true;
 				if (!state.isAuthenticated) {
-					goto(loginTarget());
+					goto(resolve(loginTarget() as '/'));
 					return;
 				}
 				void loadOnboardingState();
@@ -51,25 +55,26 @@
 		return unsubscribe;
 	});
 
-	async function loadOnboardingState() {
+	async function loadOnboardingState(preferredWorkspaceID = createdWorkspaceID) {
+		const requestSequence = ++onboardingLoadSequence;
 		pageLoading = true;
-		error = '';
+		loadError = '';
 		try {
-			const { data, error: workspacesError } = await client.GET('/workspaces');
-			if (workspacesError) {
-				throw new Error(
-					(workspacesError as { detail?: string })?.detail || m.onboarding_load_failed()
-				);
-			}
-
-			if ((data ?? []).length > 0) {
-				goto(afterOnboardingTarget());
+			await workspaceCtx.initialize(preferredWorkspaceID || undefined);
+			if (requestSequence !== onboardingLoadSequence) return;
+			if (workspaceCtx.workspaces.length > 0) {
+				await goto(resolve(afterOnboardingTarget() as '/'));
 				return;
 			}
+			createdWorkspaceID = '';
 		} catch (e) {
-			error = (e as Error).message;
+			if (requestSequence !== onboardingLoadSequence) return;
+			console.error('Failed to load onboarding workspace state:', e);
+			loadError = preferredWorkspaceID
+				? m.onboarding_workspace_refresh_failed()
+				: m.onboarding_load_failed();
 		} finally {
-			pageLoading = false;
+			if (requestSequence === onboardingLoadSequence) pageLoading = false;
 		}
 	}
 
@@ -78,16 +83,21 @@
 		if (!workspaceName.trim()) return;
 
 		isLoading = true;
-		error = '';
+		createError = '';
 
 		try {
-			const { error: err } = await client.POST('/workspaces', {
+			const { data, error: err } = await client.POST('/workspaces', {
 				body: { name: workspaceName.trim() }
 			});
-			if (err) throw new Error((err as any).detail || m.onboarding_create_failed());
-			goto(afterOnboardingTarget());
+			if (err || !data?.id) {
+				throw new Error(
+					(err as { detail?: string } | undefined)?.detail || m.onboarding_create_failed()
+				);
+			}
+			createdWorkspaceID = data.id;
+			await loadOnboardingState(data.id);
 		} catch (e) {
-			error = (e as Error).message;
+			createError = (e as Error).message;
 		} finally {
 			isLoading = false;
 		}
@@ -98,66 +108,57 @@
 	<title>{m.onboarding_title()}</title>
 </svelte:head>
 
-{#if pageLoading}
-	<div class="flex min-h-[80vh] flex-col items-center justify-center gap-4 px-4">
-		<Skeleton class="h-12 w-12 rounded-xl" />
-		<Skeleton class="h-6 w-48" />
-		<Skeleton class="h-4 w-64" />
-	</div>
-{:else}
-	<div class="flex min-h-[80vh] flex-col items-center justify-center gap-6 px-4">
-		<div class="flex justify-center">
-			<Logo width={80} height={23} />
-		</div>
+<StandaloneShell
+	title={m.onboarding_heading()}
+	description={m.onboarding_description()}
+	loading={pageLoading}
+	loadingLabel={m.common_loading()}
+>
+	{#snippet icon()}
+		<RocketIcon class="size-6" />
+	{/snippet}
 
-		<div class="w-full max-w-md text-center">
-			<div class="mb-6 flex justify-center">
-				<div class="flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10">
-					<RocketIcon class="h-8 w-8 text-primary" />
-				</div>
-			</div>
-			<h1 class="mb-2 text-xl font-semibold tracking-tight">{m.onboarding_heading()}</h1>
-			<p class="mb-8 text-muted-foreground">
-				{m.onboarding_description()}
-			</p>
-
-			<Card>
-				<CardContent class="pt-6">
-					{#if error}
-						<div
-							class="mb-4 rounded-md border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive"
-						>
-							{error}
-						</div>
-					{/if}
-
-					<form onsubmit={handleCreate} class="space-y-4">
-						<div class="space-y-2">
-							<Label for="workspace-name">{m.onboarding_workspace_name()}</Label>
-							<Input
-								type="text"
-								id="workspace-name"
-								bind:value={workspaceName}
-								placeholder={m.onboarding_workspace_placeholder()}
-								required
-								autofocus
-							/>
-							<p class="text-sm text-muted-foreground">
-								{m.onboarding_workspace_hint()}
-							</p>
-						</div>
-
-						<Button type="submit" disabled={isLoading || !workspaceName.trim()} class="w-full">
-							{#if isLoading}
-								<LoaderIcon class="mr-2 h-4 w-4 animate-spin" />
-								{m.onboarding_loading()}
-							{:else}
-								{m.onboarding_submit()}
-							{/if}
+	<div class="space-y-4">
+		{#if loadError}
+			<div data-testid="onboarding-load-error">
+				<InlineNotice tone="error" message={loadError}>
+					{#snippet actions()}
+						<Button variant="outline" size="sm" onclick={() => void loadOnboardingState()}>
+							{m.common_retry()}
 						</Button>
-					</form>
-				</CardContent>
-			</Card>
-		</div>
+					{/snippet}
+				</InlineNotice>
+			</div>
+		{:else}
+			{#if createError}
+				<InlineNotice tone="error" message={createError} />
+			{/if}
+
+			<form onsubmit={handleCreate} class="space-y-4">
+				<div class="space-y-2">
+					<Label for="workspace-name">{m.onboarding_workspace_name()}</Label>
+					<Input
+						type="text"
+						id="workspace-name"
+						bind:value={workspaceName}
+						placeholder={m.onboarding_workspace_placeholder()}
+						required
+						autofocus
+					/>
+					<p class="text-sm text-muted-foreground">
+						{m.onboarding_workspace_hint()}
+					</p>
+				</div>
+
+				<Button type="submit" disabled={isLoading || !workspaceName.trim()} class="w-full">
+					{#if isLoading}
+						<LoaderIcon class="mr-2 size-4 animate-spin" />
+						{m.onboarding_loading()}
+					{:else}
+						{m.onboarding_submit()}
+					{/if}
+				</Button>
+			</form>
+		{/if}
 	</div>
-{/if}
+</StandaloneShell>

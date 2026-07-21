@@ -1,13 +1,16 @@
 <script lang="ts">
-	import type { Snippet } from 'svelte';
-	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
+	import type { ComponentProps, Snippet } from 'svelte';
+	import PageHeader from '$lib/components/page-header.svelte';
+	import PageLoading from '$lib/components/page-loading.svelte';
+
+	type PageLoadingProps = ComponentProps<typeof PageLoading>;
 
 	interface Props {
 		/** Page title displayed in the header */
 		title: string;
 		/** Optional icon component to display before title */
 		icon?: ConstructorOfATypedSvelteComponent;
-		/** Optional description text below title - can be HTML string */
+		/** Optional plain-text description below the title */
 		description?: string;
 		/** Optional header actions (buttons, etc.) */
 		actions?: Snippet;
@@ -15,6 +18,14 @@
 		loading?: boolean;
 		/** Optional loading message */
 		loadingMessage?: string;
+		/** Content-shaped loading placeholder */
+		loadingLayout?: PageLoadingProps['layout'];
+		/** Optional recipe used by loading layouts with multiple content shapes */
+		loadingVariant?: PageLoadingProps['variant'];
+		/** Number of repeated placeholder items */
+		loadingItems?: number;
+		/** Number of controls represented in the loading header */
+		loadingActionCount?: number;
 		/** Page content */
 		children: Snippet;
 	}
@@ -26,43 +37,31 @@
 		actions,
 		loading = false,
 		loadingMessage = 'Loading...',
+		loadingLayout = 'list',
+		loadingVariant = 'profile',
+		loadingItems = 4,
+		loadingActionCount = 2,
 		children
 	}: Props = $props();
 </script>
 
-{#if loading}
-	<div class="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-4 px-4 py-6 lg:px-8">
-		<Skeleton class="h-7 w-48 rounded" />
-		<Skeleton class="h-4 w-64 rounded" />
-		<div class="mt-4 flex flex-col gap-4">
-			<Skeleton class="h-32 rounded-lg" />
-			<Skeleton class="h-24 rounded-lg" />
-			<Skeleton class="h-24 rounded-lg" />
-		</div>
-	</div>
-{:else}
-	<div class="mx-auto w-full max-w-6xl px-4 py-6 lg:px-8">
-		<!-- Page Header -->
-		<div class="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-			<div>
-				<h1 class="flex items-center gap-2.5 text-xl font-semibold tracking-tight">
-					{#if Icon}
-						<Icon class="h-5 w-5 text-primary" />
-					{/if}
-					{title}
-				</h1>
-				{#if description}
-					<p class="mt-1 text-sm text-muted-foreground">{description}</p>
-				{/if}
-			</div>
-			{#if actions}
-				<div class="flex shrink-0 items-center gap-2">
-					{@render actions()}
-				</div>
-			{/if}
-		</div>
+<div
+	data-slot="page-container"
+	class="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 px-4 py-5 sm:px-6 sm:py-6 lg:px-8"
+	style="container-type: inline-size;"
+>
+	<PageHeader {title} icon={Icon} {description} {actions} {loading} {loadingActionCount} />
 
-		<!-- Page Content -->
-		{@render children()}
+	<div data-slot="page-content" class="min-w-0" aria-busy={loading}>
+		{#if loading}
+			<PageLoading
+				layout={loadingLayout}
+				variant={loadingVariant}
+				label={loadingMessage}
+				items={loadingItems}
+			/>
+		{:else}
+			{@render children()}
+		{/if}
 	</div>
-{/if}
+</div>

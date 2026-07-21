@@ -1,4 +1,4 @@
-import { CalendarDate } from '@internationalized/date';
+import { CalendarDate, fromDate } from '@internationalized/date';
 
 export interface ParsedScheduleInput {
 	date: CalendarDate;
@@ -51,21 +51,52 @@ const MONTH_INDEXES: Record<string, number> = {
 	dec: 11
 };
 
-function toCalendarDate(date: Date): CalendarDate {
-	return new CalendarDate(date.getFullYear(), date.getMonth() + 1, date.getDate());
+function toCalendarDate(date: Date, useUTC = false): CalendarDate {
+	return new CalendarDate(
+		useUTC ? date.getUTCFullYear() : date.getFullYear(),
+		(useUTC ? date.getUTCMonth() : date.getMonth()) + 1,
+		useUTC ? date.getUTCDate() : date.getDate()
+	);
 }
 
-function toTime(date: Date): string {
-	return `${date.getHours().toString().padStart(2, '0')}:${date
-		.getMinutes()
-		.toString()
-		.padStart(2, '0')}`;
+function toTime(date: Date, useUTC = false): string {
+	const hours = useUTC ? date.getUTCHours() : date.getHours();
+	const minutes = useUTC ? date.getUTCMinutes() : date.getMinutes();
+	return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
 }
 
-function parsed(date: Date): ParsedScheduleInput {
+function parsed(date: Date, useUTC = false): ParsedScheduleInput {
 	return {
-		date: toCalendarDate(date),
-		time: toTime(date)
+		date: toCalendarDate(date, useUTC),
+		time: toTime(date, useUTC)
+	};
+}
+
+function workspaceWallClock(instant: Date, timeZone: string): Date {
+	let zoned: ReturnType<typeof fromDate>;
+	try {
+		zoned = fromDate(instant, timeZone);
+	} catch {
+		zoned = fromDate(instant, 'UTC');
+	}
+	return new Date(
+		Date.UTC(
+			zoned.year,
+			zoned.month - 1,
+			zoned.day,
+			zoned.hour,
+			zoned.minute,
+			zoned.second,
+			zoned.millisecond
+		)
+	);
+}
+
+function parsedInstant(instant: Date, timeZone: string): ParsedScheduleInput {
+	const zoned = fromDate(instant, timeZone);
+	return {
+		date: new CalendarDate(zoned.year, zoned.month, zoned.day),
+		time: `${zoned.hour.toString().padStart(2, '0')}:${zoned.minute.toString().padStart(2, '0')}`
 	};
 }
 
@@ -97,31 +128,73 @@ function parseTime(input: string): { hour: number; minute: number } | null {
 	return { hour, minute };
 }
 
-function applyTime(date: Date, time: { hour: number; minute: number } | null, fallbackHour = 9) {
+function applyTime(
+	date: Date,
+	time: { hour: number; minute: number } | null,
+	fallbackHour = 9,
+	useUTC = false
+) {
 	const next = new Date(date);
-	next.setHours(time?.hour ?? fallbackHour, time?.minute ?? 0, 0, 0);
+	if (useUTC) next.setUTCHours(time?.hour ?? fallbackHour, time?.minute ?? 0, 0, 0);
+	else next.setHours(time?.hour ?? fallbackHour, time?.minute ?? 0, 0, 0);
 	return next;
 }
 
-function nextWeekday(base: Date, targetDay: number, forceNext: boolean, timeInput: string): Date {
+function nextWeekday(
+	base: Date,
+	targetDay: number,
+	forceNext: boolean,
+	timeInput: string,
+	useUTC = false
+): Date {
 	const time = parseTime(timeInput);
-	let daysUntil = (targetDay - base.getDay() + 7) % 7;
+	let daysUntil = (targetDay - (useUTC ? base.getUTCDay() : base.getDay()) + 7) % 7;
 	if (forceNext || daysUntil === 0) {
-		const candidate = applyTime(base, time);
+		const candidate = applyTime(base, time, 9, useUTC);
 		if (forceNext || candidate.getTime() <= base.getTime())
 			daysUntil = daysUntil === 0 ? 7 : daysUntil;
 	}
 	const next = new Date(base);
-	next.setDate(base.getDate() + daysUntil);
-	return applyTime(next, time);
+	if (useUTC) next.setUTCDate(base.getUTCDate() + daysUntil);
+	else next.setDate(base.getDate() + daysUntil);
+	return applyTime(next, time, 9, useUTC);
+}
+
+function yearOf(date: Date, useUTC: boolean) {
+	return useUTC ? date.getUTCFullYear() : date.getFullYear();
+}
+
+function createDate(year: number, month: number, day: number, useUTC: boolean) {
+	return useUTC ? new Date(Date.UTC(year, month, day)) : new Date(year, month, day);
+}
+
+function isExactDate(date: Date, year: number, month: number, day: number, useUTC: boolean) {
+	return (
+		yearOf(date, useUTC) === year &&
+		(useUTC ? date.getUTCMonth() : date.getMonth()) === month &&
+		(useUTC ? date.getUTCDate() : date.getDate()) === day
+	);
+}
+
+function addCalendarDays(date: Date, days: number, useUTC: boolean) {
+	if (useUTC) date.setUTCDate(date.getUTCDate() + days);
+	else date.setDate(date.getDate() + days);
+}
+
+function addCalendarYears(date: Date, years: number, useUTC: boolean) {
+	if (useUTC) date.setUTCFullYear(date.getUTCFullYear() + years);
+	else date.setFullYear(date.getFullYear() + years);
 }
 
 export function parseNaturalScheduleInput(
 	input: string,
-	now = new Date()
+	now = new Date(),
+	timeZone?: string
 ): ParsedScheduleInput | null {
 	const normalized = input.trim().toLowerCase().replace(/[,]+/g, ' ').replace(/\s+/g, ' ');
 	if (!normalized) return null;
+	const useUTC = Boolean(timeZone);
+	const referenceNow = timeZone ? workspaceWallClock(now, timeZone) : now;
 
 	const relativeMatch = normalized.match(
 		/^in\s+(\d+)\s*(minutes?|mins?|m|hours?|hrs?|h|days?|d|weeks?|w)$/
@@ -129,28 +202,33 @@ export function parseNaturalScheduleInput(
 	if (relativeMatch) {
 		const amount = Number.parseInt(relativeMatch[1], 10);
 		const unit = relativeMatch[2];
-		const next = new Date(now);
+		if (timeZone && (unit.startsWith('m') || unit.startsWith('h'))) {
+			const milliseconds = amount * (unit.startsWith('m') ? 60_000 : 3_600_000);
+			return parsedInstant(new Date(now.getTime() + milliseconds), timeZone);
+		}
+		const next = new Date(referenceNow);
 		if (unit.startsWith('m')) next.setMinutes(next.getMinutes() + amount);
 		else if (unit.startsWith('h')) next.setHours(next.getHours() + amount);
-		else if (unit.startsWith('d')) next.setDate(next.getDate() + amount);
-		else next.setDate(next.getDate() + amount * 7);
-		next.setSeconds(0, 0);
-		return parsed(next);
+		else if (unit.startsWith('d')) addCalendarDays(next, amount, useUTC);
+		else addCalendarDays(next, amount * 7, useUTC);
+		if (useUTC) next.setUTCSeconds(0, 0);
+		else next.setSeconds(0, 0);
+		return parsed(next, useUTC);
 	}
 
 	const tomorrowMatch = /\btomorrow\b/.test(normalized);
 	const todayMatch = /\btoday\b/.test(normalized);
 	const tonightMatch = /\btonight\b/.test(normalized);
 	if (tomorrowMatch || todayMatch || tonightMatch) {
-		const next = new Date(now);
-		if (tomorrowMatch) next.setDate(now.getDate() + 1);
+		const next = new Date(referenceNow);
+		if (tomorrowMatch) addCalendarDays(next, 1, useUTC);
 		const time = parseTime(normalized);
 		const fallbackHour = tonightMatch ? 20 : 9;
-		const candidate = applyTime(next, time, fallbackHour);
-		if (!tomorrowMatch && candidate.getTime() <= now.getTime()) {
-			candidate.setDate(candidate.getDate() + 1);
+		const candidate = applyTime(next, time, fallbackHour, useUTC);
+		if (!tomorrowMatch && candidate.getTime() <= referenceNow.getTime()) {
+			addCalendarDays(candidate, 1, useUTC);
 		}
-		return parsed(candidate);
+		return parsed(candidate, useUTC);
 	}
 
 	const weekdayMatch = normalized.match(
@@ -160,7 +238,14 @@ export function parseNaturalScheduleInput(
 		const weekday = WEEKDAY_INDEXES[weekdayMatch[2]];
 		if (weekday !== undefined) {
 			return parsed(
-				nextWeekday(now, weekday, !!weekdayMatch[1], normalized.replace(weekdayMatch[0], ''))
+				nextWeekday(
+					referenceNow,
+					weekday,
+					!!weekdayMatch[1],
+					normalized.replace(weekdayMatch[0], ''),
+					useUTC
+				),
+				useUTC
 			);
 		}
 	}
@@ -173,12 +258,20 @@ export function parseNaturalScheduleInput(
 		const day = Number.parseInt(monthMatch[2], 10);
 		const explicitYear = monthMatch[3] ? Number.parseInt(monthMatch[3], 10) : null;
 		if (month !== undefined && day >= 1 && day <= 31) {
-			const candidate = new Date(explicitYear ?? now.getFullYear(), month, day);
-			const withTime = applyTime(candidate, parseTime(normalized.replace(monthMatch[0], '')));
-			if (!explicitYear && withTime.getTime() <= now.getTime()) {
-				withTime.setFullYear(withTime.getFullYear() + 1);
+			const year = explicitYear ?? yearOf(referenceNow, useUTC);
+			const candidate = createDate(year, month, day, useUTC);
+			if (!isExactDate(candidate, year, month, day, useUTC)) return null;
+			const withTime = applyTime(
+				candidate,
+				parseTime(normalized.replace(monthMatch[0], '')),
+				9,
+				useUTC
+			);
+			if (!explicitYear && withTime.getTime() <= referenceNow.getTime()) {
+				addCalendarYears(withTime, 1, useUTC);
+				if (!isExactDate(withTime, year + 1, month, day, useUTC)) return null;
 			}
-			return parsed(withTime);
+			return parsed(withTime, useUTC);
 		}
 	}
 
@@ -186,27 +279,34 @@ export function parseNaturalScheduleInput(
 	if (slashDateMatch) {
 		const month = Number.parseInt(slashDateMatch[1], 10) - 1;
 		const day = Number.parseInt(slashDateMatch[2], 10);
-		let year = slashDateMatch[3] ? Number.parseInt(slashDateMatch[3], 10) : now.getFullYear();
+		let year = slashDateMatch[3]
+			? Number.parseInt(slashDateMatch[3], 10)
+			: yearOf(referenceNow, useUTC);
 		if (year < 100) year += 2000;
 		if (month >= 0 && month <= 11 && day >= 1 && day <= 31) {
+			const candidateDate = createDate(year, month, day, useUTC);
+			if (!isExactDate(candidateDate, year, month, day, useUTC)) return null;
 			const candidate = applyTime(
-				new Date(year, month, day),
-				parseTime(normalized.replace(slashDateMatch[0], ''))
+				candidateDate,
+				parseTime(normalized.replace(slashDateMatch[0], '')),
+				9,
+				useUTC
 			);
-			if (!slashDateMatch[3] && candidate.getTime() <= now.getTime()) {
-				candidate.setFullYear(candidate.getFullYear() + 1);
+			if (!slashDateMatch[3] && candidate.getTime() <= referenceNow.getTime()) {
+				addCalendarYears(candidate, 1, useUTC);
+				if (!isExactDate(candidate, year + 1, month, day, useUTC)) return null;
 			}
-			return parsed(candidate);
+			return parsed(candidate, useUTC);
 		}
 	}
 
 	const time = parseTime(normalized);
 	if (time) {
-		const candidate = applyTime(now, time);
-		if (candidate.getTime() <= now.getTime()) {
-			candidate.setDate(candidate.getDate() + 1);
+		const candidate = applyTime(referenceNow, time, 9, useUTC);
+		if (candidate.getTime() <= referenceNow.getTime()) {
+			addCalendarDays(candidate, 1, useUTC);
 		}
-		return parsed(candidate);
+		return parsed(candidate, useUTC);
 	}
 
 	return null;

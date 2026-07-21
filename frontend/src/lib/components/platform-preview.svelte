@@ -10,6 +10,7 @@
 	import BookmarkIcon from 'lucide-svelte/icons/bookmark';
 	import PlayIcon from 'lucide-svelte/icons/play';
 	import ThumbsUpIcon from 'lucide-svelte/icons/thumbs-up';
+	import { m } from '$lib/paraglide/messages';
 
 	interface Props {
 		platform: string;
@@ -28,8 +29,8 @@
 		content,
 		mediaIds,
 		mediaMimeTypes = {},
-		username = 'username',
-		displayName = 'Display Name',
+		username = m.platform_preview_username(),
+		displayName = m.platform_preview_display_name(),
 		avatarUrl,
 		variantContent = null,
 		isUnsynced = false
@@ -107,10 +108,12 @@
 					<span class="truncate font-semibold text-foreground">{displayName}</span>
 					<span class="shrink-0 text-muted-foreground">@{username}</span>
 					<span class="shrink-0 text-muted-foreground">·</span>
-					<span class="shrink-0 text-muted-foreground">now</span>
+					<span class="shrink-0 text-muted-foreground">{m.platform_preview_now()}</span>
 				</div>
 				{#if isUnsynced}
-					<div class="mt-0.5 text-xs text-amber-500">Customized for {previewName}</div>
+					<div class="mt-0.5 text-xs text-amber-500">
+						{m.platform_preview_customized_for({ platform: previewName })}
+					</div>
 				{/if}
 				<div class="mt-1 text-[15px] leading-normal text-foreground">
 					<!-- eslint-disable-next-line svelte/no-at-html-tags -->
@@ -181,7 +184,9 @@
 					<span class="text-sm text-muted-foreground">@{username}</span>
 				</div>
 				{#if isUnsynced}
-					<div class="text-xs text-amber-500">Customized for {previewName}</div>
+					<div class="text-xs text-amber-500">
+						{m.platform_preview_customized_for({ platform: previewName })}
+					</div>
 				{/if}
 				<div class="mt-2 text-[15px] leading-relaxed whitespace-pre-wrap text-foreground">
 					<!-- eslint-disable-next-line svelte/no-at-html-tags -->
@@ -194,22 +199,24 @@
 						{/each}
 					</div>
 				{/if}
-				<div class="mt-3 flex items-center gap-5 text-sm text-muted-foreground">
+				<div
+					class="mt-3 grid grid-cols-2 gap-x-2 gap-y-2 text-xs text-muted-foreground sm:flex sm:flex-wrap sm:gap-5 sm:text-sm"
+				>
 					<span class="flex items-center gap-1.5 hover:text-indigo-500">
-						<MessageCircleIcon class="h-4 w-4" />
-						Reply
+						<MessageCircleIcon class="size-4 shrink-0" />
+						{m.platform_preview_reply()}
 					</span>
 					<span class="flex items-center gap-1.5 hover:text-green-500">
-						<RepeatIcon class="h-4 w-4" />
-						Boost
+						<RepeatIcon class="size-4 shrink-0" />
+						{m.platform_preview_boost()}
 					</span>
 					<span class="flex items-center gap-1.5 hover:text-red-500">
-						<HeartIcon class="h-4 w-4" />
-						Favorite
+						<HeartIcon class="size-4 shrink-0" />
+						{m.platform_preview_favorite()}
 					</span>
 					<span class="flex items-center gap-1.5 hover:text-foreground">
-						<ShareIcon class="h-4 w-4" />
-						Share
+						<ShareIcon class="size-4 shrink-0" />
+						{m.platform_preview_share()}
 					</span>
 				</div>
 			</div>
@@ -237,12 +244,14 @@
 					<div class="flex items-center gap-1.5">
 						<span class="font-semibold text-foreground">{displayName}</span>
 						<span class="text-sm text-muted-foreground">@{username}</span>
-						<span class="text-sm text-muted-foreground">· now</span>
+						<span class="text-sm text-muted-foreground">· {m.platform_preview_now()}</span>
 					</div>
 					<MoreHorizontalIcon class="h-4 w-4 text-muted-foreground" />
 				</div>
 				{#if isUnsynced}
-					<div class="text-xs text-amber-500">Customized for {previewName}</div>
+					<div class="text-xs text-amber-500">
+						{m.platform_preview_customized_for({ platform: previewName })}
+					</div>
 				{/if}
 				<div class="mt-1 text-[15px] leading-normal text-foreground">
 					<!-- eslint-disable-next-line svelte/no-at-html-tags -->
@@ -298,12 +307,16 @@
 			{/if}
 			<div class="min-w-0 flex-1">
 				<div class="font-semibold text-foreground">{displayName}</div>
-				<div class="text-sm text-muted-foreground">@{username} · now</div>
+				<div class="text-sm text-muted-foreground">
+					@{username} · {m.platform_preview_now()}
+				</div>
 			</div>
 			<MoreHorizontalIcon class="h-5 w-5 text-muted-foreground" />
 		</div>
 		{#if isUnsynced}
-			<div class="mt-1 text-xs text-amber-500">Customized for {previewName}</div>
+			<div class="mt-1 text-xs text-amber-500">
+				{m.platform_preview_customized_for({ platform: previewName })}
+			</div>
 		{/if}
 		<div class="mt-3 text-sm leading-relaxed text-foreground">
 			<!-- eslint-disable-next-line svelte/no-at-html-tags -->
@@ -315,26 +328,28 @@
 			</div>
 			{#if mediaIds.length > 1}
 				<div class="mt-2 text-xs text-muted-foreground">
-					Preview shows the first attachment. LinkedIn publishing currently sends one media item.
+					{m.platform_preview_first_attachment({ platform: 'LinkedIn' })}
 				</div>
 			{/if}
 		{/if}
-		<div class="mt-3 flex items-center gap-4 border-t pt-3 text-sm text-muted-foreground">
+		<div
+			class="mt-3 grid grid-cols-2 gap-x-2 gap-y-2 border-t pt-3 text-xs text-muted-foreground sm:flex sm:flex-wrap sm:gap-4 sm:text-sm"
+		>
 			<span class="flex items-center gap-1.5 hover:text-blue-600">
-				<HeartIcon class="h-4 w-4" />
-				Like
+				<HeartIcon class="size-4 shrink-0" />
+				{m.platform_preview_like()}
 			</span>
 			<span class="flex items-center gap-1.5 hover:text-blue-600">
-				<MessageCircleIcon class="h-4 w-4" />
-				Comment
+				<MessageCircleIcon class="size-4 shrink-0" />
+				{m.platform_preview_comment()}
 			</span>
 			<span class="flex items-center gap-1.5 hover:text-blue-600">
-				<RepeatIcon class="h-4 w-4" />
-				Repost
+				<RepeatIcon class="size-4 shrink-0" />
+				{m.platform_preview_repost()}
 			</span>
 			<span class="flex items-center gap-1.5 hover:text-blue-600">
-				<ShareIcon class="h-4 w-4" />
-				Send
+				<ShareIcon class="size-4 shrink-0" />
+				{m.platform_preview_send()}
 			</span>
 		</div>
 	</div>
@@ -360,12 +375,14 @@
 					<div class="flex items-center gap-2">
 						<span class="font-semibold text-foreground">{displayName}</span>
 						<span class="text-sm text-muted-foreground">@{username}</span>
-						<span class="text-sm text-muted-foreground">· now</span>
+						<span class="text-sm text-muted-foreground">· {m.platform_preview_now()}</span>
 					</div>
 					<MoreHorizontalIcon class="h-4 w-4 text-muted-foreground" />
 				</div>
 				{#if isUnsynced}
-					<div class="text-xs text-amber-500">Customized for {previewName}</div>
+					<div class="text-xs text-amber-500">
+						{m.platform_preview_customized_for({ platform: previewName })}
+					</div>
 				{/if}
 				<div class="mt-1 text-[15px] leading-normal text-foreground">
 					<!-- eslint-disable-next-line svelte/no-at-html-tags -->
@@ -377,7 +394,7 @@
 					</div>
 					{#if mediaIds.length > 1}
 						<div class="mt-2 text-xs text-muted-foreground">
-							Preview shows the first attachment. Threads publishing currently sends one media item.
+							{m.platform_preview_first_attachment({ platform: 'Threads' })}
 						</div>
 					{/if}
 				{/if}
@@ -421,7 +438,7 @@
 			{/if}
 			<div class="min-w-0 flex-1">
 				<div class="truncate text-sm font-semibold">@{username}</div>
-				<div class="text-xs text-muted-foreground">Instagram post preview</div>
+				<div class="text-xs text-muted-foreground">{m.platform_preview_instagram_post()}</div>
 			</div>
 			<MoreHorizontalIcon class="h-5 w-5 text-muted-foreground" />
 		</div>
@@ -446,7 +463,9 @@
 				<BookmarkIcon class="h-5 w-5" />
 			</div>
 			{#if isUnsynced}
-				<div class="text-xs text-amber-500">Customized for {previewName}</div>
+				<div class="text-xs text-amber-500">
+					{m.platform_preview_customized_for({ platform: previewName })}
+				</div>
 			{/if}
 			<div class="text-sm leading-normal text-foreground">
 				<span class="font-semibold">@{username}</span>
@@ -477,12 +496,16 @@
 			{/if}
 			<div class="min-w-0 flex-1">
 				<div class="font-semibold text-foreground">{displayName}</div>
-				<div class="text-xs text-muted-foreground">@{username} · Scheduled</div>
+				<div class="text-xs text-muted-foreground">
+					@{username} · {m.platform_preview_scheduled()}
+				</div>
 			</div>
 			<MoreHorizontalIcon class="h-5 w-5 text-muted-foreground" />
 		</div>
 		{#if isUnsynced}
-			<div class="mt-2 text-xs text-amber-500">Customized for {previewName}</div>
+			<div class="mt-2 text-xs text-amber-500">
+				{m.platform_preview_customized_for({ platform: previewName })}
+			</div>
 		{/if}
 		<div class="mt-3 text-[15px] leading-relaxed text-foreground">
 			<!-- eslint-disable-next-line svelte/no-at-html-tags -->
@@ -506,15 +529,15 @@
 		>
 			<span class="flex items-center justify-center gap-1.5 hover:text-blue-600">
 				<ThumbsUpIcon class="h-4 w-4" />
-				Like
+				{m.platform_preview_like()}
 			</span>
 			<span class="flex items-center justify-center gap-1.5 hover:text-blue-600">
 				<MessageCircleIcon class="h-4 w-4" />
-				Comment
+				{m.platform_preview_comment()}
 			</span>
 			<span class="flex items-center justify-center gap-1.5 hover:text-blue-600">
 				<ShareIcon class="h-4 w-4" />
-				Share
+				{m.platform_preview_share()}
 			</span>
 		</div>
 	</div>
@@ -554,9 +577,11 @@
 			{/if}
 			<div class="min-w-0 flex-1">
 				<h3 class="line-clamp-2 text-sm font-semibold text-foreground">
-					{firstLine(previewContent, 'Untitled YouTube upload')}
+					{firstLine(previewContent, m.platform_preview_untitled_youtube_upload())}
 				</h3>
-				<div class="mt-1 text-xs text-muted-foreground">{displayName} · Scheduled video</div>
+				<div class="mt-1 text-xs text-muted-foreground">
+					{displayName} · {m.platform_preview_scheduled_video()}
+				</div>
 				{#if remainingLines(previewContent)}
 					<div class="mt-2 line-clamp-3 text-xs leading-relaxed text-muted-foreground">
 						<!-- eslint-disable-next-line svelte/no-at-html-tags -->
@@ -564,7 +589,9 @@
 					</div>
 				{/if}
 				{#if isUnsynced}
-					<div class="mt-2 text-xs text-amber-500">Customized for {previewName}</div>
+					<div class="mt-2 text-xs text-amber-500">
+						{m.platform_preview_customized_for({ platform: previewName })}
+					</div>
 				{/if}
 			</div>
 			<MoreHorizontalIcon class="h-5 w-5 text-muted-foreground" />
@@ -613,7 +640,9 @@
 		<div class="absolute right-16 bottom-4 left-4 space-y-2">
 			<div class="text-sm font-semibold">@{username}</div>
 			{#if isUnsynced}
-				<div class="text-xs text-amber-200">Customized for {previewName}</div>
+				<div class="text-xs text-amber-200">
+					{m.platform_preview_customized_for({ platform: previewName })}
+				</div>
 			{/if}
 			<div class="line-clamp-4 text-sm leading-normal">
 				<!-- eslint-disable-next-line svelte/no-at-html-tags -->
@@ -629,7 +658,9 @@
 			<span class="font-medium">{previewName}</span>
 		</div>
 		{#if isUnsynced}
-			<div class="mt-1 text-xs text-amber-500">Customized for {previewName}</div>
+			<div class="mt-1 text-xs text-amber-500">
+				{m.platform_preview_customized_for({ platform: previewName })}
+			</div>
 		{/if}
 		<div class="mt-2 text-sm text-foreground">
 			<!-- eslint-disable-next-line svelte/no-at-html-tags -->

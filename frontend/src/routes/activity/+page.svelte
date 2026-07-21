@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
@@ -9,11 +8,11 @@
 	import { Tabs, TabsList, TabsTrigger, TabsContent } from '$lib/components/ui/tabs';
 	import PageContainer from '$lib/components/page-container.svelte';
 	import EmptyState from '$lib/components/empty-state.svelte';
+	import InlineNotice from '$lib/components/inline-notice.svelte';
 	import PlatformIcon from '$lib/components/platform-icon.svelte';
 	import CalendarIcon from 'lucide-svelte/icons/calendar-days';
 	import CheckCircleIcon from 'lucide-svelte/icons/circle-check';
 	import XCircleIcon from 'lucide-svelte/icons/circle-x';
-	import AlertCircleIcon from 'lucide-svelte/icons/alert-circle';
 	import RefreshIcon from 'lucide-svelte/icons/refresh-cw';
 	import FileTextIcon from 'lucide-svelte/icons/file-text';
 	import PencilIcon from 'lucide-svelte/icons/pencil';
@@ -39,17 +38,24 @@
 	let accounts = $state.raw<SocialAccount[]>([]);
 	let copiedReportPostID = $state('');
 	let loading = $state(true);
+	let hasLoaded = $state(false);
 	let error = $state('');
+	let dataWorkspaceID = $state('');
+	let dataRequestSequence = 0;
 	let activeTab = $state(page.url.searchParams.get('tab') === 'drafts' ? 'drafts' : 'scheduled');
+
+	function isThreadChild(post: Post) {
+		return Boolean(post.parent_post_id) || (post.thread_sequence ?? 0) > 0;
+	}
 
 	const scheduledPosts = $derived(
 		posts
-			.filter((post) => post.status === 'scheduled')
+			.filter((post) => post.status === 'scheduled' && !isThreadChild(post))
 			.toSorted((a, b) => timestamp(a.scheduled_at) - timestamp(b.scheduled_at))
 	);
 	const publishedPosts = $derived(
 		posts
-			.filter((post) => post.status === 'published')
+			.filter((post) => post.status === 'published' && !isThreadChild(post))
 			.toSorted((a, b) => timestamp(b.created_at) - timestamp(a.created_at))
 	);
 	const failedPosts = $derived(
@@ -62,37 +68,85 @@
 			.filter((post) => post.status === 'draft')
 			.toSorted((a, b) => timestamp(b.created_at) - timestamp(a.created_at))
 	);
+	const currentWorkspaceID = $derived(workspaceCtx.currentWorkspace?.id ?? '');
+	const currentViewLoaded = $derived(hasLoaded && dataWorkspaceID === currentWorkspaceID);
+	const initialLoading = $derived(
+		!currentViewLoaded && !error && (loading || Boolean(currentWorkspaceID))
+	);
 
-	onMount(() => {
-		void loadData();
+	$effect(() => {
+		const workspaceID = workspaceCtx.currentWorkspace?.id ?? '';
+		if (workspaceID) void loadData(workspaceID);
 	});
 
-	async function loadData() {
+	async function loadData(requestedWorkspaceID = workspaceCtx.currentWorkspace?.id ?? '') {
+		const requestSequence = ++dataRequestSequence;
+		let workspaceId = requestedWorkspaceID;
 		loading = true;
 		error = '';
 		try {
-			if (!workspaceCtx.currentWorkspace) await workspaceCtx.initialize();
-			const workspaceId = workspaceCtx.currentWorkspace?.id;
+			if (!workspaceCtx.currentWorkspace) {
+				try {
+					await workspaceCtx.initialize();
+				} catch {
+					throw new Error(m.activity_failed_load());
+				}
+			}
+			workspaceId ||= workspaceCtx.currentWorkspace?.id ?? '';
+			if (!workspaceId) throw new Error(m.activity_failed_load());
+
+			if (dataWorkspaceID !== workspaceId) {
+				dataWorkspaceID = workspaceId;
+				posts = [];
+				failedJobs = [];
+				accounts = [];
+				hasLoaded = false;
+			}
+
 			const [postsResponse, jobsResponse, accountsResponse] = await Promise.all([
 				client.GET('/posts', {
-					params: { query: { ...(workspaceId ? { workspace_id: workspaceId } : {}), limit: 200 } }
+					params: { query: { workspace_id: workspaceId, limit: 200 } }
 				}),
-				client.GET('/jobs', { params: { query: { limit: 100, offset: 0 } } }),
-				workspaceId
-					? client.GET('/accounts', { params: { query: { workspace_id: workspaceId } } })
-					: Promise.resolve({ data: [] as SocialAccount[] })
+				client.GET('/jobs', {
+					params: {
+						query: { workspace_id: workspaceId, status: 'failed', limit: 100, offset: 0 }
+					}
+				}),
+				client.GET('/accounts', { params: { query: { workspace_id: workspaceId } } })
 			]);
 
+			if (
+				requestSequence !== dataRequestSequence ||
+				(workspaceCtx.currentWorkspace?.id ?? '') !== workspaceId
+			) {
+				return;
+			}
 			if (postsResponse.error || !postsResponse.data) {
 				throw new Error(m.activity_failed_posts());
 			}
 			posts = postsResponse.data;
-			failedJobs = (jobsResponse.data ?? []).filter((job) => job.status === 'failed');
-			accounts = accountsResponse.data ?? [];
+			failedJobs = jobsResponse.error
+				? []
+				: (jobsResponse.data ?? []).filter((job) => job.status === 'failed');
+			accounts = accountsResponse.error ? [] : (accountsResponse.data ?? []);
+			error = jobsResponse.error
+				? m.activity_failed_jobs()
+				: accountsResponse.error
+					? m.activity_failed_accounts()
+					: '';
+			hasLoaded = true;
 		} catch (cause) {
+			if (
+				requestSequence !== dataRequestSequence ||
+				workspaceCtx.currentWorkspace?.id !== workspaceId
+			) {
+				return;
+			}
 			error = cause instanceof Error ? cause.message : m.activity_failed_load();
 		} finally {
-			loading = false;
+			if (requestSequence === dataRequestSequence) {
+				loading = false;
+			}
 		}
 	}
 
@@ -106,15 +160,22 @@
 			month: 'short',
 			day: 'numeric',
 			hour: '2-digit',
-			minute: '2-digit'
+			minute: '2-digit',
+			timeZone: workspaceCtx.settings.timezone || 'UTC'
 		});
+	}
+
+	function threadPostCount(count: number) {
+		return count === 1
+			? m.activity_thread_post_one({ count })
+			: m.activity_thread_post_many({ count });
 	}
 
 	function postText(post: Post) {
 		if (post.status !== 'draft') return post.content || m.activity_untitled_post();
 		const presentation = getDraftPresentation(post);
 		return presentation.isThread
-			? `${presentation.title} · ${presentation.postCount} posts`
+			? `${presentation.title} · ${threadPostCount(presentation.postCount)}`
 			: presentation.title;
 	}
 
@@ -367,10 +428,12 @@
 	title={m.activity_title()}
 	description={m.activity_description()}
 	icon={PostsIcon}
-	{loading}
+	loading={initialLoading}
+	loadingLayout="list"
+	loadingMessage={m.common_loading()}
 >
 	{#snippet actions()}
-		<Button variant="outline" size="sm" onclick={loadData} disabled={loading}>
+		<Button variant="outline" size="sm" onclick={() => loadData()} disabled={loading}>
 			<RefreshIcon class={`mr-1.5 size-3.5 ${loading ? 'animate-spin' : ''}`} />
 			{m.common_refresh()}
 		</Button>
@@ -381,87 +444,92 @@
 	{/snippet}
 
 	{#if error}
-		<div
-			class="mb-6 flex items-center gap-3 rounded-md bg-destructive/10 px-4 py-3 text-sm text-destructive"
+		<InlineNotice
+			tone="error"
+			message={error}
+			onDismiss={() => (error = '')}
+			dismissLabel={m.common_dismiss()}
 		>
-			<AlertCircleIcon class="size-4 shrink-0" />
-			<span>{error}</span>
-		</div>
+			{#snippet actions()}
+				<Button variant="outline" size="sm" onclick={() => loadData()}>{m.common_refresh()}</Button>
+			{/snippet}
+		</InlineNotice>
 	{/if}
+	{#if currentViewLoaded}
+		<Tabs bind:value={activeTab}>
+			<TabsList variant="line" class="mb-6 w-full justify-start overflow-x-auto">
+				<TabsTrigger value="scheduled"
+					>{m.activity_tab_scheduled()}
+					<span class="text-muted-foreground">{scheduledPosts.length}</span></TabsTrigger
+				>
+				<TabsTrigger value="published"
+					>{m.activity_tab_published()}
+					<span class="text-muted-foreground">{publishedPosts.length}</span></TabsTrigger
+				>
+				<TabsTrigger value="failed"
+					>{m.activity_tab_failed()}
+					<span class="text-muted-foreground">{failedPosts.length + failedJobs.length}</span
+					></TabsTrigger
+				>
+				<TabsTrigger value="drafts"
+					>{m.activity_tab_drafts()}
+					<span class="text-muted-foreground">{drafts.length}</span></TabsTrigger
+				>
+			</TabsList>
 
-	<Tabs bind:value={activeTab}>
-		<TabsList variant="line" class="mb-6 w-full justify-start overflow-x-auto">
-			<TabsTrigger value="scheduled"
-				>{m.activity_tab_scheduled()}
-				<span class="text-muted-foreground">{scheduledPosts.length}</span></TabsTrigger
-			>
-			<TabsTrigger value="published"
-				>{m.activity_tab_published()}
-				<span class="text-muted-foreground">{publishedPosts.length}</span></TabsTrigger
-			>
-			<TabsTrigger value="failed"
-				>{m.activity_tab_failed()}
-				<span class="text-muted-foreground">{failedPosts.length + failedJobs.length}</span
-				></TabsTrigger
-			>
-			<TabsTrigger value="drafts"
-				>{m.activity_tab_drafts()}
-				<span class="text-muted-foreground">{drafts.length}</span></TabsTrigger
-			>
-		</TabsList>
-
-		<TabsContent value="scheduled">
-			{@render postList(
-				scheduledPosts,
-				m.activity_empty_scheduled_title(),
-				m.activity_empty_scheduled_body()
-			)}
-		</TabsContent>
-		<TabsContent value="published">
-			{@render postList(
-				publishedPosts,
-				m.activity_empty_published_title(),
-				m.activity_empty_published_body()
-			)}
-		</TabsContent>
-		<TabsContent value="failed">
-			{@render postList(
-				failedPosts,
-				m.activity_empty_failed_title(),
-				m.activity_empty_failed_body()
-			)}
-			{#if failedJobs.length > 0}
-				<details class="mt-6 border-t pt-4">
-					<summary
-						class="cursor-pointer text-sm font-medium text-destructive focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-					>
-						{m.activity_technical_details({ count: failedJobs.length })}
-					</summary>
-					<div class="mt-3 divide-y rounded-md bg-muted/35 px-4">
-						{#each failedJobs as job (job.id)}
-							<div class="flex items-start justify-between gap-4 py-3 text-sm">
-								<div>
-									<p class="font-medium">{job.type.replaceAll('_', ' ')}</p>
-									<p class="mt-1 text-xs text-destructive">
-										{job.last_error || m.activity_delivery_failed()}
-									</p>
+			<TabsContent value="scheduled">
+				{@render postList(
+					scheduledPosts,
+					m.activity_empty_scheduled_title(),
+					m.activity_empty_scheduled_body()
+				)}
+			</TabsContent>
+			<TabsContent value="published">
+				{@render postList(
+					publishedPosts,
+					m.activity_empty_published_title(),
+					m.activity_empty_published_body()
+				)}
+			</TabsContent>
+			<TabsContent value="failed">
+				{@render postList(
+					failedPosts,
+					m.activity_empty_failed_title(),
+					m.activity_empty_failed_body()
+				)}
+				{#if failedJobs.length > 0}
+					<details class="mt-6 border-t pt-4">
+						<summary
+							class="cursor-pointer text-sm font-medium text-destructive focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+						>
+							{m.activity_technical_details({ count: failedJobs.length })}
+						</summary>
+						<div class="mt-3 divide-y rounded-md bg-muted/35 px-4">
+							{#each failedJobs as job (job.id)}
+								<div class="flex items-start justify-between gap-4 py-3 text-sm">
+									<div>
+										<p class="font-medium">{job.type.replaceAll('_', ' ')}</p>
+										<p class="mt-1 text-xs text-destructive">
+											{job.last_error || m.activity_delivery_failed()}
+										</p>
+									</div>
+									{#if failedJobPostID(job)}
+										<Button
+											variant="ghost"
+											size="sm"
+											onclick={() => goto(resolve('/posts/[id]', { id: failedJobPostID(job) }))}
+											>{m.activity_open_post()}</Button
+										>
+									{/if}
 								</div>
-								{#if failedJobPostID(job)}
-									<Button
-										variant="ghost"
-										size="sm"
-										onclick={() => goto(resolve('/posts/[id]', { id: failedJobPostID(job) }))}
-										>{m.activity_open_post()}</Button
-									>
-								{/if}
-							</div>
-						{/each}
-					</div>
-				</details>
-			{/if}
-		</TabsContent>
-		<TabsContent value="drafts">
-			{@render postList(drafts, m.activity_empty_drafts_title(), m.activity_empty_drafts_body())}
-		</TabsContent>
-	</Tabs>
+							{/each}
+						</div>
+					</details>
+				{/if}
+			</TabsContent>
+			<TabsContent value="drafts">
+				{@render postList(drafts, m.activity_empty_drafts_title(), m.activity_empty_drafts_body())}
+			</TabsContent>
+		</Tabs>
+	{/if}
 </PageContainer>

@@ -1,5 +1,4 @@
 <script lang="ts">
-	import '../app.css';
 	import './layout.css';
 	import { ModeWatcher } from 'mode-watcher';
 	import { onMount } from 'svelte';
@@ -15,9 +14,8 @@
 	import LanguageSwitcher from '$lib/components/language-switcher.svelte';
 	import { IS_CAPACITOR } from '$lib/env';
 	import { instanceStore, isInstanceConfigured } from '$lib/stores/instance.svelte';
-	import { client } from '$lib/api/client';
 	import { workspaceCtx } from '$lib/stores/workspace.svelte';
-	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
+	import AppLoading from '$lib/components/app-loading.svelte';
 	import { m } from '$lib/paraglide/messages';
 	import { onboardingPathForPlan } from '$lib/billing';
 	import { safeSameOriginRedirect } from '$lib/redirects';
@@ -108,16 +106,8 @@
 		onboardingCheckInFlightForPath = path;
 		let nextNeedsOnboarding = false;
 		try {
-			const { data, error } = await client.GET('/workspaces');
-			if (!error && data && data.length === 0) {
-				nextNeedsOnboarding = true;
-			} else {
-				nextNeedsOnboarding = !!error;
-				// Initialize workspace context after successful workspace load
-				if (!error && data) {
-					await workspaceCtx.initialize();
-				}
-			}
+			await workspaceCtx.initialize();
+			nextNeedsOnboarding = workspaceCtx.workspaces.length === 0;
 		} catch {
 			// Fail safe: if we cannot verify workspace state, keep user in onboarding flow.
 			nextNeedsOnboarding = true;
@@ -158,11 +148,7 @@
 
 <ModeWatcher />
 {#if instance.isLoading || authState.isLoading || (authState.isAuthenticated && !onboardingChecked)}
-	<div class="flex min-h-screen flex-col items-center justify-center gap-3">
-		<Skeleton class="h-12 w-12 rounded-lg" />
-		<Skeleton class="h-3 w-32 rounded" />
-		<Skeleton class="h-3 w-24 rounded" />
-	</div>
+	<AppLoading label={m.common_loading()} />
 {:else if !authState.isAuthenticated}
 	<div class="fixed top-4 right-4 z-20">
 		<LanguageSwitcher compact />
@@ -197,9 +183,19 @@
 	</div>
 	{@render children()}
 {:else}
-	<Sidebar.Provider>
+	<a
+		href="#main-content"
+		class="fixed top-2 left-2 z-[100] -translate-y-16 rounded-md bg-background px-3 py-2 text-sm font-medium shadow-lg transition-transform focus:translate-y-0 focus:ring-2 focus:ring-ring focus:outline-none"
+	>
+		{m.common_skip_to_content()}
+	</a>
+	<Sidebar.Provider style="padding-top: env(safe-area-inset-top);">
 		<SidebarLeft />
-		<Sidebar.Inset class="pb-20 md:pb-0">
+		<Sidebar.Inset
+			id="main-content"
+			tabindex={-1}
+			class="pb-[var(--mobile-bottom-nav-clearance)] md:pb-0"
+		>
 			<div class="flex flex-1 flex-col overflow-auto">
 				{@render children()}
 			</div>

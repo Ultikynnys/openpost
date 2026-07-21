@@ -64,7 +64,7 @@
 				<button
 					type="button"
 					class={[
-						'flex min-h-14 w-full flex-col items-center justify-center gap-1 rounded-md px-1 text-[0.68rem] font-medium transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
+						'flex min-h-14 w-full flex-col items-center justify-center gap-1 rounded-md px-1 text-[0.625rem] font-medium transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none min-[360px]:text-[0.68rem]',
 						item.id === 'new'
 							? 'text-primary'
 							: active
@@ -84,7 +84,7 @@
 					>
 						<Icon class={item.id === 'new' ? 'size-5' : 'size-4'} />
 					</span>
-					<span>{labelFor(item.id)}</span>
+					<span class="max-w-full truncate">{labelFor(item.id)}</span>
 				</button>
 			</li>
 		{/each}
@@ -96,7 +96,7 @@
 							{...props}
 							type="button"
 							class={[
-								'flex min-h-14 w-full flex-col items-center justify-center gap-1 rounded-md px-1 text-[0.68rem] font-medium transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
+								'flex min-h-14 w-full flex-col items-center justify-center gap-1 rounded-md px-1 text-[0.625rem] font-medium transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none min-[360px]:text-[0.68rem]',
 								moreActive ? 'text-foreground' : 'text-muted-foreground'
 							]}
 							aria-current={moreActive ? 'page' : undefined}
@@ -105,7 +105,7 @@
 							<span class="flex size-5 items-center justify-center">
 								<MoreIcon class="size-4" />
 							</span>
-							<span>{m.sidebar_more()}</span>
+							<span class="max-w-full truncate">{m.sidebar_more()}</span>
 						</button>
 					{/snippet}
 				</DropdownMenu.Trigger>

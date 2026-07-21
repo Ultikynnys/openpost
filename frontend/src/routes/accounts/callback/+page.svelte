@@ -4,16 +4,14 @@
 	import { onMount } from 'svelte';
 	import { client } from '$lib/api/client';
 	import type { components } from '$lib/api/types';
-	import PageContainer from '$lib/components/page-container.svelte';
+	import StandaloneShell from '$lib/components/standalone-shell.svelte';
+	import InlineNotice from '$lib/components/inline-notice.svelte';
 	import { Button } from '$lib/components/ui/button';
-	import {
-		Card,
-		CardContent,
-		CardDescription,
-		CardHeader,
-		CardTitle
-	} from '$lib/components/ui/card';
 	import { getPlatformName } from '$lib/utils';
+	import { getLocaleTag } from '$lib/i18n';
+	import { m } from '$lib/paraglide/messages';
+	import CheckCircleIcon from 'lucide-svelte/icons/circle-check';
+	import AlertTriangleIcon from 'lucide-svelte/icons/triangle-alert';
 
 	type Selection = components['schemas']['AccountSelectionResponse'];
 	type SelectionOption = components['schemas']['AccountSelectionOption'];
@@ -32,13 +30,31 @@
 	let timeoutId: number | undefined;
 	let intervalId: number | undefined;
 
-	let platformName = $derived(platform ? getPlatformName(platform) : 'social account');
+	let platformName = $derived(
+		platform ? getPlatformName(platform) : m.accounts_callback_social_account()
+	);
 	let options = $derived(selection?.options ?? []);
+	let shellTitle = $derived(
+		viewState === 'selection'
+			? m.accounts_callback_choose_heading({ platform: platformName })
+			: viewState === 'error'
+				? m.accounts_callback_attention_heading()
+				: viewState === 'loading'
+					? m.accounts_callback_finishing_heading()
+					: m.accounts_callback_connected_heading()
+	);
+	let shellDescription = $derived(
+		viewState === 'selection'
+			? m.accounts_callback_choose_description()
+			: viewState === 'error'
+				? m.accounts_callback_attention_description()
+				: m.accounts_callback_finalizing_description({ platform: platformName })
+	);
 	let expiresAtLabel = $derived.by(() => {
 		if (!selection?.expires_at) return '';
 		const expiresAt = new Date(selection.expires_at);
 		if (Number.isNaN(expiresAt.getTime())) return '';
-		return new Intl.DateTimeFormat(undefined, {
+		return new Intl.DateTimeFormat(getLocaleTag(), {
 			month: 'short',
 			day: 'numeric',
 			hour: 'numeric',
@@ -54,16 +70,14 @@
 
 		if (status === 'selection_required') {
 			if (!connectionId) {
-				showError(
-					'This account connection is missing its selection token. Start again from Accounts.'
-				);
+				showError(m.accounts_callback_missing_token());
 			} else {
 				void loadSelection(connectionId);
 			}
 		} else if (status === 'success' || !status) {
 			showDirectSuccess();
 		} else {
-			showError('OpenPost could not finish this account connection. Start again from Accounts.');
+			showError(m.accounts_callback_failed_restart());
 		}
 
 		return () => {
@@ -115,14 +129,12 @@
 			});
 
 			if (apiError) {
-				showError(errorMessage(apiError, 'This account selection expired or could not be loaded.'));
+				showError(errorMessage(apiError, m.accounts_callback_selection_expired()));
 				return;
 			}
 
 			if (!data || !data.options?.length) {
-				showError(
-					'This account connection did not return any selectable accounts. Start again from Accounts.'
-				);
+				showError(m.accounts_callback_no_options());
 				return;
 			}
 
@@ -131,7 +143,7 @@
 			selectedId = '';
 			viewState = 'selection';
 		} catch (requestError) {
-			showError(transportErrorMessage(requestError, 'This account selection could not be loaded.'));
+			showError(transportErrorMessage(requestError, m.accounts_callback_selection_load_failed()));
 		} finally {
 			loadingSelection = false;
 		}
@@ -139,7 +151,7 @@
 
 	async function completeSelection() {
 		if (!selectedId) {
-			error = 'Choose an account or page to continue.';
+			error = m.accounts_callback_choose_required();
 			return;
 		}
 
@@ -156,17 +168,14 @@
 			);
 
 			if (apiError) {
-				error = errorMessage(apiError, 'OpenPost could not save that account selection.');
+				error = errorMessage(apiError, m.accounts_callback_selection_save_failed());
 				return;
 			}
 
 			viewState = 'selection_success';
 			startRedirectCountdown();
 		} catch (requestError) {
-			error = transportErrorMessage(
-				requestError,
-				'OpenPost could not save that account selection.'
-			);
+			error = transportErrorMessage(requestError, m.accounts_callback_selection_save_failed());
 		} finally {
 			submitting = false;
 		}
@@ -208,154 +217,115 @@
 </script>
 
 <svelte:head>
-	<title>Account Connected - OpenPost</title>
+	<title>{m.accounts_callback_title()}</title>
 </svelte:head>
 
-<div class="flex min-h-screen items-center justify-center px-4 py-10">
-	<PageContainer
-		title={viewState === 'selection' ? `Choose ${platformName} account` : 'Account connected'}
-		description={viewState === 'selection'
-			? 'Select the account or page OpenPost should add to this workspace.'
-			: `Your ${platformName} account connection is being finalized.`}
-	>
-		<div class="mx-auto max-w-2xl">
-			<Card class="border-border/60 shadow-sm">
-				{#if viewState === 'loading'}
-					<CardHeader class="text-center" aria-live="polite">
-						<div
-							class="mx-auto h-12 w-12 animate-spin rounded-full border-2 border-muted border-t-primary"
-						></div>
-						<CardTitle
-							>{loadingSelection ? 'Loading account choices' : 'Finishing connection'}</CardTitle
-						>
-						<CardDescription>OpenPost is checking this connection.</CardDescription>
-					</CardHeader>
-				{:else if viewState === 'selection'}
-					<CardHeader>
-						<CardTitle>Choose what to connect</CardTitle>
-						<CardDescription>
-							{#if expiresAtLabel}
-								This pending connection expires {expiresAtLabel}.
-							{:else}
-								Choose one option to finish connecting {platformName}.
-							{/if}
-						</CardDescription>
-					</CardHeader>
-					<CardContent>
-						<form class="space-y-5" onsubmit={(event) => event.preventDefault()}>
-							<fieldset class="space-y-3" disabled={submitting}>
-								<legend class="sr-only">Available {platformName} accounts</legend>
-								{#each options as option (option.id)}
-									<label
-										class={[
-											'flex cursor-pointer gap-3 rounded-md border p-4 transition-colors',
-											selectedId === option.id
-												? 'border-primary bg-primary/5 ring-2 ring-primary/20'
-												: 'border-border hover:bg-muted/40'
-										]}
-									>
-										<input
-											class="mt-1 size-4 accent-primary"
-											type="radio"
-											name="selection_id"
-											value={option.id}
-											bind:group={selectedId}
-											required
-										/>
-										{#if option.avatar_url}
-											<img
-												class="size-12 rounded-full border object-cover"
-												src={option.avatar_url}
-												alt=""
-												loading="lazy"
-											/>
-										{:else}
-											<div
-												class="flex size-12 shrink-0 items-center justify-center rounded-full bg-muted text-sm font-medium text-muted-foreground"
-												aria-hidden="true"
-											>
-												{optionTitle(option).slice(0, 1).toUpperCase()}
-											</div>
-										{/if}
-										<span class="min-w-0 flex-1 space-y-1">
-											<span class="block font-medium text-foreground">{optionTitle(option)}</span>
-											{#if optionSubtitle(option)}
-												<span class="block text-sm text-muted-foreground"
-													>{optionSubtitle(option)}</span
-												>
-											{/if}
-											{#if option.description}
-												<span class="block text-sm text-muted-foreground">{option.description}</span
-												>
-											{/if}
-											{#if metadataEntries(option).length}
-												<span class="flex flex-wrap gap-2 pt-1">
-													{#each metadataEntries(option) as [key, value] (key)}
-														<span
-															class="rounded-sm bg-muted px-2 py-1 text-xs text-muted-foreground"
-														>
-															{key.replaceAll('_', ' ')}: {value}
-														</span>
-													{/each}
-												</span>
-											{/if}
-										</span>
-									</label>
-								{/each}
-							</fieldset>
-
-							{#if error}
-								<p
-									class="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive"
-								>
-									{error}
-								</p>
-							{/if}
-
-							<div class="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-								<Button variant="outline" onclick={goToAccounts} disabled={submitting}>
-									Cancel
-								</Button>
-								<Button onclick={completeSelection} disabled={submitting || !selectedId}>
-									{submitting ? 'Saving selection...' : 'Connect selected account'}
-								</Button>
-							</div>
-						</form>
-					</CardContent>
-				{:else if viewState === 'direct_success' || viewState === 'selection_success'}
-					<CardHeader class="text-center">
-						<div
-							class="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-500/12 text-3xl text-emerald-600"
-						>
-							✓
-						</div>
-						<CardTitle>Success</CardTitle>
-						<CardDescription>
-							Redirecting you back to accounts in {countdown} second{countdown === 1 ? '' : 's'}.
-						</CardDescription>
-					</CardHeader>
-					<CardContent class="flex flex-col items-center gap-3 text-center">
-						<p class="max-w-md text-sm text-muted-foreground">
-							OpenPost finished the OAuth flow and saved the connected account. You will be taken
-							back automatically.
-						</p>
-						<Button onclick={goToAccounts}>Go to accounts now</Button>
-					</CardContent>
+<StandaloneShell
+	title={shellTitle}
+	description={shellDescription}
+	maxWidth="lg"
+	loading={viewState === 'loading'}
+	loadingLabel={loadingSelection
+		? m.accounts_callback_loading_choices()
+		: m.accounts_callback_finishing()}
+>
+	{#if viewState === 'selection'}
+		<form class="space-y-5" onsubmit={(event) => event.preventDefault()}>
+			<p class="text-sm text-muted-foreground">
+				{#if expiresAtLabel}
+					{m.accounts_callback_expires({ date: expiresAtLabel })}
 				{:else}
-					<CardHeader class="text-center">
-						<div
-							class="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-destructive/10 text-3xl text-destructive"
-						>
-							!
-						</div>
-						<CardTitle>Connection needs attention</CardTitle>
-						<CardDescription>{error}</CardDescription>
-					</CardHeader>
-					<CardContent class="flex justify-center">
-						<Button onclick={goToAccounts}>Back to accounts</Button>
-					</CardContent>
+					{m.accounts_callback_choose_one({ platform: platformName })}
 				{/if}
-			</Card>
+			</p>
+
+			<fieldset class="space-y-3" disabled={submitting}>
+				<legend class="sr-only">{m.accounts_callback_available({ platform: platformName })}</legend>
+				{#each options as option (option.id)}
+					<label
+						class={[
+							'flex cursor-pointer gap-3 rounded-md border p-4 transition-colors',
+							selectedId === option.id
+								? 'border-primary bg-primary/5 ring-2 ring-primary/20'
+								: 'border-border hover:bg-muted/40'
+						]}
+					>
+						<input
+							class="mt-1 size-4 accent-primary"
+							type="radio"
+							name="selection_id"
+							value={option.id}
+							bind:group={selectedId}
+							required
+						/>
+						{#if option.avatar_url}
+							<img
+								class="size-12 rounded-full border object-cover"
+								src={option.avatar_url}
+								alt=""
+								loading="lazy"
+							/>
+						{:else}
+							<div
+								class="flex size-12 shrink-0 items-center justify-center rounded-full bg-muted text-sm font-medium text-muted-foreground"
+								aria-hidden="true"
+							>
+								{optionTitle(option).slice(0, 1).toUpperCase()}
+							</div>
+						{/if}
+						<span class="min-w-0 flex-1 space-y-1">
+							<span class="block font-medium text-foreground">{optionTitle(option)}</span>
+							{#if optionSubtitle(option)}
+								<span class="block text-sm text-muted-foreground">{optionSubtitle(option)}</span>
+							{/if}
+							{#if option.description}
+								<span class="block text-sm text-muted-foreground">{option.description}</span>
+							{/if}
+							{#if metadataEntries(option).length}
+								<span class="flex flex-wrap gap-2 pt-1">
+									{#each metadataEntries(option) as [key, value] (key)}
+										<span class="rounded-sm bg-muted px-2 py-1 text-xs text-muted-foreground">
+											{key.replaceAll('_', ' ')}: {value}
+										</span>
+									{/each}
+								</span>
+							{/if}
+						</span>
+					</label>
+				{/each}
+			</fieldset>
+
+			{#if error}
+				<InlineNotice tone="error" message={error} />
+			{/if}
+
+			<div class="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+				<Button variant="outline" onclick={goToAccounts} disabled={submitting}
+					>{m.common_cancel()}</Button
+				>
+				<Button onclick={completeSelection} disabled={submitting || !selectedId}>
+					{submitting ? m.accounts_callback_saving() : m.accounts_callback_connect_selected()}
+				</Button>
+			</div>
+		</form>
+	{:else if viewState === 'direct_success' || viewState === 'selection_success'}
+		<div class="flex flex-col items-center gap-3 text-center" role="status" aria-live="polite">
+			<CheckCircleIcon class="size-10 text-emerald-600" />
+			<p class="text-sm text-muted-foreground">
+				{countdown === 1
+					? m.accounts_callback_redirect_one()
+					: m.accounts_callback_redirect_many({ count: countdown })}
+			</p>
+			<p class="max-w-md text-sm text-muted-foreground">
+				{m.accounts_callback_completed()}
+			</p>
+			<Button onclick={goToAccounts}>{m.accounts_callback_go_now()}</Button>
 		</div>
-	</PageContainer>
-</div>
+	{:else}
+		<div class="flex flex-col items-center gap-4 text-center">
+			<AlertTriangleIcon class="size-10 text-destructive" />
+			<InlineNotice tone="error" message={error} class="w-full text-left" />
+			<Button onclick={goToAccounts}>{m.accounts_callback_back()}</Button>
+		</div>
+	{/if}
+</StandaloneShell>

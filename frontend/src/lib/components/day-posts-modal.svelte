@@ -2,16 +2,20 @@
 	import * as Sheet from '$lib/components/ui/sheet';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
 	import { Button } from '$lib/components/ui/button';
+	import DestructiveConfirmDialog from '$lib/components/destructive-confirm-dialog.svelte';
+	import PageLoading from '$lib/components/page-loading.svelte';
+	import InlineNotice from '$lib/components/inline-notice.svelte';
+	import EmptyState from '$lib/components/empty-state.svelte';
 	import { client, type Post } from '$lib/api/client';
+	import { workspaceClock } from '$lib/components/compose/schedule-timezone';
 	import { ui } from '$lib/stores/ui.svelte';
 	import { workspaceCtx } from '$lib/stores/workspace.svelte';
-	import { getLocalTimeZone, today, type DateValue } from '@internationalized/date';
+	import type { DateValue } from '@internationalized/date';
 	import PlusIcon from 'lucide-svelte/icons/plus';
 	import CalendarIcon from 'lucide-svelte/icons/calendar-days';
 	import TrashIcon from 'lucide-svelte/icons/trash-2';
 	import PencilIcon from 'lucide-svelte/icons/pencil';
 	import MoreIcon from 'lucide-svelte/icons/ellipsis';
-	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
 	import { getStatusColor } from '$lib/utils';
 	import PlatformIcon from '$lib/components/platform-icon.svelte';
 	import { goto } from '$app/navigation';
@@ -23,49 +27,74 @@
 	let loading = $state(false);
 	let error = $state('');
 	let open = $state(false);
+	let deleteDialogOpen = $state(false);
+	let postToDelete = $state.raw<Post | null>(null);
+	let loadRequestSequence = 0;
 
 	const currentDate = $derived<DateValue | undefined>(ui.dayPostsDate);
 	const dateStr = $derived(currentDate ? currentDate.toString() : '');
+	const currentWorkspaceId = $derived(workspaceCtx.currentWorkspace?.id ?? '');
+	const viewerTimeZone = $derived(
+		workspaceCtx.settingsWorkspaceID === currentWorkspaceId
+			? workspaceCtx.settings.timezone || 'UTC'
+			: 'UTC'
+	);
 	const isFutureDay = $derived.by(() => {
 		if (!currentDate) return false;
-		return currentDate.compare(today(getLocalTimeZone())) >= 0;
+		return currentDate.compare(workspaceClock(viewerTimeZone).date) >= 0;
 	});
 	const formattedDate = $derived.by(() => {
 		if (!currentDate) return '';
-		return currentDate.toDate(getLocalTimeZone()).toLocaleDateString(getLocaleTag(), {
+		return currentDate.toDate(viewerTimeZone).toLocaleDateString(getLocaleTag(), {
 			weekday: 'long',
 			month: 'long',
-			day: 'numeric'
+			day: 'numeric',
+			timeZone: viewerTimeZone
 		});
 	});
 
 	$effect(() => {
 		open = ui.isDayPostsOpen;
-		if (open && dateStr) void loadPosts(dateStr);
+		if (open && dateStr && currentWorkspaceId) {
+			void loadPosts(dateStr, currentWorkspaceId);
+		}
 	});
 
 	function handleOpenChange(isOpen: boolean) {
 		open = isOpen;
-		if (!isOpen) ui.closeDayPosts();
+		if (!isOpen) {
+			loadRequestSequence++;
+			loading = false;
+			ui.closeDayPosts();
+		}
 	}
 
-	async function loadPosts(date: string) {
+	async function loadPosts(date: string, workspaceId = currentWorkspaceId) {
+		if (!workspaceId) return;
+		const requestSequence = ++loadRequestSequence;
+		const isCurrentRequest = () =>
+			requestSequence === loadRequestSequence &&
+			ui.isDayPostsOpen &&
+			dateStr === date &&
+			(workspaceCtx.currentWorkspace?.id ?? '') === workspaceId;
 		loading = true;
 		error = '';
 		try {
-			const workspaceId = workspaceCtx.currentWorkspace?.id;
 			const { data, error: responseError } = await client.GET('/posts', {
 				params: { query: { date, ...(workspaceId ? { workspace_id: workspaceId } : {}) } }
 			});
 			if (responseError) throw new Error(m.day_posts_load_failed());
-			posts = (data ?? []).toSorted(
-				(a, b) => new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime()
-			);
+			if (!isCurrentRequest()) return;
+			posts = (data ?? [])
+				.filter((post) => !post.parent_post_id)
+				.toSorted(
+					(a, b) => new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime()
+				);
 		} catch (cause) {
+			if (!isCurrentRequest()) return;
 			error = cause instanceof Error ? cause.message : m.day_posts_load_failed();
-			posts = [];
 		} finally {
-			loading = false;
+			if (isCurrentRequest()) loading = false;
 		}
 	}
 
@@ -74,13 +103,36 @@
 			hour: '2-digit',
 			minute: '2-digit',
 			hour12: false,
-			timeZone: workspaceCtx.settings.timezone || 'UTC'
+			timeZone: viewerTimeZone
 		});
 	}
 
 	function postExcerpt(post: Post) {
-		const text = post.content || 'Untitled post';
+		const text = post.content || m.calendar_untitled_post();
 		return text.length > 130 ? `${text.slice(0, 130).trim()}…` : text;
+	}
+
+	function statusLabel(status: string) {
+		switch (status.toLowerCase()) {
+			case 'published':
+				return m.activity_status_published();
+			case 'failed':
+				return m.activity_status_failed();
+			case 'scheduled':
+				return m.activity_status_scheduled();
+			case 'publishing':
+				return m.activity_status_publishing();
+			case 'completed':
+				return m.activity_status_completed();
+			case 'processing':
+				return m.activity_status_processing();
+			case 'pending':
+				return m.activity_status_pending();
+			case 'draft':
+				return m.activity_status_draft();
+			default:
+				return status;
+		}
 	}
 
 	function handleNewPost() {
@@ -98,11 +150,17 @@
 		goto(resolve(`/posts/${postId}` as '/'));
 	}
 
-	async function handleDelete(postId: string) {
-		if (!confirm(m.day_posts_delete_confirm())) return;
+	function requestDelete(post: Post) {
+		postToDelete = post;
+		deleteDialogOpen = true;
+	}
+
+	async function handleDelete() {
+		const post = postToDelete;
+		if (!post) return;
 		try {
 			const { error: responseError } = await client.DELETE('/posts/{id}', {
-				params: { path: { id: postId } }
+				params: { path: { id: post.id } }
 			});
 			if (responseError) throw new Error(responseError.detail || m.day_posts_delete_failed());
 			await loadPosts(dateStr);
@@ -129,7 +187,7 @@
 				{#if isFutureDay}
 					<Button size="sm" onclick={handleNewPost}>
 						<PlusIcon class="mr-1.5 size-4" />
-						New post
+						{m.day_posts_new_for_day()}
 					</Button>
 				{/if}
 			</div>
@@ -137,30 +195,25 @@
 
 		<div class="min-h-0 flex-1 overflow-y-auto px-5 py-2">
 			{#if loading}
-				<div class="divide-y">
-					{#each [1, 2, 3] as placeholder (placeholder)}
-						<div class="flex gap-3 py-4">
-							<Skeleton class="h-8 w-12 rounded" />
-							<div class="flex flex-1 flex-col gap-2">
-								<Skeleton class="h-3 w-full" />
-								<Skeleton class="h-3 w-2/3" />
-							</div>
-						</div>
-					{/each}
-				</div>
+				<PageLoading layout="list" label={m.common_loading()} items={3} />
 			{:else if error}
-				<div class="my-4 rounded-md bg-destructive/10 p-3 text-sm text-destructive">{error}</div>
+				<InlineNotice tone="error" message={error} class="my-4">
+					{#snippet actions()}
+						<Button variant="outline" size="sm" onclick={() => loadPosts(dateStr)}>
+							{m.common_retry()}
+						</Button>
+					{/snippet}
+				</InlineNotice>
 			{:else if posts.length === 0}
-				<div class="flex min-h-64 flex-col items-center justify-center gap-3 text-center">
-					<CalendarIcon class="size-8 text-muted-foreground/45" />
-					<div>
-						<p class="text-sm font-medium">Nothing scheduled</p>
-						<p class="mt-1 text-sm text-muted-foreground">This day is open.</p>
-					</div>
-					{#if isFutureDay}<Button variant="outline" size="sm" onclick={handleNewPost}
-							>Schedule a post</Button
-						>{/if}
-				</div>
+				<EmptyState
+					icon={CalendarIcon}
+					title={m.day_posts_empty()}
+					actionLabel={isFutureDay ? m.day_posts_new_for_day() : undefined}
+					onAction={isFutureDay ? handleNewPost : undefined}
+					headingLevel={3}
+					size="sm"
+					variant="muted"
+				/>
 			{:else}
 				<div class="divide-y">
 					{#each posts as post (post.id)}
@@ -181,7 +234,7 @@
 										class={[
 											'rounded-sm px-1.5 py-0.5 text-[11px] font-medium capitalize',
 											getStatusColor(post.status)
-										]}>{post.status}</span
+										]}>{statusLabel(post.status)}</span
 									>
 									{#each post.destinations ?? [] as destination (destination.social_account_id)}
 										<span class="inline-flex items-center gap-1 text-xs text-muted-foreground">
@@ -194,18 +247,25 @@
 							<DropdownMenu.Root>
 								<DropdownMenu.Trigger>
 									{#snippet child({ props })}
-										<Button {...props} variant="ghost" size="icon" aria-label="Post actions"
-											><MoreIcon class="size-4" /></Button
+										<Button
+											{...props}
+											variant="ghost"
+											size="icon"
+											aria-label={m.day_posts_actions()}><MoreIcon class="size-4" /></Button
 										>
 									{/snippet}
 								</DropdownMenu.Trigger>
 								<DropdownMenu.Content align="end">
 									<DropdownMenu.Item onclick={() => handleEdit(post.id)}
-										><PencilIcon class="mr-2 size-4" />Edit post</DropdownMenu.Item
+										><PencilIcon
+											class="mr-2 size-4"
+										/>{m.day_posts_edit_in_composer()}</DropdownMenu.Item
 									>
 									<DropdownMenu.Separator />
-									<DropdownMenu.Item class="text-destructive" onclick={() => handleDelete(post.id)}
-										><TrashIcon class="mr-2 size-4" />Delete post</DropdownMenu.Item
+									<DropdownMenu.Item class="text-destructive" onclick={() => requestDelete(post)}
+										><TrashIcon
+											class="mr-2 size-4"
+										/>{m.day_posts_delete_action()}</DropdownMenu.Item
 									>
 								</DropdownMenu.Content>
 							</DropdownMenu.Root>
@@ -216,3 +276,10 @@
 		</div>
 	</Sheet.Content>
 </Sheet.Root>
+
+<DestructiveConfirmDialog
+	bind:open={deleteDialogOpen}
+	title={m.day_posts_delete_confirm()}
+	description={m.day_posts_delete_body()}
+	onConfirm={handleDelete}
+/>

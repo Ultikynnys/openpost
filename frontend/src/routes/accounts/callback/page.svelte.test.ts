@@ -66,11 +66,13 @@ describe('account OAuth callback selection flow', () => {
 
 		const screen = await render(CallbackPage);
 
-		await expect.element(screen.getByText('Choose what to connect')).toBeVisible();
+		await expect
+			.element(screen.getByRole('heading', { level: 1, name: 'Choose Facebook account' }))
+			.toBeVisible();
 		await expect.element(screen.getByText('OpenPost Page')).toBeVisible();
 		await expect.element(screen.getByText('@openpost · page')).toBeVisible();
 		await expect.element(screen.getByText('followers: 1,240')).toBeVisible();
-		expect(screen.container.textContent).not.toContain('Success');
+		expect(screen.container.textContent).not.toContain('Account connected');
 		expect(mocks.goto).not.toHaveBeenCalled();
 		expect(mocks.get).toHaveBeenCalledWith('/accounts/selections/{connection_id}', {
 			params: { path: { connection_id: 'conn_123' } }
@@ -91,11 +93,13 @@ describe('account OAuth callback selection flow', () => {
 			params: { path: { connection_id: 'conn_123' } },
 			body: { selection_id: 'page_1' }
 		});
-		expect(screen.container.textContent).not.toContain('Success');
+		expect(screen.container.textContent).not.toContain('Account connected');
 		expect(screen.container.textContent).not.toContain('Redirecting you back to accounts');
 
 		post.resolve({ data: { id: 'saved_account' }, error: null });
-		await expect.element(screen.getByText('Success')).toBeVisible();
+		await expect
+			.element(screen.getByRole('heading', { level: 1, name: 'Account connected' }))
+			.toBeVisible();
 	});
 
 	it('surfaces rejected account-selection loads', async () => {
@@ -148,6 +152,6 @@ describe('account OAuth callback selection flow', () => {
 		await expect
 			.element(screen.getByRole('button', { name: 'Connect selected account' }))
 			.toBeEnabled();
-		expect(screen.container.textContent).not.toContain('Success');
+		expect(screen.container.textContent).not.toContain('Account connected');
 	});
 });

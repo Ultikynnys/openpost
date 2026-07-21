@@ -66,110 +66,69 @@ export const timezones = [
 	{ group: 'Africa', value: 'Africa/Nairobi', label: 'Nairobi (EAT)' }
 ];
 
-export const cleanupDaysOptions = [
-	{ value: 0, label: 'Disabled' },
-	{ value: 7, label: '7 days' },
-	{ value: 14, label: '14 days' },
-	{ value: 30, label: '30 days' },
-	{ value: 60, label: '60 days' },
-	{ value: 90, label: '90 days' },
-	{ value: 180, label: '180 days' },
-	{ value: 365, label: '1 year' }
-];
+export const cleanupDaysOptions = [0, 7, 14, 30, 60, 90, 180, 365] as const;
 
-export const inviteRoleOptions = [
-	{ value: 'editor', label: 'Editor', description: 'Can create and manage workspace content.' },
-	{
-		value: 'viewer',
-		label: 'Viewer',
-		description: 'Can inspect workspace content and settings.'
-	},
-	{
-		value: 'admin',
-		label: 'Admin',
-		description: 'Can manage billing, team access, and settings.'
-	}
-];
+export const inviteRoleOptions = ['editor', 'viewer', 'admin'] as const;
 
-export const apiTokenScopeOptions = [
-	{
-		value: 'mcp:full',
-		label: 'MCP / ChatGPT App',
-		description: 'For ChatGPT, Claude, and other MCP clients.'
-	},
-	{
-		value: 'cli:full',
-		label: 'CLI / automation',
-		description: 'For OpenPost CLI, CI, cron, and scripts.'
-	}
-];
+export const apiTokenScopeOptions = ['mcp:full', 'cli:full'] as const;
 
 export const billingPlans = [
 	{
 		id: 'starter',
-		name: 'Starter',
 		monthlyPriceEur: 6,
-		description: 'Small projects that need managed posting without extra workspace overhead.',
-		limits: ['1 workspace', '3 social accounts', '100 scheduled posts/month', '1 GB media']
+		featured: false,
+		limits: [
+			{ kind: 'workspaces', count: 1 },
+			{ kind: 'social_accounts', count: 3 },
+			{ kind: 'scheduled_posts_monthly', count: 100 },
+			{ kind: 'media_gb', count: 1 }
+		]
 	},
 	{
 		id: 'creator',
-		name: 'Creator',
 		monthlyPriceEur: 12,
-		description: 'Mainstream platform scheduling for active creators and operator-led brands.',
-		limits: ['3 workspaces', '6 social accounts', '500 scheduled posts/month', '5 GB media'],
+		limits: [
+			{ kind: 'workspaces', count: 3 },
+			{ kind: 'social_accounts', count: 6 },
+			{ kind: 'scheduled_posts_monthly', count: 500 },
+			{ kind: 'media_gb', count: 5 }
+		],
 		featured: true
 	},
 	{
 		id: 'pro',
-		name: 'Pro',
 		monthlyPriceEur: 24,
-		description: 'Higher limits for teams, heavier media use, and larger publishing operations.',
-		limits: ['10 workspaces', '15 social accounts', '2,500 scheduled posts/month', '25 GB media']
+		featured: false,
+		limits: [
+			{ kind: 'workspaces', count: 10 },
+			{ kind: 'social_accounts', count: 15 },
+			{ kind: 'scheduled_posts_monthly', count: 2500 },
+			{ kind: 'media_gb', count: 25 }
+		]
 	},
 	{
 		id: 'team',
-		name: 'Team',
 		monthlyPriceEur: 49,
-		description: 'Seat-based collaboration for small teams and multi-brand operators.',
+		featured: false,
 		limits: [
-			'10 workspaces',
-			'25 social accounts',
-			'5,000 scheduled posts/month',
-			'3 included seats'
+			{ kind: 'workspaces', count: 10 },
+			{ kind: 'social_accounts', count: 25 },
+			{ kind: 'scheduled_posts_monthly', count: 5000 },
+			{ kind: 'included_seats', count: 3 }
 		]
 	},
 	{
 		id: 'agency',
-		name: 'Agency',
 		monthlyPriceEur: 99,
-		description: 'Agency workspace management with higher account and media limits.',
+		featured: false,
 		limits: [
-			'50 workspaces',
-			'150 social accounts',
-			'25,000 scheduled posts/month',
-			'5 included seats'
+			{ kind: 'workspaces', count: 50 },
+			{ kind: 'social_accounts', count: 150 },
+			{ kind: 'scheduled_posts_monthly', count: 25000 },
+			{ kind: 'included_seats', count: 5 }
 		]
 	}
-];
-
-export const billingMetricLabels: Record<string, string> = {
-	scheduled_posts_monthly: 'Scheduled posts',
-	published_posts_monthly: 'Published posts',
-	media_bytes_uploaded_monthly: 'Uploaded media',
-	provider_write_calls_monthly: 'Provider publish calls'
-};
-
-export const dayNames = [
-	'Sunday',
-	'Monday',
-	'Tuesday',
-	'Wednesday',
-	'Thursday',
-	'Friday',
-	'Saturday'
-];
-export const dayShortNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+] as const;
 
 export interface PasskeySummary {
 	id: string;

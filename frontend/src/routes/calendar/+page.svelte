@@ -2,20 +2,31 @@
 	import { goto } from '$app/navigation';
 	import { SvelteDate, SvelteMap, SvelteSet } from 'svelte/reactivity';
 	import { resolve } from '$app/paths';
-	import { client, type Post, type SocialAccount, type Workspace } from '$lib/api/client';
+	import { client, type Post, type SocialAccount } from '$lib/api/client';
 	import type { components } from '$lib/api/types';
+	import {
+		isFutureSchedule,
+		workspaceClock,
+		workspaceDateKeyFromISO,
+		workspaceScheduleMoveToDate
+	} from '$lib/components/compose/schedule-timezone';
 	import PlatformIcon from '$lib/components/platform-icon.svelte';
+	import PageHeader from '$lib/components/page-header.svelte';
+	import PageLoading from '$lib/components/page-loading.svelte';
+	import EmptyState from '$lib/components/empty-state.svelte';
+	import InlineNotice from '$lib/components/inline-notice.svelte';
 	import { Badge } from '$lib/components/ui/badge';
 	import { Button } from '$lib/components/ui/button';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
+	import * as Select from '$lib/components/ui/select';
 	import * as Tooltip from '$lib/components/ui/tooltip';
 	import { getLocaleTag } from '$lib/i18n';
 	import { m } from '$lib/paraglide/messages';
 	import { ui } from '$lib/stores/ui.svelte';
-	import { workspaceCtx } from '$lib/stores/workspace.svelte';
+	import { WorkspaceContextError, workspaceCtx } from '$lib/stores/workspace.svelte';
 	import { cn } from '$lib/utils';
+	import { CalendarDate } from '@internationalized/date';
 	import CalendarDaysIcon from 'lucide-svelte/icons/calendar-days';
-	import CheckIcon from 'lucide-svelte/icons/check';
 	import ChevronLeftIcon from 'lucide-svelte/icons/chevron-left';
 	import ChevronRightIcon from 'lucide-svelte/icons/chevron-right';
 	import ClockIcon from 'lucide-svelte/icons/clock';
@@ -58,41 +69,48 @@
 		publication?: Publication;
 	};
 
-	let currentMonth = $state(startOfMonth(new Date()));
+	let currentMonth = $state(startOfMonth(workspaceTodayDate('UTC')));
 	let selectedWorkspaceIds = $state<string[]>([]);
 	let selectedPlatform = $state('all');
 	let posts = $state<Post[]>([]);
 	let publications = $state<Publication[]>([]);
 	let accountsByWorkspace = $state<Record<string, SocialAccount[]>>({});
 	let loading = $state(true);
+	let loadError = $state('');
 	let errorMessage = $state('');
 	let successMessage = $state('');
 	let draggingKey = $state('');
 	let dropTargetKey = $state('');
 	let reschedulingKey = $state('');
+	let selectedEmptyDateKey = $state('');
 	let activeRequest = 0;
+	let dataRevision = 0;
+	let completedLoadKey = $state('');
+	let initializedCalendarWorkspace = '';
 
 	const workspaces = $derived(workspaceCtx.workspaces);
+	const viewerWorkspaceId = $derived(workspaceCtx.currentWorkspace?.id ?? '');
+	const viewerTimeZone = $derived(
+		workspaceCtx.settingsWorkspaceID === viewerWorkspaceId
+			? workspaceCtx.settings.timezone || 'UTC'
+			: 'UTC'
+	);
+	const workspaceTodayKey = $derived(workspaceClock(viewerTimeZone).date.toString());
 	const activeWorkspaceIds = $derived.by(() => {
 		if (selectedWorkspaceIds.length > 0) return selectedWorkspaceIds;
 		return workspaces.map((workspace) => workspace.id);
 	});
 	const loadKey = $derived(
-		`${monthKey(currentMonth)}|${activeWorkspaceIds.join(',')}|${workspaces.map((w) => w.id).join(',')}`
+		`${monthKey(currentMonth)}|${activeWorkspaceIds.join(',')}|${workspaces.map((w) => w.id).join(',')}|${viewerTimeZone}`
 	);
+	const initialLoading = $derived(loading && completedLoadKey !== loadKey);
 	const days = $derived.by(() =>
-		buildCalendarDays(currentMonth, workspaceCtx.weekStartsOn, new Date())
+		buildCalendarDays(currentMonth, workspaceCtx.weekStartsOn, workspaceTodayDate(viewerTimeZone))
 	);
 	const weekdayLabels = $derived.by(() =>
-		days.slice(0, 7).map((day) => day.date.toLocaleDateString(getLocaleTag(), { weekday: 'short' }))
+		days.slice(0, 7).map((day) => formatWorkspaceDate(day.date, { weekday: 'short' }))
 	);
-	const visibleRange = $derived.by(() => {
-		const start = new SvelteDate(days[0]?.date ?? currentMonth);
-		start.setHours(0, 0, 0, 0);
-		const end = new SvelteDate(days[days.length - 1]?.date ?? currentMonth);
-		end.setHours(23, 59, 59, 999);
-		return { start, end };
-	});
+	const visibleDayKeys = $derived(new SvelteSet(days.map((day) => day.key)));
 	const allItems = $derived.by((): CalendarItem[] => {
 		const items: CalendarItem[] = [];
 		for (const post of posts) {
@@ -123,8 +141,8 @@
 	});
 	const visibleItems = $derived.by(() =>
 		allItems.filter((item) => {
-			const scheduled = new Date(item.scheduledAt);
-			const inVisibleMonth = scheduled >= visibleRange.start && scheduled <= visibleRange.end;
+			const scheduledDay = workspaceDateKeyFromISO(item.scheduledAt, viewerTimeZone);
+			const inVisibleMonth = scheduledDay ? visibleDayKeys.has(scheduledDay) : false;
 			const platformMatches =
 				selectedPlatform === 'all' || item.platforms.includes(selectedPlatform);
 			return inVisibleMonth && platformMatches;
@@ -133,7 +151,8 @@
 	const itemsByDay = $derived.by(() => {
 		const map = new SvelteMap<string, CalendarItem[]>();
 		for (const item of visibleItems) {
-			const key = dateKey(new Date(item.scheduledAt));
+			const key = workspaceDateKeyFromISO(item.scheduledAt, viewerTimeZone);
+			if (!key) continue;
 			const existing = map.get(key) ?? [];
 			existing.push(item);
 			map.set(key, existing);
@@ -146,8 +165,28 @@
 			.map((day) => ({ day, items: itemsByDay.get(day.key) ?? [] }))
 			.filter((entry) => entry.items.length > 0)
 	);
+	const emptyMonthDays = $derived(
+		days.filter(
+			(day) =>
+				!day.outsideMonth &&
+				day.key >= workspaceTodayKey &&
+				(itemsByDay.get(day.key)?.length ?? 0) === 0
+		)
+	);
+	const monthAllowsCreate = $derived(days.some((day) => !day.outsideMonth && !isPastDay(day)));
+	const selectedEmptyDay = $derived.by(
+		() =>
+			emptyMonthDays.find((day) => day.key === selectedEmptyDateKey) ??
+			emptyMonthDays.find((day) => day.today) ??
+			emptyMonthDays[0] ??
+			null
+	);
 	const monthItems = $derived(
-		visibleItems.filter((item) => monthKey(new Date(item.scheduledAt)) === monthKey(currentMonth))
+		visibleItems.filter(
+			(item) =>
+				workspaceDateKeyFromISO(item.scheduledAt, viewerTimeZone)?.slice(0, 7) ===
+				monthKey(currentMonth)
+		)
 	);
 	const postCount = $derived(monthItems.filter((item) => item.kind === 'post').length);
 	const publicationCount = $derived(
@@ -161,6 +200,14 @@
 			return workspaceName(selectedWorkspaceIds[0]);
 		}
 		return m.calendar_workspace_count({ count: selectedWorkspaceIds.length });
+	});
+
+	$effect(() => {
+		const workspaceKey = workspaceCtx.settingsReady ? `${viewerWorkspaceId}|${viewerTimeZone}` : '';
+		if (workspaceKey && workspaceKey !== initializedCalendarWorkspace) {
+			initializedCalendarWorkspace = workspaceKey;
+			currentMonth = startOfMonth(workspaceTodayDate(viewerTimeZone));
+		}
 	});
 
 	$effect(() => {
@@ -186,6 +233,7 @@
 	async function loadCalendarData(_key: string) {
 		const request = ++activeRequest;
 		loading = true;
+		loadError = '';
 		errorMessage = '';
 		try {
 			if (workspaceCtx.workspaces.length === 0 && !workspaceCtx.loading) {
@@ -200,6 +248,8 @@
 				posts = [];
 				publications = [];
 				accountsByWorkspace = {};
+				dataRevision += 1;
+				completedLoadKey = _key;
 				return;
 			}
 
@@ -213,13 +263,18 @@
 			posts = postGroups.flat();
 			publications = publicationGroups.flat();
 			accountsByWorkspace = Object.fromEntries(accountEntries);
+			dataRevision += 1;
+			completedLoadKey = _key;
 		} catch (error) {
 			if (request !== activeRequest) return;
-			errorMessage = problemMessage(error, m.calendar_failed_load());
-			posts = [];
-			publications = [];
+			loadError =
+				error instanceof WorkspaceContextError
+					? m.calendar_failed_load()
+					: problemMessage(error, m.calendar_failed_load());
 		} finally {
-			if (request === activeRequest) loading = false;
+			if (request === activeRequest) {
+				loading = false;
+			}
 		}
 	}
 
@@ -268,7 +323,7 @@
 	}
 
 	function postToCalendarItem(post: Post): CalendarItem | null {
-		if (!post.scheduled_at) return null;
+		if (!post.scheduled_at || post.parent_post_id) return null;
 		const accounts = accountsForDestinations(post.workspace_id, post.destinations ?? []);
 		const initial = initialPostText(post.content);
 		return {
@@ -385,7 +440,7 @@
 	}
 
 	function goToToday() {
-		currentMonth = startOfMonth(new Date());
+		currentMonth = startOfMonth(workspaceTodayDate(viewerTimeZone));
 	}
 
 	function openItem(item: CalendarItem) {
@@ -402,16 +457,18 @@
 	}
 
 	function createPostOnDate(date: Date) {
+		if (isPastDate(date)) {
+			errorMessage = m.calendar_past_date();
+			return;
+		}
 		const params = new URLSearchParams({ date: dateKey(date) });
 		const workspaceId = composeWorkspaceId();
 		if (workspaceId) params.set('workspace_id', workspaceId);
 		goto(resolve(`/?${params.toString()}`));
 	}
 
-	function handleDayClick(event: MouseEvent, day: CalendarDay) {
-		const target = event.target as HTMLElement | null;
-		if (target?.closest('[data-calendar-item], [data-calendar-day-action]')) return;
-		createPostOnDate(day.date);
+	function createPostOnSelectedEmptyDate() {
+		if (selectedEmptyDay) createPostOnDate(selectedEmptyDay.date);
 	}
 
 	function onDragStart(event: DragEvent, item: CalendarItem) {
@@ -428,7 +485,7 @@
 	}
 
 	function onDragOver(event: DragEvent, day: CalendarDay) {
-		if (!draggingKey || reschedulingKey) return;
+		if (!draggingKey || reschedulingKey || isPastDay(day)) return;
 		event.preventDefault();
 		dropTargetKey = day.key;
 		if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
@@ -444,14 +501,36 @@
 		const item = allItems.find((candidate) => candidate.key === key);
 		draggingKey = '';
 		dropTargetKey = '';
-		if (!item || dateKey(new Date(item.scheduledAt)) === day.key) return;
+		if (isPastDay(day)) {
+			errorMessage = m.calendar_past_date();
+			return;
+		}
+		if (!item || workspaceDateKeyFromISO(item.scheduledAt, viewerTimeZone) === day.key) return;
 		await rescheduleItem(item, day.date);
 	}
 
 	async function rescheduleItem(item: CalendarItem, targetDate: Date) {
-		const nextScheduledAt = moveDateKeepTime(item.scheduledAt, targetDate);
+		if (isPastDate(targetDate)) {
+			errorMessage = m.calendar_past_date();
+			return;
+		}
+		const nextScheduledAt = workspaceScheduleMoveToDate(
+			item.scheduledAt,
+			calendarDate(targetDate),
+			viewerTimeZone
+		);
+		if (!nextScheduledAt) {
+			errorMessage = m.calendar_reschedule_failed();
+			return;
+		}
+		if (!isFutureSchedule(nextScheduledAt)) {
+			errorMessage = m.calendar_past_date();
+			return;
+		}
 		const previousPosts = posts;
 		const previousPublications = publications;
+		const mutationLoadKey = loadKey;
+		const mutationDataRevision = dataRevision;
 		reschedulingKey = item.key;
 		errorMessage = '';
 		successMessage = '';
@@ -493,15 +572,31 @@
 				});
 				if (error) throw new Error(problemMessage(error, m.calendar_reschedule_failed()));
 			}
-			successMessage = m.calendar_rescheduled({
-				title: item.title,
-				date: formatLongDateTime(nextScheduledAt)
-			});
+			if (loadKey === mutationLoadKey) {
+				if (item.kind === 'post') {
+					posts = posts.map((post) =>
+						post.id === item.id ? { ...post, scheduled_at: nextScheduledAt } : post
+					);
+				} else {
+					publications = publications.map((publication) =>
+						publication.id === item.id
+							? { ...publication, scheduled_at: nextScheduledAt }
+							: publication
+					);
+				}
+				dataRevision += 1;
+				successMessage = m.calendar_rescheduled({
+					title: item.title,
+					date: formatLongDateTime(nextScheduledAt)
+				});
+			}
 			ui.triggerRefresh();
 		} catch (error) {
-			posts = previousPosts;
-			publications = previousPublications;
-			errorMessage = problemMessage(error, m.calendar_reschedule_failed());
+			if (loadKey === mutationLoadKey && dataRevision === mutationDataRevision) {
+				posts = previousPosts;
+				publications = previousPublications;
+				errorMessage = problemMessage(error, m.calendar_reschedule_failed());
+			}
 		} finally {
 			reschedulingKey = '';
 		}
@@ -546,20 +641,31 @@
 		return `${year}-${month}-${day}`;
 	}
 
+	function isPastDate(date: Date) {
+		return dateKey(date) < workspaceTodayKey;
+	}
+
+	function isPastDay(day: CalendarDay) {
+		return day.key < workspaceTodayKey;
+	}
+
 	function monthKey(date: Date) {
 		return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
 	}
 
-	function moveDateKeepTime(sourceISO: string, targetDate: Date) {
-		const source = new Date(sourceISO);
-		const next = new SvelteDate(targetDate);
-		next.setHours(
-			source.getHours(),
-			source.getMinutes(),
-			source.getSeconds(),
-			source.getMilliseconds()
-		);
-		return next.toISOString();
+	function calendarDate(date: Date) {
+		return new CalendarDate(date.getFullYear(), date.getMonth() + 1, date.getDate());
+	}
+
+	function workspaceTodayDate(timeZone: string, instant = new Date()) {
+		const date = workspaceClock(timeZone, instant).date;
+		return new Date(date.year, date.month - 1, date.day, 12);
+	}
+
+	function formatWorkspaceDate(date: Date, options: Intl.DateTimeFormatOptions): string {
+		return calendarDate(date)
+			.toDate(viewerTimeZone)
+			.toLocaleDateString(getLocaleTag(), { ...options, timeZone: viewerTimeZone });
 	}
 
 	function firstLine(text: string) {
@@ -633,19 +739,28 @@
 	}
 
 	function formatMonth(date: Date) {
-		return date.toLocaleDateString(getLocaleTag(), { month: 'long', year: 'numeric' });
+		return formatWorkspaceDate(date, { month: 'long', year: 'numeric' });
 	}
 
 	function formatTime(value: string) {
 		return new Date(value).toLocaleTimeString(getLocaleTag(), {
 			hour: '2-digit',
-			minute: '2-digit'
+			minute: '2-digit',
+			timeZone: viewerTimeZone
 		});
 	}
 
 	function formatAgendaDate(value: Date) {
-		return value.toLocaleDateString(getLocaleTag(), {
+		return formatWorkspaceDate(value, {
 			weekday: 'long',
+			month: 'short',
+			day: 'numeric'
+		});
+	}
+
+	function formatEmptyDate(value: Date) {
+		return formatWorkspaceDate(value, {
+			weekday: 'short',
 			month: 'short',
 			day: 'numeric'
 		});
@@ -656,7 +771,8 @@
 			month: 'short',
 			day: 'numeric',
 			hour: '2-digit',
-			minute: '2-digit'
+			minute: '2-digit',
+			timeZone: viewerTimeZone
 		});
 	}
 
@@ -673,226 +789,247 @@
 		}
 		return 'border-sky-500/25 bg-sky-50/80 text-sky-950 hover:bg-sky-100 dark:bg-sky-950/30 dark:text-sky-100 dark:hover:bg-sky-950/45';
 	}
-
-	function activeWorkspaceButtonClass(workspace: Workspace) {
-		return workspaceSelected(workspace.id)
-			? 'border-primary/30 bg-primary/10 text-primary hover:bg-primary/15 dark:border-primary/40 dark:bg-primary/15'
-			: 'border-border bg-background/70 text-muted-foreground hover:bg-muted hover:text-foreground dark:bg-input/20 dark:hover:bg-input/40';
-	}
 </script>
 
 <svelte:head>
 	<title>{m.calendar_page_title()}</title>
 </svelte:head>
 
-<div class="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
+<div
+	class="flex min-h-0 flex-1 flex-col overflow-hidden bg-background"
+	style="container-type: inline-size;"
+>
 	<header class="border-b bg-background/95">
-		<div class="flex flex-col gap-4 px-4 py-4 lg:px-6">
-			<div class="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
-				<div class="min-w-0">
-					<div class="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-						<CalendarDaysIcon class="size-4" />
-						<span>{m.calendar_kicker()}</span>
-					</div>
-					<div class="mt-1 flex flex-wrap items-end gap-x-3 gap-y-1">
-						<h1 class="text-2xl font-semibold tracking-normal text-foreground sm:text-3xl">
-							{formatMonth(currentMonth)}
-						</h1>
-						<div class="flex items-center gap-2 pb-1 text-sm text-muted-foreground">
-							<span>{m.calendar_scheduled_summary({ count: monthItems.length })}</span>
-							<span class="text-muted-foreground/40">/</span>
-							<span
-								>{m.calendar_post_publication_summary({
-									posts: postCount,
-									publications: publicationCount
-								})}</span
-							>
+		<div class="px-4 py-4 lg:px-6" style="container-type: inline-size;">
+			<PageHeader
+				title={formatMonth(currentMonth)}
+				eyebrow={m.calendar_kicker()}
+				icon={CalendarDaysIcon}
+				loading={initialLoading}
+			>
+				{#snippet meta()}
+					<span>{m.calendar_scheduled_summary({ count: monthItems.length })}</span>
+					<span class="text-muted-foreground/40">/</span>
+					<span>
+						{m.calendar_post_publication_summary({
+							posts: postCount,
+							publications: publicationCount
+						})}
+					</span>
+					<span class="text-muted-foreground/40">/</span>
+					<span>{viewerTimeZone}</span>
+				{/snippet}
+				{#snippet actions()}
+					<div class="flex flex-wrap items-center gap-2">
+						<div class="inline-flex rounded-md border bg-card p-1">
+							<Tooltip.Root>
+								<Tooltip.Trigger>
+									{#snippet child({ props })}
+										<Button
+											{...props}
+											variant="ghost"
+											size="icon-sm"
+											aria-label={m.calendar_previous_month()}
+											onclick={() => changeMonth(-1)}
+										>
+											<ChevronLeftIcon class="size-4" />
+										</Button>
+									{/snippet}
+								</Tooltip.Trigger>
+								<Tooltip.Content>{m.calendar_previous_month()}</Tooltip.Content>
+							</Tooltip.Root>
+							<Button variant="ghost" size="sm" onclick={goToToday}>{m.calendar_today()}</Button>
+							<Tooltip.Root>
+								<Tooltip.Trigger>
+									{#snippet child({ props })}
+										<Button
+											{...props}
+											variant="ghost"
+											size="icon-sm"
+											aria-label={m.calendar_next_month()}
+											onclick={() => changeMonth(1)}
+										>
+											<ChevronRightIcon class="size-4" />
+										</Button>
+									{/snippet}
+								</Tooltip.Trigger>
+								<Tooltip.Content>{m.calendar_next_month()}</Tooltip.Content>
+							</Tooltip.Root>
 						</div>
-					</div>
-				</div>
 
-				<div class="flex flex-wrap items-center gap-2">
-					<div class="inline-flex rounded-md border bg-card p-1">
-						<Tooltip.Root>
-							<Tooltip.Trigger>
+						<DropdownMenu.Root>
+							<DropdownMenu.Trigger>
 								{#snippet child({ props })}
-									<Button
-										{...props}
-										variant="ghost"
-										size="icon-sm"
-										aria-label={m.calendar_previous_month()}
-										onclick={() => changeMonth(-1)}
-									>
-										<ChevronLeftIcon class="size-4" />
+									<Button {...props} variant="outline" class="max-w-64 justify-start">
+										<span class="truncate">{selectedWorkspaceLabel}</span>
 									</Button>
 								{/snippet}
-							</Tooltip.Trigger>
-							<Tooltip.Content>{m.calendar_previous_month()}</Tooltip.Content>
-						</Tooltip.Root>
-						<Button variant="ghost" size="sm" onclick={goToToday}>{m.calendar_today()}</Button>
-						<Tooltip.Root>
-							<Tooltip.Trigger>
-								{#snippet child({ props })}
-									<Button
-										{...props}
-										variant="ghost"
-										size="icon-sm"
-										aria-label={m.calendar_next_month()}
-										onclick={() => changeMonth(1)}
-									>
-										<ChevronRightIcon class="size-4" />
-									</Button>
-								{/snippet}
-							</Tooltip.Trigger>
-							<Tooltip.Content>{m.calendar_next_month()}</Tooltip.Content>
-						</Tooltip.Root>
-					</div>
-
-					<DropdownMenu.Root>
-						<DropdownMenu.Trigger>
-							{#snippet child({ props })}
-								<Button {...props} variant="outline" class="max-w-64 justify-start">
-									<span class="truncate">{selectedWorkspaceLabel}</span>
-								</Button>
-							{/snippet}
-						</DropdownMenu.Trigger>
-						<DropdownMenu.Content class="w-64" align="end">
-							<DropdownMenu.Label>{m.calendar_workspace_filter()}</DropdownMenu.Label>
-							<DropdownMenu.Item onclick={() => (selectedWorkspaceIds = [])} class="gap-2">
-								<CheckIcon
-									class={cn(
-										'size-4',
-										selectedWorkspaceIds.length === 0 ? 'opacity-100' : 'opacity-0'
-									)}
-								/>
-								<span>{m.calendar_all_workspaces()}</span>
-							</DropdownMenu.Item>
-							<DropdownMenu.Separator />
-							{#each workspaces as workspace (workspace.id)}
-								<DropdownMenu.Item onclick={() => toggleWorkspace(workspace.id)} class="gap-2">
-									<CheckIcon
-										class={cn(
-											'size-4',
-											workspaceSelected(workspace.id) ? 'opacity-100' : 'opacity-0'
-										)}
-									/>
-									<span class="h-2 w-2 rounded-full" style={workspaceDotStyle(workspace.id)}></span>
-									<span class="truncate">{workspace.name}</span>
-								</DropdownMenu.Item>
-							{/each}
-						</DropdownMenu.Content>
-					</DropdownMenu.Root>
-
-					<DropdownMenu.Root>
-						<DropdownMenu.Trigger>
-							{#snippet child({ props })}
-								<Button {...props} variant="outline" class="max-w-48 justify-start">
-									<span class="truncate">
-										{selectedPlatform === 'all'
-											? m.calendar_all_platforms()
-											: platformLabel(selectedPlatform)}
-									</span>
-								</Button>
-							{/snippet}
-						</DropdownMenu.Trigger>
-						<DropdownMenu.Content class="w-52" align="end">
-							<DropdownMenu.Label>{m.calendar_platform_filter()}</DropdownMenu.Label>
-							<DropdownMenu.Item onclick={() => (selectedPlatform = 'all')} class="gap-2">
-								<CheckIcon
-									class={cn('size-4', selectedPlatform === 'all' ? 'opacity-100' : 'opacity-0')}
-								/>
-								<span>{m.calendar_all_platforms()}</span>
-							</DropdownMenu.Item>
-							{#each availablePlatforms as platform (platform)}
-								<DropdownMenu.Item onclick={() => (selectedPlatform = platform)} class="gap-2">
-									<CheckIcon
-										class={cn(
-											'size-4',
-											selectedPlatform === platform ? 'opacity-100' : 'opacity-0'
-										)}
-									/>
-									<PlatformIcon {platform} class="size-4" />
-									<span>{platformLabel(platform)}</span>
-								</DropdownMenu.Item>
-							{/each}
-						</DropdownMenu.Content>
-					</DropdownMenu.Root>
-
-					<Tooltip.Root>
-						<Tooltip.Trigger>
-							{#snippet child({ props })}
-								<Button
-									{...props}
-									variant="outline"
-									size="icon"
-									aria-label={m.calendar_refresh()}
-									disabled={loading}
-									onclick={() => loadCalendarData(loadKey)}
+							</DropdownMenu.Trigger>
+							<DropdownMenu.Content class="w-64" align="end">
+								<DropdownMenu.Label>{m.calendar_workspace_filter()}</DropdownMenu.Label>
+								<DropdownMenu.CheckboxItem
+									checked={selectedWorkspaceIds.length === 0}
+									onCheckedChange={() => (selectedWorkspaceIds = [])}
+									class="gap-2"
 								>
-									<RefreshCwIcon class={cn('size-4', loading && 'animate-spin')} />
-								</Button>
-							{/snippet}
-						</Tooltip.Trigger>
-						<Tooltip.Content>{m.calendar_refresh()}</Tooltip.Content>
-					</Tooltip.Root>
-				</div>
-			</div>
+									<span>{m.calendar_all_workspaces()}</span>
+								</DropdownMenu.CheckboxItem>
+								<DropdownMenu.Separator />
+								{#each workspaces as workspace (workspace.id)}
+									<DropdownMenu.CheckboxItem
+										checked={workspaceSelected(workspace.id)}
+										onCheckedChange={() => toggleWorkspace(workspace.id)}
+										class="gap-2"
+									>
+										<span class="h-2 w-2 rounded-full" style={workspaceDotStyle(workspace.id)}
+										></span>
+										<span class="truncate">{workspace.name}</span>
+									</DropdownMenu.CheckboxItem>
+								{/each}
+							</DropdownMenu.Content>
+						</DropdownMenu.Root>
 
-			<div class="flex gap-2 overflow-x-auto pb-1">
-				<Button
-					variant="outline"
-					size="sm"
-					class={cn(
-						'shrink-0',
-						selectedWorkspaceIds.length === 0
-							? 'border-primary/30 bg-primary/10 text-primary hover:bg-primary/15 dark:border-primary/40 dark:bg-primary/15'
-							: ''
-					)}
-					onclick={() => (selectedWorkspaceIds = [])}
-				>
-					{m.calendar_all_workspaces()}
-				</Button>
-				{#each workspaces as workspace (workspace.id)}
-					<button
-						type="button"
-						class={cn(
-							'inline-flex h-8 shrink-0 items-center gap-2 rounded-md border px-2.5 text-sm font-medium transition-colors',
-							activeWorkspaceButtonClass(workspace)
-						)}
-						onclick={() => toggleWorkspace(workspace.id)}
-					>
-						<span class="h-2 w-2 rounded-full" style={workspaceDotStyle(workspace.id)}></span>
-						<span class="max-w-36 truncate">{workspace.name}</span>
-					</button>
-				{/each}
-			</div>
+						<DropdownMenu.Root>
+							<DropdownMenu.Trigger>
+								{#snippet child({ props })}
+									<Button {...props} variant="outline" class="max-w-48 justify-start">
+										<span class="truncate">
+											{selectedPlatform === 'all'
+												? m.calendar_all_platforms()
+												: platformLabel(selectedPlatform)}
+										</span>
+									</Button>
+								{/snippet}
+							</DropdownMenu.Trigger>
+							<DropdownMenu.Content class="w-52" align="end">
+								<DropdownMenu.Label>{m.calendar_platform_filter()}</DropdownMenu.Label>
+								<DropdownMenu.RadioGroup bind:value={selectedPlatform}>
+									<DropdownMenu.RadioItem value="all" class="gap-2">
+										<span>{m.calendar_all_platforms()}</span>
+									</DropdownMenu.RadioItem>
+									{#each availablePlatforms as platform (platform)}
+										<DropdownMenu.RadioItem value={platform} class="gap-2">
+											<PlatformIcon {platform} class="size-4" />
+											<span>{platformLabel(platform)}</span>
+										</DropdownMenu.RadioItem>
+									{/each}
+								</DropdownMenu.RadioGroup>
+							</DropdownMenu.Content>
+						</DropdownMenu.Root>
+
+						<Tooltip.Root>
+							<Tooltip.Trigger>
+								{#snippet child({ props })}
+									<Button
+										{...props}
+										variant="outline"
+										size="icon"
+										aria-label={m.calendar_refresh()}
+										disabled={loading || Boolean(reschedulingKey)}
+										onclick={() => loadCalendarData(loadKey)}
+									>
+										<RefreshCwIcon class={cn('size-4', loading && 'animate-spin')} />
+									</Button>
+								{/snippet}
+							</Tooltip.Trigger>
+							<Tooltip.Content>{m.calendar_refresh()}</Tooltip.Content>
+						</Tooltip.Root>
+					</div>
+				{/snippet}
+			</PageHeader>
 		</div>
 	</header>
 
-	{#if errorMessage}
-		<div
-			class="border-b border-destructive/20 bg-destructive/10 px-4 py-2 text-sm text-destructive lg:px-6"
-		>
-			{errorMessage}
+	{#if loadError && completedLoadKey === loadKey}
+		<div class="border-b px-4 py-2 lg:px-6">
+			<InlineNotice tone="error" message={loadError}>
+				{#snippet actions()}
+					<Button
+						variant="outline"
+						size="sm"
+						disabled={loading}
+						onclick={() => void loadCalendarData(loadKey)}
+					>
+						{m.common_retry()}
+					</Button>
+				{/snippet}
+			</InlineNotice>
+		</div>
+	{:else if errorMessage}
+		<div class="border-b px-4 py-2 lg:px-6">
+			<InlineNotice
+				tone="error"
+				message={errorMessage}
+				dismissLabel={m.common_close()}
+				onDismiss={() => (errorMessage = '')}
+			/>
 		</div>
 	{:else if successMessage}
-		<div
-			class="border-b border-emerald-500/20 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-800 lg:px-6 dark:text-emerald-200"
-		>
-			{successMessage}
+		<div class="border-b px-4 py-2 lg:px-6">
+			<InlineNotice
+				tone="success"
+				message={successMessage}
+				dismissLabel={m.common_close()}
+				onDismiss={() => (successMessage = '')}
+			/>
 		</div>
 	{/if}
 
-	<main class="min-h-0 flex-1 overflow-auto px-3 py-3 lg:px-6 lg:py-5">
-		<section class="space-y-5 md:hidden" aria-label={m.calendar_month_grid()}>
-			{#if loading}
-				{#each Array(4) as _, index (index)}
-					<div class="space-y-2">
-						<div class="h-5 w-32 animate-pulse rounded bg-muted"></div>
-						<div class="h-20 animate-pulse rounded-lg border bg-muted/45"></div>
+	<div data-calendar-content class="min-h-0 flex-1 overflow-auto px-3 py-3 lg:px-6 lg:py-5">
+		{#if initialLoading}
+			<PageLoading layout="calendar" label={m.common_loading()} />
+		{:else if loadError && completedLoadKey !== loadKey}
+			<EmptyState
+				icon={CalendarDaysIcon}
+				title={m.calendar_failed_load()}
+				description={loadError}
+				actionLabel={m.common_retry()}
+				onAction={() => void loadCalendarData(loadKey)}
+				variant="muted"
+			/>
+		{:else}
+			<section class="space-y-5 xl:hidden" aria-label={m.calendar_month_grid()}>
+				{#if monthItems.length > 0 && selectedEmptyDay}
+					<div data-testid="calendar-empty-date-create" class="rounded-lg border bg-muted/20 p-3">
+						<div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+							<div class="min-w-0">
+								<h2 class="text-sm font-semibold">{m.calendar_empty_date_heading()}</h2>
+								<p class="mt-1 text-xs text-muted-foreground">
+									{m.calendar_empty_date_body({ month: formatMonth(currentMonth) })}
+								</p>
+							</div>
+							<div class="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+								<Select.Root
+									type="single"
+									value={selectedEmptyDay.key}
+									onValueChange={(value) => value && (selectedEmptyDateKey = value)}
+								>
+									<Select.Trigger
+										class="min-h-11 w-full sm:min-h-9 sm:w-44"
+										aria-label={m.calendar_empty_date_picker({
+											month: formatMonth(currentMonth)
+										})}
+									>
+										{formatEmptyDate(selectedEmptyDay.date)}
+									</Select.Trigger>
+									<Select.Content>
+										{#each emptyMonthDays as day (day.key)}
+											<Select.Item value={day.key}>{formatEmptyDate(day.date)}</Select.Item>
+										{/each}
+									</Select.Content>
+								</Select.Root>
+								<Button
+									class="min-h-11 w-full gap-2 sm:min-h-9 sm:w-auto"
+									onclick={createPostOnSelectedEmptyDate}
+								>
+									<PlusIcon class="size-4" />
+									{m.calendar_create_post()}
+								</Button>
+							</div>
+						</div>
 					</div>
-				{/each}
-			{:else}
+				{/if}
+
 				{#each agendaDays as entry (entry.day.key)}
 					<section>
 						<div class="mb-2 flex items-center justify-between gap-3">
@@ -901,6 +1038,7 @@
 								variant="ghost"
 								size="icon-sm"
 								aria-label={`${m.calendar_create_post()} ${entry.day.key}`}
+								disabled={isPastDay(entry.day)}
 								onclick={() => createPostOnDate(entry.day.date)}
 							>
 								<PlusIcon class="size-4" />
@@ -937,189 +1075,179 @@
 						</div>
 					</section>
 				{/each}
-			{/if}
-		</section>
+			</section>
 
-		<section
-			class="month-shell hidden h-full min-h-[720px] min-w-[980px] grid-rows-[auto_minmax(0,1fr)] overflow-hidden rounded-lg border bg-card shadow-sm md:grid"
-			aria-label={m.calendar_month_grid()}
-		>
-			<div class="grid grid-cols-7 border-b bg-muted/45">
-				{#each weekdayLabels as label (label)}
-					<div class="px-3 py-2 text-xs font-medium tracking-normal text-muted-foreground">
-						{label}
-					</div>
-				{/each}
-			</div>
-			<div class="grid min-h-0 grid-cols-7 grid-rows-6">
-				{#each days as day (day.key)}
-					{@const dayItems = itemsByDay.get(day.key) ?? []}
-					<section
-						role="gridcell"
-						tabindex="0"
-						class={cn(
-							'group/day relative flex min-h-0 cursor-pointer flex-col border-r border-b bg-background/70 p-2 transition-colors last:border-r-0 hover:bg-muted/30',
-							day.outsideMonth && 'bg-muted/25 text-muted-foreground',
-							day.today && 'bg-primary/[0.035]',
-							dropTargetKey === day.key && 'bg-primary/10 ring-2 ring-primary ring-inset'
-						)}
-						onclick={(event) => handleDayClick(event, day)}
-						onkeydown={(event) => {
-							if (event.key !== 'Enter' && event.key !== ' ') return;
-							event.preventDefault();
-							createPostOnDate(day.date);
-						}}
-						ondragover={(event) => onDragOver(event, day)}
-						ondragleave={() => onDragLeave(day)}
-						ondrop={(event) => onDrop(event, day)}
-					>
-						<div class="mb-2 flex items-start justify-between gap-2">
-							<div class="flex items-center gap-2">
-								<span
-									class={cn(
-										'flex size-7 items-center justify-center rounded-md text-sm font-medium',
-										day.today && 'bg-primary text-primary-foreground',
-										day.outsideMonth && !day.today && 'text-muted-foreground'
-									)}
-								>
-									{day.date.getDate()}
-								</span>
-								{#if dayItems.length > 0}
-									<Badge class="bg-muted text-muted-foreground">
-										{m.calendar_day_item_count({ count: dayItems.length })}
-									</Badge>
-								{/if}
-							</div>
-							<div class="flex items-center gap-1">
-								{#if loading}
-									<Loader2Icon class="mt-1 size-3.5 animate-spin text-muted-foreground" />
-								{/if}
-								<Tooltip.Root>
-									<Tooltip.Trigger>
-										{#snippet child({ props })}
-											<Button
-												{...props}
-												type="button"
-												variant="outline"
-												size="icon-xs"
-												class="size-7 border-border/70 bg-background/85 opacity-80 shadow-xs group-hover/day:opacity-100 hover:bg-background dark:bg-input/30 dark:hover:bg-input/50"
-												aria-label={`${m.calendar_create_post()} ${day.key}`}
-												data-calendar-day-action
-												onclick={(event) => {
-													event.stopPropagation();
-													createPostOnDate(day.date);
-												}}
-											>
-												<PlusIcon class="size-3" />
-											</Button>
-										{/snippet}
-									</Tooltip.Trigger>
-									<Tooltip.Content>{m.calendar_create_post()}</Tooltip.Content>
-								</Tooltip.Root>
-							</div>
+			<section
+				class="month-shell hidden h-full min-h-[720px] min-w-[980px] grid-rows-[auto_minmax(0,1fr)] overflow-hidden rounded-lg border bg-card shadow-sm xl:grid"
+				aria-label={m.calendar_month_grid()}
+			>
+				<div class="grid grid-cols-7 border-b bg-muted/45">
+					{#each weekdayLabels as label (label)}
+						<div class="px-3 py-2 text-xs font-medium tracking-normal text-muted-foreground">
+							{label}
 						</div>
-
-						<div class="calendar-day-scroll min-h-0 flex-1 space-y-1.5 overflow-y-auto pr-1">
-							{#if loading}
-								{#each Array(3) as _, index (index)}
-									<div class="h-16 rounded-md border bg-muted/45"></div>
-								{/each}
-							{:else if dayItems.length === 0}
-								<div class="h-full min-h-24" aria-hidden="true"></div>
-							{:else}
-								{#each dayItems as item (item.key)}
-									<button
-										type="button"
-										draggable={true}
-										data-calendar-item
+					{/each}
+				</div>
+				<div class="grid min-h-0 grid-cols-7 grid-rows-6">
+					{#each days as day (day.key)}
+						{@const dayItems = itemsByDay.get(day.key) ?? []}
+						<div
+							role="group"
+							aria-label={formatAgendaDate(day.date)}
+							class={cn(
+								'group/day relative flex min-h-0 flex-col border-r border-b bg-background/70 p-2 transition-colors last:border-r-0',
+								day.outsideMonth && 'bg-muted/25 text-muted-foreground',
+								day.today && 'bg-primary/[0.035]',
+								dropTargetKey === day.key && 'bg-primary/10 ring-2 ring-primary ring-inset'
+							)}
+							ondragover={(event) => onDragOver(event, day)}
+							ondragleave={() => onDragLeave(day)}
+							ondrop={(event) => onDrop(event, day)}
+						>
+							<div class="mb-2 flex items-start justify-between gap-2">
+								<div class="flex items-center gap-2">
+									<span
 										class={cn(
-											'w-full rounded-md border p-2 text-left shadow-xs transition-all hover:-translate-y-0.5 hover:shadow-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
-											itemTone(item),
-											draggingKey === item.key && 'opacity-50',
-											reschedulingKey === item.key && 'pointer-events-none opacity-60'
+											'flex size-7 items-center justify-center rounded-md text-sm font-medium',
+											day.today && 'bg-primary text-primary-foreground',
+											day.outsideMonth && !day.today && 'text-muted-foreground'
 										)}
-										aria-label={item.kind === 'post'
-											? m.calendar_open_post({ title: item.title })
-											: m.calendar_publication_card({ title: item.title })}
-										ondragstart={(event) => onDragStart(event, item)}
-										ondragend={onDragEnd}
-										onclick={() => openItem(item)}
 									>
-										<div class="flex items-start gap-2">
-											<div
-												class="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-md text-[10px] font-semibold text-white shadow-xs"
-												style={workspaceDotStyle(item.workspaceId)}
-											>
-												{workspaceInitials(item.workspaceId)}
-											</div>
-											<div class="min-w-0 flex-1">
-												<div
-													class="mb-1 flex items-center gap-1.5 text-[11px] font-medium text-current/70"
+										{day.date.getDate()}
+									</span>
+									{#if dayItems.length > 0}
+										<Badge class="bg-muted text-muted-foreground">
+											{m.calendar_day_item_count({ count: dayItems.length })}
+										</Badge>
+									{/if}
+								</div>
+								<div class="flex items-center gap-1">
+									<Tooltip.Root>
+										<Tooltip.Trigger>
+											{#snippet child({ props })}
+												<Button
+													{...props}
+													type="button"
+													variant="outline"
+													size="icon-xs"
+													class="size-7 border-border/70 bg-background/85 opacity-80 shadow-xs group-hover/day:opacity-100 hover:bg-background dark:bg-input/30 dark:hover:bg-input/50"
+													aria-label={`${m.calendar_create_post()} ${day.key}`}
+													disabled={isPastDay(day)}
+													data-calendar-day-action
+													onclick={(event) => {
+														event.stopPropagation();
+														createPostOnDate(day.date);
+													}}
 												>
-													<ClockIcon class="size-3" />
-													<span>{formatTime(item.scheduledAt)}</span>
-													<span class="truncate">{item.workspaceName}</span>
-												</div>
-												<div class="line-clamp-2 text-sm leading-snug font-semibold">
-													{item.title}
-												</div>
-												{#if item.preview && item.preview !== item.title}
-													<div class="mt-0.5 line-clamp-2 text-xs leading-snug text-current/70">
-														{item.preview}
-													</div>
-												{/if}
-											</div>
-										</div>
-										<div class="mt-2 flex flex-wrap items-center gap-1">
-											<span
-												class="inline-flex items-center gap-1 rounded-sm bg-background/65 px-1.5 py-0.5 text-[11px] font-medium text-current/75 ring-1 ring-current/10"
-											>
-												{#if item.kind === 'publication'}
-													{m.calendar_publication_label()}
-												{:else}
-													{m.calendar_post_label()}
-												{/if}
-											</span>
-											{#each item.accounts.slice(0, 3) as account (account.id)}
-												<span
-													class="inline-flex max-w-32 items-center gap-1 rounded-sm bg-background/65 px-1.5 py-0.5 text-[11px] font-medium text-current/75 ring-1 ring-current/10"
-													title={`${platformLabel(account.platform)} ${account.label}`}
-												>
-													<PlatformIcon platform={account.platform} class="size-3" />
-													<span class="truncate">{account.label}</span>
-												</span>
-											{/each}
-											{#if item.accounts.length > 3}
-												<span
-													class="inline-flex rounded-sm bg-background/65 px-1.5 py-0.5 text-[11px] font-medium text-current/75 ring-1 ring-current/10"
-												>
-													{m.calendar_more_accounts({ count: item.accounts.length - 3 })}
-												</span>
-											{/if}
-											{#if reschedulingKey === item.key}
-												<Loader2Icon class="ml-auto size-3.5 animate-spin text-current/60" />
-											{/if}
-										</div>
-									</button>
-								{/each}
-							{/if}
-						</div>
-					</section>
-				{/each}
-			</div>
-		</section>
+													<PlusIcon class="size-3" />
+												</Button>
+											{/snippet}
+										</Tooltip.Trigger>
+										<Tooltip.Content>{m.calendar_create_post()}</Tooltip.Content>
+									</Tooltip.Root>
+								</div>
+							</div>
 
-		{#if !loading && monthItems.length === 0}
-			<div class="mx-auto mt-6 max-w-md rounded-lg border bg-card p-6 text-center shadow-sm">
-				<CalendarDaysIcon class="mx-auto size-8 text-muted-foreground" />
-				<h2 class="mt-3 text-base font-semibold">{m.calendar_no_scheduled_title()}</h2>
-				<p class="mt-1 text-sm text-muted-foreground">{m.calendar_no_scheduled_body()}</p>
-				<Button class="mt-4" onclick={() => createPostOnDate(new Date())}
-					>{m.calendar_create_post()}</Button
-				>
-			</div>
+							<div class="calendar-day-scroll min-h-0 flex-1 space-y-1.5 overflow-y-auto pr-1">
+								{#if dayItems.length === 0}
+									<div class="h-full min-h-24" aria-hidden="true"></div>
+								{:else}
+									{#each dayItems as item (item.key)}
+										<button
+											type="button"
+											draggable={true}
+											data-calendar-item
+											class={cn(
+												'w-full rounded-md border p-2 text-left shadow-xs transition-all hover:-translate-y-0.5 hover:shadow-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
+												itemTone(item),
+												draggingKey === item.key && 'opacity-50',
+												reschedulingKey === item.key && 'pointer-events-none opacity-60'
+											)}
+											aria-label={item.kind === 'post'
+												? m.calendar_open_post({ title: item.title })
+												: m.calendar_publication_card({ title: item.title })}
+											ondragstart={(event) => onDragStart(event, item)}
+											ondragend={onDragEnd}
+											onclick={() => openItem(item)}
+										>
+											<div class="flex items-start gap-2">
+												<div
+													class="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-md text-[10px] font-semibold text-white shadow-xs"
+													style={workspaceDotStyle(item.workspaceId)}
+												>
+													{workspaceInitials(item.workspaceId)}
+												</div>
+												<div class="min-w-0 flex-1">
+													<div
+														class="mb-1 flex items-center gap-1.5 text-[11px] font-medium text-current/70"
+													>
+														<ClockIcon class="size-3" />
+														<span>{formatTime(item.scheduledAt)}</span>
+														<span class="truncate">{item.workspaceName}</span>
+													</div>
+													<div class="line-clamp-2 text-sm leading-snug font-semibold">
+														{item.title}
+													</div>
+													{#if item.preview && item.preview !== item.title}
+														<div class="mt-0.5 line-clamp-2 text-xs leading-snug text-current/70">
+															{item.preview}
+														</div>
+													{/if}
+												</div>
+											</div>
+											<div class="mt-2 flex flex-wrap items-center gap-1">
+												<span
+													class="inline-flex items-center gap-1 rounded-sm bg-background/65 px-1.5 py-0.5 text-[11px] font-medium text-current/75 ring-1 ring-current/10"
+												>
+													{#if item.kind === 'publication'}
+														{m.calendar_publication_label()}
+													{:else}
+														{m.calendar_post_label()}
+													{/if}
+												</span>
+												{#each item.accounts.slice(0, 3) as account (account.id)}
+													<span
+														class="inline-flex max-w-32 items-center gap-1 rounded-sm bg-background/65 px-1.5 py-0.5 text-[11px] font-medium text-current/75 ring-1 ring-current/10"
+														title={`${platformLabel(account.platform)} ${account.label}`}
+													>
+														<PlatformIcon platform={account.platform} class="size-3" />
+														<span class="truncate">{account.label}</span>
+													</span>
+												{/each}
+												{#if item.accounts.length > 3}
+													<span
+														class="inline-flex rounded-sm bg-background/65 px-1.5 py-0.5 text-[11px] font-medium text-current/75 ring-1 ring-current/10"
+													>
+														{m.calendar_more_accounts({ count: item.accounts.length - 3 })}
+													</span>
+												{/if}
+												{#if reschedulingKey === item.key}
+													<Loader2Icon class="ml-auto size-3.5 animate-spin text-current/60" />
+												{/if}
+											</div>
+										</button>
+									{/each}
+								{/if}
+							</div>
+						</div>
+					{/each}
+				</div>
+			</section>
+
+			{#if monthItems.length === 0}
+				<div class="mt-5 xl:hidden">
+					<EmptyState
+						icon={CalendarDaysIcon}
+						title={m.calendar_no_scheduled_title()}
+						description={m.calendar_no_scheduled_body()}
+						actionLabel={monthAllowsCreate ? m.calendar_create_post() : undefined}
+						onAction={monthAllowsCreate ? createPostOnSelectedEmptyDate : undefined}
+						variant="dashed"
+					/>
+				</div>
+			{/if}
 		{/if}
-	</main>
+	</div>
 </div>
 
 <style>

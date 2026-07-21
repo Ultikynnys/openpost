@@ -2,18 +2,14 @@
 	import { onMount } from 'svelte';
 	import { client } from '$lib/api/client';
 	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import { Button } from '$lib/components/ui/button';
-	import {
-		Card,
-		CardContent,
-		CardHeader,
-		CardTitle,
-		CardDescription
-	} from '$lib/components/ui/card';
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
-	import PageContainer from '$lib/components/page-container.svelte';
-	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
+	import StandaloneShell from '$lib/components/standalone-shell.svelte';
+	import InlineNotice from '$lib/components/inline-notice.svelte';
+	import CheckCircleIcon from 'lucide-svelte/icons/circle-check';
+	import { m } from '$lib/paraglide/messages';
 
 	let code = $state('');
 	let serverName = $state('');
@@ -43,15 +39,15 @@
 
 	async function submitCode() {
 		if (!code.trim()) {
-			error = 'Enter the authorization code.';
+			error = m.accounts_mastodon_callback_code_required();
 			return;
 		}
 		if (!workspaceId) {
-			error = 'Workspace ID not found. Start the connection again from the accounts page.';
+			error = m.accounts_mastodon_callback_workspace_missing();
 			return;
 		}
 		if (!serverName && !instanceURL) {
-			error = 'Mastodon instance not found. Start the connection again from the accounts page.';
+			error = m.accounts_mastodon_callback_instance_missing();
 			return;
 		}
 
@@ -67,12 +63,12 @@
 					code: code.trim()
 				}
 			});
-			if (err) throw new Error(err.detail || 'Exchange failed');
+			if (err) throw new Error(err.detail || m.accounts_mastodon_callback_exchange_failed());
 			localStorage.removeItem('oauth_workspace_id');
 			localStorage.removeItem('oauth_mastodon_server');
 			localStorage.removeItem('oauth_mastodon_instance_url');
 			success = true;
-			setTimeout(() => goto('/accounts/callback?status=success&platform=mastodon'), 500);
+			setTimeout(() => goto(resolve('/accounts/callback?status=success&platform=mastodon')), 500);
 		} catch (e) {
 			error = (e as Error).message;
 		} finally {
@@ -82,73 +78,64 @@
 </script>
 
 <svelte:head>
-	<title>Mastodon Callback - OpenPost</title>
+	<title>{m.accounts_mastodon_callback_title()}</title>
 </svelte:head>
 
-{#if pageLoading}
-	<div class="flex flex-1 flex-col items-center justify-center gap-3">
-		<Skeleton class="h-10 w-10 rounded-full" />
-		<Skeleton class="h-4 w-40" />
-		<Skeleton class="h-3 w-56" />
-	</div>
-{:else if success}
-	<PageContainer title="Account Connected!">
-		<Card>
-			<CardContent class="pt-6 text-center">
-				<div class="mb-4 text-5xl text-green-600">✓</div>
-				<CardTitle class="mb-2">Success</CardTitle>
-				<CardDescription>Preparing your connected account...</CardDescription>
-			</CardContent>
-		</Card>
-	</PageContainer>
-{:else}
-	<PageContainer
-		title="Connect Mastodon Account"
-		description="Paste the authorization code from Mastodon below"
-	>
-		<Card>
-			<CardContent class="pt-6">
-				{#if serverName || instanceURL}
-					<p class="mb-4 text-sm text-muted-foreground">
-						Connecting to server: <strong>{serverName || instanceURL}</strong>
-					</p>
-				{/if}
-				<form
-					class="space-y-4"
-					onsubmit={(e: SubmitEvent) => {
-						e.preventDefault();
-						submitCode();
-					}}
-				>
-					<div class="space-y-2">
-						<Label for="code">Authorization Code</Label>
-						<Input
-							type="text"
-							id="code"
-							bind:value={code}
-							placeholder="Paste code here..."
-							class="font-mono"
-							required
-						/>
-					</div>
+<StandaloneShell
+	title={success
+		? m.accounts_mastodon_callback_connected()
+		: m.accounts_mastodon_callback_connect()}
+	description={success
+		? m.accounts_mastodon_callback_preparing()
+		: m.accounts_mastodon_callback_description()}
+	loading={pageLoading}
+	loadingLabel={m.common_loading()}
+>
+	{#if success}
+		<div class="space-y-3 text-center" role="status" aria-live="polite">
+			<CheckCircleIcon class="mx-auto size-10 text-emerald-600" />
+			<p class="text-sm text-muted-foreground">{m.accounts_mastodon_callback_preparing()}</p>
+		</div>
+	{:else}
+		<div class="space-y-4">
+			{#if serverName || instanceURL}
+				<p class="text-sm text-muted-foreground">
+					{m.accounts_mastodon_callback_server({ server: serverName || instanceURL })}
+				</p>
+			{/if}
 
-					{#if error}
-						<div
-							class="rounded-md border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive"
-						>
-							{error}
-						</div>
-					{/if}
-
-					<Button type="submit" disabled={loading} class="w-full">
-						{loading ? 'Connecting...' : 'Connect Account'}
-					</Button>
-				</form>
-
-				<div class="mt-4 text-center">
-					<a href="/accounts" class="text-sm text-primary hover:underline">Cancel</a>
+			<form
+				class="space-y-4"
+				onsubmit={(event: SubmitEvent) => {
+					event.preventDefault();
+					void submitCode();
+				}}
+			>
+				<div class="space-y-2">
+					<Label for="code">{m.accounts_mastodon_callback_code()}</Label>
+					<Input
+						type="text"
+						id="code"
+						bind:value={code}
+						placeholder={m.accounts_mastodon_callback_code_placeholder()}
+						class="font-mono"
+						required
+					/>
 				</div>
-			</CardContent>
-		</Card>
-	</PageContainer>
-{/if}
+
+				{#if error}
+					<InlineNotice tone="error" message={error} />
+				{/if}
+
+				<div class="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+					<Button href={resolve('/accounts')} variant="outline">{m.common_cancel()}</Button>
+					<Button type="submit" disabled={loading}>
+						{loading
+							? m.accounts_mastodon_callback_connecting()
+							: m.accounts_mastodon_callback_connect_action()}
+					</Button>
+				</div>
+			</form>
+		</div>
+	{/if}
+</StandaloneShell>
