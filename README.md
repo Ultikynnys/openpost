@@ -23,7 +23,7 @@
 </p>
 
 <div align="center">
-  <h2>A focused workspace for every post.</h2>
+  <h2>A beautiful place to post everywhere.</h2>
   OpenPost is an open-source social publishing workspace for drafting, adapting, scheduling, and automating posts across multiple platforms. Use the managed app or run the same product on your own infrastructure.
 </div>
 

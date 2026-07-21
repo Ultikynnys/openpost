@@ -62,7 +62,7 @@
 				<h1
 					class="mt-6 max-w-2xl text-4xl leading-[1.05] font-semibold tracking-tight text-balance sm:text-5xl"
 				>
-					A focused workspace for every post.
+					A beautiful place to post everywhere.
 				</h1>
 				<p class="mt-6 max-w-2xl text-lg leading-8 text-pretty text-muted-foreground sm:text-xl">
 					Draft once, adapt for each account, preview the result, and keep every scheduled post

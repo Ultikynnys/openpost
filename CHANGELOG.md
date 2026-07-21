@@ -10,7 +10,7 @@ All notable changes to this project are documented in this file.
 
 ### Changed
 
-- Simplified the public landing-page hero and removed the placeholder testimonial wall.
+- Gave the public landing-page hero a warmer, shorter headline and removed the placeholder testimonial wall.
 - Reworked the README around the current app, automation, deployment, and per-provider publishing capabilities.
 - Unified authenticated page headers, section hierarchy, empty/error feedback, toasts, destructive confirmations, and content-shaped loading placeholders behind shared responsive components.
 - Standardized compact desktop controls and 44-pixel portrait touch targets across shared buttons, selects, tabs, composer actions, and mobile navigation.
