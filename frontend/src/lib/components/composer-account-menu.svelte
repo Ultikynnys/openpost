@@ -5,13 +5,19 @@
 	import * as Popover from '$lib/components/ui/popover';
 	import { cn, getPlatformKey, getPlatformName } from '$lib/utils';
 	import { m } from '$lib/paraglide/messages';
-	import CheckIcon from 'lucide-svelte/icons/check';
 	import ChevronDownIcon from 'lucide-svelte/icons/chevron-down';
 	import EllipsisIcon from 'lucide-svelte/icons/ellipsis';
 	import Link2Icon from 'lucide-svelte/icons/link-2';
 	import PencilIcon from 'lucide-svelte/icons/pencil';
 	import RotateCcwIcon from 'lucide-svelte/icons/rotate-ccw';
+	import RiCheckLine from 'remixicon-svelte/icons/check-line';
+	import DestructiveConfirmDialog from './destructive-confirm-dialog.svelte';
 	import PlatformIcon from './platform-icon.svelte';
+
+	type PendingCustomChange = {
+		account: SocialAccount;
+		action: 'deselect' | 'reset';
+	};
 
 	interface Props {
 		accounts: SocialAccount[];
@@ -50,10 +56,15 @@
 	}: Props = $props();
 
 	let open = $state(false);
+	let confirmOpen = $state(false);
+	let pendingCustomChange = $state<PendingCustomChange | null>(null);
 	const compatibleIds = $derived(
 		new Set(compatibleAccountIds ?? accounts.map((account) => account.id))
 	);
 	const customIds = $derived(new Set(customAccountIds));
+	const activeAccountIsCustom = $derived(
+		activeAccountId !== null && customIds.has(activeAccountId)
+	);
 	const selectedAccounts = $derived(
 		accounts.filter((account) => selectedAccountIds.includes(account.id))
 	);
@@ -87,9 +98,29 @@
 		open = false;
 	}
 
-	function reset(account: SocialAccount) {
-		onReset?.(account);
+	function requestCustomChange(account: SocialAccount, action: PendingCustomChange['action']) {
+		pendingCustomChange = { account, action };
 		open = false;
+		confirmOpen = true;
+	}
+
+	function protectCustomDeselect(event: MouseEvent, account: SocialAccount) {
+		if (selectedAccountIds.includes(account.id) && customIds.has(account.id)) {
+			event.preventDefault();
+			requestCustomChange(account, 'deselect');
+		}
+	}
+
+	async function confirmCustomChange() {
+		const pending = pendingCustomChange;
+		if (!pending) return;
+
+		if (pending.action === 'reset') {
+			await onReset?.(pending.account);
+		} else {
+			await onToggle(pending.account);
+		}
+		pendingCustomChange = null;
 	}
 </script>
 
@@ -102,7 +133,7 @@
 				variant={triggerVariant}
 				size="sm"
 				class={cn('h-9 shrink-0 gap-2 px-2.5 text-xs text-muted-foreground', triggerClass)}
-				aria-label={`${triggerLabel}: ${selectedSummary}`}
+				aria-label={`${triggerLabel}: ${selectedSummary}${activeAccountIsCustom ? `; ${m.compose_custom_state()}` : ''}`}
 				data-testid="composer-account-control"
 			>
 				{#if selectedAccounts.length > 0}
@@ -126,6 +157,16 @@
 					</span>
 				{:else}
 					<span>{m.common_none()}</span>
+				{/if}
+				{#if activeAccountIsCustom}
+					<span
+						class="flex size-5 items-center justify-center rounded-sm bg-primary/10 text-primary"
+						title={m.compose_custom_state()}
+						data-testid="composer-active-custom-indicator"
+					>
+						<PencilIcon class="size-3.5" aria-hidden="true" />
+						<span class="sr-only">{m.compose_custom_state()}</span>
+					</span>
 				{/if}
 				<ChevronDownIcon class="size-3.5" aria-hidden="true" />
 			</Button>
@@ -168,12 +209,14 @@
 							'flex min-w-0 flex-1 cursor-pointer items-center gap-2.5 rounded-md px-2 py-1.5 text-sm focus-within:ring-2 focus-within:ring-ring',
 							!compatible && 'cursor-not-allowed opacity-45'
 						)}
+						data-testid="composer-account-toggle"
 					>
 						<input
 							type="checkbox"
 							class="sr-only"
 							checked={selected}
 							disabled={!compatible}
+							onclick={(event) => protectCustomDeselect(event, account)}
 							onchange={() => onToggle(account)}
 						/>
 						<span
@@ -187,9 +230,13 @@
 								<span class="truncate font-medium">{getPlatformName(account.platform)}</span>
 								{#if custom}
 									<span
-										class="shrink-0 font-mono text-[9px] tracking-wide text-muted-foreground uppercase"
-										>{m.compose_custom()}</span
+										class="flex size-4 shrink-0 items-center justify-center text-primary"
+										title={m.compose_custom_state()}
+										data-testid="composer-account-custom-indicator"
 									>
+										<PencilIcon class="size-3" aria-hidden="true" />
+										<span class="sr-only">{m.compose_custom_state()}</span>
+									</span>
 								{/if}
 							</span>
 							{#if accountUsername(account)}
@@ -200,12 +247,14 @@
 						</span>
 						<span
 							class={cn(
-								'flex size-5 shrink-0 items-center justify-center rounded-full border transition-colors',
-								selected ? 'border-primary text-primary' : 'border-input text-transparent'
+								'flex size-4 shrink-0 items-center justify-center rounded-[4px] border transition-colors',
+								selected
+									? 'border-primary bg-primary text-primary-foreground'
+									: 'border-input bg-background text-transparent dark:bg-input/30'
 							)}
 							aria-hidden="true"
 						>
-							{#if selected}<CheckIcon class="size-3" />{/if}
+							{#if selected}<RiCheckLine class="size-3.5" />{/if}
 						</span>
 					</label>
 
@@ -240,7 +289,7 @@
 								{#if custom && onReset}
 									<DropdownMenu.Item
 										class="min-h-11"
-										onclick={() => reset(account)}
+										onclick={() => requestCustomChange(account, 'reset')}
 										data-testid="composer-account-reset"
 									>
 										<RotateCcwIcon class="size-4" />
@@ -268,9 +317,27 @@
 				>
 					<Link2Icon class="size-4" aria-hidden="true" />
 					<span class="flex-1">{m.compose_shared_content()}</span>
-					{#if activeAccountId === null}<CheckIcon class="size-3.5" aria-hidden="true" />{/if}
+					{#if activeAccountId === null}<RiCheckLine class="size-4" aria-hidden="true" />{/if}
 				</button>
 			</div>
 		{/if}
 	</Popover.Content>
 </Popover.Root>
+
+<DestructiveConfirmDialog
+	bind:open={confirmOpen}
+	title={pendingCustomChange?.action === 'deselect'
+		? m.compose_remove_custom_account_title({
+				account: pendingCustomChange ? accountLabel(pendingCustomChange.account) : ''
+			})
+		: m.compose_reset_custom_title({
+				account: pendingCustomChange ? accountLabel(pendingCustomChange.account) : ''
+			})}
+	description={pendingCustomChange?.action === 'deselect'
+		? m.compose_remove_custom_account_body()
+		: m.compose_reset_custom_body()}
+	confirmLabel={pendingCustomChange?.action === 'deselect'
+		? m.compose_remove_custom_account_confirm()
+		: m.compose_reset_custom_confirm()}
+	onConfirm={confirmCustomChange}
+/>

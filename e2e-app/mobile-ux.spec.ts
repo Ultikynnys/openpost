@@ -165,13 +165,46 @@ test("mobile shell and composer expose touch-first controls without overflow", a
     "account customization action",
   );
   await page.getByTestId("composer-account-customize").click();
+  await expect(
+    accountControl.getByTestId("composer-active-custom-indicator"),
+  ).toBeVisible();
   await accountControl.click();
+  await expect(
+    page.getByTestId("composer-account-custom-indicator"),
+  ).toBeVisible();
+  await page.getByTestId("composer-account-toggle").click();
+  const removeCustomDialog = page.getByRole("dialog");
+  await expect(
+    removeCustomDialog.getByRole("heading", {
+      name: "Remove Bluesky @openpost_mobile from this post?",
+    }),
+  ).toBeVisible();
+  await removeCustomDialog.getByRole("button", { name: "Cancel" }).click();
+  await expect(
+    accountControl.getByTestId("composer-active-custom-indicator"),
+  ).toBeVisible();
+  await accountControl.click();
+  await expect(
+    page.getByTestId("composer-account-row").getByRole("checkbox"),
+  ).toBeChecked();
   await page.getByTestId("composer-account-actions").click();
   await expectMinimumTouchTarget(
     page.getByTestId("composer-account-reset"),
     "account reset action",
   );
-  await page.keyboard.press("Escape");
+  await page.getByTestId("composer-account-reset").click();
+  const resetCustomDialog = page.getByRole("dialog");
+  await expect(
+    resetCustomDialog.getByRole("heading", {
+      name: "Reset Bluesky @openpost_mobile to shared content?",
+    }),
+  ).toBeVisible();
+  await resetCustomDialog
+    .getByRole("button", { name: "Reset version" })
+    .click();
+  await expect(
+    accountControl.getByTestId("composer-active-custom-indicator"),
+  ).toHaveCount(0);
 
   await page.setViewportSize({ width: 1280, height: 800 });
   await expect(page.getByTestId("mobile-composer-controls")).toHaveCount(0);
