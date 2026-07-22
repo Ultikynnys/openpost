@@ -16,7 +16,7 @@
 		{
 			title: 'Product',
 			links: [
-				{ label: 'Pricing', href: '/#pricing' },
+				{ label: 'Pricing', href: '/pricing' },
 				{ label: 'Platforms', href: '/platforms' },
 				{ label: 'Compare', href: '/compare' },
 				{ label: 'Free tools', href: '/tools' },
@@ -62,8 +62,8 @@
 				<span class="text-sm font-semibold">OpenPost</span>
 			</a>
 			<p class="mt-4 max-w-sm text-sm leading-6 text-muted-foreground">
-				Social publishing for creators, small teams, and technical operators who want a focused
-				scheduler with open-source trust.
+				The publishing workspace between AI agents and social accounts: provider-aware,
+				human-reviewed, and open source.
 			</p>
 			<a
 				href={githubUrl}
@@ -98,7 +98,10 @@
 			{/each}
 		</div>
 	</div>
-	<div class="border-t px-4 py-5 text-center text-xs text-muted-foreground">
-		Copyright 2026 OpenPost Contributors. Open source, ready to use, lightweight to self-host.
+	<div
+		class="mx-auto flex max-w-7xl flex-col gap-2 border-t px-4 py-5 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8"
+	>
+		<span>Copyright 2026 OpenPost Contributors.</span>
+		<span>Managed or self-hosted. AGPL-3.0-only.</span>
 	</div>
 </footer>

@@ -15,13 +15,12 @@
 <section id="faq" class="section-pad">
 	<div class="mx-auto grid max-w-7xl gap-10 px-4 sm:px-6 lg:grid-cols-[0.75fr_1.25fr] lg:px-8">
 		<div>
-			<p class="eyebrow">FAQ</p>
+			<p class="section-label">Questions</p>
 			<h2 class="mt-4 max-w-2xl text-3xl leading-tight font-semibold text-balance sm:text-5xl">
-				Short answers before you open the app.
+				What to know before you start.
 			</h2>
 			<p class="mt-5 max-w-xl text-lg leading-8 text-muted-foreground">
-				Plans, self-hosting, provider behavior, and failed posts are clearer when they are
-				stated up front.
+				Straight answers about agent access, managed pricing, self-hosting, provider support, and failures.
 			</p>
 		</div>
 

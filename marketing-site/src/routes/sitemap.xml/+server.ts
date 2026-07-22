@@ -6,6 +6,7 @@ export const prerender = true;
 const siteUrl = 'https://openpost.social';
 const routes = [
 	{ path: '/', priority: '1.0' },
+	{ path: '/pricing', priority: '0.9' },
 	{ path: '/platforms', priority: '0.9' },
 	{ path: '/compare', priority: '0.8' },
 	{ path: '/tools', priority: '0.8' },

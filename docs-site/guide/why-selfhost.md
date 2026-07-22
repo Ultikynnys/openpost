@@ -1,46 +1,47 @@
-# Why Self-Host OpenPost?
+# When Self-Hosting Fits
 
-Self-hosting a social media scheduler might seem like extra work compared to using a hosted tool like Typefully, Buffer, or Hootsuite. Here is why you might consider it.
+OpenPost offers the same publishing product as a managed app and as an open-source server. Self-hosting gives you control over where the application runs and where its data is stored. It also makes you responsible for operating it.
 
-## Control Your Data
+## What You Control
 
-When you use a hosted SaaS, your drafts, schedules, media, and connected account tokens live on their servers. Self-hosting keeps everything on your infrastructure:
+A self-hosted installation stores OpenPost data on infrastructure you choose:
 
-- Your post drafts stay on your server
-- Your media library stays on your server
-- Your schedules and history stay on your server
-- Your OAuth tokens stay on your server
+- drafts, schedules, workspaces, and publishing history in SQLite or PostgreSQL;
+- media on local disk or S3-compatible object storage;
+- encrypted provider access and refresh tokens in the application database;
+- application secrets, provider credentials, logs, backups, and retention settings.
 
-## Avoid Another Subscription
+OpenPost still sends content and access tokens to each connected social provider when it performs an action you request. Self-hosting changes who operates the OpenPost service; it does not remove the providers from the publishing path.
 
-Hosted social media schedulers add up. Most charge per seat or per connected account. OpenPost runs on any small VPS, homelab, or even a Raspberry Pi — you already have the server, now you have the tool.
+## What You Need to Operate
 
-## Keep Tokens Secure
+Plan for the same work as any internet-facing application:
 
-OpenPost encrypts OAuth tokens at rest with AES-256-GCM. Your tokens never leave your server, and you control who can access them.
+- TLS and a public application URL;
+- unique JWT and encryption secrets;
+- database and media backups, plus tested restores;
+- release updates and security patches;
+- provider app credentials, callback URLs, permissions, and review;
+- monitoring for failed publishing jobs and storage capacity.
 
-## No Lock-In
+The default deployment stays small: one Go binary or container, SQLite, local media, and a database-backed queue. Redis is not required. PostgreSQL and S3-compatible storage are available when the installation needs them.
 
-If you decide to move to another tool or stop using a scheduler altogether, your data is yours. Export your posts, media, and schedules — nothing is trapped in someone else's platform.
+## Choose the Managed App When
 
-## Run It Your Way
+Use the managed app if you want OpenPost without maintaining its server, backups, TLS, and upgrades. It is also the simpler path when you do not need custom infrastructure or application changes.
 
-- Deploy with Docker or run the binary directly
-- Back up with a single SQLite file
-- Upgrade when you want, not when a SaaS forces an update
-- Extend it if you need to — it is open source
+Managed publishing starts at €6/month. Registration can create one bootstrap workspace before checkout, but connecting accounts, uploading media, scheduling, publishing, and other provider writes require an active or Polar-trialing subscription. There is no automatic hosted free tier or trial.
 
-## When to Consider a Hosted Tool Instead
+## Choose Self-Hosting When
 
-OpenPost is intentionally focused on the core scheduling workflow. If you need:
+Self-hosting is a good fit when you:
 
-- Built-in analytics and reporting
-- Large-team approval workflows
-- Enterprise compliance features
-- Customer support from a vendor
+- already operate a server and can maintain it;
+- need application data in a specific environment;
+- want to inspect or change the implementation;
+- need custom storage, networking, or provider configuration;
+- accept the operational cost in exchange for that control.
 
-…a hosted SaaS may be a better fit today. OpenPost aims to stay small, focused, and easy to run.
+The self-hosted edition has no software subscription. Infrastructure and provider API costs still apply.
 
-## TL;DR
-
-OpenPost is for people who want the core Typefully/Buffer workflow — write, customize, schedule, publish — without handing their content and credentials to another monthly SaaS. If you already have a server and value control over your data, self-hosting OpenPost gives you a lightweight scheduling tool that stays out of your way.
+Start with the [self-hosting guide](/self-hosting/) for deployment steps and the [security policy](https://github.com/rodrgds/openpost/blob/main/SECURITY.md) for production guidance.

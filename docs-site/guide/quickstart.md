@@ -35,7 +35,7 @@ From the repository root, copy the safe deployment example:
 cp .env.example .env
 ```
 
-Set fresh values for the two required secrets, then set `OPENPOST_APP_URL`, `OPENPOST_PUBLIC_URL`, and `OPENPOST_MEDIA_URL` for the URL where users will actually reach the app. For a local trial, `http://localhost:8080` is fine.
+Set fresh values for the two required secrets, then set `OPENPOST_APP_URL`, `OPENPOST_PUBLIC_URL`, and `OPENPOST_MEDIA_URL` for the URL where users will actually reach the app. For a local evaluation, `http://localhost:8080` is fine.
 
 Start with Bluesky if you want the easiest first provider: no server-side OAuth app is required. Add other provider env vars later as needed.
 
@@ -89,7 +89,7 @@ Start with **Bluesky** if you want the fastest validation path:
 
 ## HTTPS note
 
-`http://localhost:8080` is fine for a local trial. Before configuring production OAuth callbacks, put OpenPost behind HTTPS with a real domain and update `OPENPOST_APP_URL`, `OPENPOST_PUBLIC_URL`, and `OPENPOST_MEDIA_URL`. That matters for X, LinkedIn, Threads callback validation, WebAuthn/passkeys, and Threads public media fetches.
+`http://localhost:8080` is fine for a local evaluation. Before configuring production OAuth callbacks, put OpenPost behind HTTPS with a real domain and update `OPENPOST_APP_URL`, `OPENPOST_PUBLIC_URL`, and `OPENPOST_MEDIA_URL`. That matters for X, LinkedIn, Threads callback validation, WebAuthn/passkeys, and Threads public media fetches.
 
 If you want to close self-service signups after setup, set `OPENPOST_DISABLE_REGISTRATIONS=true` and restart OpenPost. The first account is still allowed on a brand-new instance even when that flag is enabled.
 

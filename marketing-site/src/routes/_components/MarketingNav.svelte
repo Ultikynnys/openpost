@@ -1,20 +1,20 @@
 <script lang="ts">
-	import { ArrowRight, Github, Menu } from 'lucide-svelte';
+	import { ArrowRight, Menu, Server, X } from 'lucide-svelte';
 	import Logo from '$lib/components/Logo.svelte';
 	import { Button } from '$lib/components/ui/button';
-	import { appUrl, githubUrl, navItems } from '../_marketing';
+	import { managedSignupUrl, navItems, selfHostingDocsUrl } from '../_marketing';
 
 	let mobileOpen = $state(false);
 </script>
 
-<header class="sticky top-0 z-40 border-b border-border/80 bg-background/92 backdrop-blur-xl">
+<header class="sticky top-0 z-40 border-b border-border/70 bg-background/94 backdrop-blur-xl">
 	<div class="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
 		<a class="inline-flex items-center gap-2" href="/" aria-label="OpenPost home">
 			<Logo width={34} height={26} />
 			<span class="text-sm font-semibold tracking-tight">OpenPost</span>
 		</a>
 
-		<nav class="hidden items-center gap-1 md:flex" aria-label="Primary navigation">
+		<nav class="hidden items-center gap-1 lg:flex" aria-label="Primary navigation">
 			{#each navItems as item (item.href)}
 				<a
 					href={item.href}
@@ -25,13 +25,13 @@
 			{/each}
 		</nav>
 
-		<div class="hidden items-center gap-2 md:flex">
-			<Button href={githubUrl} variant="ghost" size="sm" target="_blank" rel="noreferrer">
-				<Github data-icon="inline-start" />
-				Source
+		<div class="hidden items-center gap-2 lg:flex">
+			<Button href={selfHostingDocsUrl} variant="ghost" size="sm">
+				<Server data-icon="inline-start" />
+				Self-host
 			</Button>
-			<Button href={appUrl} size="sm">
-				Open app
+			<Button href={managedSignupUrl} size="sm">
+				Try managed app
 				<ArrowRight data-icon="inline-end" />
 			</Button>
 		</div>
@@ -39,17 +39,22 @@
 		<Button
 			variant="ghost"
 			size="icon-sm"
-			class="md:hidden"
-			aria-label="Toggle navigation"
+			class="lg:hidden"
+			aria-label={mobileOpen ? 'Close navigation' : 'Open navigation'}
 			aria-expanded={mobileOpen}
+			aria-controls="mobile-navigation"
 			onclick={() => (mobileOpen = !mobileOpen)}
 		>
-			<Menu />
+			{#if mobileOpen}<X />{:else}<Menu />{/if}
 		</Button>
 	</div>
 
 	{#if mobileOpen}
-		<nav class="border-t bg-background px-4 py-4 md:hidden" aria-label="Mobile navigation">
+		<nav
+			id="mobile-navigation"
+			class="border-t bg-background px-4 py-4 lg:hidden"
+			aria-label="Mobile navigation"
+		>
 			<div class="grid gap-1">
 				{#each navItems as item (item.href)}
 					<a
@@ -62,12 +67,12 @@
 				{/each}
 			</div>
 			<div class="mt-4 grid grid-cols-2 gap-2">
-				<Button href={githubUrl} variant="outline" size="sm" target="_blank" rel="noreferrer">
-					<Github data-icon="inline-start" />
-					Source
+				<Button href={selfHostingDocsUrl} variant="outline" size="sm">
+					<Server data-icon="inline-start" />
+					Self-host
 				</Button>
-				<Button href={appUrl} size="sm">
-					Open app
+				<Button href={managedSignupUrl} size="sm">
+					Try managed app
 					<ArrowRight data-icon="inline-end" />
 				</Button>
 			</div>

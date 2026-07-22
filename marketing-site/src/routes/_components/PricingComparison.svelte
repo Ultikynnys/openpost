@@ -1,107 +1,85 @@
 <script lang="ts">
-	import { Check, X } from 'lucide-svelte';
+	import { ArrowRight, Check, MonitorCheck, Server } from 'lucide-svelte';
 	import { Button } from '$lib/components/ui/button';
-	import { appUrl, plans } from '../_marketing';
+	import {
+		managedAccessSummary,
+		managedSignupUrl,
+		selfHostingDocsUrl
+	} from '../_marketing';
 
-	const featureGroups = [
-		{
-			title: 'Plan limits',
-			features: [
-				{ title: 'Workspaces', values: ['1', '3', '10', '10', '50'] },
-				{ title: 'Social accounts', values: ['3', '6', '15', '25', '150'] },
-				{ title: 'Scheduled posts/month', values: ['100', '500', '2,500', '5,000', '25,000'] },
-				{ title: 'Media storage', values: ['1 GB', '5 GB', '25 GB', 'Team pool', 'Agency pool'] },
-				{ title: 'Included seats', values: ['1', '1', '1', '3', '5'] }
-			]
-		},
-		{
-			title: 'Publishing workflow',
-			features: [
-				{ title: 'Composer and drafts', values: ['check', 'check', 'check', 'check', 'check'] },
-				{ title: 'Platform variants', values: ['check', 'check', 'check', 'check', 'check'] },
-				{ title: 'Media library', values: ['check', 'check', 'check', 'check', 'check'] },
-				{ title: 'Account destinations', values: ['check', 'check', 'check', 'check', 'check'] },
-				{ title: 'Queue and activity states', values: ['check', 'check', 'check', 'check', 'check'] }
-			]
-		},
-		{
-			title: 'Automation and trust',
-			features: [
-				{ title: 'CLI', values: ['check', 'check', 'check', 'check', 'check'] },
-				{ title: 'MCP tools', values: ['check', 'check', 'check', 'check', 'check'] },
-				{ title: 'API tokens', values: ['check', 'check', 'check', 'check', 'check'] },
-				{ title: 'Encrypted provider tokens', values: ['check', 'check', 'check', 'check', 'check'] },
-				{ title: 'Team roles', values: ['cross', 'cross', 'cross', 'check', 'check'] }
-			]
-		}
+	const managedIncludes = [
+		'Hosted updates, TLS, database, media storage, and queue operations',
+		'Complete composer, renditions, scheduling, API, CLI, and MCP access',
+		'Published capacity limits from €6 per month'
+	] as const;
+
+	const selfHostedIncludes = [
+		'Complete AGPL-3.0-only server without a software subscription',
+		'One Go binary or container, SQLite and local media by default',
+		'You operate TLS, secrets, provider apps, backups, updates, and restore tests'
 	] as const;
 </script>
 
-<section id="pricing" class="section-pad">
+<section id="pricing" class="section-pad scroll-mt-20 border-y bg-muted/20">
 	<div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-		<div class="max-w-3xl">
-			<p class="eyebrow">Pricing</p>
-			<h2 class="mt-4 text-3xl leading-tight font-semibold text-balance sm:text-5xl">
-				Plans that scale by publishing volume, not by confusion.
-			</h2>
-			<p class="mt-5 text-lg leading-8 text-muted-foreground">
-				Start small, then add workspaces, accounts, seats, and monthly scheduled-post capacity as
-				the publishing operation grows.
+		<div class="grid gap-8 lg:grid-cols-[0.76fr_1.24fr] lg:items-end">
+			<div>
+				<p class="section-label">Two ways to run OpenPost</p>
+				<h2 class="mt-4 text-3xl leading-tight font-semibold tracking-tight text-balance sm:text-5xl">
+					Use the managed app or own the runtime.
+				</h2>
+			</div>
+			<p class="max-w-2xl text-lg leading-8 text-muted-foreground lg:justify-self-end">
+				The managed app and self-hosted edition use the same open product. The choice is whether
+				OpenPost operates the service or you do.
 			</p>
 		</div>
 
-		<div class="mt-10 overflow-x-auto rounded-xl border bg-card">
-			<div class="min-w-[920px]">
-				<div class="grid grid-cols-[1.3fr_repeat(5,1fr)] gap-4 border-b p-4">
-					<div class="flex items-end">
-						<span class="text-sm font-medium text-muted-foreground">Monthly</span>
-					</div>
-					{#each plans as plan (plan.id)}
-						<div class="rounded-lg border bg-background/50 p-3 {plan.featured ? 'border-primary/60' : ''}">
-							<div class="flex items-center justify-between gap-2">
-								<h3 class="font-semibold">{plan.name}</h3>
-								{#if plan.featured}
-									<span class="rounded-full bg-primary px-2 py-1 text-[0.65rem] text-primary-foreground">
-										Popular
-									</span>
-								{/if}
-							</div>
-							<p class="mt-2 text-3xl font-semibold">
-								{plan.price}<span class="text-sm text-muted-foreground">/mo</span>
-							</p>
-							<Button
-								href={`${appUrl}/register?plan=${plan.id}`}
-								class="mt-4 w-full"
-								variant={plan.featured ? 'default' : 'outline'}
-							>
-								Choose
-							</Button>
-						</div>
+		<div class="mt-10 grid gap-px overflow-hidden rounded-xl border bg-border lg:grid-cols-2">
+			<article class="flex h-full flex-col bg-card p-6 sm:p-8">
+				<MonitorCheck class="size-5 text-primary" />
+				<p class="mt-5 text-sm font-medium text-primary">Managed OpenPost</p>
+				<h3 class="mt-2 text-2xl font-semibold">Start publishing without operating the server.</h3>
+				<p class="mt-4 text-sm leading-6 text-muted-foreground">{managedAccessSummary}</p>
+				<ul class="mt-6 grid gap-3">
+					{#each managedIncludes as item (item)}
+						<li class="flex gap-3 text-sm leading-6">
+							<Check class="mt-1 size-4 shrink-0 text-primary" />
+							<span>{item}</span>
+						</li>
 					{/each}
+				</ul>
+				<div class="mt-8 flex flex-wrap items-center gap-4">
+					<Button href={managedSignupUrl}>
+						Try the managed app
+						<ArrowRight data-icon="inline-end" />
+					</Button>
+					<a href="/pricing" class="text-sm font-medium text-muted-foreground hover:text-foreground">
+						Compare all plans
+					</a>
 				</div>
+			</article>
 
-				{#each featureGroups as group (group.title)}
-					<div class="border-b last:border-b-0">
-						<h3 class="bg-muted/30 px-4 py-3 text-sm font-semibold">{group.title}</h3>
-						{#each group.features as feature (feature.title)}
-							<div class="grid grid-cols-[1.3fr_repeat(5,1fr)] gap-4 border-t px-4 py-3 text-sm">
-								<div class="font-medium">{feature.title}</div>
-								{#each feature.values as value, index (`${feature.title}-${index}`)}
-									<div class="text-muted-foreground">
-										{#if value === 'check'}
-											<Check class="size-4 text-primary" />
-										{:else if value === 'cross'}
-											<X class="size-4 text-muted-foreground/60" />
-										{:else}
-											{value}
-										{/if}
-									</div>
-								{/each}
-							</div>
-						{/each}
-					</div>
-				{/each}
-			</div>
+			<article class="flex h-full flex-col bg-background p-6 sm:p-8">
+				<Server class="size-5 text-primary" />
+				<p class="mt-5 text-sm font-medium text-primary">Self-hosted OpenPost</p>
+				<h3 class="mt-2 text-2xl font-semibold">Run the complete publishing service yourself.</h3>
+				<p class="mt-4 text-sm leading-6 text-muted-foreground">
+					Choose your domain, database, media storage, provider applications, and operating controls.
+				</p>
+				<ul class="mt-6 grid gap-3">
+					{#each selfHostedIncludes as item (item)}
+						<li class="flex gap-3 text-sm leading-6">
+							<Check class="mt-1 size-4 shrink-0 text-primary" />
+							<span>{item}</span>
+						</li>
+					{/each}
+				</ul>
+				<Button href={selfHostingDocsUrl} class="mt-8 self-start" variant="outline">
+					Self-host OpenPost
+					<ArrowRight data-icon="inline-end" />
+				</Button>
+			</article>
 		</div>
 	</div>
 </section>

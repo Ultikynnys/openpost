@@ -31,18 +31,18 @@
 
 <svelte:window onkeydown={handleWindowKeydown} />
 
-<section class="section-pad border-y bg-muted/20">
+<section id="demo" class="section-pad scroll-mt-20 border-y bg-muted/20">
 	<div
 		class="mx-auto grid max-w-7xl gap-10 px-4 sm:px-6 lg:grid-cols-[0.72fr_1.28fr] lg:items-center lg:px-8"
 	>
 		<div>
-			<Badge class="border-primary/25 bg-background text-muted-foreground">Product demo</Badge>
+			<Badge class="border-primary/25 bg-background text-muted-foreground">Current product tour</Badge>
 			<h2 class="mt-5 max-w-2xl text-3xl leading-tight font-semibold text-balance sm:text-5xl">
-				See OpenPost from first draft to scheduled post.
+				See the workflow before you connect an account.
 			</h2>
 			<p class="mt-5 max-w-xl text-lg leading-8 text-muted-foreground">
-				Watch the recorded product tour for a complete look at the composer, account-specific
-				content, previews, media, and scheduling.
+				The tour shows the composer, account-specific changes, previews, media, and scheduling.
+				It is a product walkthrough, not a claim that every provider path is production-verified.
 			</p>
 		</div>
 
@@ -101,7 +101,7 @@
 		border-radius: 0.9rem;
 		background: var(--muted);
 		padding: 0;
-		box-shadow: 0 24px 70px color-mix(in oklch, black 24%, transparent);
+		box-shadow: 0 18px 48px color-mix(in oklch, black 18%, transparent);
 		cursor: pointer;
 	}
 

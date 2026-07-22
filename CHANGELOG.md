@@ -10,6 +10,9 @@ All notable changes to this project are documented in this file.
 
 ### Added
 
+- Added server-enforced `mcp:read` access for inspection-only agent connections, with mutation tools hidden and mutation attempts rejected at runtime.
+- Added a local five-destination sample campaign and reusable launch kit for reviewing agent-prepared renditions before connecting accounts or publishing.
+- Rebuilt the public platform and comparison guides and added six in-browser tools for character counting, post previews, thread splitting, handle checks, LinkedIn formatting, and timezone-aware posting plans.
 - Added email password recovery, authenticated password changes, account JSON exports, and permanent account deletion with billing, administration, shared-ownership, durable storage-cleanup, and re-authentication safeguards.
 - Added versioned Terms of Service and Privacy Policy acceptance for hosted registration, with public legal pages and an operator support contact.
 - Added Go and production-JavaScript vulnerability scans to CI and release preflight.
@@ -17,6 +20,7 @@ All notable changes to this project are documented in this file.
 
 ### Changed
 
+- Rewrote the landing, pricing, security, open-source, changelog, platform, comparison, and tools pages around current product behavior, and refreshed the canonical composer, accounts, media, and settings screenshots.
 - Restored the OpenPost composer screenshot as the product-demo preview while keeping the recorded video behind the play action.
 - Updated the project to Go 1.26.5 and current patched `x/image`, `x/net`, `x/text`, and `cookie` dependencies.
 - Replaced broad provider maturity labels with implemented and preview statuses that state provider approval, quota, public-media, and live-account verification constraints.
@@ -52,6 +56,10 @@ All notable changes to this project are documented in this file.
 
 ### Fixed
 
+- Aligned the Starter, Creator, and Pro seat entitlements with the public pricing catalog.
+- Matched provider media validation and support copy to the implemented publishing paths.
+- Corrected stale security and posting-schedule field descriptions.
+- Kept legal acceptance copy in a natural inline reading flow on account review and registration screens instead of splitting each phrase into a separate flex column.
 - Kept contract checks valid in clean CI checkouts by excluding ignored documentation build copies from tracked-file freshness checks.
 - Made MCP tool discovery and execution agent-safe and protocol-correct with complete parameter documentation and examples, runtime input/output schema enforcement, refusal for out-of-scope searches, standard stdio framing, protocol-version forwarding, origin and request guards, and actionable scope errors.
 - Kept password-reset responses enumeration-safe, reset all sessions after recovery, preserved only the current session after a password change, excluded shared workspace content from personal exports, and transferred shared organization ownership safely during deletion.

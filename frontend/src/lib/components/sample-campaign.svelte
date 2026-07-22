@@ -134,7 +134,7 @@
 	</header>
 
 	<div class="min-h-0 flex-1 overflow-y-auto">
-		<main
+		<div
 			class="mx-auto grid w-full max-w-7xl gap-5 px-4 py-5 md:px-6 md:py-6 lg:grid-cols-[21rem_minmax(0,1fr)]"
 		>
 			<aside class="self-start overflow-hidden rounded-lg border bg-card">
@@ -363,6 +363,6 @@
 					</Button>
 				</div>
 			</div>
-		</main>
+		</div>
 	</div>
 </div>

@@ -36,24 +36,23 @@
           mask="url(#nib-cutout)" />
   </g>
 
-  <path d="M 440 385
-           C 465 402, 488 296, 520 296
-           C 552 296, 570 378, 599 378
-           C 628 378, 673 188, 720 188
-           C 767 188, 798 404, 846 404
-           C 894 404, 910 204, 958 204"
+  <path d="M 440 458
+           C 492 414, 540 414, 592 458
+           C 644 502, 692 502, 744 458
+           C 796 414, 844 414, 896 458
+           C 918 476, 940 484, 962 484"
         stroke="url(#accent)"
         stroke-linecap="round"
         stroke-linejoin="round"
-        stroke-width="24" />
+        stroke-width="18" />
 
   <text x="438" y="246" fill="#f9fafb" font-family="ui-sans-serif, system-ui, sans-serif" font-size="82" font-weight="800">
     OpenPost
   </text>
   <text x="438" y="318" fill="#d1d5db" font-family="ui-sans-serif, system-ui, sans-serif" font-size="34" font-weight="500">
-    Self-hosted social media scheduling.
+    Write once. Tailor every destination.
   </text>
-  <text x="438" y="382" fill="#9ca3af" font-family="ui-sans-serif, system-ui, sans-serif" font-size="28">
-    X, Mastodon, Bluesky, Threads, and LinkedIn from your own server.
+  <text x="438" y="382" fill="#cbd5e1" font-family="ui-sans-serif, system-ui, sans-serif" font-size="28">
+    Managed or self-hosted. Open source.
   </text>
 </svg>

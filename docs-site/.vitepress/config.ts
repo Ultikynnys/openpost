@@ -158,7 +158,7 @@ const developmentSidebar = [
 
 export default defineConfig({
 	title: 'OpenPost',
-	description: 'Self-hosted Buffer/Hootsuite alternative. Schedule posts to X, Mastodon, Bluesky, Threads, LinkedIn, Facebook Pages, Instagram Business, TikTok, and YouTube from your own server.',
+	description: 'Draft, adapt, schedule, and automate social posts with the managed OpenPost app or the same self-hosted product.',
 	base: docsBase,
 	cleanUrls: true,
 	lastUpdated: true,
@@ -166,8 +166,8 @@ export default defineConfig({
 		['link', { rel: 'icon', href: `${docsBase}assets/brand/icon.svg` }],
 		['meta', { property: 'og:type', content: 'website' }],
 		['meta', { property: 'og:title', content: 'OpenPost' }],
-		['meta', { property: 'og:description', content: 'Self-hosted Buffer/Hootsuite alternative. Schedule posts to X, Mastodon, Bluesky, Threads, LinkedIn, Facebook Pages, Instagram Business, TikTok, and YouTube from your own server.' }],
-		['meta', { property: 'og:image', content: `${docsBase}assets/brand/og-image.svg` }],
+		['meta', { property: 'og:description', content: 'Draft, adapt, schedule, and automate social posts with the managed OpenPost app or the same self-hosted product.' }],
+		['meta', { property: 'og:image', content: `${docsBase}assets/brand/og-image.png` }],
 	],
 	themeConfig: {
 		logo: '/assets/brand/icon.svg',

@@ -44,7 +44,7 @@ This is the implementation map for turning OpenPost into a production-ready self
   - Pro: 15 connections, larger media/history limits, and solo power-user volume.
   - Team: seat-based collaboration for small teams and multi-brand operators.
   - Agency: higher workspace/account limits for client portfolio management.
-- Avoid a hosted free tier at launch; use trial/beta access instead.
+- Avoid a hosted free tier at launch. Any trial access should be deliberately granted through Polar's `trialing` state and described as non-automatic.
 
 ### 3. Provider Readiness
 
@@ -80,14 +80,14 @@ This is the implementation map for turning OpenPost into a production-ready self
 - The local `openpost-mcp` stdio binary is implemented for desktop/self-hosted clients. The CLI stdio proxy loads the active OpenPost profile/token and forwards frames to `/mcp`.
 - Reuse CLI/API client behavior where possible, but keep MCP stdout strict.
 - Start with safe semantic tools and prompts: list workspaces, list accounts, create/list/update drafts, set post renditions, upload media from URL, schedule post or draft, cancel post, get post status, suggest next slot, and prompt templates for planning posts, adapting renditions, and reviewing the queue. The remote MCP foundation now supports workspace/account listing, draft creation/review/revision, destination-specific rendition updates, guarded URL media upload, quota-checked scheduling for new posts and existing drafts, post status reads, scheduled-post queue inspection/cancellation, next-slot suggestions, and agentic scheduling prompt templates.
-- Require auth for remote MCP, scope sessions, log tool calls, and expose revocation in settings. Tool-call logging is now persisted in `mcp_tool_calls`, recent calls are visible in settings with API-token client attribution, Apps SDK-facing protected-resource/tool security metadata, invocation status labels, and output schemas are in place, Settings can create/revoke dedicated `mcp:full` tokens, OAuth authorization-code + PKCE account linking now mints audience-bound MCP tokens, and both manual tokens and OAuth approvals can be limited to one workspace.
+- Require auth for remote MCP, scope sessions, log tool calls, and expose revocation in settings. Tool-call logging is now persisted in `mcp_tool_calls`, recent calls are visible in settings with API-token client attribution, Apps SDK-facing protected-resource/tool security metadata, invocation status labels, and output schemas are in place. Settings can create/revoke dedicated `mcp:read` or `mcp:full` tokens, OAuth authorization-code + PKCE account linking mints audience-bound MCP tokens, and both manual tokens and OAuth approvals can be limited to one workspace. Read tokens receive only read-safe tools and search results, and mutation attempts are rejected server-side.
 
 ### 7. Marketing, SEO, And Docs
 
 - Keep `marketing-site/` public in this repo.
 - Keep `docs-site/` technical and task-oriented.
-- Add pricing, blog, comparison, tips, and tools pages to `openpost.social`. The marketing site now includes crawlable tools, tips, blog, and comparison routes with sitemap coverage.
-- Add SEO utilities such as post preview, thread splitter, character counter, and UTM builder. The marketing tools page now covers all four with Playwright verification for generated UTM links.
+- Keep pricing, platform, comparison, security, open-source, changelog, and tools pages crawlable on `openpost.social`. The public sitemap now covers each current landing page, platform guide, comparison, and tool.
+- Keep the free tools useful without an account. The current set covers character counting, platform previews, thread splitting, handle checks, LinkedIn formatting, and timezone-aware posting plans, with focused browser checks.
 - Keep docs on install, providers, configuration, CLI, operations, and development.
 
 ### 8. Verification
@@ -106,4 +106,4 @@ This is the implementation map for turning OpenPost into a production-ready self
 5. Add entitlement interfaces and self-host defaults. Done for the service contract and workspace creation boundary.
 6. Add usage tables and API boundary checks. Monthly usage counters, workspace quota enforcement, team invitation seat enforcement, social-account quota enforcement, media quota enforcement, scheduled-post quota enforcement, and publishing-worker usage/quota enforcement are in place.
 7. Add Playwright coverage around the core app flows.
-8. Start MCP with authenticated remote metadata and safe read/create/schedule tools. Remote auth, protected-resource metadata, authorization-server metadata, PKCE account linking, tool security descriptors, Apps SDK output metadata, prompt templates, workspace listing, account listing, guarded URL media upload, draft creation, scheduled posting, status reads, scheduled-post cancellation, next-slot suggestions, settings-visible tool-call activity, and dedicated `mcp:full` API-token creation are in place.
+8. Start MCP with authenticated remote metadata and safe read/create/schedule tools. Remote auth, protected-resource metadata, authorization-server metadata, PKCE account linking, `mcp:read` and `mcp:full` scopes, tool security descriptors, Apps SDK output metadata, prompt templates, workspace listing, account listing, guarded URL media upload, draft creation, scheduled posting, status reads, scheduled-post cancellation, next-slot suggestions, settings-visible tool-call activity, and dedicated MCP API-token creation are in place.

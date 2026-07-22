@@ -18,7 +18,7 @@
 	eyebrow="Legal"
 	title="Terms of Service"
 	description="These terms govern use of the hosted OpenPost service. They do not replace the open-source license for self-hosted software."
-	secondaryHref="/#pricing"
+	secondaryHref="/pricing"
 	secondaryLabel="Pricing"
 />
 

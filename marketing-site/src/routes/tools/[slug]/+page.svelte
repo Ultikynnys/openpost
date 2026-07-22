@@ -1,11 +1,58 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import { error } from '@sveltejs/kit';
-	import { ArrowRight, CheckCircle2, Copy, Wand2 } from 'lucide-svelte';
-	import { Button } from '$lib/components/ui/button';
-	import PlatformIcon from '$lib/components/platform-icon.svelte';
-	import { publicPlatformLimits, platformCharacterLimit } from '$lib/platform-limits';
-	import { appUrl, getTool, siteUrl } from '../../_marketing';
+	import CharacterCounter from '../../_components/tools/CharacterCounter.svelte';
+	import HandleChecker from '../../_components/tools/HandleChecker.svelte';
+	import LinkedInFormatter from '../../_components/tools/LinkedInFormatter.svelte';
+	import PostingPlanner from '../../_components/tools/PostingPlanner.svelte';
+	import PreviewGenerator from '../../_components/tools/PreviewGenerator.svelte';
+	import ThreadSplitter from '../../_components/tools/ThreadSplitter.svelte';
+	import ToolPageShell from '../../_components/tools/ToolPageShell.svelte';
+	import { getTool, siteUrl } from '../../_marketing';
+
+	const seoBySlug: Record<
+		string,
+		{ title: string; heading: string; description: string; privacyNote?: string }
+	> = {
+		'multi-platform-character-counter': {
+			title: 'Free social media character counter - OpenPost',
+			heading: 'Count every visible character before you publish',
+			description:
+				'Check one draft against nine social platform limits. Emoji stay intact, with an X-style estimate for weighted characters and links.'
+		},
+		'post-preview-generator': {
+			title: 'Free social post preview generator - OpenPost',
+			heading: 'See how your post changes by platform',
+			description:
+				'Compare distinct X, Mastodon, Bluesky, LinkedIn, Threads, and Instagram layouts with your own name, handle, copy, image, and alt text.'
+		},
+		'thread-splitter': {
+			title: 'Free social media thread splitter - OpenPost',
+			heading: 'Turn long drafts into clean social threads',
+			description:
+				'Split at paragraph, sentence, and word boundaries for X, Bluesky, Mastodon, Threads, or LinkedIn. Add numbering and copy each part or the full thread.'
+		},
+		'fediverse-handle-checker': {
+			title: 'Fediverse and Bluesky handle checker - OpenPost',
+			heading: 'Validate a Fediverse or Bluesky handle',
+			description:
+				'Check handle syntax locally, open the correct profile or lookup URL, and run an optional live WebFinger or Bluesky identity check when you choose.',
+			privacyNote:
+				'Syntax checks stay in this browser. A network request runs only after you select “Check live.”'
+		},
+		'linkedin-text-formatter': {
+			title: 'Accessible LinkedIn post formatter - OpenPost',
+			heading: 'Make LinkedIn posts easier to scan',
+			description:
+				'Clean spacing, shorten paragraph blocks, normalize bullets, and check length while keeping every letter readable and searchable.'
+		},
+		'best-time-to-post-calculator': {
+			title: 'Free social posting schedule planner - OpenPost',
+			heading: 'Build posting times your team can actually use',
+			description:
+				'Choose your audience days and active hours, convert the cadence to your timezone, then copy or download a weekly plan to test.'
+		}
+	};
 
 	const slug = $derived(page.params.slug ?? '');
 	const tool = $derived.by(() => {
@@ -13,328 +60,48 @@
 		if (!found) error(404, 'Tool not found');
 		return found;
 	});
-
-	let draft = $state(
-		'Launch note: OpenPost keeps social publishing focused. Draft once, adapt per platform, preview the destination shape, then schedule into the next workspace slot.'
-	);
-	let selectedPlatform = $state('x');
-	let formatterMode = $state<'bold' | 'italic' | 'clear'>('bold');
-	let timezone = $state('Europe/Lisbon');
-	let cadence = $state<'weekday' | 'daily' | 'launch'>('weekday');
-	let handleInput = $state('@openpost@mastodon.social');
-
-	const publicLimits = publicPlatformLimits();
-	const selectablePlatforms = publicLimits.filter((platform) =>
-		['x', 'mastodon', 'bluesky', 'linkedin', 'threads', 'facebook'].includes(platform.key)
-	);
-	const previewPlatforms = publicLimits.filter((platform) =>
-		['x', 'mastodon', 'bluesky', 'linkedin', 'threads'].includes(platform.key)
-	);
-	const currentLimit = $derived(platformCharacterLimit(selectedPlatform));
-	const draftLength = $derived(draft.length);
-	const remaining = $derived(currentLimit - draftLength);
-	const threadParts = $derived.by(() => splitThread(draft, currentLimit));
-	const handleResult = $derived.by(() => parseHandle(handleInput));
-	const postingSlots = $derived.by(() => buildSlots(timezone, cadence));
-	const formattedDraft = $derived.by(() => formatLinkedIn(draft, formatterMode));
-
-	function splitThread(value: string, limit: number) {
-		const text = value.trim().replace(/\s+/g, ' ');
-		if (!text) return [];
-		const words = text.split(' ');
-		const parts: string[] = [];
-		let current = '';
-
-		for (const word of words) {
-			const next = current ? `${current} ${word}` : word;
-			if (next.length <= limit) {
-				current = next;
-				continue;
-			}
-			if (current) parts.push(current);
-			current = word.length > limit ? word.slice(0, limit) : word;
+	const seo = $derived(
+		seoBySlug[slug] ?? {
+			title: `${tool.name} - OpenPost`,
+			heading: tool.name,
+			description: tool.description
 		}
-		if (current) parts.push(current);
-		return parts;
-	}
-
-	function parseHandle(value: string) {
-		const trimmed = value.trim();
-		const mastodon = /^@?([a-zA-Z0-9_]+)@([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})$/.exec(trimmed);
-		if (mastodon) {
-			return {
-				valid: true,
-				type: 'Mastodon / Fediverse',
-				username: mastodon[1],
-				host: mastodon[2],
-				message: 'Looks like a valid Fediverse handle format.'
-			};
-		}
-
-		const bluesky = /^@?([a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)+)$/.exec(trimmed);
-		if (bluesky) {
-			return {
-				valid: true,
-				type: 'Bluesky handle',
-				username: bluesky[1],
-				host: bluesky[1].split('.').slice(1).join('.'),
-				message: 'Looks like a valid domain-style Bluesky handle.'
-			};
-		}
-
-		return {
-			valid: false,
-			type: 'Unknown',
-			username: '',
-			host: '',
-			message: 'Use @name@server.tld for Mastodon or name.bsky.social for Bluesky.'
-		};
-	}
-
-	function buildSlots(zone: string, mode: typeof cadence) {
-		const base =
-			mode === 'launch'
-				? ['09:15', '12:30', '16:45', '19:10']
-				: mode === 'daily'
-					? ['08:45', '12:15', '17:30']
-					: ['09:30', '13:00', '16:30'];
-		return base.map((time, index) => ({
-			time,
-			label: ['Primary', 'Midday', 'Follow-up', 'Evening'][index],
-			zone
-		}));
-	}
-
-	function mapText(value: string, style: 'bold' | 'italic') {
-		const upperBase = style === 'bold' ? 0x1d400 : 0x1d434;
-		const lowerBase = style === 'bold' ? 0x1d41a : 0x1d44e;
-		const digitBase = style === 'bold' ? 0x1d7ce : null;
-		return [...value]
-			.map((char) => {
-				const code = char.charCodeAt(0);
-				if (code >= 65 && code <= 90) return String.fromCodePoint(upperBase + code - 65);
-				if (code >= 97 && code <= 122) return String.fromCodePoint(lowerBase + code - 97);
-				if (digitBase && code >= 48 && code <= 57)
-					return String.fromCodePoint(digitBase + code - 48);
-				return char;
-			})
-			.join('');
-	}
-
-	function formatLinkedIn(value: string, mode: typeof formatterMode) {
-		if (mode === 'clear') return value.replace(/[ \t]+$/gm, '').replace(/\n{3,}/g, '\n\n');
-		return mapText(value, mode);
-	}
-
-	async function copyText(value: string) {
-		await navigator.clipboard?.writeText(value);
-	}
+	);
+	const canonical = $derived(`${siteUrl}/tools/${tool.slug}`);
 </script>
 
 <svelte:head>
-	<title>{tool.name} - OpenPost</title>
-	<meta name="description" content={tool.description} />
-	<link rel="canonical" href={`${siteUrl}/tools/${tool.slug}`} />
+	<title>{seo.title}</title>
+	<meta name="description" content={seo.description} />
+	<link rel="canonical" href={canonical} />
+	<meta property="og:type" content="website" />
+	<meta property="og:site_name" content="OpenPost" />
+	<meta property="og:title" content={seo.title} />
+	<meta property="og:description" content={seo.description} />
+	<meta property="og:url" content={canonical} />
+	<meta property="og:image" content={`${siteUrl}/assets/brand/og-image.png`} />
+	<meta name="twitter:card" content="summary_large_image" />
+	<meta name="twitter:title" content={seo.title} />
+	<meta name="twitter:description" content={seo.description} />
+	<meta name="twitter:image" content={`${siteUrl}/assets/brand/og-image.png`} />
 </svelte:head>
 
-<section class="section-pad border-b">
-	<div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-		<div class="grid gap-10 lg:grid-cols-[0.85fr_1.15fr] lg:items-center">
-			<div>
-				<p class="eyebrow">Free tool</p>
-				<h1 class="mt-4 text-4xl leading-tight font-semibold text-balance sm:text-6xl">
-					{tool.name}
-				</h1>
-				<p class="mt-5 max-w-2xl text-lg leading-8 text-muted-foreground">{tool.description}</p>
-				<div class="mt-8 flex flex-wrap gap-3">
-					<Button href={appUrl} size="lg">
-						Open the app
-						<ArrowRight data-icon="inline-end" />
-					</Button>
-					<Button href="/tools" variant="outline" size="lg">All tools</Button>
-				</div>
-			</div>
-			<div class="rounded-xl border bg-card p-5">
-				<label for="tool-input" class="text-sm font-medium">Draft</label>
-				<textarea
-					id="tool-input"
-					bind:value={draft}
-					class="mt-3 min-h-44 w-full rounded-md border bg-background p-4 text-sm leading-6"
-					placeholder="Paste your social post here..."
-				></textarea>
-
-				{#if tool.slug === 'multi-platform-character-counter'}
-					<div class="mt-4 grid gap-3 sm:grid-cols-2">
-						{#each selectablePlatforms as platform (platform.key)}
-							{@const limit = platform.charLimit}
-							<div class="rounded-md border bg-muted/25 p-3">
-								<div class="flex items-center justify-between gap-3">
-									<span class="inline-flex items-center gap-2 text-sm font-medium">
-										<PlatformIcon platform={platform.key} class="size-4" />
-										{platform.name}
-									</span>
-									<span
-										class="font-mono text-xs {draftLength > limit
-											? 'text-red-500'
-											: 'text-muted-foreground'}"
-									>
-										{draftLength}/{limit.toLocaleString()}
-									</span>
-								</div>
-								<div class="mt-3 h-2 overflow-hidden rounded-full bg-muted">
-									<div
-										class="h-full rounded-full {draftLength > limit ? 'bg-red-500' : 'bg-primary'}"
-										style={`width: ${Math.min(100, (draftLength / limit) * 100)}%`}
-									></div>
-								</div>
-							</div>
-						{/each}
-					</div>
-				{:else if tool.slug === 'thread-splitter'}
-					<div class="mt-4 flex flex-wrap items-center gap-3">
-						<select
-							bind:value={selectedPlatform}
-							class="rounded-md border bg-background px-3 py-2 text-sm"
-						>
-							{#each selectablePlatforms as platform (platform.key)}
-								<option value={platform.key}>{platform.name}</option>
-							{/each}
-						</select>
-						<span class="font-mono text-xs text-muted-foreground">
-							{threadParts.length || 0} part{threadParts.length === 1 ? '' : 's'} at {currentLimit.toLocaleString()}
-							chars
-						</span>
-					</div>
-					<div class="mt-4 grid gap-3">
-						{#each threadParts as part, index (`part-${index}`)}
-							<div class="rounded-md border bg-muted/25 p-3">
-								<div class="flex items-center justify-between gap-3">
-									<span class="font-mono text-xs text-muted-foreground">Post {index + 1}</span>
-									<Button type="button" size="sm" variant="ghost" onclick={() => copyText(part)}>
-										<Copy data-icon="inline-start" />
-										Copy
-									</Button>
-								</div>
-								<p class="mt-2 text-sm leading-6">{part}</p>
-							</div>
-						{/each}
-					</div>
-				{:else if tool.slug === 'linkedin-text-formatter'}
-					<div class="mt-4 flex flex-wrap gap-2">
-						{#each [['bold', 'Bold'], ['italic', 'Italic'], ['clear', 'Clean spacing']] as option (option[0])}
-							<Button
-								type="button"
-								variant={formatterMode === option[0] ? 'default' : 'outline'}
-								size="sm"
-								onclick={() => (formatterMode = option[0] as typeof formatterMode)}
-							>
-								<Wand2 data-icon="inline-start" />
-								{option[1]}
-							</Button>
-						{/each}
-					</div>
-					<div class="mt-4 rounded-md border bg-muted/25 p-4">
-						<div class="mb-3 flex items-center justify-between gap-3">
-							<span class="text-sm font-medium">Formatted copy</span>
-							<Button
-								type="button"
-								size="sm"
-								variant="ghost"
-								onclick={() => copyText(formattedDraft)}
-							>
-								<Copy data-icon="inline-start" />
-								Copy
-							</Button>
-						</div>
-						<p class="whitespace-pre-wrap text-sm leading-6">{formattedDraft}</p>
-					</div>
-				{:else if tool.slug === 'best-time-to-post-calculator'}
-					<div class="mt-4 grid gap-3 sm:grid-cols-2">
-						<label class="grid gap-2 text-sm">
-							<span class="font-medium">Timezone</span>
-							<select bind:value={timezone} class="rounded-md border bg-background px-3 py-2">
-								<option>Europe/Lisbon</option>
-								<option>UTC</option>
-								<option>America/New_York</option>
-								<option>America/Los_Angeles</option>
-								<option>Europe/London</option>
-							</select>
-						</label>
-						<label class="grid gap-2 text-sm">
-							<span class="font-medium">Cadence</span>
-							<select bind:value={cadence} class="rounded-md border bg-background px-3 py-2">
-								<option value="weekday">Weekday publishing</option>
-								<option value="daily">Daily publishing</option>
-								<option value="launch">Launch day</option>
-							</select>
-						</label>
-					</div>
-					<div class="mt-4 grid gap-3 sm:grid-cols-3">
-						{#each postingSlots as slot (slot.time)}
-							<div class="rounded-md border bg-muted/25 p-4">
-								<p class="font-mono text-lg font-semibold">{slot.time}</p>
-								<p class="mt-1 text-xs text-muted-foreground">{slot.label} · {slot.zone}</p>
-							</div>
-						{/each}
-					</div>
-				{:else if tool.slug === 'fediverse-handle-checker'}
-					<label for="handle-input" class="mt-4 block text-sm font-medium">Handle</label>
-					<input
-						id="handle-input"
-						bind:value={handleInput}
-						class="mt-2 w-full rounded-md border bg-background px-3 py-2 text-sm"
-						placeholder="@name@mastodon.social or name.bsky.social"
-					/>
-					<div class="mt-4 rounded-md border bg-muted/25 p-4">
-						<div class="flex items-center gap-2">
-							<CheckCircle2
-								class="size-4 {handleResult.valid ? 'text-primary' : 'text-muted-foreground'}"
-							/>
-							<span class="font-medium">{handleResult.type}</span>
-						</div>
-						<p class="mt-2 text-sm leading-6 text-muted-foreground">{handleResult.message}</p>
-						{#if handleResult.valid}
-							<p class="mt-3 font-mono text-xs text-muted-foreground">
-								username={handleResult.username} host={handleResult.host}
-							</p>
-						{/if}
-					</div>
-				{:else}
-					<div class="mt-4 flex flex-wrap items-center gap-3">
-						<select
-							bind:value={selectedPlatform}
-							class="rounded-md border bg-background px-3 py-2 text-sm"
-						>
-							{#each previewPlatforms as platform (platform.key)}
-								<option value={platform.key}>{platform.name}</option>
-							{/each}
-						</select>
-						<span
-							class="font-mono text-xs {remaining < 0 ? 'text-red-500' : 'text-muted-foreground'}"
-						>
-							{remaining.toLocaleString()} remaining
-						</span>
-					</div>
-					<div class="mt-4 rounded-xl border bg-background p-4">
-						<div class="flex items-center gap-3">
-							<div class="grid size-10 place-items-center rounded-full border bg-muted">
-								<PlatformIcon platform={selectedPlatform} class="size-5" />
-							</div>
-							<div>
-								<p class="text-sm font-semibold">OpenPost</p>
-								<p class="text-xs text-muted-foreground">@openpost</p>
-							</div>
-						</div>
-						<p class="mt-4 whitespace-pre-wrap text-sm leading-6">{draft}</p>
-						<div class="mt-4 aspect-video rounded-lg border bg-muted/35"></div>
-					</div>
-				{/if}
-
-				<p class="mt-4 text-xs leading-5 text-muted-foreground">
-					The full app adds connected accounts, media uploads, variants, workspace schedules,
-					per-account destinations, and queue state.
-				</p>
-			</div>
-		</div>
-	</div>
-</section>
+<ToolPageShell
+	title={seo.heading}
+	description={seo.description}
+	privacyNote={seo.privacyNote}
+>
+	{#if slug === 'multi-platform-character-counter'}
+		<CharacterCounter />
+	{:else if slug === 'post-preview-generator'}
+		<PreviewGenerator />
+	{:else if slug === 'thread-splitter'}
+		<ThreadSplitter />
+	{:else if slug === 'fediverse-handle-checker'}
+		<HandleChecker />
+	{:else if slug === 'linkedin-text-formatter'}
+		<LinkedInFormatter />
+	{:else if slug === 'best-time-to-post-calculator'}
+		<PostingPlanner />
+	{/if}
+</ToolPageShell>
