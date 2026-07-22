@@ -11,11 +11,11 @@ const env = {
     process.env.GOCACHE || path.join(root, ".devenv", "state", "go-build"),
 };
 
+// Only compare generated files that are committed. The docs copies are ignored
+// build artifacts, so they are expected to be absent in a clean checkout.
 const generatedPaths = [
   "frontend/openapi.json",
   "frontend/src/lib/api/types.d.ts",
-  "docs-site/.generated/openapi.json",
-  "docs-site/public/openapi.json",
   "docs-site/reference/cli.md",
 ];
 const before = await generatedHashes();

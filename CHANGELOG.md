@@ -51,6 +51,7 @@ All notable changes to this project are documented in this file.
 
 ### Fixed
 
+- Kept contract checks valid in clean CI checkouts by excluding ignored documentation build copies from tracked-file freshness checks.
 - Made MCP tool discovery and execution agent-safe and protocol-correct with complete parameter documentation and examples, runtime input/output schema enforcement, refusal for out-of-scope searches, standard stdio framing, protocol-version forwarding, origin and request guards, and actionable scope errors.
 - Kept password-reset responses enumeration-safe, reset all sessions after recovery, preserved only the current session after a password change, excluded shared workspace content from personal exports, and transferred shared organization ownership safely during deletion.
 - Made custom composer destinations visible from the account picker, aligned selection marks with the shared checkbox style, and confirmed destructive custom-content resets and removals.
