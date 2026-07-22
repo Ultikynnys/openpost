@@ -4,7 +4,7 @@ test('docs homepage routes readers to distinct doc audiences', async ({ page }) 
 	await page.goto('/');
 
 	await expect(page.getByRole('heading', { name: 'Choose the right docs' })).toBeVisible();
-	await expect(page.getByRole('link', { name: 'Watch Demo' })).toHaveAttribute(
+	await expect(page.getByRole('link', { name: 'watch the product demo' })).toHaveAttribute(
 		'href',
 		'https://youtu.be/_mZf3HzQaN8'
 	);
