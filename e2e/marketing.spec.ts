@@ -69,6 +69,10 @@ test("marketing index links to the app and documentation", async ({ page }) => {
     "src",
     "/assets/screenshots/main-dark.png",
   );
+  const demoElement = page.locator(
+    'dialog[aria-label="OpenPost product video"]',
+  );
+  await expect(demoElement.locator("iframe")).toHaveCount(0);
   await demoButton.click();
   const demoDialog = page.getByRole("dialog", {
     name: "OpenPost product video",
@@ -88,6 +92,7 @@ test("marketing index links to the app and documentation", async ({ page }) => {
   await closeDemo.focus();
   await page.keyboard.press("Escape");
   await expect(demoDialog).not.toBeVisible();
+  await expect(demoElement.locator("iframe")).toHaveCount(0);
   await expect(demoButton).toBeFocused();
 });
 

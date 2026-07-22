@@ -16,6 +16,7 @@
 
 	let dialogElement: HTMLDialogElement | undefined;
 	let triggerElement: HTMLButtonElement | null = null;
+	let playerActive = $state(false);
 
 	function registerDialog(node: HTMLDialogElement) {
 		dialogElement = node;
@@ -27,6 +28,7 @@
 
 	function openDialog(event: MouseEvent) {
 		triggerElement = event.currentTarget as HTMLButtonElement;
+		playerActive = true;
 		dialogElement?.showModal();
 		dialogElement?.querySelector<HTMLButtonElement>('.video-close')?.focus();
 	}
@@ -38,6 +40,7 @@
 	}
 
 	function restoreTriggerFocus() {
+		playerActive = false;
 		triggerElement?.focus();
 	}
 
@@ -112,22 +115,24 @@
 		<button type="button" class="video-close" aria-label="Close video" onclick={close}>
 			<X class="size-5" />
 		</button>
-		{#if videoSrc}
-			<iframe
-				src={videoSrc}
-				title="OpenPost product video"
-				allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-				referrerpolicy="strict-origin-when-cross-origin"
-				allowfullscreen
-			></iframe>
-		{:else}
-			<div class="video-placeholder">
-				<img src={thumbnailSrc} alt="" />
-				<div>
-					<p>OpenPost product demo</p>
-					<span>Video unavailable</span>
+		{#if playerActive}
+			{#if videoSrc}
+				<iframe
+					src={videoSrc}
+					title="OpenPost product video"
+					allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+					referrerpolicy="strict-origin-when-cross-origin"
+					allowfullscreen
+				></iframe>
+			{:else}
+				<div class="video-placeholder">
+					<img src={thumbnailSrc} alt="" />
+					<div>
+						<p>OpenPost product demo</p>
+						<span>Video unavailable</span>
+					</div>
 				</div>
-			</div>
+			{/if}
 		{/if}
 	</div>
 </dialog>
