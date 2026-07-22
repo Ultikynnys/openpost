@@ -17,6 +17,7 @@ All notable changes to this project are documented in this file.
 
 ### Changed
 
+- Restored the OpenPost composer screenshot as the product-demo preview while keeping the recorded video behind the play action.
 - Updated the project to Go 1.26.5 and current patched `x/image`, `x/net`, `x/text`, and `cookie` dependencies.
 - Replaced broad provider maturity labels with implemented and preview statuses that state provider approval, quota, public-media, and live-account verification constraints.
 - Added the recorded product demo to the public landing page, app profile menu, user docs, and repository overview.

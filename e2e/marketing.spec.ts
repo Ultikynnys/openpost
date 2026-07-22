@@ -34,9 +34,14 @@ test("marketing index links to the app and documentation", async ({ page }) => {
     page.getByRole("link", { name: "GitHub source" }),
   ).toHaveAttribute("href", "https://github.com/rodrgds/openpost");
 
-  await page
-    .getByRole("button", { name: "Play OpenPost product video" })
-    .click();
+  const demoButton = page.getByRole("button", {
+    name: "Play OpenPost product video",
+  });
+  await expect(demoButton.locator("img")).toHaveAttribute(
+    "src",
+    "/assets/screenshots/main-dark.png",
+  );
+  await demoButton.click();
   await expect(
     page
       .getByRole("dialog", { name: "OpenPost product video" })
