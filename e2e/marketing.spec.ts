@@ -70,14 +70,25 @@ test("marketing index links to the app and documentation", async ({ page }) => {
     "/assets/screenshots/main-dark.png",
   );
   await demoButton.click();
-  await expect(
-    page
-      .getByRole("dialog", { name: "OpenPost product video" })
-      .locator("iframe"),
-  ).toHaveAttribute(
+  const demoDialog = page.getByRole("dialog", {
+    name: "OpenPost product video",
+  });
+  const closeDemo = demoDialog.getByRole("button", { name: "Close video" });
+  await expect(demoDialog.locator("iframe")).toHaveAttribute(
     "src",
     "https://www.youtube-nocookie.com/embed/_mZf3HzQaN8?autoplay=1&rel=0",
   );
+  await expect(closeDemo).toBeFocused();
+  await closeDemo.press("Shift+Tab");
+  expect(
+    await page.evaluate(() =>
+      document.querySelector("dialog")?.contains(document.activeElement),
+    ),
+  ).toBe(true);
+  await closeDemo.focus();
+  await page.keyboard.press("Escape");
+  await expect(demoDialog).not.toBeVisible();
+  await expect(demoButton).toBeFocused();
 });
 
 test("security page states the agent permission boundary accurately", async ({

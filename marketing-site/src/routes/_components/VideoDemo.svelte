@@ -14,22 +14,57 @@
 		thumbnailAlt = 'OpenPost product demo video thumbnail'
 	}: Props = $props();
 
-	let open = $state(false);
+	let dialogElement: HTMLDialogElement | undefined;
+	let triggerElement: HTMLButtonElement | null = null;
+
+	function registerDialog(node: HTMLDialogElement) {
+		dialogElement = node;
+
+		return () => {
+			if (dialogElement === node) dialogElement = undefined;
+		};
+	}
+
+	function openDialog(event: MouseEvent) {
+		triggerElement = event.currentTarget as HTMLButtonElement;
+		dialogElement?.showModal();
+		dialogElement?.querySelector<HTMLButtonElement>('.video-close')?.focus();
+	}
 
 	function close() {
-		open = false;
+		if (!dialogElement?.open) return;
+
+		dialogElement.close();
+	}
+
+	function restoreTriggerFocus() {
+		triggerElement?.focus();
+	}
+
+	function keepFocusInside(event: KeyboardEvent) {
+		if (event.key !== 'Tab' || !dialogElement?.open) return;
+
+		const focusable = Array.from(
+			dialogElement.querySelectorAll<HTMLElement>(
+				'button:not([disabled]), a[href], iframe, [tabindex]:not([tabindex="-1"])'
+			)
+		).filter((element) => element.getClientRects().length > 0);
+		const first = focusable.at(0);
+		const last = focusable.at(-1);
+
+		if (event.shiftKey && document.activeElement === first) {
+			event.preventDefault();
+			last?.focus();
+		} else if (!event.shiftKey && document.activeElement === last) {
+			event.preventDefault();
+			first?.focus();
+		}
 	}
 
 	function handleModalClick(event: MouseEvent) {
 		if (event.target === event.currentTarget) close();
 	}
-
-	function handleWindowKeydown(event: KeyboardEvent) {
-		if (event.key === 'Escape' && open) close();
-	}
 </script>
-
-<svelte:window onkeydown={handleWindowKeydown} />
 
 <section id="demo" class="section-pad scroll-mt-20 border-y bg-muted/20">
 	<div
@@ -50,7 +85,7 @@
 			type="button"
 			class="video-trigger group"
 			aria-label="Play OpenPost product video"
-			onclick={() => (open = true)}
+			onclick={openDialog}
 		>
 			<img src={thumbnailSrc} alt={thumbnailAlt} loading="lazy" decoding="async" />
 			<span class="video-surface" aria-hidden="true">
@@ -64,32 +99,38 @@
 	</div>
 </section>
 
-{#if open}
-	<div class="video-modal" role="presentation" onclick={handleModalClick}>
-		<div class="video-dialog" role="dialog" aria-modal="true" aria-label="OpenPost product video">
-			<button type="button" class="video-close" aria-label="Close video" onclick={close}>
-				<X class="size-5" />
-			</button>
-			{#if videoSrc}
-				<iframe
-					src={videoSrc}
-					title="OpenPost product video"
-					allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-					referrerpolicy="strict-origin-when-cross-origin"
-					allowfullscreen
-				></iframe>
-			{:else}
-				<div class="video-placeholder">
-					<img src={thumbnailSrc} alt="" />
-					<div>
-						<p>OpenPost product demo</p>
-						<span>Video unavailable</span>
-					</div>
+
+<dialog
+	{@attach registerDialog}
+	class="video-modal"
+	aria-label="OpenPost product video"
+	onclick={handleModalClick}
+	onclose={restoreTriggerFocus}
+	onkeydown={keepFocusInside}
+>
+	<div class="video-dialog">
+		<button type="button" class="video-close" aria-label="Close video" onclick={close}>
+			<X class="size-5" />
+		</button>
+		{#if videoSrc}
+			<iframe
+				src={videoSrc}
+				title="OpenPost product video"
+				allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+				referrerpolicy="strict-origin-when-cross-origin"
+				allowfullscreen
+			></iframe>
+		{:else}
+			<div class="video-placeholder">
+				<img src={thumbnailSrc} alt="" />
+				<div>
+					<p>OpenPost product demo</p>
+					<span>Video unavailable</span>
 				</div>
-			{/if}
-		</div>
+			</div>
+		{/if}
 	</div>
-{/if}
+</dialog>
 
 <style>
 	.video-trigger {
@@ -160,13 +201,27 @@
 		position: fixed;
 		z-index: 220;
 		inset: 0;
-		display: grid;
-		place-items: center;
+		width: 100%;
+		height: 100%;
+		max-width: none;
+		max-height: none;
+		margin: 0;
+		border: 0;
 		background: color-mix(in oklch, black 64%, transparent);
 		padding: 1rem;
 		backdrop-filter: blur(10px);
 		-webkit-backdrop-filter: blur(10px);
+		color: inherit;
 		animation: video-modal-in 140ms ease both;
+	}
+
+	.video-modal[open] {
+		display: grid;
+		place-items: center;
+	}
+
+	.video-modal::backdrop {
+		background: transparent;
 	}
 
 	.video-dialog {

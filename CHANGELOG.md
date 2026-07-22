@@ -56,6 +56,7 @@ All notable changes to this project are documented in this file.
 
 ### Fixed
 
+- Kept keyboard focus inside the product-video dialog and returned it to the play control when the dialog closes.
 - Aligned the Starter, Creator, and Pro seat entitlements with the public pricing catalog.
 - Matched provider media validation and support copy to the implemented publishing paths.
 - Corrected stale security and posting-schedule field descriptions.
