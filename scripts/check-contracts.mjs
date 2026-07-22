@@ -1,4 +1,6 @@
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -9,20 +11,43 @@ const env = {
     process.env.GOCACHE || path.join(root, ".devenv", "state", "go-build"),
 };
 
-run("node", ["scripts/sync-docs-openapi.mjs"]);
-run("pnpm", ["--filter", "@openpost/web", "generate:types"]);
-run("git", [
-  "diff",
-  "--exit-code",
-  "--",
+const generatedPaths = [
   "frontend/openapi.json",
   "frontend/src/lib/api/types.d.ts",
   "docs-site/.generated/openapi.json",
   "docs-site/public/openapi.json",
   "docs-site/reference/cli.md",
-]);
+];
+const before = await generatedHashes();
+
+run("node", ["scripts/sync-docs-openapi.mjs"]);
+run("pnpm", ["--filter", "@openpost/web", "generate:types"]);
+const after = await generatedHashes();
+const changed = generatedPaths.filter(
+  (file) => before.get(file) !== after.get(file),
+);
+if (changed.length > 0) {
+  console.error(`Generated contracts were stale: ${changed.join(", ")}`);
+  run("git", ["diff", "--exit-code", "--", ...changed]);
+  process.exit(1);
+}
 
 console.log("Generated API, TypeScript, docs, and CLI contracts are current.");
+
+async function generatedHashes() {
+  const entries = await Promise.all(
+    generatedPaths.map(async (file) => {
+      try {
+        const contents = await readFile(path.join(root, file));
+        return [file, createHash("sha256").update(contents).digest("hex")];
+      } catch (error) {
+        if (error?.code === "ENOENT") return [file, null];
+        throw error;
+      }
+    }),
+  );
+  return new Map(entries);
+}
 
 function run(command, args) {
   const result = spawnSync(command, args, { cwd: root, env, stdio: "inherit" });

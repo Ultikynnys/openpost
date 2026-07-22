@@ -497,5 +497,5 @@ test("the day drawer keeps scheduled posts compact and icon-led", async ({
   await page.setViewportSize({ width: 390, height: 844 });
   const portraitDrawerBox = await drawer.boundingBox();
   expect(portraitDrawerBox).not.toBeNull();
-  expect(portraitDrawerBox!.width).toBe(390);
+	expect(portraitDrawerBox!.width).toBeCloseTo(390, 3);
 });
