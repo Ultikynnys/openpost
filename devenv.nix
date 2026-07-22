@@ -1,6 +1,7 @@
 {
   pkgs,
   config,
+  lib,
   ...
 }:
 
@@ -19,6 +20,9 @@
   # be resumed after a Hermes reboot without relying on /tmp or global state.
   env.GOCACHE = "${config.git.root}/.devenv/state/go-build";
   env.GOMODCACHE = "${config.git.root}/.devenv/state/go-mod";
+  # The module files pin the security-patched Go point release. Let the go
+  # command fetch that toolchain when nixpkgs trails the upstream patch.
+  env.GOTOOLCHAIN = lib.mkForce "auto";
   env.npm_config_store_dir = "${config.git.root}/.devenv/state/pnpm-store";
 
   scripts = {
@@ -80,12 +84,32 @@
       check && lint && test-all && build
     '';
 
+    security.exec = ''
+      cd "${config.git.root}"
+      scripts/security-check.sh
+    '';
+
     backend-check.exec = ''
       backend-format-check && backend-lint
     '';
 
     backend-verify.exec = ''
       backend-check && backend-test && backend-build
+    '';
+
+    backend-security.exec = ''
+      cd "${config.git.root}/backend"
+      go run golang.org/x/vuln/cmd/govulncheck@v1.6.0 ./...
+    '';
+
+    cli-security.exec = ''
+      cd "${config.git.root}/cli"
+      go run golang.org/x/vuln/cmd/govulncheck@v1.6.0 ./...
+    '';
+
+    frontend-security.exec = ''
+      cd "${config.git.root}"
+      pnpm audit --prod --audit-level low
     '';
 
     frontend-verify.exec = ''
@@ -147,6 +171,7 @@
     echo "    test         - Run backend and frontend tests"
     echo "    build        - Build the frontend and backend binary"
     echo "    verify       - Run check, lint, test, and build"
+    echo "    security     - Scan Go call paths and production JS dependencies"
     echo "    backend-*    - Targeted backend commands"
     echo "    frontend-*   - Targeted frontend commands"
     echo ""

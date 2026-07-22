@@ -5,6 +5,7 @@ import (
 	"context"
 	"io"
 	"net/http"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -80,6 +81,33 @@ func TestLocalStorageReportsDriver(t *testing.T) {
 	storage := NewLocalStorage(t.TempDir(), "/media")
 
 	require.Equal(t, "local", storage.Driver())
+}
+
+func TestLocalStorageRejectsPathsOutsideItsDirectory(t *testing.T) {
+	storage := NewLocalStorage(t.TempDir(), "/media")
+
+	for _, key := range []string{"", "../secret", "media/../../secret", "/tmp/secret"} {
+		_, err := storage.Save(key, bytes.NewBufferString("secret"))
+		require.ErrorContains(t, err, "invalid local storage key", key)
+		require.ErrorContains(t, storage.Delete(key), "invalid local storage key", key)
+		_, err = storage.Open(key)
+		require.ErrorContains(t, err, "invalid local storage key", key)
+	}
+}
+
+func TestLocalStorageCreatesDirectoriesForSafeNestedKeys(t *testing.T) {
+	baseDir := t.TempDir()
+	storage := NewLocalStorage(baseDir, "/media")
+
+	path, err := storage.Save("avatars/user-1.png", bytes.NewBufferString("image"))
+	require.NoError(t, err)
+	require.Equal(t, filepath.Join(baseDir, "avatars", "user-1.png"), path)
+	reader, err := storage.Open("avatars/user-1.png")
+	require.NoError(t, err)
+	defer reader.Close()
+	body, err := io.ReadAll(reader)
+	require.NoError(t, err)
+	require.Equal(t, "image", string(body))
 }
 
 func TestNewStorageRejectsUnsupportedDriver(t *testing.T) {

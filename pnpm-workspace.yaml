@@ -2,6 +2,8 @@ packages:
   - "frontend"
   - "docs-site"
   - "marketing-site"
+overrides:
+  cookie: 0.7.2
 onlyBuiltDependencies:
   - esbuild
   - sharp

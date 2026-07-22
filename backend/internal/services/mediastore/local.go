@@ -58,7 +58,13 @@ func (s *LocalStorage) Driver() string {
 }
 
 func (s *LocalStorage) Save(id string, reader io.Reader) (string, error) {
-	path := filepath.Join(s.baseDir, id)
+	path, err := s.resolvePath(id)
+	if err != nil {
+		return "", err
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		return "", err
+	}
 
 	outFile, err := os.Create(path)
 	if err != nil {
@@ -74,8 +80,15 @@ func (s *LocalStorage) Save(id string, reader io.Reader) (string, error) {
 }
 
 func (s *LocalStorage) Delete(id string) error {
-	path := filepath.Join(s.baseDir, id)
-	return os.Remove(path)
+	path, err := s.resolvePath(id)
+	if err != nil {
+		return err
+	}
+	err = os.Remove(path)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	return err
 }
 
 // GetURL returns the accessible URL for the media asset.
@@ -85,6 +98,29 @@ func (s *LocalStorage) GetURL(id string) string {
 }
 
 func (s *LocalStorage) Open(id string) (io.ReadCloser, error) {
-	path := filepath.Join(s.baseDir, id)
+	path, err := s.resolvePath(id)
+	if err != nil {
+		return nil, err
+	}
 	return os.Open(path)
+}
+
+func (s *LocalStorage) resolvePath(id string) (string, error) {
+	if strings.TrimSpace(id) == "" || filepath.IsAbs(id) {
+		return "", fmt.Errorf("invalid local storage key %q", id)
+	}
+	cleaned := filepath.Clean(filepath.FromSlash(id))
+	if cleaned == "." || cleaned == ".." || strings.HasPrefix(cleaned, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("invalid local storage key %q", id)
+	}
+	baseDir, err := filepath.Abs(s.baseDir)
+	if err != nil {
+		return "", fmt.Errorf("resolve local storage directory: %w", err)
+	}
+	path := filepath.Join(baseDir, cleaned)
+	relative, err := filepath.Rel(baseDir, path)
+	if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("invalid local storage key %q", id)
+	}
+	return path, nil
 }
