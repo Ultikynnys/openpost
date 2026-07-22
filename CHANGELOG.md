@@ -56,6 +56,7 @@ All notable changes to this project are documented in this file.
 
 ### Fixed
 
+- Gave production frontend builds enough bounded Node heap to finish static asset generation on release runners.
 - Loaded the embedded product video only after the tour opens and removed it again when the dialog closes.
 - Kept keyboard focus inside the product-video dialog and returned it to the play control when the dialog closes.
 - Aligned the Starter, Creator, and Pro seat entitlements with the public pricing catalog.
