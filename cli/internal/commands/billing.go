@@ -44,7 +44,7 @@ func newBillingCheckoutCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "checkout <plan>",
 		Short: "Create a Polar checkout URL for the active workspace",
-		Long:  "Create a hosted checkout URL for the active workspace. Plan IDs are validated by the server, usually starter, creator, or pro.",
+		Long:  "Create a hosted checkout URL for the active workspace. Plan IDs are validated by the server: starter, creator, pro, team, or agency.",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, client, workspaceID, err := billingRuntime(cmd)

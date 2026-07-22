@@ -96,6 +96,17 @@ func signedWebhookHeaders(t *testing.T, secret string, now time.Time, eventID st
 	}
 }
 
+func TestDefaultPlanCatalogKeepsSeatLimitsMonotonic(t *testing.T) {
+	t.Parallel()
+
+	catalog := DefaultPlanCatalog("starter", "creator", "pro", "team", "agency")
+	require.Equal(t, int64(1), catalog["starter"].Limits[entitlements.LimitTeamMembers])
+	require.Equal(t, int64(1), catalog["creator"].Limits[entitlements.LimitTeamMembers])
+	require.Equal(t, int64(1), catalog["pro"].Limits[entitlements.LimitTeamMembers])
+	require.Equal(t, int64(3), catalog["team"].Limits[entitlements.LimitTeamMembers])
+	require.Equal(t, int64(5), catalog["agency"].Limits[entitlements.LimitTeamMembers])
+}
+
 func TestProcessPolarWebhookUpsertsSubscription(t *testing.T) {
 	t.Parallel()
 

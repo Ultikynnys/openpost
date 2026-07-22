@@ -2409,7 +2409,7 @@ export interface components {
             readonly $schema?: string;
             /**
              * Format: int64
-             * @description Day of week (0=Sunday, 6=Saturday)
+             * @description Workspace-local day of week (0=Sunday, 6=Saturday)
              */
             day_of_week: number;
             /** @description Display label */
@@ -2431,12 +2431,12 @@ export interface components {
             local_minute?: number;
             /**
              * Format: int64
-             * @description Hour in UTC (0-23)
+             * @description Legacy field name for the workspace-local hour (0-23)
              */
             utc_hour: number;
             /**
              * Format: int64
-             * @description Minute in UTC (0-59)
+             * @description Legacy field name for the workspace-local minute (0-59)
              */
             utc_minute: number;
             /** @description Workspace ID */
@@ -3356,7 +3356,7 @@ export interface components {
             created_at: string;
             /**
              * Format: int64
-             * @description Day of week (0=Sunday, 6=Saturday) in UTC
+             * @description Workspace-local day of week (0=Sunday, 6=Saturday)
              */
             day_of_week: number;
             /** @description Schedule ID */
@@ -3382,12 +3382,12 @@ export interface components {
             local_minute: number;
             /**
              * Format: int64
-             * @description Hour in UTC (0-23)
+             * @description Legacy field name for the workspace-local hour (0-23)
              */
             utc_hour: number;
             /**
              * Format: int64
-             * @description Minute in UTC (0-59)
+             * @description Legacy field name for the workspace-local minute (0-59)
              */
             utc_minute: number;
             /** @description Workspace ID */
@@ -4039,7 +4039,7 @@ export interface components {
             readonly $schema?: string;
             /**
              * Format: int64
-             * @description Day of week (0=Sunday, 6=Saturday)
+             * @description Workspace-local day of week (0=Sunday, 6=Saturday)
              */
             day_of_week?: number;
             /** @description Whether this slot is active */
@@ -4048,12 +4048,12 @@ export interface components {
             label?: string;
             /**
              * Format: int64
-             * @description Hour in UTC (0-23)
+             * @description Legacy field name for the workspace-local hour (0-23)
              */
             utc_hour?: number;
             /**
              * Format: int64
-             * @description Minute in UTC (0-59)
+             * @description Legacy field name for the workspace-local minute (0-59)
              */
             utc_minute?: number;
         };

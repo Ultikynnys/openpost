@@ -393,7 +393,7 @@ openpost billing
 
 Create a Polar checkout URL for the active workspace
 
-Create a hosted checkout URL for the active workspace. Plan IDs are validated by the server, usually starter, creator, or pro.
+Create a hosted checkout URL for the active workspace. Plan IDs are validated by the server: starter, creator, pro, team, or agency.
 
 **Usage**
 

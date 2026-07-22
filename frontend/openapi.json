@@ -1660,7 +1660,7 @@
 						"type": "string"
 					},
 					"day_of_week": {
-						"description": "Day of week (0=Sunday, 6=Saturday)",
+						"description": "Workspace-local day of week (0=Sunday, 6=Saturday)",
 						"format": "int64",
 						"type": "integer"
 					},
@@ -1684,12 +1684,12 @@
 						"type": "integer"
 					},
 					"utc_hour": {
-						"description": "Hour in UTC (0-23)",
+						"description": "Legacy field name for the workspace-local hour (0-23)",
 						"format": "int64",
 						"type": "integer"
 					},
 					"utc_minute": {
-						"description": "Minute in UTC (0-59)",
+						"description": "Legacy field name for the workspace-local minute (0-59)",
 						"format": "int64",
 						"type": "integer"
 					},
@@ -3522,7 +3522,7 @@
 						"type": "string"
 					},
 					"day_of_week": {
-						"description": "Day of week (0=Sunday, 6=Saturday) in UTC",
+						"description": "Workspace-local day of week (0=Sunday, 6=Saturday)",
 						"format": "int64",
 						"type": "integer"
 					},
@@ -3554,12 +3554,12 @@
 						"type": "integer"
 					},
 					"utc_hour": {
-						"description": "Hour in UTC (0-23)",
+						"description": "Legacy field name for the workspace-local hour (0-23)",
 						"format": "int64",
 						"type": "integer"
 					},
 					"utc_minute": {
-						"description": "Minute in UTC (0-59)",
+						"description": "Legacy field name for the workspace-local minute (0-59)",
 						"format": "int64",
 						"type": "integer"
 					},
@@ -4999,7 +4999,7 @@
 						"type": "string"
 					},
 					"day_of_week": {
-						"description": "Day of week (0=Sunday, 6=Saturday)",
+						"description": "Workspace-local day of week (0=Sunday, 6=Saturday)",
 						"format": "int64",
 						"type": "integer"
 					},
@@ -5012,12 +5012,12 @@
 						"type": "string"
 					},
 					"utc_hour": {
-						"description": "Hour in UTC (0-23)",
+						"description": "Legacy field name for the workspace-local hour (0-23)",
 						"format": "int64",
 						"type": "integer"
 					},
 					"utc_minute": {
-						"description": "Minute in UTC (0-59)",
+						"description": "Legacy field name for the workspace-local minute (0-59)",
 						"format": "int64",
 						"type": "integer"
 					}

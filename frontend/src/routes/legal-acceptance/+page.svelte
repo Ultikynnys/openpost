@@ -67,7 +67,7 @@
 	<form onsubmit={submit} class="space-y-4">
 		<div class="flex items-start gap-3 rounded-md border p-3">
 			<Checkbox id="legal-acceptance" bind:checked={acceptedLegal} required />
-			<Label for="legal-acceptance" class="text-sm leading-5 font-normal">
+			<Label for="legal-acceptance" class="block min-w-0 flex-1 text-sm leading-5 font-normal">
 				{m.auth_register_legal_prefix()}
 				<a
 					href={authConfiguration?.terms_url}

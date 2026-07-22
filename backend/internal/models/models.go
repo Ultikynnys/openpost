@@ -603,10 +603,11 @@ type PostingSchedule struct {
 	WorkspaceID string `bun:",notnull" json:"workspace_id"`
 	SetID       string `json:"-"` // Legacy column kept for old databases; schedules are workspace-scoped.
 
-	// Store times in UTC for consistency, convert on read using workspace timezone
-	UTCHour   int `bun:",notnull" json:"utc_hour"`    // 0-23 UTC
-	UTCMinute int `bun:",notnull" json:"utc_minute"`  // 0-59 UTC
-	DayOfWeek int `bun:",notnull" json:"day_of_week"` // 0=Sunday, 6=Saturday (in UTC)
+	// Legacy column names; values are workspace-local wall-clock fields so
+	// recurring slots remain stable through daylight-saving transitions.
+	UTCHour   int `bun:",notnull" json:"utc_hour"`    // 0-23 workspace local time
+	UTCMinute int `bun:",notnull" json:"utc_minute"`  // 0-59 workspace local time
+	DayOfWeek int `bun:",notnull" json:"day_of_week"` // 0=Sunday, 6=Saturday (workspace local)
 
 	// Display/helpers
 	Label    string `json:"label"` // e.g., "Morning", "Lunch", "Evening"

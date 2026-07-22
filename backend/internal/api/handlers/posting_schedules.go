@@ -50,9 +50,9 @@ func (h *PostingScheduleHandler) checkWorkspaceAdminAccess(ctx context.Context, 
 type PostingScheduleResponse struct {
 	ID             string `json:"id" doc:"Schedule ID"`
 	WorkspaceID    string `json:"workspace_id" doc:"Workspace ID"`
-	UTCHour        int    `json:"utc_hour" doc:"Hour in UTC (0-23)"`
-	UTCMinute      int    `json:"utc_minute" doc:"Minute in UTC (0-59)"`
-	DayOfWeek      int    `json:"day_of_week" doc:"Day of week (0=Sunday, 6=Saturday) in UTC"`
+	UTCHour        int    `json:"utc_hour" doc:"Legacy field name for the workspace-local hour (0-23)"`
+	UTCMinute      int    `json:"utc_minute" doc:"Legacy field name for the workspace-local minute (0-59)"`
+	DayOfWeek      int    `json:"day_of_week" doc:"Workspace-local day of week (0=Sunday, 6=Saturday)"`
 	LocalHour      int    `json:"local_hour" doc:"Hour in workspace local time (0-23)"`
 	LocalMinute    int    `json:"local_minute" doc:"Minute in workspace local time (0-59)"`
 	LocalDayOfWeek int    `json:"local_day_of_week" doc:"Day of week in workspace local time (0=Sunday, 6=Saturday)"`
@@ -117,9 +117,9 @@ func (h *PostingScheduleHandler) ListSchedules(api huma.API) {
 type CreatePostingScheduleInput struct {
 	Body struct {
 		WorkspaceID    string `json:"workspace_id" doc:"Workspace ID"`
-		UTCHour        int    `json:"utc_hour" doc:"Hour in UTC (0-23)"`
-		UTCMinute      int    `json:"utc_minute" doc:"Minute in UTC (0-59)"`
-		DayOfWeek      int    `json:"day_of_week" doc:"Day of week (0=Sunday, 6=Saturday)"`
+		UTCHour        int    `json:"utc_hour" doc:"Legacy field name for the workspace-local hour (0-23)"`
+		UTCMinute      int    `json:"utc_minute" doc:"Legacy field name for the workspace-local minute (0-59)"`
+		DayOfWeek      int    `json:"day_of_week" doc:"Workspace-local day of week (0=Sunday, 6=Saturday)"`
 		LocalHour      *int   `json:"local_hour,omitempty" doc:"Hour in workspace local time (0-23)"`
 		LocalMinute    *int   `json:"local_minute,omitempty" doc:"Minute in workspace local time (0-59)"`
 		LocalDayOfWeek *int   `json:"local_day_of_week,omitempty" doc:"Day of week in workspace local time (0=Sunday, 6=Saturday)"`
@@ -184,7 +184,7 @@ func (h *PostingScheduleHandler) CreateSchedule(api huma.API) {
 			if *input.Body.LocalMinute < 0 || *input.Body.LocalMinute > 59 {
 				return nil, huma.Error400BadRequest("local_minute must be between 0 and 59")
 			}
-			utcDayOfWeek, utcHour, utcMinute = convertLocalScheduleToUTC(loc, *input.Body.LocalDayOfWeek, *input.Body.LocalHour, *input.Body.LocalMinute)
+			utcDayOfWeek, utcHour, utcMinute = encodeLocalScheduleForStorage(loc, *input.Body.LocalDayOfWeek, *input.Body.LocalHour, *input.Body.LocalMinute)
 		}
 
 		schedule := &models.PostingSchedule{
@@ -209,9 +209,9 @@ func (h *PostingScheduleHandler) CreateSchedule(api huma.API) {
 type UpdatePostingScheduleInput struct {
 	PathID string `path:"id" doc:"Schedule ID"`
 	Body   struct {
-		UTCHour   *int    `json:"utc_hour,omitempty" doc:"Hour in UTC (0-23)"`
-		UTCMinute *int    `json:"utc_minute,omitempty" doc:"Minute in UTC (0-59)"`
-		DayOfWeek *int    `json:"day_of_week,omitempty" doc:"Day of week (0=Sunday, 6=Saturday)"`
+		UTCHour   *int    `json:"utc_hour,omitempty" doc:"Legacy field name for the workspace-local hour (0-23)"`
+		UTCMinute *int    `json:"utc_minute,omitempty" doc:"Legacy field name for the workspace-local minute (0-59)"`
+		DayOfWeek *int    `json:"day_of_week,omitempty" doc:"Workspace-local day of week (0=Sunday, 6=Saturday)"`
 		Label     *string `json:"label,omitempty" doc:"Display label"`
 		IsActive  *bool   `json:"is_active,omitempty" doc:"Whether this slot is active"`
 	}
@@ -403,7 +403,9 @@ func postingScheduleResponseForWorkspace(reference time.Time, loc *time.Location
 	return resp
 }
 
-func convertLocalScheduleToUTC(_ *time.Location, localDayOfWeek, localHour, localMinute int) (int, int, int) {
+// The column names predate wall-clock schedule semantics. Keep the local values
+// unchanged so a 09:00 slot remains at 09:00 when the workspace enters or leaves DST.
+func encodeLocalScheduleForStorage(_ *time.Location, localDayOfWeek, localHour, localMinute int) (int, int, int) {
 	return localDayOfWeek, localHour, localMinute
 }
 
@@ -551,7 +553,7 @@ func (h *PostingScheduleHandler) SuggestSchedule(api huma.API) {
 			templates = suggestionTemplates[3]
 		}
 
-		// Convert local times to UTC and create schedules for all 7 days
+		// Store workspace-local wall-clock times for all seven days.
 		schedules := make([]models.PostingSchedule, 0, len(templates)*7)
 		for dayOfWeek := 0; dayOfWeek <= 6; dayOfWeek++ {
 			for _, t := range templates {
