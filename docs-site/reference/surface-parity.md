@@ -13,7 +13,7 @@ OpenPost exposes one backend through several purpose-built clients. “Supported
 | Upload and reuse media                            | Full                        | Full                                         | Upload-by-URL and reuse by ID  | Full                     |
 | Manage posting-slot definitions                   | Full                        | Uses existing next slot                      | Reads next slot for scheduling | Full                     |
 | Review jobs and publication activity              | Full                        | Full                                         | Publication events only        | Full                     |
-| Reply to and moderate provider comments           | Full                        | Not exposed                                  | Not exposed                    | Full                     |
+| Reply to and moderate provider comments           | Full                        | Not exposed                                  | Supported providers           | Full                     |
 | Manage billing                                    | Full on hosted instances    | Status, checkout, and portal                 | Not exposed                    | Full on hosted instances |
 | Configure provider applications                   | Operator configuration only | Not exposed                                  | Readiness only                 | Instance-admin API       |
 
@@ -22,6 +22,6 @@ The CLI command reference is generated from Cobra, and the HTTP reference is gen
 ## Intentional differences
 
 - Provider OAuth belongs in a browser because providers require redirects, consent, and sometimes account selection.
-- MCP advertises compact `search`, read-only `query`, and mutation-only `execute` tools so assistants discover operation schemas on demand while hosts retain a hard approval boundary.
+- MCP advertises compact `search_operations`, read-only `query_operation`, and mutation-only `execute_operation` tools so assistants discover operation schemas on demand while hosts retain a hard approval boundary.
 - The CLI favors stable IDs, slugs, JSON output, and explicit confirmation suitable for terminals and automation.
 - The web app owns visual editing, previews, drag-and-drop media, security ceremonies, and provider consent UX.

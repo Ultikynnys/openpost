@@ -27,6 +27,17 @@ func TestReadWriteFrameRoundTrip(t *testing.T) {
 	}
 }
 
+func TestWriteFrameCompactsHTTPStyleJSON(t *testing.T) {
+	var buf bytes.Buffer
+	body := []byte("{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"result\": {}\n}\n")
+	if err := WriteFrame(&buf, body); err != nil {
+		t.Fatalf("WriteFrame: %v", err)
+	}
+	if got, want := buf.String(), "{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{}}\n"; got != want {
+		t.Fatalf("unexpected compact frame: got %q want %q", got, want)
+	}
+}
+
 func TestReadFrameRejectsMissingContentLength(t *testing.T) {
 	_, err := ReadFrame(bufio.NewReader(strings.NewReader("X-Test: yes\r\n\r\n{}")))
 	if err == nil || !strings.Contains(err.Error(), "Content-Length") {
@@ -47,6 +58,9 @@ func TestProxyForwardUsesBearerAndMCPPath(t *testing.T) {
 		if got := r.Header.Get("User-Agent"); got != "openpost-mcp/v1.2.3" {
 			t.Fatalf("unexpected user-agent header %q", got)
 		}
+		if got := r.Header.Get("Accept"); got != "application/json, text/event-stream" {
+			t.Fatalf("unexpected accept header %q", got)
+		}
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
 			t.Fatalf("read body: %v", err)
@@ -66,6 +80,76 @@ func TestProxyForwardUsesBearerAndMCPPath(t *testing.T) {
 	}
 	if string(resp) != `{"jsonrpc":"2.0","id":"a","result":{"tools":[]}}` {
 		t.Fatalf("unexpected response %s", resp)
+	}
+}
+
+func TestProxyServeForwardsNegotiatedProtocolVersion(t *testing.T) {
+	t.Parallel()
+
+	requestNumber := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestNumber++
+		w.Header().Set("Content-Type", "application/json")
+		switch requestNumber {
+		case 1:
+			if got := r.Header.Get("MCP-Protocol-Version"); got != "" {
+				t.Fatalf("initialize must not send a negotiated version header, got %q", got)
+			}
+			_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-06-18","capabilities":{},"serverInfo":{"name":"openpost","version":"test"}}}`))
+		case 2:
+			if got := r.Header.Get("MCP-Protocol-Version"); got != "2025-06-18" {
+				t.Fatalf("unexpected negotiated protocol version %q", got)
+			}
+			_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":2,"result":{"tools":[]}}`))
+		default:
+			t.Fatalf("unexpected request %d", requestNumber)
+		}
+	}))
+	defer srv.Close()
+
+	proxy := NewProxy(srv.URL, "token")
+	var in bytes.Buffer
+	if err := WriteFrame(&in, []byte(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1"}}}`)); err != nil {
+		t.Fatalf("WriteFrame initialize: %v", err)
+	}
+	if err := WriteFrame(&in, []byte(`{"jsonrpc":"2.0","id":2,"method":"tools/list"}`)); err != nil {
+		t.Fatalf("WriteFrame tools/list: %v", err)
+	}
+	var out bytes.Buffer
+	if err := proxy.Serve(context.Background(), &in, &out); err != nil {
+		t.Fatalf("Serve: %v", err)
+	}
+	if !strings.HasPrefix(out.String(), "{") {
+		t.Fatalf("expected standard newline-delimited JSON output, got %q", out.String())
+	}
+	reader := bufio.NewReader(&out)
+	for range 2 {
+		if _, err := ReadFrame(reader); err != nil {
+			t.Fatalf("ReadFrame: %v", err)
+		}
+	}
+}
+
+func TestProxyServePreservesLegacyContentLengthFraming(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{"tools":[]}}`))
+	}))
+	defer srv.Close()
+
+	proxy := NewProxy(srv.URL, "token")
+	var in bytes.Buffer
+	if err := writeLegacyFrame(&in, []byte(`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`)); err != nil {
+		t.Fatalf("writeLegacyFrame: %v", err)
+	}
+	var out bytes.Buffer
+	if err := proxy.Serve(context.Background(), &in, &out); err != nil {
+		t.Fatalf("Serve: %v", err)
+	}
+	if !strings.HasPrefix(out.String(), "Content-Length:") {
+		t.Fatalf("expected legacy response framing, got %q", out.String())
 	}
 }
 

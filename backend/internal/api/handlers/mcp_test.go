@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -213,6 +214,117 @@ func TestMCPGetReturnsMethodNotAllowed(t *testing.T) {
 	require.NotContains(t, rec.Header().Get("Content-Type"), "text/html")
 }
 
+func TestMCPRejectsUntrustedBrowserOrigins(t *testing.T) {
+	t.Parallel()
+
+	srv := newMCPTestServer(t)
+	payload := bytes.NewBufferString(`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp", payload)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer web-token")
+	req.Header.Set("Origin", "https://attacker.example")
+	rec := httptest.NewRecorder()
+	srv.echo.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusForbidden, rec.Code)
+	require.Contains(t, rec.Body.String(), "Origin")
+
+	srv.handler.SetAllowedOrigins([]string{"https://trusted-client.example"})
+	payload = bytes.NewBufferString(`{"jsonrpc":"2.0","id":2,"method":"tools/list"}`)
+	req = httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp", payload)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer web-token")
+	req.Header.Set("Origin", "https://trusted-client.example")
+	rec = httptest.NewRecorder()
+	srv.echo.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusOK, rec.Code)
+}
+
+func TestMCPEnforcesHTTPContentTypeAndProtocolVersion(t *testing.T) {
+	t.Parallel()
+
+	srv := newMCPTestServer(t)
+	payload := bytes.NewBufferString(`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp", payload)
+	req.Header.Set("Authorization", "Bearer web-token")
+	rec := httptest.NewRecorder()
+	srv.echo.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusUnsupportedMediaType, rec.Code)
+
+	payload = bytes.NewBufferString(`{"jsonrpc":"2.0","id":2,"method":"tools/list"}`)
+	req = httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp", payload)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer web-token")
+	req.Header.Set("MCP-Protocol-Version", "2099-01-01")
+	rec = httptest.NewRecorder()
+	srv.echo.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+	require.Contains(t, rec.Body.String(), "MCP-Protocol-Version")
+
+	payload = bytes.NewBufferString(`{"jsonrpc":"2.0","id":3,"method":"tools/list"}`)
+	req = httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp", payload)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer web-token")
+	req.Header.Set("MCP-Protocol-Version", mcpProtocolVersion)
+	rec = httptest.NewRecorder()
+	srv.echo.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusOK, rec.Code)
+}
+
+func TestMCPRejectsOversizedRequestBodies(t *testing.T) {
+	t.Parallel()
+
+	srv := newMCPTestServer(t)
+	req := httptest.NewRequestWithContext(
+		t.Context(),
+		http.MethodPost,
+		"/mcp",
+		strings.NewReader(strings.Repeat(" ", maxMCPRequestBytes+1)),
+	)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer web-token")
+	rec := httptest.NewRecorder()
+	srv.echo.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusRequestEntityTooLarge, rec.Code)
+	require.Contains(t, rec.Body.String(), "exceeds")
+}
+
+func TestMCPInitializeNegotiatesSupportedProtocolVersions(t *testing.T) {
+	t.Parallel()
+
+	srv := newMCPTestServer(t)
+	for _, test := range []struct {
+		name      string
+		requested string
+		expected  string
+	}{
+		{name: "current", requested: mcpProtocolVersion, expected: mcpProtocolVersion},
+		{name: "fallback", requested: mcpFallbackVersion, expected: mcpFallbackVersion},
+		{name: "unsupported", requested: "2024-11-05", expected: mcpProtocolVersion},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			resp := srv.request(t, "web-token", map[string]any{
+				"jsonrpc": "2.0", "id": test.name, "method": "initialize",
+				"params": map[string]any{
+					"protocolVersion": test.requested,
+					"capabilities":    map[string]any{},
+					"clientInfo":      map[string]any{"name": "test", "version": "1"},
+				},
+			})
+			require.Equal(t, http.StatusOK, resp.Code)
+			var out map[string]any
+			require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &out))
+			require.Equal(t, test.expected, out["result"].(map[string]any)["protocolVersion"])
+		})
+	}
+
+	resp := srv.request(t, "web-token", map[string]any{"jsonrpc": "2.0", "id": "missing", "method": "initialize", "params": map[string]any{}})
+	var out map[string]any
+	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &out))
+	require.Contains(t, out["error"].(map[string]any)["message"], "protocolVersion")
+}
+
 func TestMCPProtectedResourceMetadata(t *testing.T) {
 	t.Parallel()
 
@@ -255,8 +367,9 @@ func TestMCPAuthenticatesSupportedTokenScopes(t *testing.T) {
 		"id":      "bad-scope",
 		"method":  "tools/list",
 	})
-	require.Equal(t, http.StatusUnauthorized, resp.Code)
+	require.Equal(t, http.StatusForbidden, resp.Code)
 	require.Contains(t, resp.Header().Get("WWW-Authenticate"), `scope="mcp:full"`)
+	require.Contains(t, resp.Header().Get("WWW-Authenticate"), `error="insufficient_scope"`)
 }
 
 func TestMCPRejectsAudienceMismatch(t *testing.T) {
@@ -355,6 +468,82 @@ func TestMCPAdvertisedToolCatalogIsCompact(t *testing.T) {
 
 	t.Logf("advertised tool descriptors: %d bytes; legacy catalog: %d bytes", len(advertised), len(legacy))
 	require.Less(t, len(advertised), len(legacy)*30/100)
+}
+
+func TestMCPToolCatalogMeetsAgentUsabilityContract(t *testing.T) {
+	t.Parallel()
+
+	descriptors := append([]map[string]any{}, mcpAdvertisedTools()...)
+	for _, operation := range mcpOperationCatalog() {
+		descriptors = append(descriptors, operation.Descriptor)
+	}
+
+	seen := make(map[string]bool, len(descriptors))
+	for _, descriptor := range descriptors {
+		name, ok := descriptor["name"].(string)
+		require.True(t, ok)
+		t.Run(name, func(t *testing.T) {
+			require.False(t, seen[name], "duplicate MCP tool or operation name")
+			seen[name] = true
+			require.Regexp(t, `^[a-z0-9]+(?:_[a-z0-9]+)+$`, name, "use descriptive verb_object snake_case names")
+
+			description, ok := descriptor["description"].(string)
+			require.True(t, ok)
+			require.GreaterOrEqual(t, len(strings.TrimSpace(description)), 30, "description must explain what and when")
+			require.Contains(t, strings.ToLower(description), "return", "description must state what the call returns")
+
+			inputSchema, ok := descriptor["inputSchema"].(map[string]any)
+			require.True(t, ok)
+			assertMCPInputSchemaUsability(t, "arguments", inputSchema)
+
+			outputSchema, ok := descriptor["outputSchema"].(map[string]any)
+			require.True(t, ok)
+			require.Equal(t, "object", outputSchema["type"])
+			require.Contains(t, outputSchema, "properties")
+			require.Contains(t, outputSchema, "required")
+		})
+	}
+}
+
+func assertMCPInputSchemaUsability(t *testing.T, path string, schema map[string]any) {
+	t.Helper()
+	require.Equal(t, "object", schema["type"], "%s must be an object schema", path)
+	properties, ok := schema["properties"].(map[string]any)
+	require.True(t, ok, "%s must declare properties, even when empty", path)
+	require.Contains(t, schema, "required", "%s must declare required, even when empty", path)
+	require.Contains(t, schema, "additionalProperties", "%s must state whether extra fields are accepted", path)
+
+	names := make([]string, 0, len(properties))
+	for name := range properties {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		propertyPath := path + "." + name
+		property, ok := properties[name].(map[string]any)
+		require.True(t, ok, "%s must be a JSON Schema object", propertyPath)
+		require.NotEmpty(t, strings.TrimSpace(fmt.Sprint(property["description"])), "%s must explain meaning, format, and constraints", propertyPath)
+		require.NotEmpty(t, property["type"], "%s must declare a type", propertyPath)
+
+		propertyType, _ := property["type"].(string)
+		if propertyType == "object" || propertyType == "array" {
+			_, hasExamples := property["examples"]
+			description := strings.ToLower(fmt.Sprint(property["description"]))
+			require.True(t, hasExamples || strings.Contains(description, "e.g."), "%s must include a concrete example", propertyPath)
+		}
+		if propertyType == "object" {
+			if _, hasProperties := property["properties"]; hasProperties {
+				assertMCPInputSchemaUsability(t, propertyPath, property)
+			}
+		}
+		if propertyType == "array" {
+			items, ok := property["items"].(map[string]any)
+			require.True(t, ok, "%s must type its array items", propertyPath)
+			if items["type"] == "object" {
+				assertMCPInputSchemaUsability(t, propertyPath+"[]", items)
+			}
+		}
+	}
 }
 
 func TestMCPOperationCatalogHasCompleteSafetyClassification(t *testing.T) {
@@ -523,6 +712,53 @@ func TestMCPSearchRoutesReadOnlyOperationsToQuery(t *testing.T) {
 	require.Equal(t, mcpToolQuery, operations[0].(map[string]any)["executionTool"])
 }
 
+func TestMCPSearchRefusesOutOfScopeAndAmbiguousMutations(t *testing.T) {
+	t.Parallel()
+
+	for _, query := range []string{
+		"delete a workspace and its database backups",
+		"send an email invoice",
+		"book a calendar appointment",
+		"delete",
+	} {
+		t.Run(query, func(t *testing.T) {
+			result, rpcErr := searchMCPOperations(map[string]any{"query": query})
+			require.Nil(t, rpcErr)
+			operations := result.(map[string]any)["structuredContent"].(map[string]any)["operations"].([]map[string]any)
+			require.Empty(t, operations, "out-of-scope discovery must refuse instead of guessing")
+		})
+	}
+
+	result, rpcErr := searchMCPOperations(map[string]any{"query": "delete a provider comment"})
+	require.Nil(t, rpcErr)
+	operations := result.(map[string]any)["structuredContent"].(map[string]any)["operations"].([]map[string]any)
+	require.NotEmpty(t, operations)
+	require.Equal(t, mcpToolDeleteComment, operations[0]["name"])
+}
+
+func TestMCPSearchCommonPhrasesSelectTheIntendedOperation(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		query string
+		want  string
+	}{
+		{query: "list connected accounts", want: mcpToolAccounts},
+		{query: "scheduled publication", want: mcpToolSchedulePub},
+		{query: "upload media from url", want: mcpToolUploadURL},
+		{query: "create a draft post", want: mcpToolCreateDraft},
+		{query: "reply to a provider comment", want: mcpToolReplyComment},
+	} {
+		t.Run(test.query, func(t *testing.T) {
+			result, rpcErr := searchMCPOperations(map[string]any{"query": test.query})
+			require.Nil(t, rpcErr)
+			operations := result.(map[string]any)["structuredContent"].(map[string]any)["operations"].([]map[string]any)
+			require.NotEmpty(t, operations)
+			require.Equal(t, test.want, operations[0]["name"])
+		})
+	}
+}
+
 func TestMCPQueryDelegatesToDiscoveredReadOnlyOperation(t *testing.T) {
 	t.Parallel()
 
@@ -604,14 +840,14 @@ func TestMCPDelegatedToolsRejectOperationsAcrossSafetyBoundary(t *testing.T) {
 			tool:          mcpToolQuery,
 			operation:     mcpToolCreateDraft,
 			arguments:     map[string]any{"workspace_id": "ws-1", "content": "must not be created"},
-			expectedError: "create_draft changes state or performs an external action; call execute with this operation",
+			expectedError: "create_draft changes state or performs an external action; call " + mcpToolExecute + " with this operation",
 		},
 		{
 			name:          "execute rejects read",
 			tool:          mcpToolExecute,
 			operation:     mcpToolWorkspaces,
 			arguments:     map[string]any{},
-			expectedError: "list_workspaces is read-only; call query with this operation",
+			expectedError: "list_workspaces is read-only; call " + mcpToolQuery + " with this operation",
 		},
 	}
 	for _, test := range tests {
@@ -648,6 +884,111 @@ func TestMCPDelegatedToolsRejectOperationsAcrossSafetyBoundary(t *testing.T) {
 	}
 }
 
+func TestMCPEnforcesAdvertisedAndDiscoveredInputSchemas(t *testing.T) {
+	t.Parallel()
+
+	srv := newMCPTestServer(t)
+	tests := []struct {
+		name      string
+		tool      string
+		arguments map[string]any
+		parameter string
+	}{
+		{
+			name: "delegated arguments are required", tool: mcpToolQuery,
+			arguments: map[string]any{"operation": mcpToolWorkspaces}, parameter: "arguments",
+		},
+		{
+			name: "nested parameter types are enforced", tool: mcpToolQuery,
+			arguments: map[string]any{
+				"operation": mcpToolListMedia,
+				"arguments": map[string]any{"workspace_id": "ws-1", "limit": "twenty"},
+			},
+			parameter: "limit",
+		},
+		{
+			name: "unknown nested parameters are rejected", tool: mcpToolQuery,
+			arguments: map[string]any{
+				"operation": mcpToolAccounts,
+				"arguments": map[string]any{"workspace_id": "ws-1", "invented": true},
+			},
+			parameter: "invented",
+		},
+		{
+			name: "cached direct operations use the same schema", tool: mcpToolCreateDraft,
+			arguments: map[string]any{"workspace_id": "ws-1"}, parameter: "content",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			resp := srv.request(t, "web-token", map[string]any{
+				"jsonrpc": "2.0", "id": test.name, "method": "tools/call",
+				"params": map[string]any{"name": test.tool, "arguments": test.arguments},
+			})
+			require.Equal(t, http.StatusOK, resp.Code)
+			var out map[string]any
+			require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &out))
+			require.Contains(t, out["error"].(map[string]any)["message"], test.parameter)
+		})
+	}
+
+	count, err := srv.db.NewSelect().Model((*models.Post)(nil)).Where("workspace_id = ?", "ws-1").Count(t.Context())
+	require.NoError(t, err)
+	require.Zero(t, count, "invalid schema inputs must not reach mutation handlers")
+}
+
+func TestMCPLegacyDiscoveryAliasesRemainCallableButUnadvertised(t *testing.T) {
+	t.Parallel()
+
+	srv := newMCPTestServer(t)
+	for legacy, canonical := range map[string]string{
+		mcpLegacyToolSearch:  mcpToolSearch,
+		mcpLegacyToolQuery:   mcpToolQuery,
+		mcpLegacyToolExecute: mcpToolExecute,
+	} {
+		arguments := map[string]any{}
+		switch canonical {
+		case mcpToolSearch:
+			arguments = map[string]any{"query": mcpToolWorkspaces}
+		case mcpToolQuery:
+			arguments = map[string]any{"operation": mcpToolWorkspaces, "arguments": map[string]any{}}
+		case mcpToolExecute:
+			arguments = map[string]any{"operation": mcpToolCreateDraft, "arguments": map[string]any{"workspace_id": "ws-1", "content": "Legacy alias draft"}}
+		}
+		resp := srv.request(t, "web-token", map[string]any{
+			"jsonrpc": "2.0", "id": legacy, "method": "tools/call",
+			"params": map[string]any{"name": legacy, "arguments": arguments},
+		})
+		require.Equal(t, http.StatusOK, resp.Code, legacy)
+		var out map[string]any
+		require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &out))
+		require.Nil(t, out["error"], legacy)
+	}
+
+	for _, descriptor := range mcpAdvertisedTools() {
+		name := descriptor["name"].(string)
+		require.NotContains(t, []string{mcpLegacyToolSearch, mcpLegacyToolQuery, mcpLegacyToolExecute}, name)
+	}
+}
+
+func TestMCPValidatesStructuredOutputAgainstAdvertisedSchema(t *testing.T) {
+	t.Parallel()
+
+	valid := map[string]any{
+		"content":           []mcpContent{{Type: "text", Text: "No workspaces available."}},
+		"structuredContent": map[string]any{"workspaces": []mcpWorkspace{}},
+	}
+	require.Nil(t, validateMCPToolOutput(mcpToolWorkspaces, valid))
+
+	invalid := map[string]any{
+		"content":           []mcpContent{{Type: "text", Text: "Invalid"}},
+		"structuredContent": map[string]any{"workspaces": "not-an-array"},
+	}
+	rpcErr := validateMCPToolOutput(mcpToolWorkspaces, invalid)
+	require.NotNil(t, rpcErr)
+	require.Contains(t, rpcErr.Message, "workspaces")
+}
+
 func TestMCPInitializeAdvertisesPrompts(t *testing.T) {
 	t.Parallel()
 
@@ -657,6 +998,11 @@ func TestMCPInitializeAdvertisesPrompts(t *testing.T) {
 		"jsonrpc": "2.0",
 		"id":      "init",
 		"method":  "initialize",
+		"params": map[string]any{
+			"protocolVersion": mcpProtocolVersion,
+			"capabilities":    map[string]any{},
+			"clientInfo":      map[string]any{"name": "openpost-test", "version": "1.0.0"},
+		},
 	})
 
 	require.Equal(t, http.StatusOK, resp.Code)
@@ -666,9 +1012,9 @@ func TestMCPInitializeAdvertisesPrompts(t *testing.T) {
 	serverInfo := result["serverInfo"].(map[string]any)
 	require.Equal(t, "openpost", serverInfo["name"])
 	require.Equal(t, "v9.8.7", serverInfo["version"])
-	require.Contains(t, result["instructions"], "Call search")
-	require.Contains(t, result["instructions"], "Call query")
-	require.Contains(t, result["instructions"], "execute for operations")
+	require.Contains(t, result["instructions"], "Call "+mcpToolSearch)
+	require.Contains(t, result["instructions"], "Call "+mcpToolQuery)
+	require.Contains(t, result["instructions"], mcpToolExecute+" only")
 	require.Contains(t, result["instructions"], "render_scheduler_widget")
 	capabilities := result["capabilities"].(map[string]any)
 	require.Contains(t, capabilities, "tools")
@@ -1520,7 +1866,7 @@ func TestMCPRejectsUndocumentedToolArguments(t *testing.T) {
 	require.Equal(t, http.StatusOK, resp.Code)
 	var out map[string]any
 	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &out))
-	require.Equal(t, "invalid create_draft arguments", out["error"].(map[string]any)["message"])
+	require.Equal(t, "invalid create_draft arguments: undocumented: unexpected property", out["error"].(map[string]any)["message"])
 	count, err := srv.db.NewSelect().Model((*models.Post)(nil)).Where("content = ?", "Draft from an agent").Count(context.Background())
 	require.NoError(t, err)
 	require.Zero(t, count)

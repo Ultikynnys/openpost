@@ -184,3 +184,8 @@ openpost-mcp --profile local
 ```
 
 You can also pass `--instance` and `--token` directly for automation.
+
+The proxy writes standard newline-delimited MCP JSON on stdout, accepts the same
+format on stdin, and keeps legacy `Content-Length` framing for older desktop
+clients. It also forwards the protocol version negotiated during initialization
+to the remote Streamable HTTP endpoint.

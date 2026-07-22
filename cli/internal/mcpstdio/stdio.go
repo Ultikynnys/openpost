@@ -11,17 +11,29 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
 const contentLengthHeader = "content-length"
 const defaultVersion = "dev"
+const maxFrameBytes = 16 * 1024 * 1024
+
+type frameFormat int
+
+const (
+	frameFormatNewline frameFormat = iota
+	frameFormatContentLength
+)
 
 type Proxy struct {
 	Endpoint  string
 	Token     string
 	HTTP      *http.Client
 	UserAgent string
+
+	mu              sync.RWMutex
+	protocolVersion string
 }
 
 func NewProxy(instance, token string) *Proxy {
@@ -44,7 +56,7 @@ func NewProxyWithVersion(instance, token, version string) *Proxy {
 func (p *Proxy) Serve(ctx context.Context, in io.Reader, out io.Writer) error {
 	reader := bufio.NewReader(in)
 	for {
-		frame, err := ReadFrame(reader)
+		frame, format, err := readFrame(reader)
 		if err != nil {
 			if err == io.EOF {
 				return nil
@@ -58,7 +70,7 @@ func (p *Proxy) Serve(ctx context.Context, in io.Reader, out io.Writer) error {
 		if len(resp) == 0 {
 			continue
 		}
-		if err := WriteFrame(out, resp); err != nil {
+		if err := writeFrame(out, resp, format); err != nil {
 			return err
 		}
 	}
@@ -76,8 +88,12 @@ func (p *Proxy) Forward(ctx context.Context, frame []byte) ([]byte, error) {
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
 	req.Header.Set("User-Agent", p.UserAgent)
+	isInitialize := mcpInitializeRequest(frame)
+	if protocolVersion := p.negotiatedProtocolVersion(); protocolVersion != "" && !isInitialize {
+		req.Header.Set("MCP-Protocol-Version", protocolVersion)
+	}
 	if p.Token != "" {
 		req.Header.Set("Authorization", "Bearer "+p.Token)
 	}
@@ -102,51 +118,148 @@ func (p *Proxy) Forward(ctx context.Context, frame []byte) ([]byte, error) {
 		}
 		return nil, fmt.Errorf("remote MCP returned HTTP %d: %s", resp.StatusCode, message)
 	}
+	if isInitialize {
+		p.setNegotiatedProtocolVersion(mcpInitializeResponseVersion(body))
+	}
 	return body, nil
 }
 
 func ReadFrame(r *bufio.Reader) ([]byte, error) {
-	headers := map[string]string{}
-	for {
-		line, err := r.ReadString('\n')
+	body, _, err := readFrame(r)
+	return body, err
+}
+
+func readFrame(r *bufio.Reader) ([]byte, frameFormat, error) {
+	firstLine, err := readMCPLine(r)
+	if err != nil {
+		return nil, frameFormatNewline, err
+	}
+	for len(bytes.TrimSpace(firstLine)) == 0 {
+		firstLine, err = readMCPLine(r)
 		if err != nil {
-			if err == io.EOF && strings.TrimSpace(line) == "" {
-				return nil, io.EOF
-			}
-			return nil, err
+			return nil, frameFormatNewline, err
 		}
-		line = strings.TrimRight(line, "\r\n")
-		if line == "" {
-			break
-		}
+	}
+	if json.Valid(firstLine) {
+		return bytes.TrimSpace(firstLine), frameFormatNewline, nil
+	}
+
+	headers := map[string]string{}
+	line := string(firstLine)
+	for line != "" {
 		name, value, ok := strings.Cut(line, ":")
 		if !ok {
-			return nil, fmt.Errorf("invalid MCP header line %q", line)
+			return nil, frameFormatContentLength, fmt.Errorf("invalid newline-delimited JSON or legacy MCP header line %q", line)
 		}
 		headers[strings.ToLower(strings.TrimSpace(name))] = strings.TrimSpace(value)
+		nextLine, err := readMCPLine(r)
+		if err != nil {
+			return nil, frameFormatContentLength, err
+		}
+		line = string(nextLine)
 	}
 
 	rawLength := headers[contentLengthHeader]
 	if rawLength == "" {
-		return nil, fmt.Errorf("missing Content-Length header")
+		return nil, frameFormatContentLength, fmt.Errorf("missing Content-Length header in legacy MCP frame")
 	}
 	length, err := strconv.Atoi(rawLength)
-	if err != nil || length < 0 {
-		return nil, fmt.Errorf("invalid Content-Length %q", rawLength)
+	if err != nil || length < 0 || length > maxFrameBytes {
+		return nil, frameFormatContentLength, fmt.Errorf("invalid Content-Length %q", rawLength)
 	}
 	body := make([]byte, length)
 	if _, err := io.ReadFull(r, body); err != nil {
-		return nil, err
+		return nil, frameFormatContentLength, err
 	}
-	return body, nil
+	if !json.Valid(body) {
+		return nil, frameFormatContentLength, fmt.Errorf("legacy MCP frame body is not valid JSON")
+	}
+	return body, frameFormatContentLength, nil
 }
 
 func WriteFrame(w io.Writer, body []byte) error {
-	if _, err := fmt.Fprintf(w, "Content-Length: %d\r\n\r\n", len(body)); err != nil {
+	return writeFrame(w, body, frameFormatNewline)
+}
+
+func writeFrame(w io.Writer, body []byte, format frameFormat) error {
+	if len(body) > maxFrameBytes {
+		return fmt.Errorf("MCP frame exceeds %d-byte limit", maxFrameBytes)
+	}
+	if !json.Valid(body) {
+		return fmt.Errorf("MCP frame body is not valid JSON")
+	}
+	if format == frameFormatContentLength {
+		if _, err := fmt.Fprintf(w, "Content-Length: %d\r\n\r\n", len(body)); err != nil {
+			return err
+		}
+		_, err := w.Write(body)
 		return err
 	}
-	_, err := w.Write(body)
+	var compact bytes.Buffer
+	if err := json.Compact(&compact, body); err != nil {
+		return fmt.Errorf("compact newline-delimited MCP frame: %w", err)
+	}
+	if _, err := w.Write(compact.Bytes()); err != nil {
+		return err
+	}
+	_, err := io.WriteString(w, "\n")
 	return err
+}
+
+func readMCPLine(r *bufio.Reader) ([]byte, error) {
+	line := make([]byte, 0, 1024)
+	for {
+		part, prefix, err := r.ReadLine()
+		if err != nil {
+			return nil, err
+		}
+		if len(line)+len(part) > maxFrameBytes {
+			return nil, fmt.Errorf("MCP frame exceeds %d-byte limit", maxFrameBytes)
+		}
+		line = append(line, part...)
+		if !prefix {
+			return line, nil
+		}
+	}
+}
+
+func mcpInitializeRequest(frame []byte) bool {
+	var message struct {
+		Method string `json:"method"`
+	}
+	return json.Unmarshal(frame, &message) == nil && message.Method == "initialize"
+}
+
+func mcpInitializeResponseVersion(frame []byte) string {
+	var message struct {
+		Result struct {
+			ProtocolVersion string `json:"protocolVersion"`
+		} `json:"result"`
+	}
+	if json.Unmarshal(frame, &message) != nil {
+		return ""
+	}
+	return strings.TrimSpace(message.Result.ProtocolVersion)
+}
+
+func writeLegacyFrame(w io.Writer, body []byte) error {
+	return writeFrame(w, body, frameFormatContentLength)
+}
+
+func (p *Proxy) negotiatedProtocolVersion() string {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.protocolVersion
+}
+
+func (p *Proxy) setNegotiatedProtocolVersion(version string) {
+	version = strings.TrimSpace(version)
+	if version == "" {
+		return
+	}
+	p.mu.Lock()
+	p.protocolVersion = version
+	p.mu.Unlock()
 }
 
 func jsonRPCError(request []byte, cause error) []byte {

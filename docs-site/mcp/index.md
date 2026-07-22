@@ -41,12 +41,14 @@ The proxy reads the selected CLI profile and forwards MCP frames to the remote `
 OpenPost advertises a compact four-tool surface so connecting it does not load
 every scheduling schema into the assistant's context:
 
-- `search` finds relevant OpenPost operations and returns only the schemas needed
-  for the current task, including whether each result must use `query` or
-  `execute`.
-- `query` runs only guaranteed read-only operations and rejects mutations.
-- `execute` runs only state-changing or external-action operations and rejects
-  read-only work, giving clients a hard approval boundary.
+- `search_operations` finds relevant OpenPost operations and returns only the
+  schemas needed for the current task, including whether each result must use
+  `query_operation` or `execute_operation`. It returns no result instead of
+  guessing when a request is ambiguous or outside OpenPost.
+- `query_operation` runs only guaranteed read-only operations and rejects
+  mutations.
+- `execute_operation` runs only state-changing or external-action operations
+  and rejects read-only work, giving clients a hard approval boundary.
 - `render_scheduler_widget` displays a visual scheduler summary in clients that
   support MCP Apps resources.
 
@@ -54,8 +56,8 @@ The discoverable operations still cover workspaces, providers, accounts, media,
 drafts, renditions, format-first publications, validation, scheduling,
 publishing, status, cancellation, lifecycle events, comments, and slot
 suggestions. You can usually ask for the outcome in plain language; the
-assistant should use `search` before `query` or `execute` when it needs an
-operation schema.
+assistant should use `search_operations` before `query_operation` or
+`execute_operation` when it needs an operation schema.
 
 ## Safe workflow
 
