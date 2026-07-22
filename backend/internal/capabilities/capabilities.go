@@ -121,6 +121,15 @@ func All() []Capability {
 	publicImage.MaxCount = 1
 	publicCarousel := publicImages
 	publicCarousel.MinCount = 2
+	publicMedia := MediaConstraint{
+		MinCount:               1,
+		MaxCount:               10,
+		AllowedMIMEs:           []string{"image/jpeg", "image/png", "image/webp", "video/mp4", "video/quicktime"},
+		RequiresPublicURL:      true,
+		RequiresHTTPSFetchable: true,
+	}
+	publicMediaCarousel := publicMedia
+	publicMediaCarousel.MinCount = 2
 	threadsCarousel := MediaConstraint{
 		MinCount:               2,
 		MaxCount:               10,
@@ -128,7 +137,7 @@ func All() []Capability {
 		RequiresPublicURL:      true,
 		RequiresHTTPSFetchable: true,
 	}
-	publicStory := publicImages
+	publicStory := publicMedia
 	publicStory.MaxCount = 1
 	video := MediaConstraint{MinCount: 1, MaxCount: 1, AllowedMIMEs: []string{"video/mp4", "video/quicktime"}, MaxSizeBytes: 2 * 1024 * 1024 * 1024}
 	shortVideo := video
@@ -196,8 +205,8 @@ func All() []Capability {
 		defaultQueued(Capability{Provider: ProviderFacebook, Profile: models.ContentProfileLongVideo, Label: "Facebook video", TextLimit: 63206, Media: longVideo, RequiresPublicMedia: true, Settings: facebookSettings()}),
 
 		defaultQueued(Capability{Provider: ProviderInstagram, Profile: models.ContentProfileImagePost, Label: "Instagram feed", TextLimit: 2200, Media: publicImage, RequiresPublicMedia: true, Settings: instagramSettings()}),
-		defaultQueued(Capability{Provider: ProviderInstagram, Profile: models.ContentProfileCarousel, Label: "Instagram carousel", TextLimit: 2200, Media: publicCarousel, RequiresPublicMedia: true, Settings: instagramSettings()}),
-		defaultQueued(Capability{Provider: ProviderInstagram, Profile: models.ContentProfileStory, Label: "Instagram Story", Media: publicImages, RequiresPublicMedia: true, RequiresAppReview: true, Settings: instagramSettings()}),
+		defaultQueued(Capability{Provider: ProviderInstagram, Profile: models.ContentProfileCarousel, Label: "Instagram carousel", TextLimit: 2200, Media: publicMediaCarousel, RequiresPublicMedia: true, Settings: instagramSettings()}),
+		defaultQueued(Capability{Provider: ProviderInstagram, Profile: models.ContentProfileStory, Label: "Instagram Story", Media: publicStory, RequiresPublicMedia: true, RequiresAppReview: true, Settings: instagramSettings()}),
 		defaultQueued(Capability{Provider: ProviderInstagram, Profile: models.ContentProfileShortVideo, Label: "Instagram Reel", TextLimit: 2200, Media: publicShortVideo, RequiresPublicMedia: true, Settings: instagramSettings()}),
 
 		defaultQueued(Capability{Provider: ProviderYouTube, Profile: models.ContentProfileShortVideo, Label: "YouTube Short", TextLimit: 5000, TitleRequired: true, DescriptionRequired: false, Media: shortVideo, Settings: youtubeSettings(), Caveats: []string{"Unaudited Google projects can force uploads private."}}),

@@ -66,28 +66,28 @@ The snapshot includes health/readiness checks, token presence, workspace context
 - Threads requires the Meta app's Threads product and scopes: `threads_basic`, `threads_content_publish`, and `threads_manage_replies`.
 - Media URLs must be public HTTPS. Meta fetches media server-side and cannot use localhost, private DNS, or plain local paths.
 - For local testing, expose both the app callback and `/media/...` paths through a tunnel.
-- Threads supports one attachment in the current OpenPost flow. Videos must be MP4 or MOV.
+- Threads posts support up to 10 JPEG, PNG, WebP, MP4, or MOV attachments, including mixed-media carousels.
 
 ## Facebook
 
 - Facebook connects Pages, not personal profile timelines.
 - `facebook account has no manageable pages` usually means the user has no eligible Pages or the app lacks `pages_show_list`.
 - Page publishing requires `pages_show_list`, `pages_read_engagement`, and `pages_manage_posts`, often with Meta app review.
-- Media posts require one public HTTPS image or video URL.
+- Single-media posts and Stories support one JPEG, PNG, WebP, MP4, or MOV file. Multi-photo posts support 2–10 JPEG, PNG, or WebP images. Every media URL must use public HTTPS.
 
 ## Instagram
 
 - Instagram requires an Instagram Business or Creator account connected to a Facebook Page.
 - `facebook account has no connected instagram business accounts` means the authenticated Meta user has no eligible Page-backed Instagram account or the app lacks required scopes.
 - Publishing requires `instagram_basic`, `instagram_content_publish`, Page scopes, and often Meta app review.
-- Instagram does not publish text-only posts. Attach exactly one image or one Reel video.
+- Instagram does not publish text-only posts. Feed posts use one image, carousels use 2–10 JPEG, PNG, WebP, MP4, or MOV items, and Stories use one image or video. Reels use one video.
 
 ## TikTok
 
 - TikTok requires Login Kit plus Content Posting API access.
 - Required scopes are `user.info.basic`, `user.info.profile`, `video.publish`, and `video.upload`.
 - The redirect URI in the TikTok app must match `https://your-domain.com/api/v1/accounts/tiktok/callback` or the configured `redirect_uri`.
-- The current adapter publishes one video through a public HTTPS media URL. Text-only and image posts are not enabled.
+- TikTok publishes one MP4 or MOV video, or a photo post with 1–35 JPEG or WebP images. Every media URL must use public HTTPS; text-only posts are not supported.
 
 ## YouTube
 

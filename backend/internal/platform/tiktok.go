@@ -354,8 +354,8 @@ func (t *TikTokAdapter) publishPhotoPost(ctx context.Context, accessToken string
 	if len(req.PlatformMediaIDs) < 1 || len(req.PlatformMediaIDs) > 35 {
 		return "", fmt.Errorf("tiktok photo posts require 1-35 images")
 	}
-	if !allTikTokMediaImages(req.Media) {
-		return "", fmt.Errorf("tiktok photo posts support images only")
+	if !allTikTokPhotoImages(req.Media) {
+		return "", fmt.Errorf("tiktok photo posts support JPEG or WebP images only")
 	}
 	privacyLevel, err := t.privacyLevel(ctx, accessToken, req.Settings)
 	if err != nil {
@@ -525,9 +525,35 @@ func validateTikTokMedia(media []MediaItem) []MediaValidationIssue {
 		}}
 	}
 	if len(media) == 1 && isVideoMime(media[0].MimeType) {
-		return nil
+		if isTikTokVideoMime(media[0].MimeType) {
+			return nil
+		}
+		return []MediaValidationIssue{{
+			Provider: providerTikTok,
+			MediaID:  media[0].ID,
+			Severity: severityError,
+			Message:  "TikTok video publishing supports MP4 or MOV video.",
+		}}
 	}
 	if allTikTokMediaImages(media) {
+		if len(media) > 35 {
+			return []MediaValidationIssue{{
+				Provider: providerTikTok,
+				Severity: severityError,
+				Message:  "TikTok photo posts support 1-35 images.",
+			}}
+		}
+		for _, item := range media {
+			if isTikTokPhotoMime(item.MimeType) {
+				continue
+			}
+			return []MediaValidationIssue{{
+				Provider: providerTikTok,
+				MediaID:  item.ID,
+				Severity: severityError,
+				Message:  "TikTok photo posts support JPEG or WebP images only.",
+			}}
+		}
 		return nil
 	}
 	if !isVideoMime(media[0].MimeType) {
@@ -541,8 +567,38 @@ func validateTikTokMedia(media []MediaItem) []MediaValidationIssue {
 	return []MediaValidationIssue{{
 		Provider: providerTikTok,
 		Severity: severityError,
-		Message:  "TikTok video publishing requires exactly one video attachment.",
+		Message:  "TikTok publishing supports one MP4 or MOV video, or 1-35 JPEG or WebP images.",
 	}}
+}
+
+func allTikTokPhotoImages(media []MediaItem) bool {
+	if len(media) == 0 {
+		return false
+	}
+	for _, item := range media {
+		if !isTikTokPhotoMime(item.MimeType) {
+			return false
+		}
+	}
+	return true
+}
+
+func isTikTokPhotoMime(mimeType string) bool {
+	switch strings.ToLower(strings.TrimSpace(mimeType)) {
+	case "image/jpeg", "image/webp":
+		return true
+	default:
+		return false
+	}
+}
+
+func isTikTokVideoMime(mimeType string) bool {
+	switch strings.ToLower(strings.TrimSpace(mimeType)) {
+	case videoTypeMP4, "video/quicktime":
+		return true
+	default:
+		return false
+	}
 }
 
 func tiktokScopes() []string {

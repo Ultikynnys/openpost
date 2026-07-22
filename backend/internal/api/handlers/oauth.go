@@ -292,8 +292,8 @@ var providerCatalog = []ProviderInfo{
 		Platform:     "tiktok",
 		DisplayName:  "TikTok",
 		AuthMode:     "oauth",
-		Description:  "OAuth app connection for TikTok video publishing workflows.",
-		Capabilities: []string{"Short videos", "Scheduling", "Platform variants", "MCP workflows"},
+		Description:  "OAuth app connection for TikTok videos and photo posts.",
+		Capabilities: []string{"Short videos", "Photo posts", "Scheduling", "Platform variants", "MCP workflows"},
 	},
 }
 

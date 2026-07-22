@@ -447,16 +447,35 @@ func validateInstagramMedia(media []MediaItem) []MediaValidationIssue {
 		}}
 	}
 	for _, item := range media {
-		if !isVideoMime(item.MimeType) && !strings.HasPrefix(strings.ToLower(item.MimeType), "image/") {
-			return []MediaValidationIssue{{
-				Provider: providerInstagram,
-				MediaID:  item.ID,
-				Severity: severityError,
-				Message:  "Instagram publishing supports image or video attachments only.",
-			}}
+		if isInstagramImageMime(item.MimeType) || isInstagramVideoMime(item.MimeType) {
+			continue
 		}
+		return []MediaValidationIssue{{
+			Provider: providerInstagram,
+			MediaID:  item.ID,
+			Severity: severityError,
+			Message:  "Instagram supports JPEG, PNG, WebP, MP4, or MOV media.",
+		}}
 	}
 	return nil
+}
+
+func isInstagramImageMime(mimeType string) bool {
+	switch strings.ToLower(strings.TrimSpace(mimeType)) {
+	case "image/jpeg", "image/png", "image/webp":
+		return true
+	default:
+		return false
+	}
+}
+
+func isInstagramVideoMime(mimeType string) bool {
+	switch strings.ToLower(strings.TrimSpace(mimeType)) {
+	case videoTypeMP4, "video/quicktime":
+		return true
+	default:
+		return false
+	}
 }
 
 func instagramScopes() []string {

@@ -489,29 +489,48 @@ func validateThreadsMedia(media []MediaItem) []MediaValidationIssue {
 	if len(media) == 0 {
 		return nil
 	}
+	if len(media) > 10 {
+		return []MediaValidationIssue{{
+			Provider: providerThreads,
+			Severity: severityError,
+			Message:  "Threads supports up to 10 media attachments per post.",
+		}}
+	}
 
 	var issues []MediaValidationIssue
 	for _, item := range media {
-		if isVideoMime(item.MimeType) && !isThreadsVideoMime(item.MimeType) {
+		if isThreadsImageMime(item.MimeType) || isThreadsVideoMime(item.MimeType) {
+			continue
+		}
+		if isVideoMime(item.MimeType) {
 			issues = append(issues, MediaValidationIssue{
 				Provider: providerThreads,
 				MediaID:  item.ID,
 				Severity: severityError,
 				Message:  "Threads supports MP4 or MOV video.",
 			})
+			continue
 		}
-	}
-	if len(media) > 1 {
 		issues = append(issues, MediaValidationIssue{
 			Provider: providerThreads,
-			Severity: severityWarning,
-			Message:  "OpenPost currently publishes only the first Threads attachment.",
+			MediaID:  item.ID,
+			Severity: severityError,
+			Message:  "Threads supports JPEG, PNG, WebP, MP4, or MOV media.",
 		})
 	}
 	return issues
 }
 
 func isThreadsVideoMime(mimeType string) bool {
-	mimeType = strings.ToLower(mimeType)
+	mimeType = strings.ToLower(strings.TrimSpace(mimeType))
 	return mimeType == videoTypeMP4 || mimeType == "video/quicktime"
+}
+
+func isThreadsImageMime(mimeType string) bool {
+	switch strings.ToLower(strings.TrimSpace(mimeType)) {
+	case "image/jpeg", "image/png", "image/webp":
+		return true
+	default:
+		return false
+	}
 }

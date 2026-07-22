@@ -113,6 +113,9 @@ func TestListProvidersReportsConfiguredProviders(t *testing.T) {
 	require.Equal(t, "tiktok", out[8].Platform)
 	require.Equal(t, providerStatusNeedsConfiguration, out[8].Status)
 	require.False(t, out[8].Configured)
+	require.Equal(t, "OAuth app connection for TikTok videos and photo posts.", out[8].Description)
+	require.Contains(t, out[8].Capabilities, "Short videos")
+	require.Contains(t, out[8].Capabilities, "Photo posts")
 }
 
 func TestListProvidersIncludesUnavailableMastodonPlaceholder(t *testing.T) {

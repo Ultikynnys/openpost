@@ -489,14 +489,57 @@ func facebookPublishedID(label string, respBody []byte) (string, error) {
 }
 
 func validateFacebookMedia(media []MediaItem) []MediaValidationIssue {
-	if len(media) <= 10 {
+	if len(media) == 0 {
+		return nil
+	}
+	if len(media) > 10 {
+		return []MediaValidationIssue{{
+			Provider: providerFacebook,
+			Severity: severityError,
+			Message:  "Facebook photo posts support up to 10 media attachments.",
+		}}
+	}
+	if len(media) > 1 {
+		for _, item := range media {
+			if isFacebookPhotoMime(item.MimeType) {
+				continue
+			}
+			return []MediaValidationIssue{{
+				Provider: providerFacebook,
+				MediaID:  item.ID,
+				Severity: severityError,
+				Message:  "Facebook multi-photo posts support JPEG, PNG, or WebP images only.",
+			}}
+		}
+		return nil
+	}
+	if isFacebookPhotoMime(media[0].MimeType) || isFacebookVideoMime(media[0].MimeType) {
 		return nil
 	}
 	return []MediaValidationIssue{{
 		Provider: providerFacebook,
+		MediaID:  media[0].ID,
 		Severity: severityError,
-		Message:  "Facebook publishing supports up to 10 media attachments for photo posts.",
+		Message:  "Facebook supports one JPEG, PNG, WebP, MP4, or MOV attachment.",
 	}}
+}
+
+func isFacebookPhotoMime(mimeType string) bool {
+	switch strings.ToLower(strings.TrimSpace(mimeType)) {
+	case "image/jpeg", "image/png", "image/webp":
+		return true
+	default:
+		return false
+	}
+}
+
+func isFacebookVideoMime(mimeType string) bool {
+	switch strings.ToLower(strings.TrimSpace(mimeType)) {
+	case videoTypeMP4, "video/quicktime":
+		return true
+	default:
+		return false
+	}
 }
 
 func facebookScopes() []string {

@@ -16,7 +16,13 @@ export interface MediaCapabilityIssue {
 }
 
 const videoTypeMP4 = 'video/mp4';
+const videoTypeQuickTime = 'video/quicktime';
 const blueskyVideoLimitBytes = 100 * 1024 * 1024;
+const maxCarouselMedia = 10;
+const maxTikTokPhotos = 35;
+const feedImageMimeTypes = new Set(['image/jpeg', 'image/png', 'image/webp']);
+const standardVideoMimeTypes = new Set([videoTypeMP4, videoTypeQuickTime]);
+const tiktokPhotoMimeTypes = new Set(['image/jpeg', 'image/webp']);
 
 export function mediaCapabilityItemsFromIds(
 	mediaIds: string[],
@@ -80,7 +86,7 @@ export function videoProviderSupportDetail(mimeType: string): string | null {
 		return 'MP4 is the safest video format. YouTube and TikTok require one video; X and Bluesky cannot mix video with images.';
 	}
 	if (normalized === 'video/quicktime') {
-		return 'MOV works for Threads, but most providers are safest with MP4.';
+		return 'MOV is accepted by several video profiles, but MP4 has the widest provider support.';
 	}
 	if (normalized === 'video/webm') {
 		return 'WebM is mainly Mastodon-friendly; use MP4 for wider provider support.';
@@ -189,72 +195,119 @@ function validateLinkedInMedia(media: MediaCapabilityItem[]): MediaCapabilityIss
 
 function validateThreadsMedia(media: MediaCapabilityItem[]): MediaCapabilityIssue[] {
 	if (media.length === 0) return [];
+	if (media.length > maxCarouselMedia) {
+		return [issue('threads', 'error', 'Threads supports up to 10 media attachments per post.')];
+	}
 
 	const issues: MediaCapabilityIssue[] = [];
 	for (const item of media) {
-		if (isVideoMime(item.mimeType) && !isThreadsVideoMime(item.mimeType)) {
+		if (isSupportedFeedImage(item.mimeType) || isThreadsVideoMime(item.mimeType)) continue;
+		if (isVideoMime(item.mimeType)) {
 			issues.push(issue('threads', 'error', 'Threads supports MP4 or MOV video.', item.id));
+			continue;
 		}
-	}
-	if (media.length > 1) {
 		issues.push(
-			issue('threads', 'warning', 'OpenPost currently publishes only the first Threads attachment.')
+			issue('threads', 'error', 'Threads supports JPEG, PNG, WebP, MP4, or MOV media.', item.id)
 		);
 	}
 	return issues;
 }
 
 function validateFacebookMedia(media: MediaCapabilityItem[]): MediaCapabilityIssue[] {
-	if (media.length <= 1) return [];
+	if (media.length === 0) return [];
+	if (media.length > maxCarouselMedia) {
+		return [issue('facebook', 'error', 'Facebook photo posts support up to 10 media attachments.')];
+	}
+	if (media.length > 1) {
+		const unsupported = media.find((item) => !isSupportedFeedImage(item.mimeType));
+		return unsupported
+			? [
+					issue(
+						'facebook',
+						'error',
+						'Facebook multi-photo posts support JPEG, PNG, or WebP images only.',
+						unsupported.id
+					)
+				]
+			: [];
+	}
+	if (isSupportedFeedImage(media[0].mimeType) || isStandardVideo(media[0].mimeType)) return [];
 	return [
 		issue(
 			'facebook',
 			'error',
-			'Facebook publishing currently supports at most one media attachment.'
+			'Facebook supports one JPEG, PNG, WebP, MP4, or MOV attachment.',
+			media[0].id
 		)
 	];
 }
 
 function validateInstagramMedia(media: MediaCapabilityItem[]): MediaCapabilityIssue[] {
-	if (media.length !== 1) {
+	if (media.length < 1 || media.length > maxCarouselMedia) {
 		return [
-			issue(
-				'instagram',
-				'error',
-				'Instagram publishing currently requires exactly one image or video attachment.'
-			)
+			issue('instagram', 'error', 'Instagram publishing requires 1-10 image or video attachments.')
 		];
 	}
-	if (!isVideoMime(media[0].mimeType) && !isImageMime(media[0].mimeType)) {
+	for (const item of media) {
+		if (isSupportedFeedImage(item.mimeType) || isStandardVideo(item.mimeType)) continue;
 		return [
-			issue(
-				'instagram',
-				'error',
-				'Instagram publishing supports image or video attachments only.',
-				media[0].id
-			)
+			issue('instagram', 'error', 'Instagram supports JPEG, PNG, WebP, MP4, or MOV media.', item.id)
 		];
 	}
 	return [];
 }
 
 function validateTikTokMedia(media: MediaCapabilityItem[]): MediaCapabilityIssue[] {
-	if (media.length !== 1) {
+	if (media.length === 0) {
 		return [
-			issue('tiktok', 'error', 'TikTok publishing currently requires exactly one video attachment.')
+			issue('tiktok', 'error', 'TikTok publishing requires one video or 1-35 photo attachments.')
 		];
 	}
-	if (!isVideoMime(media[0].mimeType)) {
-		return [
-			issue(
-				'tiktok',
-				'error',
-				'TikTok publishing currently supports video attachments only.',
-				media[0].id
-			)
-		];
+	if (media.length === 1 && isVideoMime(media[0].mimeType)) {
+		return isStandardVideo(media[0].mimeType)
+			? []
+			: [
+					issue(
+						'tiktok',
+						'error',
+						'TikTok video publishing supports MP4 or MOV video.',
+						media[0].id
+					)
+				];
 	}
-	return [];
+	if (media.every((item) => isImageMime(item.mimeType))) {
+		if (media.length > maxTikTokPhotos) {
+			return [issue('tiktok', 'error', 'TikTok photo posts support 1-35 images.')];
+		}
+		const unsupported = media.find(
+			(item) => !tiktokPhotoMimeTypes.has(normalizeMime(item.mimeType))
+		);
+		return unsupported
+			? [
+					issue(
+						'tiktok',
+						'error',
+						'TikTok photo posts support JPEG or WebP images only.',
+						unsupported.id
+					)
+				]
+			: [];
+	}
+	return [
+		issue(
+			'tiktok',
+			'error',
+			'TikTok publishing supports one MP4 or MOV video, or 1-35 JPEG or WebP images.'
+		)
+	];
+}
+
+function isSupportedFeedImage(mimeType: string): boolean {
+	return feedImageMimeTypes.has(normalizeMime(mimeType));
+}
+
+function isStandardVideo(mimeType: string): boolean {
+	return standardVideoMimeTypes.has(normalizeMime(mimeType));
 }
 
 function validateYouTubeMedia(media: MediaCapabilityItem[]): MediaCapabilityIssue[] {

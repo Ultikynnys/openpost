@@ -59,15 +59,101 @@ describe('media-capabilities', () => {
 		).toContain('Bluesky video must be under 100MB.');
 	});
 
-	it('warns when video-only providers receive an image', () => {
-		const media = [{ id: 'image-1', mimeType: 'image/png' }];
+	it('accepts Threads mixed carousels and enforces their count and MIME rules', () => {
+		const carousel = Array.from({ length: 10 }, (_, index) => ({
+			id: `media-${index}`,
+			mimeType: index % 2 === 0 ? 'image/webp' : 'video/quicktime'
+		}));
 
-		expect(providerMediaWarningMessages('tiktok', media)).toContain(
-			'TikTok publishing currently supports video attachments only.'
+		expect(validateProviderMedia('threads', carousel)).toEqual([]);
+		expect(
+			providerMediaWarningMessages('threads', [
+				...carousel,
+				{ id: 'media-10', mimeType: 'image/jpeg' }
+			])
+		).toContain('Threads supports up to 10 media attachments per post.');
+		expect(validateProviderMedia('threads', [{ id: 'video', mimeType: 'video/webm' }])).toEqual([
+			{
+				provider: 'threads',
+				mediaId: 'video',
+				severity: 'error',
+				message: 'Threads supports MP4 or MOV video.'
+			}
+		]);
+	});
+
+	it('allows Facebook multi-photo posts without treating videos as photos', () => {
+		const photos = Array.from({ length: 10 }, (_, index) => ({
+			id: `photo-${index}`,
+			mimeType: index % 2 === 0 ? 'image/jpeg' : 'image/png'
+		}));
+
+		expect(validateProviderMedia('facebook', photos)).toEqual([]);
+		expect(
+			providerMediaWarningMessages('facebook', [
+				...photos,
+				{ id: 'photo-10', mimeType: 'image/webp' }
+			])
+		).toContain('Facebook photo posts support up to 10 media attachments.');
+		expect(
+			providerMediaWarningMessages('facebook', [
+				{ id: 'photo', mimeType: 'image/jpeg' },
+				{ id: 'video', mimeType: 'video/mp4' }
+			])
+		).toContain('Facebook multi-photo posts support JPEG, PNG, or WebP images only.');
+	});
+
+	it('accepts Instagram single media and 2-10 item carousels', () => {
+		const carousel = Array.from({ length: 10 }, (_, index) => ({
+			id: `instagram-${index}`,
+			mimeType: index % 2 === 0 ? 'image/webp' : 'video/mp4'
+		}));
+
+		expect(validateProviderMedia('instagram', [{ id: 'image', mimeType: 'image/jpeg' }])).toEqual(
+			[]
 		);
-		expect(providerMediaWarningMessages('youtube', media)).toContain(
-			'YouTube publishing supports video attachments only.'
+		expect(validateProviderMedia('instagram', carousel)).toEqual([]);
+		expect(
+			providerMediaWarningMessages('instagram', [
+				...carousel,
+				{ id: 'instagram-10', mimeType: 'image/png' }
+			])
+		).toContain('Instagram publishing requires 1-10 image or video attachments.');
+		expect(providerMediaWarningMessages('instagram', [])).toContain(
+			'Instagram publishing requires 1-10 image or video attachments.'
 		);
+	});
+
+	it('accepts one TikTok video or 1-35 JPEG and WebP photos', () => {
+		const photos = Array.from({ length: 35 }, (_, index) => ({
+			id: `tiktok-${index}`,
+			mimeType: index % 2 === 0 ? 'image/jpeg' : 'image/webp'
+		}));
+
+		expect(validateProviderMedia('tiktok', [{ id: 'video', mimeType: 'video/quicktime' }])).toEqual(
+			[]
+		);
+		expect(validateProviderMedia('tiktok', photos)).toEqual([]);
+		expect(
+			providerMediaWarningMessages('tiktok', [
+				...photos,
+				{ id: 'tiktok-35', mimeType: 'image/jpeg' }
+			])
+		).toContain('TikTok photo posts support 1-35 images.');
+		expect(validateProviderMedia('tiktok', [{ id: 'png', mimeType: 'image/png' }])).toEqual([
+			{
+				provider: 'tiktok',
+				mediaId: 'png',
+				severity: 'error',
+				message: 'TikTok photo posts support JPEG or WebP images only.'
+			}
+		]);
+	});
+
+	it('warns when YouTube receives an image', () => {
+		expect(
+			providerMediaWarningMessages('youtube', [{ id: 'image-1', mimeType: 'image/png' }])
+		).toContain('YouTube publishing supports video attachments only.');
 	});
 
 	it('labels videos as provider-limited for the media library', () => {

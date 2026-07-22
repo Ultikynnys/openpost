@@ -143,6 +143,7 @@ func TestPublicMediaCountsMatchAdapterPublishingModes(t *testing.T) {
 		{ProviderFacebook, models.ContentProfileStory, 1, 1},
 		{ProviderInstagram, models.ContentProfileImagePost, 1, 1},
 		{ProviderInstagram, models.ContentProfileCarousel, 2, 10},
+		{ProviderInstagram, models.ContentProfileStory, 1, 1},
 		{ProviderTikTok, models.ContentProfileCarousel, 1, 35},
 	}
 
@@ -186,6 +187,32 @@ func TestThreadsCarouselCapabilityAllowsMixedMedia(t *testing.T) {
 	require.True(t, ok)
 	require.Contains(t, capability.Media.AllowedMIMEs, "image/jpeg")
 	require.Contains(t, capability.Media.AllowedMIMEs, "video/mp4")
+}
+
+func TestMetaCarouselAndStoryCapabilitiesMatchPublishingPaths(t *testing.T) {
+	mixedMediaMIMEs := []string{"image/jpeg", "image/png", "image/webp", "video/mp4", "video/quicktime"}
+
+	facebookCarousel, ok := Find(ProviderFacebook, models.ContentProfileCarousel)
+	require.True(t, ok)
+	require.ElementsMatch(t, []string{"image/jpeg", "image/png", "image/webp"}, facebookCarousel.Media.AllowedMIMEs)
+
+	facebookStory, ok := Find(ProviderFacebook, models.ContentProfileStory)
+	require.True(t, ok)
+	require.Equal(t, 1, facebookStory.Media.MinCount)
+	require.Equal(t, 1, facebookStory.Media.MaxCount)
+	require.ElementsMatch(t, mixedMediaMIMEs, facebookStory.Media.AllowedMIMEs)
+
+	instagramCarousel, ok := Find(ProviderInstagram, models.ContentProfileCarousel)
+	require.True(t, ok)
+	require.Equal(t, 2, instagramCarousel.Media.MinCount)
+	require.Equal(t, 10, instagramCarousel.Media.MaxCount)
+	require.ElementsMatch(t, mixedMediaMIMEs, instagramCarousel.Media.AllowedMIMEs)
+
+	instagramStory, ok := Find(ProviderInstagram, models.ContentProfileStory)
+	require.True(t, ok)
+	require.Equal(t, 1, instagramStory.Media.MinCount)
+	require.Equal(t, 1, instagramStory.Media.MaxCount)
+	require.ElementsMatch(t, mixedMediaMIMEs, instagramStory.Media.AllowedMIMEs)
 }
 
 func TestValidateBlocksMastodonPollWithMedia(t *testing.T) {

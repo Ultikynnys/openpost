@@ -288,6 +288,38 @@ func TestTikTokPublishRequiresHTTPSVideoURL(t *testing.T) {
 	}
 }
 
+func TestTikTokPublishRejectsUnsupportedPhotoMedia(t *testing.T) {
+	adapter := NewTikTokAdapter("client-key", "client-secret", "https://app.example/callback")
+
+	t.Run("PNG", func(t *testing.T) {
+		_, err := adapter.Publish(context.Background(), "access", "open-1", &PublishRequest{
+			Profile:          "carousel",
+			PlatformMediaIDs: []string{"https://media.example/photo.png"},
+			Media:            []MediaItem{{ID: "photo-1", MimeType: "image/png"}},
+		})
+		if err == nil || !strings.Contains(err.Error(), "JPEG or WebP") {
+			t.Fatalf("expected TikTok photo MIME error, got %v", err)
+		}
+	})
+
+	t.Run("more than 35 photos", func(t *testing.T) {
+		mediaURLs := make([]string, 36)
+		media := make([]MediaItem, 36)
+		for index := range media {
+			mediaURLs[index] = "https://media.example/photo.webp"
+			media[index] = MediaItem{ID: "photo", MimeType: "image/webp"}
+		}
+		_, err := adapter.Publish(context.Background(), "access", "open-1", &PublishRequest{
+			Profile:          "carousel",
+			PlatformMediaIDs: mediaURLs,
+			Media:            media,
+		})
+		if err == nil || !strings.Contains(err.Error(), "1-35 images") {
+			t.Fatalf("expected TikTok photo count error, got %v", err)
+		}
+	})
+}
+
 func jsonResponse(req *http.Request, body string) *http.Response {
 	return jsonResponseWithStatus(req, http.StatusOK, body)
 }

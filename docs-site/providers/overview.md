@@ -13,12 +13,14 @@ These providers have adapter code in OpenPost today. The Accounts page discovers
 | Mastodon | OAuth 2.0 per instance | Dynamic registration or `MASTODON_SERVERS` JSON | Configurable | One app per instance, unless dynamic registration is enabled.  |
 | LinkedIn | OAuth 2.0              | Client ID + secret                              | Configurable | Replies may need extra approval.                               |
 | Threads  | Meta OAuth             | Client ID + secret + redirect URI               | Configurable | Public media URL required.                                     |
-| Facebook | Meta OAuth             | Provider app registry                           | Configurable | Pages only first slice; public media URL required for media.   |
+| Facebook | Meta OAuth             | Provider app registry                           | Configurable | Pages only; public HTTPS media required.                       |
 | Instagram | Meta OAuth            | Provider app registry                           | Configurable | Business accounts only; public media URL required for media.   |
 | TikTok   | OAuth 2.0              | Provider app registry                           | Configurable | Video and photo paths; provider approval and public media required. |
 | YouTube  | Google OAuth           | Provider app registry                           | Configurable | One-video upload with configurable privacy; live verification recommended. |
 
 Start with one provider, confirm the callback works, then expand.
+
+For launch or demo claims, do not treat adapter code or a configured provider app as proof that an exact account and format published successfully. Use the [Launch Verification Matrix](/providers/launch-matrix) to record implementation, runtime configuration, and live verification separately.
 
 Provider app credentials can come from legacy env vars, `OPENPOST_PROVIDER_APPS` JSON, or active encrypted `provider_apps` database rows managed through the instance-admin provider app API. The current web settings UI does not expose Provider Apps management, so self-hosted operators should normally use env vars or `OPENPOST_PROVIDER_APPS`; scripted/admin deployments can use the API.
 
@@ -39,8 +41,8 @@ This matrix reflects current OpenPost support, not the full theoretical capabili
 | Bluesky  | Yes        | Yes         | Yes                              | Yes             | Partial, one MP4 path implemented and needs real-account verification | Yes                        | No        |
 | LinkedIn | Yes        | Yes         | Partial, implemented as comments | Yes             | Partial, implementation exists and needs re-verification              | Yes                        | No        |
 | Threads  | Yes        | Yes         | Yes                              | Yes             | Partial, public-media deployment dependent                            | Yes                        | No        |
-| Facebook | Yes        | Yes         | No                               | Yes             | Partial, one public HTTPS video URL path implemented                  | Yes                        | No        |
-| Instagram | No        | Yes         | No                               | Yes             | Partial, one public HTTPS video URL path implemented as Reels         | Yes                        | No        |
+| Facebook | Yes        | Yes         | Yes, via Page comments           | Yes             | Partial, public HTTPS video and Story paths implemented               | Yes                        | No        |
+| Instagram | No        | Yes         | Yes, via comments                | Yes             | Partial, public HTTPS carousel, Story, and Reel paths implemented     | Yes                        | No        |
 | TikTok   | No         | Yes         | No                               | Yes             | Partial, public HTTPS video and photo-post paths implemented          | Yes                        | No        |
 | YouTube  | No         | No          | No                               | Yes             | Partial, one video upload path with privacy settings implemented      | Yes                        | No        |
 
@@ -51,7 +53,7 @@ This matrix reflects current OpenPost support, not the full theoretical capabili
 - **Bluesky:** Uses handle plus app password. No server-side OAuth app is required.
 - **LinkedIn:** Permissions and app review can block some publishing or reply workflows even when the integration code is present.
 - **Threads:** Media must be reachable at a public `OPENPOST_MEDIA_URL`, and Meta fetches those files server-side.
-- **Facebook:** Configure through the provider app registry with provider `facebook`. The initial adapter connects a selected Page and supports text, one image URL, or one video URL.
+- **Facebook:** Configure through the provider app registry with provider `facebook`. The adapter connects a selected Page and supports text, one image or video, multi-photo posts with 2–10 images, Stories, and Page comment replies. Media must use public HTTPS URLs.
 - **Instagram:** Configure through the provider app registry with provider `instagram`. The adapter connects a selected Instagram Business account behind a Facebook Page and implements single-image, carousel, Story, Reel, and comment-reply paths. Provider access and live verification still apply.
 - **TikTok:** Configure through the provider app registry with provider `tiktok`. The adapter implements direct and inbox video paths plus photo posts using public HTTPS media. App review and live verification still apply.
 - **YouTube:** Configure through the provider app registry with provider `youtube`. The adapter connects a selected channel and uploads one video with privacy, metadata, thumbnail, and playlist settings. Live verification is still recommended.
