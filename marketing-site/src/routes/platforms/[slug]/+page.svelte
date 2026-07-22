@@ -27,7 +27,7 @@
 				<div class="flex size-14 items-center justify-center rounded-xl border bg-card">
 					<PlatformIcon platform={platform.short} class="size-7" />
 				</div>
-				<p class="eyebrow mt-6">{platform.status} provider</p>
+				<p class="eyebrow mt-6">{platform.status} integration</p>
 				<h1 class="mt-4 text-4xl leading-tight font-semibold text-balance sm:text-6xl">
 					Schedule {platform.name} posts from OpenPost.
 				</h1>

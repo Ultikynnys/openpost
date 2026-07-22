@@ -8,8 +8,17 @@ All notable changes to this project are documented in this file.
 
 - Redesign the mobile app shell and composer with a safe-area-aware More menu, compact post controls, circular rendition targets, and always-visible touch actions for media and thread editing.
 
+### Added
+
+- Added email password recovery, authenticated password changes, account JSON exports, and permanent account deletion with billing, administration, shared-ownership, durable storage-cleanup, and re-authentication safeguards.
+- Added versioned Terms of Service and Privacy Policy acceptance for hosted registration, with public legal pages and an operator support contact.
+- Added Go and production-JavaScript vulnerability scans to CI and release preflight.
+- Added database restore-drill tooling, hosted restore evidence, versioned media snapshots, and declarative daily backup and weekly restore verification for the hosted service.
+
 ### Changed
 
+- Updated the project to Go 1.26.5 and current patched `x/image`, `x/net`, `x/text`, and `cookie` dependencies.
+- Replaced broad provider maturity labels with implemented and preview statuses that state provider approval, quota, public-media, and live-account verification constraints.
 - Added the recorded product demo to the public landing page, app profile menu, user docs, and repository overview.
 - Consolidated account selection and per-account content customization into one icon-based composer menu across every post format.
 - Simplified the calendar day drawer with shorter copy, tighter previews, and destination icons instead of platform names.
@@ -42,6 +51,8 @@ All notable changes to this project are documented in this file.
 
 ### Fixed
 
+- Made MCP tool discovery and execution agent-safe and protocol-correct with complete parameter documentation and examples, runtime input/output schema enforcement, refusal for out-of-scope searches, standard stdio framing, protocol-version forwarding, origin and request guards, and actionable scope errors.
+- Kept password-reset responses enumeration-safe, reset all sessions after recovery, preserved only the current session after a password change, excluded shared workspace content from personal exports, and transferred shared organization ownership safely during deletion.
 - Made custom composer destinations visible from the account picker, aligned selection marks with the shared checkbox style, and confirmed destructive custom-content resets and removals.
 - Simplified the composer destination menu with a quieter icon summary, compact account rows, and one contextual menu for per-account content actions.
 - Kept REST and MCP publication scheduling atomic and future-only, preserved reply/job history during reschedules, and made schedule clearing return publications and renditions to draft without erasing unrelated fields.

@@ -100,14 +100,14 @@ export const platforms = [
 		name: 'X',
 		short: 'x',
 		tag: 'Text, images, threads',
-		status: 'Core',
+		status: 'Implemented',
 		description:
 			'Write short posts, image posts, and reply-style threads for connected X accounts.',
 		limits: [
 			`${PLATFORM_LIMITS.x.charLimit} characters by default`,
 			'25,000 characters for X Premium longer posts',
 			PLATFORM_LIMITS.x.media,
-			'API/scheduling support for long posts should be verified per account'
+			'API tier, quota, video, and long-post access must be verified per account'
 		]
 	},
 	{
@@ -115,14 +115,14 @@ export const platforms = [
 		name: 'Mastodon',
 		short: 'mastodon',
 		tag: 'Fediverse scheduling',
-		status: 'Core',
+		status: 'Implemented',
 		description:
 			'Connect configured or custom public Mastodon instances and schedule posts into your workspace queue.',
 		limits: [
 			`${PLATFORM_LIMITS.mastodon.charLimit} characters by default`,
 			PLATFORM_LIMITS.mastodon.media,
 			'Reply chains',
-			'Instance-specific behavior'
+			'Instance-specific limits; video needs live-account verification'
 		]
 	},
 	{
@@ -130,14 +130,14 @@ export const platforms = [
 		name: 'Bluesky',
 		short: 'bluesky',
 		tag: 'App-password login',
-		status: 'Core',
+		status: 'Implemented',
 		description:
 			'Connect with a Bluesky handle and app password, then publish posts and reply chains.',
 		limits: [
 			`${PLATFORM_LIMITS.bluesky.charLimit} characters`,
 			PLATFORM_LIMITS.bluesky.media,
 			'AT Protocol replies',
-			'Limited MP4 video support'
+			'MP4 path implemented; live-account verification recommended'
 		]
 	},
 	{
@@ -145,14 +145,14 @@ export const platforms = [
 		name: 'LinkedIn',
 		short: 'linkedin',
 		tag: 'Professional posts',
-		status: 'Core',
+		status: 'Implemented',
 		description:
 			'Publish professional updates and account-specific variants without leaving the shared composer.',
 		limits: [
 			`${PLATFORM_LIMITS.linkedin.charLimit} characters`,
 			PLATFORM_LIMITS.linkedin.media,
 			'Thread children as comments',
-			'App review may apply'
+			'Permissions, app review, and video need live-account verification'
 		]
 	},
 	{
@@ -160,14 +160,14 @@ export const platforms = [
 		name: 'Threads',
 		short: 'threads',
 		tag: 'Public media required',
-		status: 'Core',
+		status: 'Implemented',
 		description:
 			'Publish Threads posts and reply chains, with media served through public hosted URLs.',
 		limits: [
 			`${PLATFORM_LIMITS.threads.charLimit} characters`,
 			PLATFORM_LIMITS.threads.media,
 			'Reply chains',
-			'Public media URL required'
+			'Public media URL and approved Meta app access required'
 		]
 	},
 	{
@@ -175,7 +175,7 @@ export const platforms = [
 		name: 'Facebook Pages',
 		short: 'facebook',
 		tag: 'Pages and Stories',
-		status: 'Early support',
+		status: 'Preview',
 		description:
 			'Connect Facebook Pages and schedule text, photo, multi-photo, Story, and video publications.',
 		limits: [
@@ -190,7 +190,7 @@ export const platforms = [
 		name: 'Instagram Business',
 		short: 'instagram',
 		tag: 'Media-first',
-		status: 'Early support',
+		status: 'Preview',
 		description:
 			'Schedule feed images, carousels, Stories, and Reels to Instagram Business accounts behind Facebook Pages.',
 		limits: [
@@ -206,7 +206,7 @@ export const platforms = [
 		name: 'TikTok',
 		short: 'tiktok',
 		tag: 'Video and photo posts',
-		status: 'Early support',
+		status: 'Preview',
 		description:
 			'Schedule video or photo posts through TikTok publishing flows and public media URLs.',
 		limits: [
@@ -221,7 +221,7 @@ export const platforms = [
 		name: 'YouTube',
 		short: 'youtube',
 		tag: 'Private video upload',
-		status: 'Early support',
+		status: 'Preview',
 		description:
 			'Upload one scheduled video to a connected channel. The current adapter uploads it as private by default.',
 		limits: [
@@ -519,7 +519,7 @@ export const changelogEntries = [
 		date: '2026-07',
 		title: 'Provider expansion',
 		detail:
-			'Provider docs and adapters now cover Facebook Pages, Instagram Business, TikTok, and YouTube alongside X, Mastodon, Bluesky, LinkedIn, and Threads.'
+			'Implemented adapters cover X, Mastodon, Bluesky, LinkedIn, and Threads. Facebook Pages, Instagram Business, TikTok, and YouTube are preview integrations that still depend on provider access and live-account verification.'
 	},
 	{
 		date: '2026-06',

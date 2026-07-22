@@ -93,7 +93,7 @@ OpenPost keeps the publishing workflow in one place without hiding provider diff
 - **Portable deployment:** one Go binary or container with the SvelteKit app embedded; SQLite and local media are the defaults, with PostgreSQL and S3-compatible storage available.
 - **Android:** every GitHub release includes a Capacitor APK built from the same responsive web app.
 
-OAuth tokens are encrypted at rest. OpenPost also supports revocable sessions, passkeys, TOTP two-factor authentication, and workspace roles.
+OAuth tokens are encrypted at rest. OpenPost also supports revocable sessions, passkeys, TOTP two-factor authentication, password recovery, account exports and deletion, and workspace roles.
 
 ## Platform support
 
@@ -101,11 +101,11 @@ This table describes the profiles implemented by OpenPost, not every feature off
 
 | Platform           | Implemented publishing profiles                              | Threads / replies           | Maturity and main caveat                                                         |
 | ------------------ | ------------------------------------------------------------ | --------------------------- | -------------------------------------------------------------------------------- |
-| X                  | Text, links, up to 4 images, short video                     | Reply chains                | Core; video, API quota, and account tier need live verification                  |
-| Mastodon           | Text, links, up to 4 image/video attachments                 | Reply chains                | Core; limits and OAuth setup vary by instance, and video needs live verification |
-| Bluesky            | Text, links, up to 4 images, one MP4 video                   | AT Protocol reply chains    | Core; video still needs live-account verification                                |
-| LinkedIn           | Text, links, image, document, short and long video           | Child posts become comments | Core; permissions, app review, and video need live verification                  |
-| Threads            | Text, image, video, and 2-10 item mixed carousels            | Reply chains                | Core; media must be available through a public HTTPS URL                         |
+| X                  | Text, links, up to 4 images, short video                     | Reply chains                | Implemented; video, API quota, and account tier need live verification           |
+| Mastodon           | Text, links, up to 4 image/video attachments                 | Reply chains                | Implemented; limits and OAuth vary by instance, and video needs live verification |
+| Bluesky            | Text, links, up to 4 images, one MP4 video                   | AT Protocol reply chains    | Implemented; video still needs live-account verification                         |
+| LinkedIn           | Text, links, image, document, short and long video           | Child posts become comments | Implemented; permissions, app review, and video need live verification           |
+| Threads            | Text, image, video, and 2-10 item mixed carousels            | Reply chains                | Implemented; public media and approved Meta app access are required               |
 | Facebook Pages     | Text, links, image, multi-photo, Story, short and long video | Comment operations          | Early; Page permissions, app review, and public media URLs apply                 |
 | Instagram Business | Feed image, carousel, Story, and Reel                        | Comment operations          | Early; requires a Page-backed professional account and public media URLs         |
 | TikTok             | Video and 1-35 image photo posts                             | No                          | Early; Content Posting API review or audit is required                           |

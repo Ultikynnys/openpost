@@ -103,6 +103,36 @@ custom domains, lifecycle rules, or CORS outside the object data itself.
 6. Start OpenPost.
 7. Confirm login, media access, and scheduled-post visibility.
 
+## Automated database restore drill
+
+For a Postgres deployment, `scripts/restore-drill.sh` restores a compressed SQL backup into a
+uniquely named temporary database, checks the schema and core row counts, writes non-sensitive JSON
+evidence when requested, and drops the temporary database on exit. It refuses to overwrite any
+database whose name does not match the dedicated restore-drill pattern.
+
+Run it on the database host with an explicit backup:
+
+```bash
+sudo env \
+  OPENPOST_RESTORE_BACKUP=/var/backup/openpost/openpost_20260722_000000.sql.gz \
+  OPENPOST_RESTORE_EVIDENCE=/var/backup/openpost/restore-drill-latest.json \
+  PODMAN_BIN=/run/current-system/sw/bin/podman \
+  ./scripts/restore-drill.sh
+```
+
+Set `OPENPOST_MEDIA_SNAPSHOT` to the local media-backup directory to include its file count in the
+same evidence. A database-only pass is not proof that uploaded media can be recovered; the output
+states `media_snapshot=not_checked` when no media snapshot is supplied.
+
+### Hosted restore evidence
+
+On 22 July 2026, the latest hosted Postgres backup was restored into an isolated temporary
+database. Compressed-backup integrity, public schema restoration, and core account, workspace, and
+post queries passed. The hosted R2 bucket was copied to a separate local snapshot and `rclone check`
+reported no differences before the same drill verified that snapshot. The temporary database was
+dropped after validation. Non-sensitive machine-readable evidence is stored on the host at
+`/var/backup/openpost/restore-drill-latest.json`.
+
 ### Example restore
 
 ```bash

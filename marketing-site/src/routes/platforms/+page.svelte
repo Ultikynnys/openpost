@@ -17,7 +17,7 @@
 <PageHero
 	eyebrow="Platforms"
 	title="Platform support, described without pretending every network is the same."
-	description="OpenPost uses one composer and per-account variants, but provider support still follows each network's real API behavior."
+	description="OpenPost uses one composer and per-account variants. Implemented means the code path exists; provider approval, account access, quotas, and live verification can still affect publishing."
 	secondaryHref="/compare"
 	secondaryLabel="Compare tools"
 />
