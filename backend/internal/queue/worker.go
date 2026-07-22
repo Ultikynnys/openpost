@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -21,6 +22,7 @@ const (
 	jobTypePublishPublication = "publish_publication"
 	jobStatusPending          = "pending"
 	jobTypeMediaCleanup       = "media_cleanup"
+	jobTypeStorageDelete      = "storage_delete"
 	jobTypeRefreshToken       = "refresh_token"
 	jobStatusProcessing       = "processing"
 	jobStatusFailed           = "failed"
@@ -213,9 +215,36 @@ func (w *BackgroundWorker) executeJob(ctx context.Context, job *models.Job) erro
 		return w.handleRefreshTokenJob(ctx, job.Payload)
 	case jobTypeMediaCleanup:
 		return w.handleMediaCleanup(ctx, job.Payload)
+	case jobTypeStorageDelete:
+		return w.handleStorageDelete(job.Payload)
 	default:
 		return fmt.Errorf("unsupported job type %q", job.Type)
 	}
+}
+
+func (w *BackgroundWorker) handleStorageDelete(payload string) error {
+	if w.storage == nil {
+		return fmt.Errorf("storage is not configured")
+	}
+	var cleanup struct {
+		Keys []string `json:"keys"`
+	}
+	if err := json.Unmarshal([]byte(payload), &cleanup); err != nil {
+		return fmt.Errorf("decode storage deletion payload: %w", err)
+	}
+	if len(cleanup.Keys) == 0 || len(cleanup.Keys) > 10_000 {
+		return fmt.Errorf("storage deletion payload must contain 1 to 10000 keys")
+	}
+	for _, key := range cleanup.Keys {
+		key = filepath.Clean(key)
+		if key == "." || filepath.IsAbs(key) || key == ".." || strings.HasPrefix(key, ".."+string(filepath.Separator)) {
+			return fmt.Errorf("storage deletion payload contains an invalid key")
+		}
+		if err := w.storage.Delete(key); err != nil {
+			return fmt.Errorf("delete storage object %q: %w", key, err)
+		}
+	}
+	return nil
 }
 
 func (w *BackgroundWorker) handleRefreshTokenJob(ctx context.Context, payload string) error {

@@ -18,6 +18,12 @@ interface AuthActionResult {
 	mfaMethods?: string[];
 }
 
+interface RegisterInput {
+	email: string;
+	password: string;
+	acceptedLegal: boolean;
+}
+
 function createAuthStore() {
 	const { subscribe, set, update } = writable<AuthState>({
 		user: null,
@@ -64,10 +70,10 @@ function createAuthStore() {
 				return { success: false, error: (e as Error).message };
 			}
 		},
-		async register(email: string, password: string) {
+		async register({ email, password, acceptedLegal }: RegisterInput) {
 			try {
 				const { data, error } = await client.POST('/auth/register', {
-					body: { email, password }
+					body: { email, password, accepted_legal: acceptedLegal }
 				});
 				if (error || !data) throw new Error(error?.detail || 'Registration failed');
 				setToken(IS_CAPACITOR ? data.token : null);
@@ -124,6 +130,9 @@ function createAuthStore() {
 			} catch {
 				// Local state must still be cleared if the server is unavailable.
 			}
+			this.clearLocal();
+		},
+		clearLocal() {
 			setToken(null);
 			set({ user: null, isLoading: false, isAuthenticated: false });
 		},

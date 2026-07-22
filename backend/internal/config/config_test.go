@@ -31,6 +31,19 @@ var configTestEnvKeys = []string{
 	"OPENPOST_ENCRYPTION_KEY",
 	"ENCRYPTION_KEY",
 	"OPENPOST_DISABLE_REGISTRATIONS",
+	"OPENPOST_LEGAL_ACCEPTANCE_REQUIRED",
+	"OPENPOST_TERMS_URL",
+	"OPENPOST_PRIVACY_URL",
+	"OPENPOST_TERMS_VERSION",
+	"OPENPOST_PRIVACY_VERSION",
+	"OPENPOST_SUPPORT_EMAIL",
+	"OPENPOST_SMTP_HOST",
+	"OPENPOST_SMTP_PORT",
+	"OPENPOST_SMTP_USERNAME",
+	"OPENPOST_SMTP_PASSWORD",
+	"OPENPOST_SMTP_FROM",
+	"OPENPOST_SMTP_TLS_MODE",
+	"OPENPOST_SMTP_SERVER_NAME",
 	"OPENPOST_EXTRA_CORS_ORIGINS",
 	"OPENPOST_CORS_EXTRA_ORIGINS",
 	"X_CLIENT_ID",
@@ -116,6 +129,28 @@ func TestLoadCloudPostgresAndS3Primitives(t *testing.T) {
 	require.Equal(t, "secret-key", cfg.S3SecretAccessKey)
 	require.Equal(t, "https://media.openpost.social", cfg.S3PublicBaseURL)
 	require.True(t, cfg.S3ForcePathStyle)
+	require.True(t, cfg.LegalAcceptanceRequired)
+	require.Equal(t, "https://openpost.social/terms", cfg.TermsURL)
+	require.Equal(t, "2026-07-22", cfg.TermsVersion)
+}
+
+func TestLoadPasswordRecoveryConfiguration(t *testing.T) {
+	t.Setenv("OPENPOST_APP_URL", "https://app.openpost.social")
+	t.Setenv("OPENPOST_SMTP_HOST", "smtp.example.com")
+	t.Setenv("OPENPOST_SMTP_PORT", "465")
+	t.Setenv("OPENPOST_SMTP_USERNAME", "openpost")
+	t.Setenv("OPENPOST_SMTP_PASSWORD_FILE", writeEnvFile(t, "smtp-password", "smtp-secret\n"))
+	t.Setenv("OPENPOST_SMTP_FROM", "OpenPost <support@example.com>")
+	t.Setenv("OPENPOST_SMTP_TLS_MODE", "tls")
+
+	cfg := Load()
+
+	require.Equal(t, "smtp.example.com", cfg.SMTPHost)
+	require.Equal(t, 465, cfg.SMTPPort)
+	require.Equal(t, "openpost", cfg.SMTPUsername)
+	require.Equal(t, "smtp-secret", cfg.SMTPPassword)
+	require.Equal(t, "OpenPost <support@example.com>", cfg.SMTPFrom)
+	require.Equal(t, "tls", cfg.SMTPTLSMode)
 }
 
 func TestLoadSupportsFileBackedEnvValues(t *testing.T) {
@@ -141,6 +176,8 @@ func TestLoadSupportsFileBackedEnvValues(t *testing.T) {
 	t.Setenv("OPENPOST_POLAR_PRO_PRODUCT_ID_FILE", writeEnvFile(t, "polar-pro-product", "pro-product\n"))
 	t.Setenv("OPENPOST_POLAR_TEAM_PRODUCT_ID_FILE", writeEnvFile(t, "polar-team-product", "team-product\n"))
 	t.Setenv("OPENPOST_POLAR_AGENCY_PRODUCT_ID_FILE", writeEnvFile(t, "polar-agency-product", "agency-product\n"))
+	t.Setenv("OPENPOST_SMTP_HOST_FILE", writeEnvFile(t, "smtp-host", "smtp.example.com\n"))
+	t.Setenv("OPENPOST_SMTP_FROM_FILE", writeEnvFile(t, "smtp-from", "OpenPost <openpost@example.com>\n"))
 
 	cfg := Load()
 
@@ -327,27 +364,57 @@ func TestValidateRuntimeRejectsCloudWildcardCORSOrigins(t *testing.T) {
 	require.ErrorContains(t, err, "OPENPOST_EXTRA_CORS_ORIGINS without wildcard origins")
 }
 
+func TestValidateRuntimeRejectsCloudWithoutAccountRecoveryAndLegalConfig(t *testing.T) {
+	cfg := validCloudRuntimeConfig()
+	cfg.LegalAcceptanceRequired = false
+	cfg.TermsURL = ""
+	cfg.PrivacyURL = ""
+	cfg.TermsVersion = ""
+	cfg.PrivacyVersion = ""
+	cfg.SupportEmail = ""
+	cfg.SMTPHost = ""
+	cfg.SMTPFrom = ""
+
+	err := cfg.ValidateRuntime()
+
+	require.Error(t, err)
+	require.ErrorContains(t, err, "OPENPOST_LEGAL_ACCEPTANCE_REQUIRED=true")
+	require.ErrorContains(t, err, "OPENPOST_TERMS_URL")
+	require.ErrorContains(t, err, "OPENPOST_PRIVACY_URL")
+	require.ErrorContains(t, err, "OPENPOST_SMTP_HOST")
+	require.ErrorContains(t, err, "OPENPOST_SMTP_FROM")
+}
+
 func validCloudRuntimeConfig() *Config {
 	return &Config{
-		Edition:               EditionCloud,
-		DatabaseDriver:        DatabaseDriverPostgres,
-		DatabaseURL:           "postgres://openpost:secret@db.internal:5432/openpost?sslmode=require",
-		StorageDriver:         StorageDriverS3,
-		S3Region:              "auto",
-		S3Bucket:              "openpost-media",
-		S3AccessKeyID:         "access-key",
-		S3SecretAccessKey:     "secret-key",
-		S3PublicBaseURL:       "https://media.openpost.social",
-		S3ForcePathStyle:      true,
-		PolarAccessToken:      "polar-token",
-		PolarWebhookSecret:    "whsec_secret",
-		PolarCheckoutURL:      "https://app.openpost.social/settings/billing?checkout_id={CHECKOUT_ID}",
-		PolarReturnURL:        "https://app.openpost.social/settings/billing",
-		PolarStarterProductID: "starter-product",
-		PolarCreatorProductID: "creator-product",
-		PolarProProductID:     "pro-product",
-		PolarTeamProductID:    "team-product",
-		PolarAgencyProductID:  "agency-product",
+		Edition:                 EditionCloud,
+		DatabaseDriver:          DatabaseDriverPostgres,
+		DatabaseURL:             "postgres://openpost:secret@db.internal:5432/openpost?sslmode=require",
+		StorageDriver:           StorageDriverS3,
+		S3Region:                "auto",
+		S3Bucket:                "openpost-media",
+		S3AccessKeyID:           "access-key",
+		S3SecretAccessKey:       "secret-key",
+		S3PublicBaseURL:         "https://media.openpost.social",
+		S3ForcePathStyle:        true,
+		PolarAccessToken:        "polar-token",
+		PolarWebhookSecret:      "whsec_secret",
+		PolarCheckoutURL:        "https://app.openpost.social/settings/billing?checkout_id={CHECKOUT_ID}",
+		PolarReturnURL:          "https://app.openpost.social/settings/billing",
+		PolarStarterProductID:   "starter-product",
+		PolarCreatorProductID:   "creator-product",
+		PolarProProductID:       "pro-product",
+		PolarTeamProductID:      "team-product",
+		PolarAgencyProductID:    "agency-product",
+		LegalAcceptanceRequired: true,
+		TermsURL:                "https://openpost.social/terms",
+		PrivacyURL:              "https://openpost.social/privacy",
+		TermsVersion:            "2026-07-22",
+		PrivacyVersion:          "2026-07-22",
+		SupportEmail:            "openpost@rgo.pt",
+		SMTPHost:                "smtp.example.com",
+		SMTPPort:                587,
+		SMTPFrom:                "OpenPost <openpost@example.com>",
 	}
 }
 

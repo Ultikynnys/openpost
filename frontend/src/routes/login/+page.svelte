@@ -13,6 +13,8 @@
 	import KeyRoundIcon from 'lucide-svelte/icons/key-round';
 	import { m } from '$lib/paraglide/messages';
 	import { safeSameOriginRedirect } from '$lib/redirects';
+	import { onMount } from 'svelte';
+	import { client, type AuthConfiguration } from '$lib/api/client';
 
 	let email = $state('');
 	let password = $state('');
@@ -21,8 +23,14 @@
 	let isLoading = $state(false);
 	let mfaToken = $state('');
 	let mfaMethods = $state<string[]>([]);
+	let authConfiguration = $state<AuthConfiguration | null>(null);
 
 	const needsMfa = $derived(mfaToken.length > 0);
+
+	onMount(async () => {
+		const { data } = await client.GET('/auth/config');
+		authConfiguration = data ?? null;
+	});
 
 	function loginTarget() {
 		return safeSameOriginRedirect($page.url);
@@ -158,6 +166,7 @@
 					id="email"
 					bind:value={email}
 					required
+					autocomplete="email"
 					placeholder={m.auth_email_placeholder()}
 				/>
 			</div>
@@ -169,9 +178,20 @@
 					id="password"
 					bind:value={password}
 					required
+					autocomplete="current-password"
 					placeholder="••••••••"
 				/>
 			</div>
+
+			{#if authConfiguration?.password_reset_enabled}
+				<div class="-mt-2 text-right">
+					<a
+						href={resolve('/forgot-password')}
+						class="inline-flex min-h-11 items-center text-sm font-medium text-primary hover:underline"
+						>{m.auth_login_forgot_password()}</a
+					>
+				</div>
+			{/if}
 
 			<Button type="submit" disabled={isLoading} class="w-full gap-2">
 				{#if isLoading}

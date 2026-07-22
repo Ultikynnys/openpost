@@ -30,6 +30,9 @@
 	const publicRoutes = [
 		'/login',
 		'/register',
+		'/forgot-password',
+		'/reset-password',
+		'/account-deleted',
 		'/connect',
 		'/demo',
 		'/demo/paraglide',
@@ -42,6 +45,8 @@
 
 	const standaloneRoutes = [
 		'/onboarding',
+		'/legal-acceptance',
+		'/account-deleted',
 		'/connect',
 		'/invite',
 		'/cli/authorize',
@@ -88,6 +93,14 @@
 		}
 
 		if (authState.isAuthenticated) {
+			if (authState.user?.legal_acceptance_required) {
+				if (currentPath !== '/legal-acceptance') goto(resolve('/legal-acceptance'));
+				return;
+			}
+			if (currentPath === '/legal-acceptance') {
+				goto(resolve('/'));
+				return;
+			}
 			if (!onboardingChecked) return;
 
 			if (needsOnboarding) {
@@ -123,7 +136,11 @@
 	}
 
 	$effect(() => {
-		if (authState.isLoading || !authState.isAuthenticated) {
+		if (
+			authState.isLoading ||
+			!authState.isAuthenticated ||
+			authState.user?.legal_acceptance_required
+		) {
 			onboardingChecked = false;
 			onboardingCheckedPath = '';
 			onboardingCheckInFlightForPath = '';
@@ -147,7 +164,7 @@
 </svelte:head>
 
 <ModeWatcher />
-{#if instance.isLoading || authState.isLoading || (authState.isAuthenticated && !onboardingChecked)}
+{#if instance.isLoading || authState.isLoading || (authState.isAuthenticated && !authState.user?.legal_acceptance_required && !onboardingChecked)}
 	<AppLoading label={m.common_loading()} />
 {:else if !authState.isAuthenticated}
 	<div class="fixed top-4 right-4 z-20">

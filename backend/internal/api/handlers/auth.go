@@ -19,6 +19,7 @@ import (
 	"github.com/openpost/backend/internal/services/auth"
 	"github.com/openpost/backend/internal/services/crypto"
 	"github.com/openpost/backend/internal/services/mfa"
+	"github.com/openpost/backend/internal/services/passwordmail"
 	"github.com/openpost/backend/internal/services/ratelimit"
 	"github.com/openpost/backend/internal/services/sessions"
 	"github.com/uptrace/bun"
@@ -45,6 +46,9 @@ type AuthHandler struct {
 	mfa                   *mfa.Service
 	registrationsDisabled bool
 	limiter               *ratelimit.Limiter
+	passwordResetSender   passwordmail.Sender
+	publicURL             string
+	accountPolicy         AccountPolicy
 }
 
 func NewAuthHandler(
@@ -73,6 +77,15 @@ func (h *AuthHandler) SetSessionService(sessionService *sessions.Service) {
 	h.sessions = sessionService
 }
 
+func (h *AuthHandler) SetPasswordResetSender(sender passwordmail.Sender, publicURL string) {
+	h.passwordResetSender = sender
+	h.publicURL = strings.TrimRight(strings.TrimSpace(publicURL), "/")
+}
+
+func (h *AuthHandler) SetAccountPolicy(policy AccountPolicy) {
+	h.accountPolicy = policy.normalized()
+}
+
 var (
 	errEmailAlreadyRegistered = errors.New("email already registered")
 	errRegistrationsDisabled  = errors.New("registrations are disabled for this instance")
@@ -80,8 +93,9 @@ var (
 
 type RegisterInput struct {
 	Body struct {
-		Email    string `json:"email" format:"email" doc:"User email address"`
-		Password string `json:"password" minLength:"8" doc:"User password (min 8 characters)"`
+		Email         string `json:"email" format:"email" doc:"User email address"`
+		Password      string `json:"password" minLength:"12" maxLength:"1024" doc:"User password (min 12 characters)"`
+		AcceptedLegal *bool  `json:"accepted_legal,omitempty" doc:"Whether the user accepted the current terms and privacy policy"`
 	}
 }
 
@@ -154,12 +168,16 @@ type RemovePasskeyInput struct {
 }
 
 type UserProfile struct {
-	ID          string    `json:"id" doc:"User ID"`
-	Email       string    `json:"email" doc:"User email address"`
-	DisplayName string    `json:"display_name" doc:"User display name"`
-	AvatarURL   string    `json:"avatar_url" doc:"Profile avatar URL"`
-	IsAdmin     bool      `json:"is_admin" doc:"Whether this user can manage instance-level settings"`
-	CreatedAt   time.Time `json:"created_at" doc:"Account creation time"`
+	ID                      string    `json:"id" doc:"User ID"`
+	Email                   string    `json:"email" doc:"User email address"`
+	DisplayName             string    `json:"display_name" doc:"User display name"`
+	AvatarURL               string    `json:"avatar_url" doc:"Profile avatar URL"`
+	IsAdmin                 bool      `json:"is_admin" doc:"Whether this user can manage instance-level settings"`
+	TermsVersion            string    `json:"terms_version,omitempty" doc:"Terms version accepted by the user"`
+	PrivacyVersion          string    `json:"privacy_version,omitempty" doc:"Privacy version acknowledged by the user"`
+	LegalAcceptedAt         time.Time `json:"legal_accepted_at,omitempty" doc:"When the current account policy was accepted"`
+	LegalAcceptanceRequired bool      `json:"legal_acceptance_required" doc:"Whether the current hosted policy still needs acceptance"`
+	CreatedAt               time.Time `json:"created_at" doc:"Account creation time"`
 }
 
 type UpdateProfileInput struct {
@@ -270,8 +288,15 @@ func (h *AuthHandler) Register(api huma.API) {
 		Summary:     "Register a new user",
 		Tags:        []string{tagAuth},
 		Middlewares: huma.Middlewares{middleware.RequestMetadataMiddleware()},
-		Errors:      []int{400, 409},
+		Errors:      []int{400, 403, 409},
 	}, func(ctx context.Context, input *RegisterInput) (*AuthOutput, error) {
+		if err := validateNewPassword(input.Body.Password); err != nil {
+			return nil, huma.Error400BadRequest(err.Error())
+		}
+		acceptedLegal := input.Body.AcceptedLegal != nil && *input.Body.AcceptedLegal
+		if h.accountPolicy.Required && !acceptedLegal {
+			return nil, huma.Error400BadRequest("accept the Terms of Service and Privacy Policy to continue")
+		}
 		if !h.allowAuthAttempt(clientIP(ctx), "register:ip", 10, time.Hour) {
 			return nil, huma.Error429TooManyRequests("too many registration attempts")
 		}
@@ -279,7 +304,7 @@ func (h *AuthHandler) Register(api huma.API) {
 			return nil, huma.Error429TooManyRequests("too many registration attempts")
 		}
 
-		user, err := h.registerUser(ctx, input.Body.Email, input.Body.Password)
+		user, err := h.registerUserWithPolicy(ctx, input.Body.Email, input.Body.Password, acceptedLegal)
 		if errors.Is(err, errEmailAlreadyRegistered) {
 			return nil, huma.Error409Conflict("email already registered")
 		}
@@ -294,7 +319,7 @@ func (h *AuthHandler) Register(api huma.API) {
 	})
 }
 
-func (h *AuthHandler) registerUser(ctx context.Context, email, password string) (*models.User, error) {
+func (h *AuthHandler) registerUserWithPolicy(ctx context.Context, email, password string, acceptedLegal bool) (*models.User, error) {
 	normalizedEmail := strings.TrimSpace(strings.ToLower(email))
 	passwordHash, err := h.auth.HashPassword(password)
 	if err != nil {
@@ -306,6 +331,11 @@ func (h *AuthHandler) registerUser(ctx context.Context, email, password string) 
 		Email:        normalizedEmail,
 		PasswordHash: passwordHash,
 		CreatedAt:    time.Now().UTC(),
+	}
+	if h.accountPolicy.Required && acceptedLegal {
+		user.TermsVersion = h.accountPolicy.TermsVersion
+		user.PrivacyVersion = h.accountPolicy.PrivacyVersion
+		user.LegalAcceptedAt = user.CreatedAt
 	}
 
 	err = h.db.RunInTx(ctx, &sql.TxOptions{}, func(txCtx context.Context, tx bun.Tx) error {
@@ -611,7 +641,7 @@ func (h *AuthHandler) Me(api huma.API) {
 			return nil, huma.Error404NotFound("user not found")
 		}
 
-		return &MeOutput{Body: toUserProfile(user)}, nil
+		return &MeOutput{Body: h.toUserProfile(user)}, nil
 	})
 }
 
@@ -655,7 +685,7 @@ func (h *AuthHandler) UpdateProfile(api huma.API) {
 		if err != nil {
 			return nil, huma.Error404NotFound("user not found")
 		}
-		return &MeOutput{Body: toUserProfile(user)}, nil
+		return &MeOutput{Body: h.toUserProfile(user)}, nil
 	})
 }
 
@@ -685,7 +715,7 @@ func (h *AuthHandler) SecurityStatus(api huma.API) {
 		}
 
 		resp := &SecurityStatusOutput{}
-		resp.Body.User = toUserProfile(user)
+		resp.Body.User = h.toUserProfile(user)
 		resp.Body.TOTPEnabled = len(user.TOTPSecretEnc) > 0
 		resp.Body.Passkeys = toPasskeySummaries(passkeys)
 		resp.Body.Methods = methods
@@ -1105,7 +1135,7 @@ func (h *AuthHandler) issueAuthResponse(ctx context.Context, user *models.User) 
 
 	resp := &AuthOutput{}
 	resp.Body.Token = token
-	resp.Body.User = toUserProfile(user)
+	resp.Body.User = h.toUserProfile(user)
 	resp.SetCookie = sessionCookie(token, expiresAt, middleware.IsSecureRequest(ctx)).String()
 	return resp, nil
 }
@@ -1237,21 +1267,28 @@ func (h *AuthHandler) securityStatusResponse(ctx context.Context, userID string)
 	}
 
 	resp := &SecurityStatusOutput{}
-	resp.Body.User = toUserProfile(user)
+	resp.Body.User = h.toUserProfile(user)
 	resp.Body.TOTPEnabled = len(user.TOTPSecretEnc) > 0
 	resp.Body.Passkeys = toPasskeySummaries(passkeys)
 	resp.Body.Methods = methods
 	return resp, nil
 }
 
-func toUserProfile(user *models.User) *UserProfile {
+func (h *AuthHandler) toUserProfile(user *models.User) *UserProfile {
 	return &UserProfile{
-		ID:          user.ID,
-		Email:       user.Email,
-		DisplayName: user.DisplayName,
-		AvatarURL:   user.AvatarURL,
-		IsAdmin:     user.IsAdmin,
-		CreatedAt:   user.CreatedAt,
+		ID:              user.ID,
+		Email:           user.Email,
+		DisplayName:     user.DisplayName,
+		AvatarURL:       user.AvatarURL,
+		IsAdmin:         user.IsAdmin,
+		TermsVersion:    user.TermsVersion,
+		PrivacyVersion:  user.PrivacyVersion,
+		LegalAcceptedAt: user.LegalAcceptedAt,
+		LegalAcceptanceRequired: h.accountPolicy.Required &&
+			(user.LegalAcceptedAt.IsZero() ||
+				user.TermsVersion != h.accountPolicy.TermsVersion ||
+				user.PrivacyVersion != h.accountPolicy.PrivacyVersion),
+		CreatedAt: user.CreatedAt,
 	}
 }
 

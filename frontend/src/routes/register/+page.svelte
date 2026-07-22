@@ -4,6 +4,7 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { Button } from '$lib/components/ui/button';
+	import { Checkbox } from '$lib/components/ui/checkbox';
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
 	import InlineNotice from '$lib/components/inline-notice.svelte';
@@ -12,6 +13,8 @@
 	import CheckCircleIcon from 'lucide-svelte/icons/check-circle-2';
 	import { m } from '$lib/paraglide/messages';
 	import { onboardingPathForPlan } from '$lib/billing';
+	import { onMount } from 'svelte';
+	import { client, type AuthConfiguration } from '$lib/api/client';
 
 	let email = $state('');
 	let password = $state('');
@@ -19,6 +22,26 @@
 	let error = $state('');
 	let isLoading = $state(false);
 	let registrationSuccess = $state(false);
+	let acceptedLegal = $state(false);
+	let authConfiguration = $state<AuthConfiguration | null>(null);
+	let configurationLoading = $state(true);
+
+	async function loadConfiguration() {
+		configurationLoading = true;
+		error = '';
+		const { data, error: responseError } = await client.GET('/auth/config');
+		if (responseError || !data) {
+			error = responseError?.detail ?? m.auth_config_load_failed();
+		} else {
+			authConfiguration = data;
+			if (!data.registration_enabled) error = m.auth_registration_disabled();
+		}
+		configurationLoading = false;
+	}
+
+	onMount(() => {
+		void loadConfiguration();
+	});
 
 	async function handleSubmit(e: Event) {
 		e.preventDefault();
@@ -29,14 +52,19 @@
 			return;
 		}
 
-		if (password.length < 8) {
+		if (password.length < 12) {
 			error = m.auth_register_password_short();
+			return;
+		}
+
+		if (authConfiguration?.legal_acceptance_required && !acceptedLegal) {
+			error = m.auth_register_legal_required();
 			return;
 		}
 
 		isLoading = true;
 
-		const result = await auth.register(email, password);
+		const result = await auth.register({ email, password, acceptedLegal });
 
 		if (result.success) {
 			registrationSuccess = true;
@@ -79,6 +107,7 @@
 					id="email"
 					bind:value={email}
 					required
+					autocomplete="email"
 					placeholder={m.auth_email_placeholder()}
 				/>
 			</div>
@@ -90,6 +119,8 @@
 					id="password"
 					bind:value={password}
 					required
+					minlength={12}
+					autocomplete="new-password"
 					placeholder={m.auth_password_min_placeholder()}
 				/>
 			</div>
@@ -101,11 +132,44 @@
 					id="confirmPassword"
 					bind:value={confirmPassword}
 					required
+					minlength={12}
+					autocomplete="new-password"
 					placeholder={m.auth_password_confirm_placeholder()}
 				/>
 			</div>
 
-			<Button type="submit" disabled={isLoading} class="w-full gap-2">
+			{#if authConfiguration?.legal_acceptance_required}
+				<div class="flex items-start gap-3 rounded-md border p-3">
+					<Checkbox id="legal-acceptance" bind:checked={acceptedLegal} required />
+					<Label for="legal-acceptance" class="text-sm leading-5 font-normal">
+						{m.auth_register_legal_prefix()}
+						<a
+							href={authConfiguration.terms_url}
+							target="_blank"
+							rel="noreferrer"
+							class="font-medium text-primary underline-offset-4 hover:underline"
+							>{m.auth_register_terms()}</a
+						>
+						{m.auth_register_legal_join()}
+						<a
+							href={authConfiguration.privacy_url}
+							target="_blank"
+							rel="noreferrer"
+							class="font-medium text-primary underline-offset-4 hover:underline"
+							>{m.auth_register_privacy()}</a
+						>.
+					</Label>
+				</div>
+			{/if}
+
+			<Button
+				type="submit"
+				disabled={isLoading ||
+					configurationLoading ||
+					!authConfiguration?.registration_enabled ||
+					(Boolean(authConfiguration?.legal_acceptance_required) && !acceptedLegal)}
+				class="w-full gap-2"
+			>
 				{#if isLoading}
 					<LoaderIcon class="h-4 w-4 animate-spin" />
 					{m.auth_register_loading()}

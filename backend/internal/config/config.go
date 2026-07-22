@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/url"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -20,18 +21,32 @@ type MastodonServerConfig struct {
 }
 
 type Config struct {
-	Edition              string
-	Port                 string
-	DatabaseDriver       string
-	DatabasePath         string
-	DatabaseURL          string
-	JWTSecret            string
-	EncryptionKey        string
-	DisableRegistrations bool
-	FrontendURL          string
-	PublicURL            string
-	CORSOrigins          []string
-	WebAuthnRPID         string
+	Edition                 string
+	Port                    string
+	DatabaseDriver          string
+	DatabasePath            string
+	DatabaseURL             string
+	JWTSecret               string
+	EncryptionKey           string
+	DisableRegistrations    bool
+	FrontendURL             string
+	PublicURL               string
+	CORSOrigins             []string
+	WebAuthnRPID            string
+	LegalAcceptanceRequired bool
+	TermsURL                string
+	PrivacyURL              string
+	TermsVersion            string
+	PrivacyVersion          string
+	SupportEmail            string
+
+	SMTPHost       string
+	SMTPPort       int
+	SMTPUsername   string
+	SMTPPassword   string
+	SMTPFrom       string
+	SMTPTLSMode    string
+	SMTPServerName string
 
 	TwitterClientID     string
 	TwitterClientSecret string
@@ -96,18 +111,44 @@ func Load() *Config {
 	// (Vite's dev port) regardless of where the binary was actually
 	// deployed.
 	frontendURL := strings.TrimRight(getEnvWithFallbacks("OPENPOST_APP_URL", "http://localhost:8080", "OPENPOST_FRONTEND_URL"), "/")
+	edition := getEnvEnum("OPENPOST_EDITION", EditionSelfHost, EditionSelfHost, EditionCloud)
+	legalRequired := edition == EditionCloud
+	defaultTermsURL := ""
+	defaultPrivacyURL := ""
+	defaultPolicyVersion := ""
+	defaultSupportEmail := ""
+	if legalRequired {
+		defaultTermsURL = "https://openpost.social/terms"
+		defaultPrivacyURL = "https://openpost.social/privacy"
+		defaultPolicyVersion = "2026-07-22"
+		defaultSupportEmail = "openpost@rgo.pt"
+	}
 
 	cfg := &Config{
-		Edition:              getEnvEnum("OPENPOST_EDITION", EditionSelfHost, EditionSelfHost, EditionCloud),
-		Port:                 getEnvWithFallbacks("OPENPOST_PORT", "8080"),
-		DatabaseDriver:       getEnvEnum("OPENPOST_DATABASE_DRIVER", DatabaseDriverSQLite, DatabaseDriverSQLite, DatabaseDriverPostgres),
-		DatabasePath:         getEnvWithFallbacks("OPENPOST_DATABASE_PATH", "file:openpost.db?cache=shared&mode=rwc", "OPENPOST_DB_PATH"),
-		DatabaseURL:          getEnvWithFallbacks("OPENPOST_DATABASE_URL", "", "DATABASE_URL"),
-		JWTSecret:            getEnvWithFallbacks("OPENPOST_JWT_SECRET", "", "JWT_SECRET"),
-		EncryptionKey:        getEnvWithFallbacks("OPENPOST_ENCRYPTION_KEY", "", "ENCRYPTION_KEY"),
-		DisableRegistrations: getEnvBoolWithAliases(false, "OPENPOST_DISABLE_REGISTRATIONS"),
-		FrontendURL:          frontendURL,
-		PublicURL:            getEnvWithFallbacks("OPENPOST_PUBLIC_URL", "", "OPENPOST_APP_URL", "OPENPOST_FRONTEND_URL"),
+		Edition:                 edition,
+		Port:                    getEnvWithFallbacks("OPENPOST_PORT", "8080"),
+		DatabaseDriver:          getEnvEnum("OPENPOST_DATABASE_DRIVER", DatabaseDriverSQLite, DatabaseDriverSQLite, DatabaseDriverPostgres),
+		DatabasePath:            getEnvWithFallbacks("OPENPOST_DATABASE_PATH", "file:openpost.db?cache=shared&mode=rwc", "OPENPOST_DB_PATH"),
+		DatabaseURL:             getEnvWithFallbacks("OPENPOST_DATABASE_URL", "", "DATABASE_URL"),
+		JWTSecret:               getEnvWithFallbacks("OPENPOST_JWT_SECRET", "", "JWT_SECRET"),
+		EncryptionKey:           getEnvWithFallbacks("OPENPOST_ENCRYPTION_KEY", "", "ENCRYPTION_KEY"),
+		DisableRegistrations:    getEnvBoolWithAliases(false, "OPENPOST_DISABLE_REGISTRATIONS"),
+		FrontendURL:             frontendURL,
+		PublicURL:               getEnvWithFallbacks("OPENPOST_PUBLIC_URL", "", "OPENPOST_APP_URL", "OPENPOST_FRONTEND_URL"),
+		LegalAcceptanceRequired: getEnvBoolWithAliases(legalRequired, "OPENPOST_LEGAL_ACCEPTANCE_REQUIRED"),
+		TermsURL:                strings.TrimRight(getEnvDefault("OPENPOST_TERMS_URL", defaultTermsURL), "/"),
+		PrivacyURL:              strings.TrimRight(getEnvDefault("OPENPOST_PRIVACY_URL", defaultPrivacyURL), "/"),
+		TermsVersion:            getEnvDefault("OPENPOST_TERMS_VERSION", defaultPolicyVersion),
+		PrivacyVersion:          getEnvDefault("OPENPOST_PRIVACY_VERSION", defaultPolicyVersion),
+		SupportEmail:            getEnvDefault("OPENPOST_SUPPORT_EMAIL", defaultSupportEmail),
+
+		SMTPHost:       getEnvDefault("OPENPOST_SMTP_HOST", ""),
+		SMTPPort:       getEnvInt("OPENPOST_SMTP_PORT", 587),
+		SMTPUsername:   getEnvDefault("OPENPOST_SMTP_USERNAME", ""),
+		SMTPPassword:   getEnvDefault("OPENPOST_SMTP_PASSWORD", ""),
+		SMTPFrom:       getEnvDefault("OPENPOST_SMTP_FROM", ""),
+		SMTPTLSMode:    getEnvEnum("OPENPOST_SMTP_TLS_MODE", "starttls", "starttls", "tls", "none"),
+		SMTPServerName: getEnvDefault("OPENPOST_SMTP_SERVER_NAME", ""),
 
 		TwitterClientID:     getEnvWithFallbacks("X_CLIENT_ID", "", "TWITTER_CLIENT_ID"),
 		TwitterClientSecret: getEnvWithFallbacks("X_CLIENT_SECRET", "", "TWITTER_CLIENT_SECRET"),
@@ -298,11 +339,37 @@ func (c *Config) ValidateRuntime() error {
 	}
 
 	missing := append(c.missingCloudDataPlaneConfig(), c.missingCloudBillingConfig()...)
+	missing = append(missing, c.missingCloudAccountConfig()...)
 	missing = append(missing, c.invalidCloudCORSConfig()...)
 	if len(missing) > 0 {
 		return fmt.Errorf("OPENPOST_EDITION=cloud requires: %s", strings.Join(missing, ", "))
 	}
 	return nil
+}
+
+func (c *Config) missingCloudAccountConfig() []string {
+	missing := make([]string, 0, 10)
+	if !c.LegalAcceptanceRequired {
+		missing = append(missing, "OPENPOST_LEGAL_ACCEPTANCE_REQUIRED=true")
+	}
+	for key, value := range map[string]string{
+		"OPENPOST_TERMS_URL":       c.TermsURL,
+		"OPENPOST_PRIVACY_URL":     c.PrivacyURL,
+		"OPENPOST_TERMS_VERSION":   c.TermsVersion,
+		"OPENPOST_PRIVACY_VERSION": c.PrivacyVersion,
+		"OPENPOST_SUPPORT_EMAIL":   c.SupportEmail,
+		"OPENPOST_SMTP_HOST":       c.SMTPHost,
+		"OPENPOST_SMTP_FROM":       c.SMTPFrom,
+	} {
+		if strings.TrimSpace(value) == "" {
+			missing = append(missing, key)
+		}
+	}
+	if strings.TrimSpace(c.SMTPUsername) != "" && strings.TrimSpace(c.SMTPPassword) == "" {
+		missing = append(missing, "OPENPOST_SMTP_PASSWORD")
+	}
+	sort.Strings(missing)
+	return missing
 }
 
 func (c *Config) missingCloudDataPlaneConfig() []string {
@@ -430,6 +497,19 @@ func getEnvBoolWithAliases(fallback bool, keys ...string) bool {
 	}
 
 	return fallback
+}
+
+func getEnvInt(key string, fallback int) int {
+	value, source, ok := getEnvValue(key)
+	if !ok {
+		return fallback
+	}
+	parsed, err := strconv.Atoi(strings.TrimSpace(value))
+	if err != nil {
+		log.Printf("WARNING: invalid integer for %s=%q, using default %d", source, value, fallback)
+		return fallback
+	}
+	return parsed
 }
 
 func getEnvEnum(key, fallback string, allowed ...string) string {

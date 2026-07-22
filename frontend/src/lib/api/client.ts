@@ -10,6 +10,8 @@ export type SocialAccount = components['schemas']['AccountResponse'];
 export type ProviderInfo = components['schemas']['ProviderInfo'];
 export type ScheduleOverview = components['schemas']['ScheduleOverviewOutputBody'];
 export type AuthResponse = components['schemas']['AuthOutputBody'];
+export type AuthConfiguration = components['schemas']['AuthConfigurationOutputBody'];
+export type AccountDeletionImpact = components['schemas']['AccountDeletionImpact'];
 
 let token: string | null = null;
 

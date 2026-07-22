@@ -13,6 +13,7 @@
 	import InlineNotice from '$lib/components/inline-notice.svelte';
 	import DestructiveConfirmDialog from '$lib/components/destructive-confirm-dialog.svelte';
 	import ProfileAvatarUploader from '$lib/components/profile-avatar-uploader.svelte';
+	import AccountDataCard from '$lib/components/account-data-card.svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { auth } from '$lib/stores/auth';
@@ -92,7 +93,8 @@
 	let authSessionsLoading = $state(true);
 	let authSessionsError = $state('');
 	let authSessionBusyID = $state('');
-	let currentPassword = $state('');
+	let totpCurrentPassword = $state('');
+	let passkeyCurrentPassword = $state('');
 	let totpSetupChallengeId = $state('');
 	let totpManualEntryKey = $state('');
 	let totpQRCodeDataURL = $state('');
@@ -851,7 +853,7 @@
 		securityError = '';
 		try {
 			const { data, error: err } = await client.POST('/auth/security/totp/setup', {
-				body: { current_password: currentPassword }
+				body: { current_password: totpCurrentPassword }
 			});
 			if (err || !data) throw new Error(err?.detail || m.settings_action_failed());
 			totpSetupChallengeId = data.challenge_id;
@@ -882,7 +884,7 @@
 			totpManualEntryKey = '';
 			totpQRCodeDataURL = '';
 			totpCode = '';
-			currentPassword = '';
+			totpCurrentPassword = '';
 			notify(m.settings_authenticator_enabled_notice());
 		} catch (e) {
 			securityError = (e as Error).message;
@@ -896,11 +898,11 @@
 		securityError = '';
 		try {
 			const { data, error: err } = await client.POST('/auth/security/totp/disable', {
-				body: { current_password: currentPassword }
+				body: { current_password: totpCurrentPassword }
 			});
 			if (err || !data) throw new Error(err?.detail || m.settings_action_failed());
 			securityStatus = data;
-			currentPassword = '';
+			totpCurrentPassword = '';
 			notify(m.settings_authenticator_disabled_notice());
 		} catch (e) {
 			securityError = (e as Error).message;
@@ -917,7 +919,7 @@
 				'/auth/security/passkeys/begin',
 				{
 					body: {
-						current_password: currentPassword,
+						current_password: passkeyCurrentPassword,
 						name: newPasskeyName
 					}
 				}
@@ -936,7 +938,7 @@
 			});
 			if (err || !data) throw new Error(err?.detail || m.settings_action_failed());
 			securityStatus = data;
-			currentPassword = '';
+			passkeyCurrentPassword = '';
 			newPasskeyName = '';
 			notify(m.settings_passkey_added());
 		} catch (e) {
@@ -954,12 +956,12 @@
 				'/auth/security/passkeys/{passkey_id}/remove',
 				{
 					params: { path: { passkey_id: passkeyId } },
-					body: { current_password: currentPassword }
+					body: { current_password: passkeyCurrentPassword }
 				}
 			);
 			if (err || !data) throw new Error(err?.detail || m.settings_action_failed());
 			securityStatus = data;
-			currentPassword = '';
+			passkeyCurrentPassword = '';
 			notify(m.settings_passkey_removed());
 		} catch (e) {
 			securityError = (e as Error).message;
@@ -2057,6 +2059,8 @@
 								</div>
 							</div>
 
+							<AccountDataCard email={securityStatus?.user.email ?? profileEmail} />
+
 							<div class="rounded-lg border p-4">
 								<div class="mb-4 flex items-center justify-between gap-3">
 									<div>
@@ -2157,14 +2161,15 @@
 												<Input
 													id="disable-password"
 													type="password"
-													bind:value={currentPassword}
+													bind:value={totpCurrentPassword}
+													autocomplete="current-password"
 													placeholder={m.settings_password_required_disable()}
 												/>
 											</div>
 											<Button
 												variant="outline"
 												onclick={disableTOTP}
-												disabled={securityBusy || !currentPassword.trim()}
+												disabled={securityBusy || !totpCurrentPassword.trim()}
 											>
 												{m.settings_disable_authenticator()}
 											</Button>
@@ -2176,13 +2181,14 @@
 												<Input
 													id="totp-password"
 													type="password"
-													bind:value={currentPassword}
+													bind:value={totpCurrentPassword}
+													autocomplete="current-password"
 													placeholder={m.settings_password_required_setup()}
 												/>
 											</div>
 											<Button
 												onclick={startTOTPSetup}
-												disabled={securityBusy || !currentPassword.trim()}
+												disabled={securityBusy || !totpCurrentPassword.trim()}
 											>
 												{m.settings_start_authenticator()}
 											</Button>
@@ -2238,7 +2244,8 @@
 											<Input
 												id="passkey-password"
 												type="password"
-												bind:value={currentPassword}
+												bind:value={passkeyCurrentPassword}
+												autocomplete="current-password"
 												placeholder={m.settings_password_required_passkeys()}
 											/>
 										</div>
@@ -2250,7 +2257,10 @@
 												placeholder={m.settings_passkey_name_placeholder()}
 											/>
 										</div>
-										<Button onclick={addPasskey} disabled={securityBusy || !currentPassword.trim()}>
+										<Button
+											onclick={addPasskey}
+											disabled={securityBusy || !passkeyCurrentPassword.trim()}
+										>
 											{m.settings_add_passkey()}
 										</Button>
 									</div>
@@ -2278,7 +2288,7 @@
 														size="sm"
 														class="text-destructive hover:text-destructive"
 														onclick={() => removePasskey(passkey.id)}
-														disabled={securityBusy || !currentPassword.trim()}
+														disabled={securityBusy || !passkeyCurrentPassword.trim()}
 													>
 														{m.settings_remove()}
 													</Button>

@@ -26,7 +26,7 @@ func TestRegisterUserMakesFirstUserAdminEvenWhenRegistrationsDisabled(t *testing
 	db := createHandlerTestDB(t, (*models.User)(nil))
 	handler := NewAuthHandler(db, auth.NewService("test-secret"), nil, nil, nil, true)
 
-	user, err := handler.registerUser(context.Background(), "admin@example.com", "password123")
+	user, err := handler.registerUserWithPolicy(context.Background(), "admin@example.com", "password123", false)
 	require.NoError(t, err)
 	require.True(t, user.IsAdmin)
 }
@@ -37,10 +37,10 @@ func TestRegisterUserRejectsAdditionalUsersWhenRegistrationsDisabled(t *testing.
 	db := createHandlerTestDB(t, (*models.User)(nil))
 	handler := NewAuthHandler(db, auth.NewService("test-secret"), nil, nil, nil, true)
 
-	_, err := handler.registerUser(context.Background(), "admin@example.com", "password123")
+	_, err := handler.registerUserWithPolicy(context.Background(), "admin@example.com", "password123", false)
 	require.NoError(t, err)
 
-	_, err = handler.registerUser(context.Background(), "user@example.com", "password123")
+	_, err = handler.registerUserWithPolicy(context.Background(), "user@example.com", "password123", false)
 	require.ErrorIs(t, err, errRegistrationsDisabled)
 }
 
@@ -50,11 +50,11 @@ func TestRegisterUserOnlyPromotesTheFirstUser(t *testing.T) {
 	db := createHandlerTestDB(t, (*models.User)(nil))
 	handler := NewAuthHandler(db, auth.NewService("test-secret"), nil, nil, nil, false)
 
-	firstUser, err := handler.registerUser(context.Background(), "admin@example.com", "password123")
+	firstUser, err := handler.registerUserWithPolicy(context.Background(), "admin@example.com", "password123", false)
 	require.NoError(t, err)
 	require.True(t, firstUser.IsAdmin)
 
-	secondUser, err := handler.registerUser(context.Background(), "user@example.com", "password123")
+	secondUser, err := handler.registerUserWithPolicy(context.Background(), "user@example.com", "password123", false)
 	require.NoError(t, err)
 	require.False(t, secondUser.IsAdmin)
 }

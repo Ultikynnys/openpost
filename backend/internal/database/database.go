@@ -77,6 +77,7 @@ func CreateSchema(db *bun.DB) error {
 		(*models.OrganizationInvitation)(nil),
 		(*models.Workspace)(nil),
 		(*models.User)(nil),
+		(*models.PasswordResetToken)(nil),
 		(*models.WorkspaceMember)(nil),
 		(*models.WorkspaceInvitation)(nil),
 		(*models.UsageCounter)(nil),

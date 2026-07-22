@@ -145,6 +145,22 @@ describe('workspace settings state', () => {
 		expect(localStorage.getItem('openpost_current_workspace')).toBeNull();
 	});
 
+	it('resets all account-scoped workspace state after account deletion', async () => {
+		mocks.get.mockResolvedValueOnce({ data: settings('Europe/Lisbon'), error: null });
+		const context = new WorkspaceContext();
+		context.workspaces = [workspaceA];
+		await context.setWorkspace(workspaceA);
+
+		context.reset();
+
+		expect(context.workspaces).toEqual([]);
+		expect(context.currentWorkspace).toBeNull();
+		expect(context.settings.timezone).toBe('UTC');
+		expect(context.settingsReady).toBe(false);
+		expect(context.loading).toBe(false);
+		expect(localStorage.getItem('openpost_current_workspace')).toBeNull();
+	});
+
 	it('ignores settings that arrive after a newer workspace switch', async () => {
 		const firstLoad = deferred<{ data: ReturnType<typeof settings>; error: null }>();
 		mocks.get

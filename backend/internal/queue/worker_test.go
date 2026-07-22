@@ -27,6 +27,21 @@ func (stubStorage) Delete(string) error                    { return nil }
 func (stubStorage) GetURL(string) string                   { return "" }
 func (stubStorage) Open(string) (io.ReadCloser, error)     { return io.NopCloser(&emptyReader{}), nil }
 
+type recordingStorage struct {
+	deleted []string
+}
+
+func (*recordingStorage) Driver() string                         { return "test" }
+func (*recordingStorage) Save(string, io.Reader) (string, error) { return "", nil }
+func (s *recordingStorage) Delete(key string) error {
+	s.deleted = append(s.deleted, key)
+	return nil
+}
+func (*recordingStorage) GetURL(string) string { return "" }
+func (*recordingStorage) Open(string) (io.ReadCloser, error) {
+	return io.NopCloser(&emptyReader{}), nil
+}
+
 type emptyReader struct{}
 
 func (*emptyReader) Read([]byte) (int, error) { return 0, io.EOF }
@@ -158,4 +173,34 @@ func TestWorkerFailsUnknownJobTypes(t *testing.T) {
 	require.NoError(t, db.NewSelect().Model(stored).Where("id = ?", job.ID).Scan(t.Context()))
 	require.Equal(t, jobStatusFailed, stored.Status)
 	require.Contains(t, stored.LastError, "unsupported job type")
+}
+
+func TestWorkerProcessesDurableStorageDeletion(t *testing.T) {
+	t.Parallel()
+
+	db := createTestDB(t)
+	job := &models.Job{
+		ID: "job-storage-delete", Type: jobTypeStorageDelete,
+		Payload: `{"keys":["media.png","thumbs/media-sm.png"]}`,
+		Status:  jobStatusPending, RunAt: time.Now().UTC().Add(-time.Second), MaxAttempts: 3,
+	}
+	_, err := db.NewInsert().Model(job).Exec(t.Context())
+	require.NoError(t, err)
+	storage := &recordingStorage{}
+	worker := NewWorker(db, "worker-test", time.Second, nil, nil, storage)
+
+	require.True(t, worker.processNextJobIfAvailable(t.Context()))
+	require.Equal(t, []string{"media.png", "thumbs/media-sm.png"}, storage.deleted)
+
+	stored := new(models.Job)
+	require.NoError(t, db.NewSelect().Model(stored).Where("id = ?", job.ID).Scan(t.Context()))
+	require.Equal(t, jobStatusCompleted, stored.Status)
+}
+
+func TestStorageDeletionRejectsTraversal(t *testing.T) {
+	t.Parallel()
+
+	worker := NewWorker(nil, "worker-test", time.Second, nil, nil, &recordingStorage{})
+	err := worker.handleStorageDelete(`{"keys":["../outside"]}`)
+	require.ErrorContains(t, err, "invalid key")
 }

@@ -36,6 +36,7 @@ import (
 	"github.com/openpost/backend/internal/services/mediasigner"
 	"github.com/openpost/backend/internal/services/mediastore"
 	"github.com/openpost/backend/internal/services/mfa"
+	"github.com/openpost/backend/internal/services/passwordmail"
 	"github.com/openpost/backend/internal/services/providerapps"
 	"github.com/openpost/backend/internal/services/publisher"
 	"github.com/openpost/backend/internal/services/sessions"
@@ -63,7 +64,7 @@ func main() {
 	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
 		AllowOrigins:     cfg.CORSOrigins,
 		AllowMethods:     []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete, http.MethodOptions},
-		AllowHeaders:     []string{echo.HeaderOrigin, echo.HeaderContentType, echo.HeaderAuthorization},
+		AllowHeaders:     []string{echo.HeaderOrigin, echo.HeaderContentType, echo.HeaderAuthorization, "MCP-Protocol-Version", "Mcp-Session-Id", "Last-Event-ID"},
 		AllowCredentials: true,
 	}))
 
@@ -107,6 +108,21 @@ func main() {
 	})
 	if err != nil {
 		log.Fatal(err)
+	}
+	var passwordResetSender passwordmail.Sender
+	if cfg.SMTPHost != "" {
+		passwordResetSender, err = passwordmail.NewSMTPSender(passwordmail.SMTPConfig{
+			Host:       cfg.SMTPHost,
+			Port:       cfg.SMTPPort,
+			Username:   cfg.SMTPUsername,
+			Password:   cfg.SMTPPassword,
+			From:       cfg.SMTPFrom,
+			TLSMode:    cfg.SMTPTLSMode,
+			ServerName: cfg.SMTPServerName,
+		})
+		if err != nil {
+			log.Fatalf("password reset email configuration is invalid: %v", err)
+		}
 	}
 	tokenManager := tokenmanager.NewTokenManager(db, tokenEncryptor)
 	publishSvc := publisher.NewService(db, tokenManager)
@@ -208,6 +224,7 @@ func main() {
 	mcpHandler.SetServerVersion(version)
 	mcpHandler.SetMediaStorage(storage)
 	mcpHandler.SetPublicURL(cfg.PublicURL)
+	mcpHandler.SetAllowedOrigins(cfg.CORSOrigins)
 	mcpHandler.SetProviderCatalog(providers, mastodonAppService != nil)
 	mcpHandler.SetTokenEncryptor(tokenEncryptor)
 	mcpHandler.RegisterRoutes(e)
@@ -215,20 +232,29 @@ func main() {
 	mcpOAuthHandler.RegisterEchoRoutes(e)
 
 	apiroutes.RegisterHumaRoutes(api, apiroutes.RouteDeps{
-		DB:              db,
-		AuthService:     authService,
-		Authenticator:   authenticator,
-		SessionService:  sessionService,
-		APITokenService: apiTokenService,
-		CLIAuthService:  cliAuthService,
-		MCPOAuthService: mcpOAuthService,
-		BillingService:  billingService,
-		MediaStorage:    storage,
-		MediaSigner:     mediaSigner,
-		Entitlement:     entitlementService,
-		TokenEncryptor:  tokenEncryptor,
-		MFAService:      mfaService,
-		Providers:       providers,
+		DB:                  db,
+		AuthService:         authService,
+		Authenticator:       authenticator,
+		SessionService:      sessionService,
+		APITokenService:     apiTokenService,
+		CLIAuthService:      cliAuthService,
+		MCPOAuthService:     mcpOAuthService,
+		BillingService:      billingService,
+		MediaStorage:        storage,
+		MediaSigner:         mediaSigner,
+		Entitlement:         entitlementService,
+		TokenEncryptor:      tokenEncryptor,
+		MFAService:          mfaService,
+		PasswordResetSender: passwordResetSender,
+		AccountPolicy: handlers.AccountPolicy{
+			Required:       cfg.LegalAcceptanceRequired,
+			TermsURL:       cfg.TermsURL,
+			PrivacyURL:     cfg.PrivacyURL,
+			TermsVersion:   cfg.TermsVersion,
+			PrivacyVersion: cfg.PrivacyVersion,
+			SupportEmail:   cfg.SupportEmail,
+		},
+		Providers: providers,
 		ProviderRegistrars: []func(string, platform.Adapter){
 			tokenManager.SetProvider,
 			publishSvc.SetProvider,

@@ -19,6 +19,7 @@ import (
 	"github.com/openpost/backend/internal/services/mediasigner"
 	"github.com/openpost/backend/internal/services/mediastore"
 	"github.com/openpost/backend/internal/services/mfa"
+	"github.com/openpost/backend/internal/services/passwordmail"
 	"github.com/openpost/backend/internal/services/providerapps"
 	"github.com/openpost/backend/internal/services/sessions"
 	"github.com/uptrace/bun"
@@ -38,6 +39,8 @@ type RouteDeps struct {
 	Entitlement                  entitlements.Service
 	TokenEncryptor               *servicecrypto.TokenEncryptor
 	MFAService                   *mfa.Service
+	PasswordResetSender          passwordmail.Sender
+	AccountPolicy                handlers.AccountPolicy
 	Providers                    map[string]platform.Adapter
 	ProviderRegistrars           []func(string, platform.Adapter)
 	MastodonAppService           *mastodonapps.Service
@@ -81,9 +84,16 @@ func RegisterHumaRoutes(api huma.API, deps RouteDeps) {
 		deps.DisableRegistrations,
 	)
 	authHandler.SetSessionService(deps.SessionService)
+	authHandler.SetPasswordResetSender(deps.PasswordResetSender, deps.PublicURL)
+	authHandler.SetAccountPolicy(deps.AccountPolicy)
+	authHandler.Configuration(api)
+	authHandler.AcceptAccountPolicy(api)
 	authHandler.Register(api)
 	authHandler.Login(api)
 	authHandler.Logout(api)
+	authHandler.RequestPasswordReset(api)
+	authHandler.ResetPassword(api)
+	authHandler.ChangePassword(api)
 	authHandler.VerifyTOTPLogin(api)
 	authHandler.BeginPasskeyLogin(api)
 	authHandler.FinishPasskeyLogin(api)
@@ -98,6 +108,13 @@ func RegisterHumaRoutes(api huma.API, deps RouteDeps) {
 	authHandler.BeginPasskeyRegistration(api)
 	authHandler.FinishPasskeyRegistration(api)
 	authHandler.RemovePasskey(api)
+
+	handlers.NewAccountLifecycleHandler(
+		deps.DB,
+		deps.AuthService,
+		deps.Authenticator,
+		deps.MediaStorage,
+	).RegisterRoutes(api)
 
 	handlers.NewAPITokenHandler(deps.APITokenService, deps.Authenticator, deps.DB).RegisterRoutes(api)
 	handlers.NewCLIAuthHandler(deps.CLIAuthService, deps.Authenticator, deps.PublicURL).RegisterRoutes(api)

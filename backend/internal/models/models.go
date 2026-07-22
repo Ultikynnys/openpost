@@ -129,7 +129,21 @@ type User struct {
 	TOTPSecretEnc    []byte    `bun:"totp_secret_encrypted" json:"-"`
 	TOTPEnabledAt    time.Time `bun:",nullzero" json:"totp_enabled_at"`
 	PasskeyEnabledAt time.Time `bun:",nullzero" json:"passkey_enabled_at"`
+	TermsVersion     string    `bun:"terms_version,notnull,default:''" json:"terms_version"`
+	PrivacyVersion   string    `bun:"privacy_version,notnull,default:''" json:"privacy_version"`
+	LegalAcceptedAt  time.Time `bun:"legal_accepted_at,nullzero" json:"legal_accepted_at"`
 	CreatedAt        time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"created_at"`
+}
+
+type PasswordResetToken struct {
+	bun.BaseModel `bun:"table:password_reset_tokens"`
+
+	ID        string    `bun:",pk" json:"id"`
+	UserID    string    `bun:",notnull" json:"user_id"`
+	TokenHash string    `bun:",unique,notnull" json:"-"`
+	ExpiresAt time.Time `bun:",notnull" json:"expires_at"`
+	UsedAt    time.Time `bun:",nullzero" json:"used_at"`
+	CreatedAt time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"created_at"`
 }
 
 type UserPasskey struct {
@@ -557,7 +571,7 @@ type Job struct {
 	bun.BaseModel `bun:"table:jobs"`
 
 	ID          string    `bun:",pk" json:"id"`
-	Type        string    `bun:",notnull" json:"type"` // 'publish_post', 'refresh_token'
+	Type        string    `bun:",notnull" json:"type"` // 'publish_post', 'refresh_token', 'media_cleanup', 'storage_delete'
 	Payload     string    `bun:",notnull" json:"payload"`
 	Status      string    `bun:",default:'pending'" json:"status"` // 'pending', 'processing', 'completed', 'failed'
 	RunAt       time.Time `bun:",notnull" json:"run_at"`

@@ -119,6 +119,13 @@ export class WorkspaceContext {
 		}
 	}
 
+	reset() {
+		this.initializePromise = null;
+		this.loading = false;
+		this.workspaces = [];
+		this.clearWorkspaceState();
+	}
+
 	async loadWorkspaces(preferredWorkspaceID?: string) {
 		try {
 			const { data, error } = await client.GET('/workspaces', {});

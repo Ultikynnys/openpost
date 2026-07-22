@@ -228,6 +228,91 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/account": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Permanently delete the current account */
+        delete: operations["delete-account"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/account/deletion-impact": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Preview the impact and blockers for account deletion */
+        get: operations["get-account-deletion-impact"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/account/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Export the current user's account data */
+        post: operations["export-account-data"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get public authentication configuration */
+        get: operations["get-auth-configuration"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/legal-acceptance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Accept the current account policy */
+        post: operations["accept-account-policy"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/login": {
         parameters: {
             query?: never;
@@ -324,6 +409,57 @@ export interface paths {
         get: operations["get-me"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Change the current account password */
+        post: operations["change-password"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/password-reset/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reset a password with a single-use token */
+        post: operations["reset-password"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/password-reset/request": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Request a password reset link */
+        post: operations["request-password-reset"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1557,6 +1693,16 @@ export interface components {
             /** @description Optional workspace ID this token is limited to */
             workspace_id?: string;
         };
+        AcceptAccountPolicyInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/AcceptAccountPolicyInputBody.json
+             */
+            readonly $schema?: string;
+            /** @description Whether the user accepts the current Terms and acknowledges the Privacy Policy */
+            accepted_legal: boolean;
+        };
         AcceptWorkspaceInvitationInputBody: {
             /**
              * Format: uri
@@ -1577,6 +1723,158 @@ export interface components {
             accepted: boolean;
             role: string;
             workspace_id: string;
+        };
+        AccountDeletionImpact: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/AccountDeletionImpact.json
+             */
+            readonly $schema?: string;
+            blockers: components["schemas"]["DeletionBlocker"][] | null;
+            instance_admin_transfer?: components["schemas"]["DeletionInstanceAdminTransfer"];
+            /** Format: int64 */
+            media: number;
+            /** Format: int64 */
+            organizations: number;
+            ownership_transfers: components["schemas"]["DeletionOwnershipTransfer"][] | null;
+            /** Format: int64 */
+            posts: number;
+            /** Format: int64 */
+            publications: number;
+            /** Format: int64 */
+            social_accounts: number;
+            /** Format: int64 */
+            workspaces: number;
+        };
+        AccountExport: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/AccountExport.json
+             */
+            readonly $schema?: string;
+            api_tokens: components["schemas"]["AccountExportToken"][] | null;
+            format_version: string;
+            /** Format: date-time */
+            generated_at: string;
+            media: components["schemas"]["AccountExportMedia"][] | null;
+            organizations: components["schemas"]["AccountExportOrganization"][] | null;
+            posts: components["schemas"]["AccountExportPost"][] | null;
+            publications: components["schemas"]["AccountExportPublication"][] | null;
+            shared_workspace_content_excluded: boolean;
+            social_accounts: components["schemas"]["AccountExportSocialAccount"][] | null;
+            user: components["schemas"]["AccountExportUser"];
+            workspaces: components["schemas"]["AccountExportWorkspace"][] | null;
+        };
+        AccountExportMedia: {
+            alt_text: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: int64 */
+            duration_ms: number;
+            /** Format: int64 */
+            height: number;
+            id: string;
+            mime_type: string;
+            original_filename: string;
+            /** Format: int64 */
+            size: number;
+            /** Format: int64 */
+            width: number;
+            workspace_id: string;
+        };
+        AccountExportOrganization: {
+            /** Format: date-time */
+            created_at: string;
+            id: string;
+            name: string;
+            role: string;
+        };
+        AccountExportPost: {
+            content: string;
+            /** Format: date-time */
+            created_at: string;
+            id: string;
+            publication_id?: string;
+            /** Format: date-time */
+            published_at?: string;
+            /** Format: date-time */
+            scheduled_at?: string;
+            status: string;
+            workspace_id: string;
+        };
+        AccountExportPublication: {
+            content_profile: string;
+            /** Format: date-time */
+            created_at: string;
+            id: string;
+            /** Format: date-time */
+            scheduled_at?: string;
+            source_text: string;
+            source_url?: string;
+            status: string;
+            title: string;
+            /** Format: date-time */
+            updated_at: string;
+            workspace_id: string;
+        };
+        AccountExportSocialAccount: {
+            account_id: string;
+            account_username: string;
+            /** Format: date-time */
+            created_at: string;
+            granted_scopes?: string;
+            id: string;
+            instance_url?: string;
+            is_active: boolean;
+            platform: string;
+            workspace_id: string;
+        };
+        AccountExportToken: {
+            /** Format: date-time */
+            created_at: string;
+            id: string;
+            /** Format: date-time */
+            last_used_at?: string;
+            name: string;
+            /** Format: date-time */
+            revoked_at?: string;
+            scope: string;
+            token_prefix: string;
+            workspace_id?: string;
+        };
+        AccountExportUser: {
+            avatar_url: string;
+            /** Format: date-time */
+            created_at: string;
+            display_name: string;
+            email: string;
+            id: string;
+            is_admin: boolean;
+            /** Format: date-time */
+            legal_accepted_at?: string;
+            privacy_version?: string;
+            terms_version?: string;
+        };
+        AccountExportWorkspace: {
+            /** Format: date-time */
+            created_at: string;
+            id: string;
+            name: string;
+            organization_id?: string;
+            role: string;
+            timezone: string;
+        };
+        AccountReauthenticationInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/AccountReauthenticationInputBody.json
+             */
+            readonly $schema?: string;
+            /** @description Current account password */
+            current_password: string;
         };
         AccountResponse: {
             /**
@@ -1657,6 +1955,22 @@ export interface components {
             name?: string;
             scopes?: string;
             user_code?: string;
+        };
+        AuthConfigurationOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/AuthConfigurationOutputBody.json
+             */
+            readonly $schema?: string;
+            legal_acceptance_required: boolean;
+            password_reset_enabled: boolean;
+            privacy_url?: string;
+            privacy_version?: string;
+            registration_enabled: boolean;
+            support_email?: string;
+            terms_url?: string;
+            terms_version?: string;
         };
         AuthOutputBody: {
             /**
@@ -1820,6 +2134,29 @@ export interface components {
             text_limit?: number;
             title_required?: boolean;
             validation_categories?: string[] | null;
+        };
+        ChangePasswordInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ChangePasswordInputBody.json
+             */
+            readonly $schema?: string;
+            /** @description Current password */
+            current_password: string;
+            /** @description New password */
+            new_password: string;
+        };
+        ChangePasswordOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ChangePasswordOutputBody.json
+             */
+            readonly $schema?: string;
+            message: string;
+            /** Format: int64 */
+            revoked_sessions: number;
         };
         CommentActionOutputBody: {
             /**
@@ -2232,6 +2569,30 @@ export interface components {
             name: string;
             organization_id: string;
         };
+        DeleteAccountInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/DeleteAccountInputBody.json
+             */
+            readonly $schema?: string;
+            /**
+             * Format: email
+             * @description Exact account email confirmation
+             */
+            confirm_email: string;
+            /** @description Current account password */
+            current_password: string;
+        };
+        DeleteAccountOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/DeleteAccountOutputBody.json
+             */
+            readonly $schema?: string;
+            deleted: boolean;
+        };
         DeleteMediaOutputBody: {
             /**
              * Format: uri
@@ -2291,6 +2652,20 @@ export interface components {
             readonly $schema?: string;
             /** @description Success message */
             message: string;
+        };
+        DeletionBlocker: {
+            code: string;
+            message: string;
+            organization_id?: string;
+            workspace_id?: string;
+        };
+        DeletionInstanceAdminTransfer: {
+            successor_email: string;
+        };
+        DeletionOwnershipTransfer: {
+            organization_id: string;
+            organization_name: string;
+            successor_email: string;
         };
         DenyCLIAuthInputBody: {
             /**
@@ -2765,6 +3140,15 @@ export interface components {
             /** @description Post status */
             status: string;
         };
+        MessageOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/MessageOutputBody.json
+             */
+            readonly $schema?: string;
+            message: string;
+        };
         NextAvailableSlotOutputBody: {
             /**
              * Format: uri
@@ -3228,12 +3612,14 @@ export interface components {
              * @example https://example.com/schemas/RegisterInputBody.json
              */
             readonly $schema?: string;
+            /** @description Whether the user accepted the current terms and privacy policy */
+            accepted_legal?: boolean;
             /**
              * Format: email
              * @description User email address
              */
             email: string;
-            /** @description User password (min 8 characters) */
+            /** @description User password (min 12 characters) */
             password: string;
         };
         RemoveAvatarOutputBody: {
@@ -3316,6 +3702,40 @@ export interface components {
             settings?: {
                 [key: string]: unknown;
             };
+        };
+        RequestPasswordResetInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/RequestPasswordResetInputBody.json
+             */
+            readonly $schema?: string;
+            /**
+             * Format: email
+             * @description Account email address
+             */
+            email: string;
+        };
+        ResetPasswordInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ResetPasswordInputBody.json
+             */
+            readonly $schema?: string;
+            /** @description New password */
+            new_password: string;
+            /** @description Single-use password reset token */
+            token: string;
+        };
+        ResetPasswordOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ResetPasswordOutputBody.json
+             */
+            readonly $schema?: string;
+            message: string;
         };
         RevokeAPITokenOutputBody: {
             /**
@@ -3749,6 +4169,17 @@ export interface components {
             id: string;
             /** @description Whether this user can manage instance-level settings */
             is_admin: boolean;
+            /** @description Whether the current hosted policy still needs acceptance */
+            legal_acceptance_required: boolean;
+            /**
+             * Format: date-time
+             * @description When the current account policy was accepted
+             */
+            legal_accepted_at?: string;
+            /** @description Privacy version acknowledged by the user */
+            privacy_version?: string;
+            /** @description Terms version accepted by the user */
+            terms_version?: string;
         };
         UserSessionSummary: {
             /**
@@ -4649,6 +5080,255 @@ export interface operations {
             };
         };
     };
+    "delete-account": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeleteAccountInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    "Set-Cookie"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeleteAccountOutputBody"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "get-account-deletion-impact": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountDeletionImpact"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "export-account-data": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AccountReauthenticationInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    "Content-Disposition"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountExport"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "get-auth-configuration": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthConfigurationOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "accept-account-policy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AcceptAccountPolicyInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserProfile"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     login: {
         parameters: {
             query?: never;
@@ -4951,6 +5631,196 @@ export interface operations {
             };
         };
     };
+    "change-password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangePasswordInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChangePasswordOutputBody"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "reset-password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResetPasswordInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    "Set-Cookie"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResetPasswordOutputBody"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "request-password-reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RequestPasswordResetInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessageOutputBody"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     "update-profile": {
         parameters: {
             query?: never;
@@ -5083,6 +5953,15 @@ export interface operations {
             };
             /** @description Bad Request */
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
