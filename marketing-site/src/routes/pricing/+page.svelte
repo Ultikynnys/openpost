@@ -72,7 +72,7 @@
 							<p class="mt-2 text-3xl font-semibold">{plan.price}<span class="text-sm font-normal text-muted-foreground">/month</span></p>
 						</div>
 						{#if plan.featured}
-							<span class="rounded-full bg-primary px-2 py-1 text-[0.65rem] font-medium text-primary-foreground">Popular</span>
+							<span class="rounded-full bg-primary px-2 py-1 text-xs font-medium text-primary-foreground">Popular</span>
 						{/if}
 					</div>
 					<p class="mt-4 min-h-12 text-sm leading-6 text-muted-foreground">{plan.description}</p>

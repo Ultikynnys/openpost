@@ -16,7 +16,7 @@
 			<PlatformIcon platform={platform.short} class="size-4" />
 			<span class="text-xs font-medium">{platform.preview.label}</span>
 		</div>
-		<span class="font-mono text-[0.65rem] text-muted-foreground">{platform.preview.detail}</span>
+		<span class="font-mono text-xs text-muted-foreground">{platform.preview.detail}</span>
 	</div>
 
 	<div class="p-5">
@@ -47,7 +47,7 @@
 				<p class="text-sm leading-6">A short launch note with <span class="text-primary underline underline-offset-2">linked context</span> and a clear destination.</p>
 				<div class="mt-4 overflow-hidden rounded-lg border bg-background/60">
 					<div class="h-20 border-b bg-primary/10"></div>
-					<div class="p-3"><p class="text-xs font-medium">openpost.social</p><p class="mt-1 text-[0.7rem] text-muted-foreground">Rich link metadata travels with the AT Protocol record.</p></div>
+					<div class="p-3"><p class="text-xs font-medium">openpost.social</p><p class="mt-1 text-xs text-muted-foreground">Rich link metadata travels with the AT Protocol record.</p></div>
 				</div>
 			</div>
 		{:else if platform.slug === 'linkedin'}
@@ -73,14 +73,14 @@
 		{:else if platform.slug === 'instagram'}
 			<div class="grid grid-cols-3 gap-2">
 				{#each platform.preview.chips as chip, index (chip)}
-					<div class="flex aspect-square flex-col items-center justify-center rounded-lg border bg-primary/10 p-2 text-center"><Image class="size-5 text-muted-foreground" /><span class="mt-2 text-[0.65rem] font-medium">{chip}</span></div>
+					<div class="flex aspect-square flex-col items-center justify-center rounded-lg border bg-primary/10 p-2 text-center"><Image class="size-5 text-muted-foreground" /><span class="mt-2 text-xs font-medium">{chip}</span></div>
 				{/each}
 			</div>
 			<p class="mt-4 text-center text-xs text-muted-foreground">Placement first; caption and media validation follow.</p>
 		{:else if platform.slug === 'tiktok'}
 			<div class="grid grid-cols-2 gap-3">
-				<div class="relative aspect-[4/5] rounded-lg border bg-primary/10"><Play class="absolute top-1/2 left-1/2 size-7 -translate-x-1/2 -translate-y-1/2" /><span class="absolute right-2 bottom-2 left-2 text-center text-[0.65rem]">2,200-character video caption</span></div>
-				<div class="aspect-[4/5] rounded-lg border bg-muted/20 p-3"><div class="grid grid-cols-2 gap-1">{#each [1, 2, 3, 4] as item (item)}<span class="aspect-square rounded bg-primary/15"></span>{/each}</div><p class="mt-4 text-center text-[0.65rem]">Up to 35 photos · 4,000 characters</p></div>
+				<div class="relative aspect-[4/5] rounded-lg border bg-primary/10"><Play class="absolute top-1/2 left-1/2 size-7 -translate-x-1/2 -translate-y-1/2" /><span class="absolute right-2 bottom-2 left-2 text-center text-xs">2,200-character video caption</span></div>
+				<div class="aspect-[4/5] rounded-lg border bg-muted/20 p-3"><div class="grid grid-cols-2 gap-1">{#each [1, 2, 3, 4] as item (item)}<span class="aspect-square rounded bg-primary/15"></span>{/each}</div><p class="mt-4 text-center text-xs">Up to 35 photos · 4,000 characters</p></div>
 			</div>
 		{:else}
 			<div>
