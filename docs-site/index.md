@@ -3,40 +3,40 @@ layout: home
 
 hero:
   name: OpenPost
-  text: Self-hosted Buffer/Hootsuite alternative.
-  tagline: Schedule posts to X, Mastodon, Bluesky, Threads, LinkedIn, Facebook Pages, Instagram Business, TikTok, and YouTube from your own server. One binary or container. No Redis, no required Postgres, no external queue.
+  text: The publishing layer between AI agents and your social accounts.
+  tagline: Let an agent prepare a base post and destination-specific renditions. Review the result in OpenPost, then schedule it through one visible queue.
   image:
     src: /assets/brand/logo-docs.svg
     alt: OpenPost logo
   actions:
     - theme: brand
-      text: Get Started
+      text: Use the managed app
+      link: https://app.openpost.social
+    - theme: alt
+      text: Self-host OpenPost
       link: /guide/quickstart
     - theme: alt
-      text: View on GitHub
-      link: https://github.com/rodrgds/openpost
-    - theme: alt
-      text: Watch Demo
-      link: https://youtu.be/_mZf3HzQaN8
+      text: Agent workflow
+      link: /usage/agent-assisted-publishing
 
 features:
-  - title: Composer
-    details: Write once, customize per platform, and preview posts before scheduling.
-  - title: Threads
-    details: Build multi-post threads and publish them in sequence.
-  - title: Scheduling
-    details: Plan posts ahead with durable jobs that survive restarts.
-  - title: Media library
-    details: Upload, inspect, favorite, and clean up workspace media from one place.
-  - title: Workspaces
-    details: Keep separate brands, accounts, media, prompts, and schedules organized.
-  - title: CLI
-    details: Create posts, upload media, schedule rich publications, and automate workflows from scripts or CI.
-  - title: MCP
-    details: Let assistants inspect workspaces, draft posts, adapt renditions, and schedule through authenticated tools.
-  - title: Android app
-    details: Install the release APK and connect it to your self-hosted instance.
+  - title: Provider-aware renditions
+    details: Keep one campaign source while adapting copy, media, format, and settings for each account.
+  - title: Review in the web app
+    details: Inspect every destination and edit the result before you approve scheduling or publication.
+  - title: Read and mutation boundary
+    details: Use mcp:read for server-enforced inspection, then grant mcp:full only when the agent must change or publish work.
+  - title: Visible publishing queue
+    details: Follow scheduled, published, failed, and retry state instead of handing work to an opaque automation.
+  - title: Revocable access
+    details: Limit MCP tokens to one workspace, inspect recent activity, and revoke a client from Settings.
+  - title: Compact self-hosting
+    details: Run the same AGPL product as one binary or container with SQLite and no required Redis service.
 ---
+
+::: info Managed or self-hosted
+Managed publishing starts at €6/month. Registration can create one bootstrap workspace before checkout, but connecting accounts, uploading media, scheduling, publishing, and other provider writes require an active or Polar-trialing subscription. There is no automatic hosted free tier or trial. Self-hosted OpenPost has no software subscription.
+:::
 
 <p>
   <img
@@ -70,7 +70,7 @@ volumes:
 ```
 
 ::: tip
-New to OpenPost? [Watch the product demo](https://youtu.be/_mZf3HzQaN8) or start with the [Quickstart](/guide/quickstart) guide.
+New to OpenPost? Read the [agent-assisted publishing workflow](/usage/agent-assisted-publishing), [watch the product demo](https://youtu.be/_mZf3HzQaN8), or start with the [self-hosting quickstart](/guide/quickstart).
 :::
 
 ## Choose the right docs
@@ -83,4 +83,5 @@ New to OpenPost? [Watch the product demo](https://youtu.be/_mZf3HzQaN8) or start
 
 - Use the [CLI](/cli/) for terminal workflows, cron jobs, and CI automation.
 - Connect an assistant through [MCP](/mcp/) for agentic drafting, rendition, and scheduling workflows.
+- Rehearse a campaign with the public [OpenPost Launch Kit](https://github.com/rodrgds/openpost/tree/main/launch-kit).
 - Install the [Android app](/installation/android) from the APK shipped with each GitHub release.

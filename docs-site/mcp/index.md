@@ -1,6 +1,10 @@
-# Assistant Scheduling With MCP
+# Agent-Assisted Publishing With MCP
 
-OpenPost's MCP support lets ChatGPT-style clients and local desktop assistants work with your scheduler through the same authenticated OpenPost instance you use in the web app and CLI.
+OpenPost's MCP support lets ChatGPT-style clients and local desktop assistants prepare and operate publishing work through the same authenticated OpenPost instance you use in the web app and CLI. The MCP client receives OpenPost data and operation results; it does not receive decrypted social-provider credentials.
+
+::: warning Credentials and publishing authority are different
+Use `mcp:read` when a client only needs to inspect OpenPost; the server hides mutation tools and rejects mutation attempts. An `mcp:full` token can run state-changing or external operations through `execute_operation` when the client allows them. Bind either token to one workspace when possible, review every destination, and require explicit approval before scheduling or publishing.
+:::
 
 Use it when you want an assistant to:
 
@@ -20,7 +24,7 @@ Use the remote MCP endpoint from your OpenPost instance:
 https://your-openpost-host.example/mcp
 ```
 
-OAuth-aware clients can use OpenPost's browser account-linking flow. Clients that need a manual token can use a dedicated `mcp:full` token from **Settings -> Account -> CLI Devices & API Tokens**.
+OAuth-aware clients can use OpenPost's browser account-linking flow. Clients that need a manual token can create `mcp:read` or `mcp:full` access from **Settings -> Account -> CLI Devices & API Tokens**. OAuth requests default to `mcp:full` when they omit a scope, so choose `mcp:read` explicitly for inspection-only connections.
 
 When approving OAuth or creating a manual token, prefer the current-workspace boundary unless the client truly needs every workspace you can access.
 
@@ -38,8 +42,15 @@ The proxy reads the selected CLI profile and forwards MCP frames to the remote `
 
 ## Current assistant tools
 
-OpenPost advertises a compact four-tool surface so connecting it does not load
-every scheduling schema into the assistant's context:
+OpenPost advertises a compact tool surface so connecting it does not load every scheduling schema into the assistant's context.
+
+An `mcp:read` connection receives three tools:
+
+- `search_operations`, limited to read-only operation results;
+- `query_operation`, which runs guaranteed read-only operations;
+- `render_scheduler_widget`, which displays a read-only scheduler summary in compatible clients.
+
+An `mcp:full` connection also receives `execute_operation`. Across the full surface:
 
 - `search_operations` finds relevant OpenPost operations and returns only the
   schemas needed for the current task, including whether each result must use
@@ -61,12 +72,25 @@ assistant should use `search_operations` before `query_operation` or
 
 ## Safe workflow
 
-1. Ask the assistant to inspect the current workspace, provider catalog, accounts, and recent media.
-2. Draft the base post and destination-specific renditions.
-3. Review the proposed schedule and destination list.
-4. Let the assistant schedule only after the final content and accounts are correct.
+1. Start with a workspace-scoped `mcp:read` token. Ask the assistant to inspect the current workspace, provider catalog, accounts, recent media, and provider readiness.
+2. If the agent must create or change drafts and destination-specific renditions, switch to a workspace-scoped `mcp:full` token and approve only those exact mutations. Keep preview providers out of the campaign unless the exact path has passed a fresh live rehearsal.
+3. Open the campaign in the web app. Review each account, rendition, media attachment, accessibility text, format, and schedule.
+4. Approve `execute_operation` only after the final content and accounts are correct.
+5. Inspect the queue and lifecycle events. Record published URLs or failures from OpenPost instead of treating a scheduled state as proof of publication.
 
 MCP tools validate workspace membership, optional token workspace boundaries, and account ownership before reading or changing data. Scheduling and media uploads use the same quota and usage accounting as the web app and CLI.
+
+For a worked brief, prompt, sample renditions, verification log, and review checklist, use the public [OpenPost Launch Kit](https://github.com/rodrgds/openpost/tree/main/launch-kit). The samples are illustrative and are not published campaign evidence.
+
+## What the boundary does and does not protect
+
+| Boundary | What OpenPost enforces | What the operator still decides |
+| --- | --- | --- |
+| Provider credentials | Provider access and refresh tokens remain encrypted in OpenPost and are not returned by MCP tools. | Protect the OpenPost encryption key, database, backups, and server access. |
+| Workspace access | OAuth and manual MCP tokens can be limited to one workspace; tools validate membership and account ownership. | Choose the smallest useful workspace and revoke access when the task ends. |
+| Read versus mutation | `mcp:read` exposes read-safe discovery/query tools and rejects every mutation. Under `mcp:full`, `query_operation` rejects mutations and `execute_operation` rejects read-only operations. | Start with `mcp:read`; require client approval for every `execute_operation` after granting `mcp:full`. |
+| Provider validation | Scheduling uses current media, capability, quota, and account checks. | Rehearse the exact provider account and format; provider approval and API behavior remain external. |
+| Human review | Drafts and renditions remain visible and editable in the web app. | Review is a workflow step, not an enforced approval gate. |
 
 ## Activity and revocation
 

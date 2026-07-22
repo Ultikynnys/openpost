@@ -377,12 +377,26 @@ func validateClientMetadata(metadata clientMetadata, redirectURI, scope string) 
 	if len(metadata.ResponseTypes) > 0 && !slices.Contains(metadata.ResponseTypes, "code") {
 		return ErrInvalidClient
 	}
-	if metadata.Scope != "" {
-		if _, err := normalizeScope(metadata.Scope); err != nil || !strings.Contains(metadata.Scope, scope) {
-			return ErrUnsupportedScope
-		}
+	if metadata.Scope != "" && !clientMetadataAllowsScope(metadata.Scope, scope) {
+		return ErrUnsupportedScope
 	}
 	return nil
+}
+
+func clientMetadataAllowsScope(rawScopes, requestedScope string) bool {
+	requestedScope = strings.TrimSpace(requestedScope)
+	found := false
+	for _, scope := range strings.Fields(rawScopes) {
+		switch scope {
+		case apitokens.ScopeMCPRead, apitokens.ScopeMCP:
+		default:
+			return false
+		}
+		if scope == requestedScope {
+			found = true
+		}
+	}
+	return found
 }
 
 func validateExchangeResource(input TokenRequest, codeResource string) error {
@@ -400,8 +414,11 @@ func normalizeScope(scope string) (string, error) {
 	if len(parts) == 0 {
 		return apitokens.ScopeMCP, nil
 	}
-	if len(parts) == 1 && parts[0] == apitokens.ScopeMCP {
-		return apitokens.ScopeMCP, nil
+	if len(parts) == 1 {
+		switch parts[0] {
+		case apitokens.ScopeMCPRead, apitokens.ScopeMCP:
+			return parts[0], nil
+		}
 	}
 	return "", ErrUnsupportedScope
 }

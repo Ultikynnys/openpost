@@ -24,6 +24,8 @@ Account settings follow your user login across every workspace.
 - CLI devices and API tokens
 - MCP and ChatGPT App tokens/activity
 
+Use a workspace-scoped `mcp:read` token when an assistant only needs to inspect OpenPost. Use `mcp:full` only when it must create or change drafts and renditions, upload media, schedule, publish, cancel, reply, or moderate. Both scopes are revocable; review recent activity here and remove access when the integration no longer needs it.
+
 Use this tab when the setting is about you, not a workspace.
 
 ## Organization

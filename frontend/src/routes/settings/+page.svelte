@@ -111,7 +111,7 @@
 	let mcpActivityError = $state('');
 	let apiTokenBusy = $state(false);
 	let apiTokenName = $state('OpenPost MCP');
-	let apiTokenScope = $state('mcp:full');
+	let apiTokenScope = $state('mcp:read');
 	let apiTokenWorkspaceScope = $state('current');
 	let createdAPIToken = $state('');
 	let billingBusyPlan = $state('');
@@ -239,12 +239,14 @@
 	}
 
 	function apiTokenScopeLabel(value: string) {
+		if (value === 'mcp:read') return m.settings_token_scope_mcp_read();
 		if (value === 'mcp:full') return m.settings_token_scope_mcp();
 		if (value === 'cli:full') return m.settings_token_scope_cli();
 		return value;
 	}
 
 	function apiTokenScopeDescription(value: string) {
+		if (value === 'mcp:read') return m.settings_token_scope_mcp_read_description();
 		if (value === 'mcp:full') return m.settings_token_scope_mcp_description();
 		if (value === 'cli:full') return m.settings_token_scope_cli_description();
 		return '';
@@ -694,7 +696,7 @@
 		apiTokenBusy = true;
 		apiTokenError = '';
 		createdAPIToken = '';
-		const fallbackName = apiTokenScope === 'mcp:full' ? 'OpenPost MCP' : 'OpenPost CLI';
+		const fallbackName = apiTokenScope.startsWith('mcp:') ? 'OpenPost MCP' : 'OpenPost CLI';
 		const workspaceID =
 			apiTokenWorkspaceScope === 'current' ? (workspaceCtx.currentWorkspace?.id ?? '') : '';
 		try {
@@ -2315,6 +2317,20 @@
 						icon={TerminalIcon}
 						class="mb-4"
 					/>
+
+					{#if apiTokenScope === 'mcp:read'}
+						<InlineNotice
+							tone="info"
+							message={m.settings_token_scope_mcp_read_boundary()}
+							class="mb-4"
+						/>
+					{:else if apiTokenScope === 'mcp:full'}
+						<InlineNotice
+							tone="warning"
+							message={m.settings_token_scope_mcp_full_boundary()}
+							class="mb-4"
+						/>
+					{/if}
 
 					{#if apiTokensLoadError}
 						<div data-testid="api-tokens-load-error" class="mb-4">

@@ -23,49 +23,12 @@
 </p>
 
 <div align="center">
-  <h2>A beautiful place to post everywhere.</h2>
-  OpenPost is an open-source social publishing workspace for drafting, adapting, scheduling, and automating posts across multiple platforms. Use the managed app or run the same product on your own infrastructure.
-</div>
-
-<div align="center">
-  <br/>
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="./assets/logos/x-white.svg">
-    <img alt="X (Twitter)" src="./assets/logos/x.svg" width="24">
-  </picture>
-  &nbsp;
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="./assets/logos/mastodon-white.svg">
-    <img alt="Mastodon" src="./assets/logos/mastodon.svg" width="24">
-  </picture>
-  &nbsp;
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="./assets/logos/bluesky-white.svg">
-    <img alt="Bluesky" src="./assets/logos/bluesky.svg" width="24">
-  </picture>
-  &nbsp;
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="./assets/logos/threads-white.svg">
-    <img alt="Threads" src="./assets/logos/threads.svg" width="24">
-  </picture>
-  &nbsp;
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="./assets/logos/linkedin-white.svg">
-    <img alt="LinkedIn" src="./assets/logos/linkedin.svg" width="24">
-  </picture>
-  &nbsp;
-  <img alt="Facebook" src="./assets/logos/facebook.svg" width="24">
-  &nbsp;
-  <img alt="Instagram" src="./assets/logos/instagram.svg" width="24">
-  &nbsp;
-  <img alt="TikTok" src="./assets/logos/tiktok.svg" width="24">
-  &nbsp;
-  <img alt="YouTube" src="./assets/logos/youtube.svg" width="24">
+  <h2>The publishing layer between AI agents and your social accounts.</h2>
+  Let an agent inspect workspace context, prepare a base post, and tailor each destination without receiving provider credentials. Review the result in OpenPost, then schedule it through one visible queue.
 </div>
 
 <p align="center">
-  <br/>
-  <a href="https://app.openpost.social"><strong>Open app</strong></a>
+  <a href="https://app.openpost.social"><strong>Use managed app</strong></a>
   ·
   <a href="https://youtu.be/_mZf3HzQaN8"><strong>Watch demo</strong></a>
   ·
@@ -77,19 +40,31 @@
 </p>
 
 <p align="center">
+  Managed publishing starts at €6/month. There is no automatic hosted free tier or trial. Self-hosted OpenPost has no software subscription.
+</p>
+
+<p align="center">
   <img alt="OpenPost main dashboard screenshot" src="./assets/screenshots/main-dark.png" width="960">
 </p>
+
+## Agent-assisted, human-reviewed publishing
+
+OpenPost gives MCP clients a compact publishing surface without returning decrypted social-provider tokens. A workspace-scoped `mcp:read` token can inspect accounts, media, drafts, schedules, provider readiness, and outcomes while the server rejects every mutation. Preparing or changing drafts and renditions, uploading media, scheduling, and publishing require `mcp:full`.
+
+The server separates guaranteed read-only operations from mutations and external actions. Access tokens are revocable and can be limited to one workspace. This is a technical boundary, not a mandatory approval workflow: an `mcp:full` token can execute publishing operations when the client allows them, so review content and destinations before approval.
+
+See the [agent-assisted publishing guide](https://docs.openpost.social/usage/agent-assisted-publishing) and clone the repository's [OpenPost Launch Kit](./launch-kit/) for a worked campaign brief, sample prompt, five distinct renditions, review checklist, and evidence templates.
 
 ## What OpenPost includes
 
 OpenPost keeps the publishing workflow in one place without hiding provider differences or operational state.
 
-- **Focused composer:** draft a base post, then customize text, media, and settings per account.
+- **Provider-aware preparation:** draft a base post, then customize text, media, format, and settings per account.
 - **Eight publication profiles:** short text, threads, links, images, carousels, Stories, short video, and long video.
 - **Reliable scheduling:** calendar planning, workspace timezones, reusable posting slots, next-slot scheduling, and a durable database-backed job queue.
 - **Visible outcomes:** inspect drafts, scheduled work, destination renditions, published posts, failures, and retry state.
 - **Shared operations:** workspaces, role-based team access, connected accounts, reusable media, prompts, billing, and usage limits.
-- **Automation:** the web app, HTTP API, CLI, and MCP server use the same workspace and account boundaries.
+- **Controlled automation:** the web app, HTTP API, CLI, and MCP server use the same authorization, workspace, account, validation, quota, and queue boundaries.
 - **Portable deployment:** one Go binary or container with the SvelteKit app embedded; SQLite and local media are the defaults, with PostgreSQL and S3-compatible storage available.
 - **Android:** every GitHub release includes a Capacitor APK built from the same responsive web app.
 
@@ -97,7 +72,7 @@ OAuth tokens are encrypted at rest. OpenPost also supports revocable sessions, p
 
 ## Platform support
 
-This table describes the profiles implemented by OpenPost, not every feature offered by each provider. Scheduling and account-specific variants are supported across all listed providers.
+This table describes OpenPost publishing code paths, not every feature offered by each provider. The queue and account-specific variant flows cover every listed provider, but provider approval, app configuration, quotas, and live-account verification still determine whether a destination can publish in production.
 
 | Platform           | Implemented publishing profiles                              | Threads / replies           | Maturity and main caveat                                                         |
 | ------------------ | ------------------------------------------------------------ | --------------------------- | -------------------------------------------------------------------------------- |
@@ -106,16 +81,18 @@ This table describes the profiles implemented by OpenPost, not every feature off
 | Bluesky            | Text, links, up to 4 images, one MP4 video                   | AT Protocol reply chains    | Implemented; video still needs live-account verification                         |
 | LinkedIn           | Text, links, image, document, short and long video           | Child posts become comments | Implemented; permissions, app review, and video need live verification           |
 | Threads            | Text, image, video, and 2-10 item mixed carousels            | Reply chains                | Implemented; public media and approved Meta app access are required               |
-| Facebook Pages     | Text, links, image, multi-photo, Story, short and long video | Comment operations          | Early; Page permissions, app review, and public media URLs apply                 |
-| Instagram Business | Feed image, carousel, Story, and Reel                        | Comment operations          | Early; requires a Page-backed professional account and public media URLs         |
-| TikTok             | Video and 1-35 image photo posts                             | No                          | Early; Content Posting API review or audit is required                           |
-| YouTube            | Shorts and long-form video                                   | No                          | Early; title required, with Google audit and quota constraints                   |
+| Facebook Pages     | Text, links, image, multi-photo, Story, short and long video | Comment operations          | Preview; Page permissions, app review, and public media URLs apply               |
+| Instagram Business | Feed image, carousel, Story, and Reel                        | Comment operations          | Preview; requires a Page-backed professional account and public media URLs       |
+| TikTok             | Video and 1-35 image photo posts                             | No                          | Preview; Content Posting API review or audit is required                         |
+| YouTube            | Shorts and long-form video                                   | No                          | Preview; title required, with Google audit and quota constraints                 |
 
 “Implemented” means the code path and validation exist. Provider approval, deployment configuration, quotas, and live-account verification can still affect production access. See the [provider matrix](https://docs.openpost.social/providers/platform-limits) for current limits.
 
 ## Run OpenPost
 
-The managed app is available at [app.openpost.social](https://app.openpost.social). For self-hosting, copy the environment template, replace the two example secrets, set the public app URL, and start the container:
+The managed app is available at [app.openpost.social](https://app.openpost.social). Registration can create one bootstrap workspace before checkout, but connecting accounts, uploading media, scheduling, publishing, and other provider writes require an active or Polar-trialing subscription. There is no automatic hosted trial or free tier; managed publishing starts at €6/month.
+
+Self-hosted OpenPost has no software subscription. Copy the environment template, replace the two example secrets, set the public app URL, and start the container:
 
 ```bash
 cp .env.example .env

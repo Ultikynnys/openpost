@@ -1,6 +1,6 @@
 # MCP And ChatGPT App
 
-This page is for MCP implementation and protocol details. For setup-oriented user docs, see [Assistant Scheduling With MCP](/mcp/).
+This page is for MCP implementation and protocol details. For setup-oriented user docs, see [Agent-Assisted Publishing With MCP](/mcp/).
 
 OpenPost exposes an authenticated MCP foundation at:
 
@@ -46,9 +46,7 @@ GET /.well-known/oauth-protected-resource
 GET /.well-known/oauth-authorization-server
 ```
 
-The advertised tool surface uses progressive discovery to keep model context
-small. Clients receive only `search_operations`, `query_operation`,
-`execute_operation`, and the Apps widget renderer. `search_operations` returns
+The advertised tool surface uses progressive discovery to keep model context small. `mcp:full` clients receive `search_operations`, `query_operation`, `execute_operation`, and the Apps widget renderer. `mcp:read` clients receive the same surface without `execute_operation`; search results and prompt discovery are filtered to read-only operations. `search_operations` returns
 the exact input/output schema, safety annotations, and required execution tool
 for relevant OpenPost operations on demand. It returns no match for ambiguous
 mutations or tasks outside OpenPost instead of guessing. `query_operation`
@@ -77,7 +75,7 @@ GET /oauth/authorize
 POST /oauth/token
 ```
 
-The approval page can bind the resulting token to the current workspace. A
+The authorization request can ask for `mcp:read` or `mcp:full`; omitted scope defaults to `mcp:full`. The approval page can bind the resulting token to the current workspace. A
 workspace-scoped token can only list that workspace and MCP tools reject any
 request whose `workspace_id` targets another workspace. Manual tokens created in
 Settings support the same optional workspace boundary.
@@ -117,6 +115,8 @@ GET /api/v1/mcp/activity?workspace_id=<workspace-id>
   tool as a whole.
 - `render_scheduler_widget`: renders structured OpenPost scheduler data in the
   ChatGPT Apps widget and stays directly visible for UI resource discovery.
+
+For `mcp:read`, `tools/list` omits `execute_operation`, `search_operations` omits mutation results, and direct or cached mutation calls are rejected before dispatch. Read-only connections receive only the `review_schedule` prompt; prompts that create or adapt work require `mcp:full`.
 
 Example discovery and execution calls:
 
@@ -199,14 +199,14 @@ delegated operation catalog; clients call it only when they want the Apps UI.
 ## Current scope
 
 - Uses the same Bearer authentication path as the CLI and API tokens.
-- Dedicated `mcp:full` tokens can be created in Settings for ChatGPT, Claude, and other MCP clients. Existing `cli:full` tokens also remain accepted by `/mcp` so `openpost-mcp` profiles continue to work.
+- Dedicated `mcp:read` and `mcp:full` tokens can be created in Settings for ChatGPT, Claude, and other MCP clients. Existing `cli:full` tokens also remain accepted by `/mcp` so `openpost-mcp` profiles continue to work.
 - Publishes MCP protected-resource metadata and returns `WWW-Authenticate` plus `_meta["mcp/www_authenticate"]` challenges for unauthenticated MCP requests.
 - Rejects untrusted browser origins, non-JSON requests, oversized request bodies, unsupported post-initialization protocol versions, and authenticated tokens with insufficient scope.
 - Supports MCP `ping` and accepts `notifications/*` messages with HTTP `202 Accepted`, which keeps standard initialization handshakes quiet.
-- Publishes OAuth authorization-server metadata for public PKCE clients, including `S256`, `mcp:full`, and client ID metadata document support.
-- Provides a browser approval page at `/oauth/authorize` and a form-encoded `/oauth/token` code exchange that mints `mcp:full` API tokens.
+- Publishes OAuth authorization-server metadata for public PKCE clients, including `S256`, `mcp:read`, `mcp:full`, and client ID metadata document support.
+- Provides a browser approval page at `/oauth/authorize` and a form-encoded `/oauth/token` code exchange that mints the requested `mcp:read` or `mcp:full` API token; omitted scope defaults to `mcp:full`.
 - Validates client metadata redirect URIs for URL-based client IDs, accepts ChatGPT fallback redirects for predefined clients, and binds OAuth-issued MCP tokens to the `/mcp` resource audience.
-- Advertises and enforces the `mcp:full` OAuth scope in every MCP tool descriptor, with optional single-workspace session boundaries for API-token and OAuth-issued MCP clients.
+- Advertises and enforces `mcp:read` and `mcp:full` OAuth scopes, with optional single-workspace session boundaries for API-token and OAuth-issued MCP clients. Read tokens never receive `execute_operation` and the server rejects cached or direct mutation calls.
 - Advertises a guaranteed read-only `query_operation` boundary separately from mutation-capable `execute_operation`, and enforces the catalog classification server-side before operation dispatch.
 - Documents every advertised and discoverable parameter with examples, uses enums for fixed values, declares required fields and unknown-field behavior explicitly, and validates both operation input and structured output against the advertised schemas.
 - Adds Apps SDK-friendly `_meta["openai/toolInvocation/invoking"]`, `_meta["openai/toolInvocation/invoked"]`, and `outputSchema` metadata to every tool descriptor.

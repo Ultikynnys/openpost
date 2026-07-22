@@ -70,7 +70,7 @@ export const cleanupDaysOptions = [0, 7, 14, 30, 60, 90, 180, 365] as const;
 
 export const inviteRoleOptions = ['editor', 'viewer', 'admin'] as const;
 
-export const apiTokenScopeOptions = ['mcp:full', 'cli:full'] as const;
+export const apiTokenScopeOptions = ['mcp:read', 'mcp:full', 'cli:full'] as const;
 
 export const billingPlans = [
 	{

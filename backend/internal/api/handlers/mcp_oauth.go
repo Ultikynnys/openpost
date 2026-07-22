@@ -33,7 +33,7 @@ type CreateMCPOAuthAuthorizationInput struct {
 		ResponseType        string `json:"response_type" doc:"OAuth response type. Must be code."`
 		ClientID            string `json:"client_id" doc:"OAuth client ID or client metadata URL"`
 		RedirectURI         string `json:"redirect_uri" doc:"OAuth redirect URI"`
-		Scope               string `json:"scope,omitempty" doc:"Requested OAuth scope. Defaults to mcp:full."`
+		Scope               string `json:"scope,omitempty" doc:"Requested OAuth scope. Supported values are mcp:read and mcp:full. Defaults to mcp:full."`
 		State               string `json:"state,omitempty" doc:"Opaque client state to echo to the redirect URI"`
 		CodeChallenge       string `json:"code_challenge,omitempty" doc:"PKCE S256 code challenge. Required when approved is true."`
 		CodeChallengeMethod string `json:"code_challenge_method,omitempty" doc:"PKCE method. Must be S256 when approved is true."`
@@ -109,7 +109,7 @@ func (h *MCPOAuthHandler) authorizationServerMetadata(c echo.Context) error {
 		"grant_types_supported":                 []string{"authorization_code"},
 		"code_challenge_methods_supported":      []string{mcpoauth.CodeChallengeMethodS256},
 		"token_endpoint_auth_methods_supported": []string{"none"},
-		"scopes_supported":                      []string{mcpScopeFull},
+		"scopes_supported":                      []string{mcpScopeRead, mcpScopeFull},
 		"client_id_metadata_document_supported": true,
 		"resource_indicators_supported":         true,
 	})
@@ -177,7 +177,7 @@ func mcpOAuthError(err error) (int, string, string) {
 	case errors.Is(err, mcpoauth.ErrUnsupportedPKCE):
 		return http.StatusBadRequest, "invalid_request", "PKCE S256 is required"
 	case errors.Is(err, mcpoauth.ErrUnsupportedScope):
-		return http.StatusBadRequest, "invalid_scope", "Only mcp:full is supported"
+		return http.StatusBadRequest, "invalid_scope", "Only mcp:read and mcp:full are supported"
 	case errors.Is(err, mcpoauth.ErrUnsupportedResource):
 		return http.StatusBadRequest, "invalid_target", "Unsupported MCP resource"
 	case errors.Is(err, mcpoauth.ErrWorkspaceNotAllowed):

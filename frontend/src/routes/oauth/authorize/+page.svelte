@@ -39,6 +39,9 @@
 			.map((scope) => scope.trim())
 			.filter(Boolean)
 	);
+	let requestedReadOnlyAccess = $derived(
+		scopes.includes('mcp:read') && !scopes.includes('mcp:full')
+	);
 
 	let clientLabel = $derived(clientDisplayName(params.client_id));
 	let redirectHost = $derived(hostname(params.redirect_uri));
@@ -174,6 +177,13 @@
 				{/each}
 			</div>
 		</div>
+
+		<InlineNotice
+			tone={requestedReadOnlyAccess ? 'info' : 'warning'}
+			message={requestedReadOnlyAccess
+				? m.oauth_authorize_read_access_description()
+				: m.oauth_authorize_full_access_description()}
+		/>
 
 		<div class="space-y-2">
 			<p class="text-sm font-medium">{m.oauth_authorize_access_boundary()}</p>

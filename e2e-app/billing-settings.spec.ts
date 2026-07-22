@@ -180,7 +180,10 @@ test("settings lists and revokes active web sessions", async ({
   );
 });
 
-test("settings creates MCP-scoped API tokens", async ({ page, request }) => {
+test("settings creates read-only MCP API tokens by default", async ({
+  page,
+  request,
+}) => {
   const unique = Date.now().toString(36);
   const email = `mcp-token-${unique}@example.com`;
 
@@ -191,8 +194,9 @@ test("settings creates MCP-scoped API tokens", async ({ page, request }) => {
   await page.goto("/settings?tab=developer");
 
   await expect(page.getByTestId("api-token-scope")).toContainText(
-    "MCP / ChatGPT App",
+    "MCP / inspect only",
   );
+  await expect(page.getByText(/Recommended for inspection/)).toBeVisible();
   await page.locator("#api-token-name").fill("ChatGPT App E2E");
   await page.getByRole("button", { name: "Create Token" }).click();
 
@@ -200,7 +204,7 @@ test("settings creates MCP-scoped API tokens", async ({ page, request }) => {
   await expect(page.getByText(/op_cli_[a-f0-9]{8}_/)).toBeVisible();
   const createdToken = page.getByText("ChatGPT App E2E").locator("..");
   await expect(createdToken).toBeVisible();
-  await expect(createdToken).toContainText("MCP / ChatGPT App");
+  await expect(createdToken).toContainText("MCP / inspect only");
 });
 
 test("settings creates and accepts workspace invitations", async ({
@@ -293,7 +297,13 @@ test("plan selection from signup starts checkout after onboarding", async ({
 
   await expect(page).toHaveURL(/\/onboarding\?plan=creator/);
   await page.getByLabel("Workspace name").fill("Plan Handoff E2E");
-  await page.getByRole("button", { name: "Get Started" }).click();
+  await page.getByRole("button", { name: "Create workspace" }).click();
+
+  await expect(page).toHaveURL(/\/\?sample=campaign&plan=creator/);
+  await expect(
+    page.getByRole("heading", { name: "Review an agent-prepared campaign" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Continue plan setup" }).click();
 
   await expect(page).toHaveURL(/\/settings\?checkout=creator/);
   expect(checkoutURL).toContain("/organizations/");

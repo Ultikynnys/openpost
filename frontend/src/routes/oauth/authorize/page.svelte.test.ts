@@ -32,6 +32,7 @@ const mocks = vi.hoisted(() => {
 	return {
 		goto: vi.fn(),
 		post: vi.fn(),
+		pageValue,
 		pageStore,
 		authStore,
 		workspaceCtx: {
@@ -49,6 +50,9 @@ vi.mock('$lib/api/client', () => ({ client: { POST: mocks.post } }));
 describe('OAuth authorization request validation', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
+		mocks.pageValue.url = new URL(
+			'http://localhost/oauth/authorize?response_type=code&redirect_uri=https%3A%2F%2Fclient.example%2Fcallback&code_challenge=challenge&code_challenge_method=S256'
+		);
 	});
 
 	it('disables denial when the request has no client ID', async () => {
@@ -59,5 +63,33 @@ describe('OAuth authorization request validation', () => {
 			.toBeVisible();
 		await expect.element(screen.getByRole('button', { name: 'Deny' })).toBeDisabled();
 		expect(mocks.post).not.toHaveBeenCalled();
+	});
+
+	it('explains that full MCP access can change publishing state', async () => {
+		mocks.pageValue.url = new URL(
+			'http://localhost/oauth/authorize?response_type=code&client_id=chatgpt&redirect_uri=https%3A%2F%2Fclient.example%2Fcallback&scope=mcp%3Afull&code_challenge=challenge&code_challenge_method=S256'
+		);
+
+		const screen = await render(AuthorizePage);
+
+		await expect
+			.element(screen.getByText(/Full MCP access can create and edit drafts/))
+			.toBeVisible();
+		await expect
+			.element(screen.getByText(/the MCP client decides when to show its approval prompt/))
+			.toBeVisible();
+	});
+
+	it('explains the server-enforced read-only MCP scope', async () => {
+		mocks.pageValue.url = new URL(
+			'http://localhost/oauth/authorize?response_type=code&client_id=chatgpt&redirect_uri=https%3A%2F%2Fclient.example%2Fcallback&scope=mcp%3Aread&code_challenge=challenge&code_challenge_method=S256'
+		);
+
+		const screen = await render(AuthorizePage);
+
+		await expect
+			.element(screen.getByText(/Read-only access can inspect the selected workspace/))
+			.toBeVisible();
+		await expect.element(screen.getByText(/cannot create or change data/)).toBeVisible();
 	});
 });

@@ -44,7 +44,7 @@ type ListAPITokensOutput struct {
 type CreateAPITokenInput struct {
 	Body struct {
 		Name        string     `json:"name" doc:"User-visible token name"`
-		Scope       string     `json:"scope,omitempty" doc:"Token scope. Supported values: cli:full, mcp:full. Defaults to cli:full."`
+		Scope       string     `json:"scope,omitempty" doc:"Token scope. Supported values: cli:full, mcp:read, mcp:full. Defaults to cli:full."`
 		WorkspaceID string     `json:"workspace_id,omitempty" doc:"Optional workspace ID this token is limited to"`
 		ExpiresAt   *time.Time `json:"expires_at,omitempty" doc:"Explicit expiry. Null means never expires."`
 	}

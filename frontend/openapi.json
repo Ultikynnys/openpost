@@ -1367,7 +1367,7 @@
 						"type": "string"
 					},
 					"scope": {
-						"description": "Token scope. Supported values: cli:full, mcp:full. Defaults to cli:full.",
+						"description": "Token scope. Supported values: cli:full, mcp:read, mcp:full. Defaults to cli:full.",
 						"type": "string"
 					},
 					"workspace_id": {
@@ -1485,7 +1485,7 @@
 						"type": "string"
 					},
 					"scope": {
-						"description": "Requested OAuth scope. Defaults to mcp:full.",
+						"description": "Requested OAuth scope. Supported values are mcp:read and mcp:full. Defaults to mcp:full.",
 						"type": "string"
 					},
 					"state": {

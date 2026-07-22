@@ -19,6 +19,7 @@
 		onboardingPathForPlan,
 		settingsPathForPlan
 	} from '$lib/billing';
+	import { sampleCampaignPathForPlan, SAMPLE_CAMPAIGN_DISMISSED_KEY } from '$lib/sample-campaign';
 
 	let workspaceName = $state('Personal');
 	let isLoading = $state(false);
@@ -34,7 +35,10 @@
 	}
 
 	function afterOnboardingTarget() {
-		return settingsPathForPlan(selectedPlanID());
+		const planID = selectedPlanID();
+		return localStorage.getItem(SAMPLE_CAMPAIGN_DISMISSED_KEY) === 'true'
+			? settingsPathForPlan(planID)
+			: sampleCampaignPathForPlan(planID);
 	}
 
 	function loginTarget() {
@@ -158,6 +162,9 @@
 						{m.onboarding_submit()}
 					{/if}
 				</Button>
+				<p class="text-center text-xs leading-5 text-muted-foreground">
+					{m.onboarding_sample_hint()}
+				</p>
 			</form>
 		{/if}
 	</div>

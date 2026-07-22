@@ -38,7 +38,7 @@ func TestCreateAndExchangeCodeWithClientMetadata(t *testing.T) {
 			"token_endpoint_auth_method":"none",
 			"grant_types":["authorization_code"],
 			"response_types":["code"],
-			"scope":"mcp:full"
+			"scope":"mcp:read"
 		}`, redirectURI)
 	}))
 	t.Cleanup(client.Close)
@@ -52,7 +52,7 @@ func TestCreateAndExchangeCodeWithClientMetadata(t *testing.T) {
 		ResponseType:        "code",
 		ClientID:            client.URL + "/client.json",
 		RedirectURI:         redirectURI,
-		Scope:               "mcp:full",
+		Scope:               "mcp:read",
 		State:               "state-1",
 		CodeChallenge:       pkceChallenge(verifier),
 		CodeChallengeMethod: CodeChallengeMethodS256,
@@ -86,11 +86,12 @@ func TestCreateAndExchangeCodeWithClientMetadata(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.True(t, strings.HasPrefix(exchanged.AccessToken, "op_cli_"))
-	require.Equal(t, "mcp:full", exchanged.Scope)
+	require.Equal(t, "mcp:read", exchanged.Scope)
 	require.Equal(t, "https://app.openpost.test/mcp", exchanged.Resource)
 
 	principal, err := apitokens.NewService(db).ValidateToken(ctx, exchanged.AccessToken)
 	require.NoError(t, err)
+	require.Equal(t, "mcp:read", principal.Scope)
 	require.Equal(t, "https://app.openpost.test/mcp", principal.Audience)
 	require.Equal(t, "ws-1", principal.WorkspaceID)
 	require.Equal(t, "ChatGPT OpenPost", principal.TokenName)
@@ -104,6 +105,26 @@ func TestCreateAndExchangeCodeWithClientMetadata(t *testing.T) {
 		Resource:     "https://app.openpost.test/mcp",
 	})
 	require.ErrorIs(t, err, ErrInvalidGrant)
+}
+
+func TestNormalizeScopeSupportsReadOnlyAndFullMCPAccess(t *testing.T) {
+	t.Parallel()
+
+	readOnly, err := normalizeScope(apitokens.ScopeMCPRead)
+	require.NoError(t, err)
+	require.Equal(t, apitokens.ScopeMCPRead, readOnly)
+
+	full, err := normalizeScope(apitokens.ScopeMCP)
+	require.NoError(t, err)
+	require.Equal(t, apitokens.ScopeMCP, full)
+
+	_, err = normalizeScope(apitokens.ScopeMCPRead + " " + apitokens.ScopeMCP)
+	require.ErrorIs(t, err, ErrUnsupportedScope)
+
+	require.True(t, clientMetadataAllowsScope("mcp:read mcp:full", apitokens.ScopeMCPRead))
+	require.True(t, clientMetadataAllowsScope("mcp:read mcp:full", apitokens.ScopeMCP))
+	require.False(t, clientMetadataAllowsScope("mcp:full", apitokens.ScopeMCPRead))
+	require.False(t, clientMetadataAllowsScope("mcp:read profile", apitokens.ScopeMCPRead))
 }
 
 func TestCreateAuthorizationCodeRejectsInaccessibleWorkspaceScope(t *testing.T) {

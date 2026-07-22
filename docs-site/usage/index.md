@@ -11,6 +11,7 @@ The web app is the main editorial surface.
 - [Workspaces](/usage/workspaces) keep brands, accounts, prompts, schedules, and media separate.
 - [Settings](/usage/settings) explains the Workspace, Account, and Organization split.
 - [Accounts](/usage/accounts) explains how connected provider identities appear in a workspace.
+- [Agent-Assisted Publishing](/usage/agent-assisted-publishing) shows how an MCP client can prepare destination renditions while a person reviews and approves the campaign.
 - [Composing Posts](/usage/composing-posts) covers destination selection, media, variants, and the composer.
 - [Threads](/usage/threads) covers multi-post sequences.
 - [Scheduling](/usage/scheduling) covers queued publishing and failure visibility.
@@ -31,7 +32,7 @@ The CLI is for terminal, CI, cron, and scripted workflows against a running Open
 
 MCP is for authenticated assistant workflows. Use it when a client such as ChatGPT, Claude, Cursor, Codex, or another agent should inspect context, create drafts, adapt renditions, or schedule posts with OpenPost permissions.
 
-- [MCP Assistant Scheduling](/mcp/) covers the user-facing MCP workflow.
+- [Agent-Assisted Publishing With MCP](/mcp/) covers the user-facing MCP workflow and token scopes.
 - [MCP and ChatGPT App Developer Notes](/development/mcp) cover implementation details for contributors.
 
 ## Where not to look

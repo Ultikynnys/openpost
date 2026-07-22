@@ -2,12 +2,12 @@
 
 ## Supported Versions
 
-Security patches are currently provided for the latest OpenPost release line.
+Security patches are currently provided for the latest OpenPost release.
 
-| Version | Supported |
-| ------- | --------- |
-| latest  | Yes       |
-| v1.x    | Yes       |
+| Version        | Supported |
+| -------------- | --------- |
+| Latest release | Yes       |
+| Older releases | No        |
 
 We recommend always using the latest release for security patches and improvements.
 
@@ -38,7 +38,7 @@ Email the maintainer at `openpost+security@rgo.pt` and include:
 - Configure a proper firewall.
 - Do not expose the OpenPost port directly to the internet unless that is part of your deliberate reverse-proxy setup.
 - For Threads media publishing, confirm that Meta can reach the public media endpoint.
-- Use HTTPS before configuring production OAuth callbacks for X, Mastodon, LinkedIn, or Threads.
+- Use HTTPS before configuring production OAuth callbacks for X, Mastodon, LinkedIn, Threads, Facebook, Instagram, TikTok, or YouTube.
 
 ### Data Protection
 
@@ -54,16 +54,26 @@ Email the maintainer at `openpost+security@rgo.pt` and include:
 - Rotate OAuth tokens and secrets periodically.
 - Revoke access for accounts no longer in use.
 
+### Assistant And Automation Access
+
+- Prefer an `mcp:read` token when a client only needs to inspect workspaces, accounts, media, drafts, schedules, or delivery state. The MCP server omits mutation tools for this scope and rejects cached or direct mutation calls.
+- Use `mcp:full` only when the client must create drafts or renditions, upload media, schedule, publish, reply, or moderate. OpenPost separates read operations from `execute_operation`, but the MCP client controls whether and when it asks for approval.
+- Limit each MCP token to one workspace when possible. Create a separate token per client and revoke it from Settings when the connection is no longer needed.
+- Treat API tokens as secrets. OpenPost stores only their hashes and shows the raw value once.
+- Connected-provider credentials remain on the OpenPost server and are not returned through MCP responses.
+
 ## Security Features in OpenPost
 
 OpenPost includes:
 
-- Encrypted OAuth tokens at rest
+- Encrypted provider access and refresh tokens at rest
 - Bcrypt password hashing
 - JWT authentication
 - Account MFA with TOTP
 - WebAuthn passkeys
-- OAuth PKCE for X authentication
+- OAuth 1.0a for X account connections
+- Revocable, expiring API tokens with optional workspace boundaries
+- Server-enforced read-only MCP access, separate read and mutation tools, and MCP tool-call audit records
 - A self-contained server binary with no required external queue or database service
 
 ## Third-Party Dependencies

@@ -77,6 +77,7 @@ const (
 	mcpPromptPlanPost     = "plan_social_post"
 	mcpPromptRenditions   = "adapt_platform_renditions"
 	mcpPromptReviewQueue  = "review_schedule"
+	mcpScopeRead          = apitokens.ScopeMCPRead
 	mcpScopeFull          = apitokens.ScopeMCP
 	maxRemoteMediaBytes   = 50 * 1024 * 1024
 	maxMCPRequestBytes    = 2 * 1024 * 1024
@@ -379,7 +380,7 @@ func (h *MCPHandler) protectedResourceMetadata(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]any{
 		"resource":                 resource,
 		"authorization_servers":    []string{baseURL},
-		"scopes_supported":         []string{mcpScopeFull},
+		"scopes_supported":         []string{mcpScopeRead, mcpScopeFull},
 		"bearer_methods_supported": []string{"header"},
 		"resource_name":            "OpenPost MCP",
 	})
@@ -433,11 +434,23 @@ func (h *MCPHandler) authenticate(r *http.Request) (*middleware.Principal, error
 
 func mcpScopeAllowed(scope string) bool {
 	switch strings.TrimSpace(scope) {
-	case "", apitokens.ScopeCLI, apitokens.ScopeMCP:
+	case "", apitokens.ScopeCLI, apitokens.ScopeMCPRead, apitokens.ScopeMCP:
 		return true
 	default:
 		return false
 	}
+}
+
+func mcpScopeIsReadOnly(scope string) bool {
+	return strings.TrimSpace(scope) == apitokens.ScopeMCPRead
+}
+
+func mcpInstructions(scope string) string {
+	const base = "OpenPost schedules social posts and format-first publications through a compact safety-aware tool surface. Call search_operations with a plain-language task to discover relevant operation names and schemas. Call query_operation only for guaranteed read-only operations. Search again when required fields are unclear. Use render_scheduler_widget directly when a visual summary helps. All delegated operations retain the same authorization, workspace scoping, schema validation, quota, and audit controls."
+	if mcpScopeIsReadOnly(scope) {
+		return base + " This connection is read-only: mutation operations are hidden from discovery and rejected by the server."
+	}
+	return base + " Call execute_operation only for operations that change state or interact with external systems, and only after the user approves the mutation."
 }
 
 type mcpWorkspaceScopeContextKey struct{}
@@ -486,7 +499,7 @@ func (h *MCPHandler) dispatch(ctx context.Context, principal *middleware.Princip
 				"name":    "openpost",
 				"version": h.serverVersion,
 			},
-			"instructions": "OpenPost schedules social posts and format-first publications through a compact safety-aware tool surface. Call search_operations with a plain-language task to discover relevant operation names, schemas, and the required execution tool. Call query_operation only for guaranteed read-only operations and execute_operation only for operations that change state or interact with external systems. Search again when required fields are unclear. Use render_scheduler_widget directly when a visual summary helps. All delegated operations retain the same authorization, workspace scoping, schema validation, quota, and audit controls.",
+			"instructions": mcpInstructions(principal.Scope),
 			"capabilities": map[string]any{
 				"tools":     map[string]any{"listChanged": false},
 				"prompts":   map[string]any{"listChanged": false},
@@ -496,23 +509,30 @@ func (h *MCPHandler) dispatch(ctx context.Context, principal *middleware.Princip
 	case "ping":
 		return map[string]any{}, nil
 	case "tools/list":
-		return map[string]any{"tools": mcpAdvertisedTools()}, nil
+		return map[string]any{"tools": mcpAdvertisedToolsForScope(principal.Scope)}, nil
 	case "resources/list":
 		return h.listMCPResources(), nil
 	case "resources/read":
 		return h.readMCPResource(req.Params)
 	case "prompts/list":
-		return map[string]any{"prompts": []map[string]any{
-			mcpPlanSocialPostPrompt(),
-			mcpAdaptPlatformRenditionsPrompt(),
-			mcpReviewSchedulePrompt(),
-		}}, nil
+		return map[string]any{"prompts": mcpPromptsForScope(principal.Scope)}, nil
 	case "prompts/get":
-		return mcpGetPrompt(req.Params)
+		return mcpGetPrompt(req.Params, mcpScopeIsReadOnly(principal.Scope))
 	case "tools/call":
 		return h.callTool(ctx, principal, req.Params)
 	default:
 		return nil, &mcpError{Code: -32601, Message: "method not found"}
+	}
+}
+
+func mcpPromptsForScope(scope string) []map[string]any {
+	if mcpScopeIsReadOnly(scope) {
+		return []map[string]any{mcpReviewSchedulePrompt()}
+	}
+	return []map[string]any{
+		mcpPlanSocialPostPrompt(),
+		mcpAdaptPlatformRenditionsPrompt(),
+		mcpReviewSchedulePrompt(),
 	}
 }
 
@@ -554,13 +574,16 @@ func mcpReviewSchedulePrompt() map[string]any {
 	}
 }
 
-func mcpGetPrompt(raw json.RawMessage) (any, *mcpError) {
+func mcpGetPrompt(raw json.RawMessage, readOnly ...bool) (any, *mcpError) {
 	var params struct {
 		Name      string            `json:"name"`
 		Arguments map[string]string `json:"arguments"`
 	}
 	if err := json.Unmarshal(raw, &params); err != nil {
 		return nil, &mcpError{Code: -32602, Message: "invalid prompt params"}
+	}
+	if len(readOnly) > 0 && readOnly[0] && params.Name != mcpPromptReviewQueue {
+		return nil, &mcpError{Code: -32602, Message: "this prompt requires mcp:full because it creates or changes OpenPost data"}
 	}
 	switch params.Name {
 	case mcpPromptPlanPost:
@@ -865,6 +888,20 @@ func mcpAdvertisedTools() []map[string]any {
 		mcpExecuteTool(),
 		mcpRenderSchedulerWidgetTool(),
 	}
+}
+
+func mcpAdvertisedToolsForScope(scope string) []map[string]any {
+	tools := mcpAdvertisedTools()
+	if !mcpScopeIsReadOnly(scope) {
+		return tools
+	}
+	readOnlyTools := make([]map[string]any, 0, len(tools)-1)
+	for _, tool := range tools {
+		if tool["name"] != mcpToolExecute {
+			readOnlyTools = append(readOnlyTools, tool)
+		}
+	}
+	return readOnlyTools
 }
 
 type mcpOperationMode string
@@ -2021,7 +2058,7 @@ func mcpOperationDescriptor(tool map[string]any, mode mcpOperationMode, destruct
 }
 
 func mcpToolDescriptor(tool map[string]any, safety mcpToolSafety) map[string]any {
-	securitySchemes := []map[string]any{mcpOAuthSecurityScheme()}
+	securitySchemes := []map[string]any{mcpOAuthSecurityScheme(safety.ReadOnly)}
 	toolName, _ := tool["name"].(string)
 	if inputSchema, ok := tool["inputSchema"].(map[string]any); ok {
 		mcpPrepareInputSchema(inputSchema)
@@ -2225,10 +2262,14 @@ func mcpOpenObjectSchema() map[string]any {
 	}
 }
 
-func mcpOAuthSecurityScheme() map[string]any {
+func mcpOAuthSecurityScheme(readOnly bool) map[string]any {
+	scopes := []string{mcpScopeFull}
+	if readOnly {
+		scopes = []string{mcpScopeRead, mcpScopeFull}
+	}
 	return map[string]any{
 		"type":   "oauth2",
-		"scopes": []string{mcpScopeFull},
+		"scopes": scopes,
 	}
 }
 
@@ -2238,7 +2279,7 @@ type mcpOperationMatch struct {
 	doc   map[string]any
 }
 
-func searchMCPOperations(args map[string]any) (any, *mcpError) {
+func searchMCPOperations(args map[string]any, allowedModes ...mcpOperationMode) (any, *mcpError) {
 	var input struct {
 		Query string `json:"query"`
 		Limit int    `json:"limit"`
@@ -2261,6 +2302,9 @@ func searchMCPOperations(args map[string]any) (any, *mcpError) {
 	terms := mcpSearchTerms(query)
 	matches := make([]mcpOperationMatch, 0, input.Limit)
 	for index, operation := range mcpOperationCatalog() {
+		if !mcpOperationModeAllowed(operation.Mode, allowedModes) {
+			continue
+		}
 		doc := mcpOperationDocument(operation)
 		name, _ := doc["name"].(string)
 		title, _ := doc["title"].(string)
@@ -2297,6 +2341,18 @@ func searchMCPOperations(args map[string]any) (any, *mcpError) {
 			"operations": operations,
 		},
 	}, nil
+}
+
+func mcpOperationModeAllowed(mode mcpOperationMode, allowed []mcpOperationMode) bool {
+	if len(allowed) == 0 {
+		return true
+	}
+	for _, candidate := range allowed {
+		if mode == candidate {
+			return true
+		}
+	}
+	return false
 }
 
 func mcpOperationDocument(operation mcpOperationDefinition) map[string]any {
@@ -2451,16 +2507,31 @@ func (h *MCPHandler) callTool(ctx context.Context, principal *middleware.Princip
 	canonicalName := canonicalMCPToolName(params.Name)
 	auditToolName, auditArgs := mcpToolAuditTarget(canonicalName, params.Arguments)
 	start := time.Now()
+	if mcpScopeIsReadOnly(principal.Scope) && mcpToolCallChangesState(canonicalName) {
+		rpcErr := &mcpError{Code: -32602, Message: "this token has mcp:read scope and cannot run state-changing operations; authorize mcp:full access to make changes"}
+		h.recordToolCall(ctx, principal, auditToolName, workspaceIDFromMCPArguments(auditArgs), time.Since(start), rpcErr)
+		return nil, rpcErr
+	}
 	if rpcErr := validateMCPToolArguments(canonicalName, params.Arguments); rpcErr != nil {
 		h.recordToolCall(ctx, principal, auditToolName, workspaceIDFromMCPArguments(auditArgs), time.Since(start), rpcErr)
 		return nil, rpcErr
 	}
-	result, auditToolName, auditArgs, rpcErr := h.executeMCPTool(ctx, principal.UserID, canonicalName, params.Arguments)
+	result, auditToolName, auditArgs, rpcErr := h.executeMCPTool(ctx, principal.UserID, principal.Scope, canonicalName, params.Arguments)
 	if rpcErr == nil {
 		rpcErr = validateMCPResult(canonicalName, auditToolName, result)
 	}
 	h.recordToolCall(ctx, principal, auditToolName, workspaceIDFromMCPArguments(auditArgs), time.Since(start), rpcErr)
 	return result, rpcErr
+}
+
+func mcpToolCallChangesState(canonicalName string) bool {
+	if canonicalName == mcpToolExecute {
+		return true
+	}
+	if operation, ok := mcpOperationByName(canonicalName); ok {
+		return operation.Mode == mcpOperationExecute
+	}
+	return false
 }
 
 func parseMCPToolCallParams(raw json.RawMessage) (mcpToolCallParams, *mcpError) {
@@ -2492,7 +2563,7 @@ func mcpToolAuditTarget(canonicalName string, arguments map[string]any) (string,
 	return auditToolName, auditArgs
 }
 
-func (h *MCPHandler) executeMCPTool(ctx context.Context, userID, canonicalName string, arguments map[string]any) (any, string, map[string]any, *mcpError) {
+func (h *MCPHandler) executeMCPTool(ctx context.Context, userID, scope, canonicalName string, arguments map[string]any) (any, string, map[string]any, *mcpError) {
 	auditToolName, auditArgs := mcpToolAuditTarget(canonicalName, arguments)
 	var (
 		result any
@@ -2500,7 +2571,11 @@ func (h *MCPHandler) executeMCPTool(ctx context.Context, userID, canonicalName s
 	)
 	switch canonicalName {
 	case mcpToolSearch:
-		result, rpcErr = searchMCPOperations(arguments)
+		if mcpScopeIsReadOnly(scope) {
+			result, rpcErr = searchMCPOperations(arguments, mcpOperationQuery)
+		} else {
+			result, rpcErr = searchMCPOperations(arguments)
+		}
 	case mcpToolQuery, mcpToolExecute:
 		var input mcpDelegatedOperationInput
 		if err := decodeMCPArguments(arguments, &input); err != nil {

@@ -2247,7 +2247,7 @@ export interface components {
             expires_at?: string;
             /** @description User-visible token name */
             name: string;
-            /** @description Token scope. Supported values: cli:full, mcp:full. Defaults to cli:full. */
+            /** @description Token scope. Supported values: cli:full, mcp:read, mcp:full. Defaults to cli:full. */
             scope?: string;
             /** @description Optional workspace ID this token is limited to */
             workspace_id?: string;
@@ -2310,7 +2310,7 @@ export interface components {
             resource?: string;
             /** @description OAuth response type. Must be code. */
             response_type: string;
-            /** @description Requested OAuth scope. Defaults to mcp:full. */
+            /** @description Requested OAuth scope. Supported values are mcp:read and mcp:full. Defaults to mcp:full. */
             scope?: string;
             /** @description Opaque client state to echo to the redirect URI */
             state?: string;

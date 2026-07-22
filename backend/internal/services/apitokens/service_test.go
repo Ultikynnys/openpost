@@ -89,6 +89,10 @@ func TestGenerateTokenValidatesScope(t *testing.T) {
 	seedServiceUser(ctx, t, db, "user-1", "user@example.com")
 
 	service := NewService(db)
+	mcpRead, err := service.GenerateToken(ctx, "user-1", "Read-only MCP", ScopeMCPRead, nil)
+	require.NoError(t, err)
+	require.Equal(t, ScopeMCPRead, mcpRead.Model.Scope)
+
 	mcp, err := service.GenerateToken(ctx, "user-1", "ChatGPT App", ScopeMCP, nil)
 	require.NoError(t, err)
 	require.Equal(t, ScopeMCP, mcp.Model.Scope)

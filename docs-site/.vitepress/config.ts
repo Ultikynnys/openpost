@@ -19,6 +19,7 @@ const userDocsSidebar = [
 		collapsed: false,
 		items: [
 			{ text: 'Overview', link: '/usage/' },
+			{ text: 'Agent-Assisted Publishing', link: '/usage/agent-assisted-publishing' },
 			{ text: 'Workspaces', link: '/usage/workspaces' },
 			{ text: 'Settings', link: '/usage/settings' },
 			{ text: 'Accounts', link: '/usage/accounts' },
@@ -95,6 +96,7 @@ const selfHostingSidebar = [
 		collapsed: false,
 		items: [
 			{ text: 'Overview', link: '/providers/overview' },
+			{ text: 'Launch Verification Matrix', link: '/providers/launch-matrix' },
 			{ text: 'Supported Platforms & Limits', link: '/providers/platform-limits' },
 			{ text: 'Provider Troubleshooting', link: '/providers/troubleshooting' },
 			{ text: 'Provider Roadmap', link: '/providers/roadmap' },

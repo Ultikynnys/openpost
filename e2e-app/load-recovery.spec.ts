@@ -185,7 +185,7 @@ test("onboarding does not offer workspace creation when bootstrap fails", async 
   const loadError = page.getByTestId("onboarding-load-error");
   await expect(loadError).toContainText("Failed to load workspaces");
   await expect(page.getByLabel("Workspace name")).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Get Started" })).toHaveCount(
+  await expect(page.getByRole("button", { name: "Create workspace" })).toHaveCount(
     0,
   );
 

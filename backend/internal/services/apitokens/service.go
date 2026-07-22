@@ -20,6 +20,7 @@ import (
 const (
 	TokenPrefix       = "op_cli"
 	ScopeCLI          = "cli:full"
+	ScopeMCPRead      = "mcp:read"
 	ScopeMCP          = "mcp:full"
 	DefaultScope      = ScopeCLI
 	DefaultExpiration = 90 * 24 * time.Hour
@@ -118,7 +119,7 @@ func NormalizeScope(scope string) (string, error) {
 		return DefaultScope, nil
 	}
 	switch scope {
-	case ScopeCLI, ScopeMCP:
+	case ScopeCLI, ScopeMCPRead, ScopeMCP:
 		return scope, nil
 	default:
 		return "", ErrInvalidScope

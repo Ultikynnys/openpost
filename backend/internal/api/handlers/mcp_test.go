@@ -338,7 +338,7 @@ func TestMCPProtectedResourceMetadata(t *testing.T) {
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &out))
 	require.Equal(t, "https://app.openpost.test/mcp", out["resource"])
 	require.Equal(t, []any{"https://app.openpost.test"}, out["authorization_servers"])
-	require.Equal(t, []any{"mcp:full"}, out["scopes_supported"])
+	require.Equal(t, []any{"mcp:read", "mcp:full"}, out["scopes_supported"])
 	require.Equal(t, []any{"header"}, out["bearer_methods_supported"])
 }
 
@@ -348,12 +348,13 @@ func TestMCPAuthenticatesSupportedTokenScopes(t *testing.T) {
 	srv := newMCPTestServer(t)
 	srv.handler.auth = mcpScopeAuthenticator{
 		"web-token":   {UserID: "user-1", Email: "user@example.com"},
+		"read-token":  {UserID: "user-1", Email: "user@example.com", Scope: "mcp:read"},
 		"mcp-token":   {UserID: "user-1", Email: "user@example.com", Scope: "mcp:full"},
 		"cli-token":   {UserID: "user-1", Email: "user@example.com", Scope: "cli:full"},
 		"media-token": {UserID: "user-1", Email: "user@example.com", Scope: "media:read"},
 	}
 
-	for _, token := range []string{"web-token", "mcp-token", "cli-token"} {
+	for _, token := range []string{"web-token", "read-token", "mcp-token", "cli-token"} {
 		resp := srv.request(t, token, map[string]any{
 			"jsonrpc": "2.0",
 			"id":      token,
@@ -370,6 +371,112 @@ func TestMCPAuthenticatesSupportedTokenScopes(t *testing.T) {
 	require.Equal(t, http.StatusForbidden, resp.Code)
 	require.Contains(t, resp.Header().Get("WWW-Authenticate"), `scope="mcp:full"`)
 	require.Contains(t, resp.Header().Get("WWW-Authenticate"), `error="insufficient_scope"`)
+}
+
+func TestMCPReadOnlyScopeHidesAndRejectsMutations(t *testing.T) {
+	t.Parallel()
+
+	srv := newMCPTestServer(t)
+	srv.handler.auth = mcpScopeAuthenticator{
+		"read-token": {
+			UserID:      "user-1",
+			Email:       "user@example.com",
+			Scope:       "mcp:read",
+			WorkspaceID: "ws-1",
+			ClientID:    "token-read-only",
+			ClientName:  "Read-only MCP",
+		},
+	}
+
+	toolsResp := srv.request(t, "read-token", map[string]any{
+		"jsonrpc": "2.0",
+		"id":      "read-tools",
+		"method":  "tools/list",
+	})
+	require.Equal(t, http.StatusOK, toolsResp.Code)
+	var toolsOut map[string]any
+	require.NoError(t, json.Unmarshal(toolsResp.Body.Bytes(), &toolsOut))
+	tools := toolsOut["result"].(map[string]any)["tools"].([]any)
+	require.Len(t, tools, 3)
+	for _, item := range tools {
+		require.NotEqual(t, mcpToolExecute, item.(map[string]any)["name"])
+	}
+
+	initializeResp := srv.request(t, "read-token", map[string]any{
+		"jsonrpc": "2.0",
+		"id":      "read-initialize",
+		"method":  "initialize",
+		"params": map[string]any{
+			"protocolVersion": mcpProtocolVersion,
+			"capabilities":    map[string]any{},
+			"clientInfo":      map[string]any{"name": "test", "version": "1"},
+		},
+	})
+	var initializeOut map[string]any
+	require.NoError(t, json.Unmarshal(initializeResp.Body.Bytes(), &initializeOut))
+	require.Contains(t, initializeOut["result"].(map[string]any)["instructions"], "This connection is read-only")
+
+	promptsResp := srv.request(t, "read-token", map[string]any{
+		"jsonrpc": "2.0",
+		"id":      "read-prompts",
+		"method":  "prompts/list",
+	})
+	var promptsOut map[string]any
+	require.NoError(t, json.Unmarshal(promptsResp.Body.Bytes(), &promptsOut))
+	prompts := promptsOut["result"].(map[string]any)["prompts"].([]any)
+	require.Len(t, prompts, 1)
+	require.Equal(t, mcpPromptReviewQueue, prompts[0].(map[string]any)["name"])
+
+	searchResp := srv.request(t, "read-token", map[string]any{
+		"jsonrpc": "2.0",
+		"id":      "read-search",
+		"method":  "tools/call",
+		"params": map[string]any{
+			"name":      mcpToolSearch,
+			"arguments": map[string]any{"query": "delete a provider comment"},
+		},
+	})
+	var searchOut map[string]any
+	require.NoError(t, json.Unmarshal(searchResp.Body.Bytes(), &searchOut))
+	operations := searchOut["result"].(map[string]any)["structuredContent"].(map[string]any)["operations"].([]any)
+	require.Empty(t, operations)
+
+	queryResp := srv.request(t, "read-token", map[string]any{
+		"jsonrpc": "2.0",
+		"id":      "read-query",
+		"method":  "tools/call",
+		"params": map[string]any{
+			"name": mcpToolQuery,
+			"arguments": map[string]any{
+				"operation": "list_accounts",
+				"arguments": map[string]any{"workspace_id": "ws-1"},
+			},
+		},
+	})
+	var queryOut map[string]any
+	require.NoError(t, json.Unmarshal(queryResp.Body.Bytes(), &queryOut))
+	require.NotContains(t, queryOut, "error")
+
+	for _, toolName := range []string{mcpToolExecute, mcpToolCreateDraft} {
+		mutationResp := srv.request(t, "read-token", map[string]any{
+			"jsonrpc": "2.0",
+			"id":      "read-mutation-" + toolName,
+			"method":  "tools/call",
+			"params": map[string]any{
+				"name": toolName,
+				"arguments": map[string]any{
+					"operation": mcpToolCreateDraft,
+					"arguments": map[string]any{
+						"workspace_id": "ws-1",
+						"content":      "This must not be created",
+					},
+				},
+			},
+		})
+		var mutationOut map[string]any
+		require.NoError(t, json.Unmarshal(mutationResp.Body.Bytes(), &mutationOut))
+		require.Contains(t, mutationOut["error"].(map[string]any)["message"], "mcp:read")
+	}
 }
 
 func TestMCPRejectsAudienceMismatch(t *testing.T) {
@@ -433,7 +540,11 @@ func TestMCPToolsList(t *testing.T) {
 		require.Len(t, securitySchemes, 1)
 		scheme := securitySchemes[0].(map[string]any)
 		require.Equal(t, "oauth2", scheme["type"])
-		require.Equal(t, []any{"mcp:full"}, scheme["scopes"])
+		if descriptor["annotations"].(map[string]any)["readOnlyHint"] == true {
+			require.Equal(t, []any{"mcp:read", "mcp:full"}, scheme["scopes"])
+		} else {
+			require.Equal(t, []any{"mcp:full"}, scheme["scopes"])
+		}
 		meta := descriptor["_meta"].(map[string]any)
 		require.Equal(t, descriptor["securitySchemes"], meta["securitySchemes"])
 		require.NotEmpty(t, meta["openai/toolInvocation/invoking"])

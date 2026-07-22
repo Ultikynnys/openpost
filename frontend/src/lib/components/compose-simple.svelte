@@ -61,6 +61,7 @@
 	import { soundPreferences } from '$lib/stores/sound-preferences.svelte';
 	import InlineNotice from './inline-notice.svelte';
 	import DestructiveConfirmDialog from './destructive-confirm-dialog.svelte';
+	import { sampleCampaignPathForPlan, SAMPLE_CAMPAIGN_DISMISSED_KEY } from '$lib/sample-campaign';
 
 	// --------------------------------------------------------------------------
 	// Types
@@ -133,6 +134,7 @@
 	let accountLoadError = $state('');
 	let accountsWorkspaceId = $state('');
 	let accountRetryIds: string[] | undefined = undefined;
+	let showSampleCampaignEntry = $state(false);
 	let workspaceRequestSequence = 0;
 	let accountRequestSequence = 0;
 	let nextSlotRequestSequence = 0;
@@ -751,8 +753,14 @@
 	}
 
 	onMount(() => {
+		showSampleCampaignEntry = localStorage.getItem(SAMPLE_CAMPAIGN_DISMISSED_KEY) !== 'true';
 		void initializeComposer();
 	});
+
+	function dismissSampleCampaignEntry() {
+		showSampleCampaignEntry = false;
+		localStorage.setItem(SAMPLE_CAMPAIGN_DISMISSED_KEY, 'true');
+	}
 
 	$effect(() => {
 		const post = initialPost;
@@ -2557,6 +2565,25 @@
 				{/each}
 			</ul>
 		</div>
+	{/if}
+	{#if showSampleCampaignEntry && !isEditMode && selectedWorkspaceId && !accountControlLoading && !accountLoadError && accounts.length === 0}
+		<InlineNotice
+			message={m.compose_sample_campaign_entry()}
+			class="mx-3 mt-2 md:mx-4 md:mt-3"
+			onDismiss={dismissSampleCampaignEntry}
+			dismissLabel={m.common_dismiss()}
+		>
+			{#snippet actions()}
+				<Button
+					href={sampleCampaignPathForPlan()}
+					variant="outline"
+					size="sm"
+					onclick={dismissSampleCampaignEntry}
+				>
+					{m.compose_sample_campaign_action()}
+				</Button>
+			{/snippet}
+		</InlineNotice>
 	{/if}
 
 	<!-- ====================================================================== -->

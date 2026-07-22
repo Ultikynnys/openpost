@@ -118,6 +118,7 @@ func TestMCPOAuthAuthorizationCodeFlowIssuesUsableMCPToken(t *testing.T) {
 	require.NoError(t, json.Unmarshal(metadataResp.Body.Bytes(), &metadata))
 	require.Equal(t, "https://app.openpost.test/oauth/authorize", metadata["authorization_endpoint"])
 	require.Equal(t, "https://app.openpost.test/oauth/token", metadata["token_endpoint"])
+	require.Equal(t, []any{"mcp:read", "mcp:full"}, metadata["scopes_supported"])
 	require.Equal(t, true, metadata["client_id_metadata_document_supported"])
 
 	verifier := strings.Repeat("e", 43)
