@@ -78,7 +78,10 @@ backend/media/
 /backend/devenv.lock
 
 .pre-commit-config.yaml
-.codex
+.codex/*
+!.codex/hooks.json
+.impeccable/config.local.json
+.impeccable/hook.cache.json
 TODO.md
 
 cli/openpost
