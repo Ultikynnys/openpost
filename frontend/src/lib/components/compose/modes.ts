@@ -42,6 +42,11 @@ export interface ComposerAccountTarget {
 	account_username?: string;
 }
 
+export interface ComposerCapabilityTarget {
+	provider: string;
+	profile: string;
+}
+
 export interface FocusedRoleField {
 	key: FocusedFieldKey;
 	label: string;
@@ -195,6 +200,25 @@ export function composerMode(key: ComposerModeKey): ComposerMode {
 
 export function isLegacyComposerMode(key: ComposerModeKey): boolean {
 	return composerMode(key).flow === 'legacy';
+}
+
+export function isAccountCompatibleWithMode(
+	mode: ComposerModeKey,
+	account: ComposerAccountTarget,
+	capabilities: readonly ComposerCapabilityTarget[] = []
+): boolean {
+	const provider = getPlatformKey(account.platform);
+	if (
+		provider === 'youtube' &&
+		mode !== 'short_video' &&
+		mode !== 'long_video'
+	) {
+		return false;
+	}
+	if (capabilities.length === 0) return true;
+	return capabilities.some(
+		(capability) => capability.provider === provider && capability.profile === mode
+	);
 }
 
 export function roleFieldsForMode(

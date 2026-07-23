@@ -58,6 +58,11 @@
 		workspaceScheduleFromISO,
 		workspaceScheduleToISO
 	} from './compose/schedule-timezone';
+	import {
+		composerMode,
+		isAccountCompatibleWithMode,
+		type ComposerModeKey
+	} from './compose/modes';
 	import { soundPreferences } from '$lib/stores/sound-preferences.svelte';
 	import InlineNotice from './inline-notice.svelte';
 	import DestructiveConfirmDialog from './destructive-confirm-dialog.svelte';
@@ -214,6 +219,11 @@
 	const hasContent = $derived(hasAnyContent(posts));
 	const totalChars = $derived(posts.reduce((sum, p) => sum + p.content.length, 0));
 	const isThread = $derived(posts.length > 1);
+	const legacyMode = $derived<ComposerModeKey>(isThread ? 'thread' : 'short_text');
+	const legacyModeMeta = $derived(composerMode(legacyMode));
+	const compatibleAccounts = $derived(
+		accounts.filter((account) => isAccountCompatibleWithMode(legacyMode, account))
+	);
 	const autoSavesDraft = $derived(!isEditMode || initialPost?.status === 'draft');
 	const selectedAccounts = $derived(accounts.filter((a) => selectedAccountIds.includes(a.id)));
 	const syncedLinkedInThreadAccounts = $derived.by(() => {
@@ -928,17 +938,17 @@
 			}
 
 			const nextAccounts = data ?? [];
+			const nextCompatibleAccounts = nextAccounts.filter((account) =>
+				isAccountCompatibleWithMode(legacyMode, account)
+			);
 			accounts = nextAccounts;
 			if (selectionToPreserve && selectionToPreserve.length > 0) {
-				const validIds = nextAccounts.map((account) => account.id);
+				const validIds = nextCompatibleAccounts.map((account) => account.id);
 				selectedAccountIds = selectionToPreserve.filter((id) => validIds.includes(id));
-				if (selectedAccountIds.length === 0) {
-					selectedAccountIds = nextAccounts.map((account) => account.id);
-				}
 			} else {
-				selectedAccountIds = nextAccounts.map((account) => account.id);
+				selectedAccountIds = nextCompatibleAccounts.map((account) => account.id);
 			}
-			sanitizeSelectedAccounts(nextAccounts);
+			sanitizeSelectedAccounts(nextCompatibleAccounts);
 		} catch (e) {
 			console.error('Failed to load accounts:', e);
 			if (requestSequence !== accountRequestSequence || selectedWorkspaceId !== workspaceId) {
@@ -990,6 +1000,8 @@
 	}
 
 	function toggleAccount(id: string) {
+		const account = accounts.find((candidate) => candidate.id === id);
+		if (!account || !isAccountCompatibleWithMode(legacyMode, account)) return;
 		if (selectedAccountIds.includes(id)) {
 			selectedAccountIds = selectedAccountIds.filter((a) => a !== id);
 			if (variants.has(id)) {
@@ -1007,7 +1019,7 @@
 	}
 
 	function selectAllAccounts() {
-		selectedAccountIds = accounts.map((a) => a.id);
+		selectedAccountIds = compatibleAccounts.map((account) => account.id);
 		scheduleAutoSave();
 	}
 
@@ -2008,11 +2020,13 @@
 					<ComposerAccountMenu
 						{accounts}
 						{selectedAccountIds}
+						compatibleAccountIds={compatibleAccounts.map((account) => account.id)}
 						customAccountIds={[...variants.keys()]}
 						activeAccountId={activeVariantAccountId}
 						triggerLabel={m.compose_publish_to()}
 						triggerVariant="outline"
 						triggerClass="h-11 px-2.5"
+						description={m.compose_accounts_compatible({ format: legacyModeMeta.label })}
 						onToggle={(account) => toggleAccount(account.id)}
 						onSelectAll={selectAllAccounts}
 						onClearAll={clearAllAccounts}
@@ -2130,9 +2144,11 @@
 					<ComposerAccountMenu
 						{accounts}
 						{selectedAccountIds}
+						compatibleAccountIds={compatibleAccounts.map((account) => account.id)}
 						customAccountIds={[...variants.keys()]}
 						activeAccountId={activeVariantAccountId}
 						triggerLabel={m.compose_publish_to()}
+						description={m.compose_accounts_compatible({ format: legacyModeMeta.label })}
 						onToggle={(account) => toggleAccount(account.id)}
 						onSelectAll={selectAllAccounts}
 						onClearAll={clearAllAccounts}

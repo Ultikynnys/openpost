@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
 	buildFocusedPublicationPayload,
 	COMPOSER_MODE_GROUPS,
+	isAccountCompatibleWithMode,
 	roleFieldsForMode,
 	SELECTABLE_COMPOSER_MODES
 } from './modes';
@@ -57,6 +58,23 @@ describe('composer mode role mapping', () => {
 		expect(roleFieldsForMode('image_post', [instagram])).toEqual([
 			expect.objectContaining({ key: 'caption', label: 'Caption', hint: 'Caption · Instagram' })
 		]);
+	});
+
+	it('offers YouTube only for video formats supported by the public API', () => {
+		expect(isAccountCompatibleWithMode('short_text', youtube)).toBe(false);
+		expect(isAccountCompatibleWithMode('thread', youtube)).toBe(false);
+		expect(isAccountCompatibleWithMode('link_share', youtube)).toBe(false);
+		expect(isAccountCompatibleWithMode('image_post', youtube)).toBe(false);
+		expect(isAccountCompatibleWithMode('carousel', youtube)).toBe(false);
+		expect(isAccountCompatibleWithMode('story', youtube)).toBe(false);
+		expect(isAccountCompatibleWithMode('short_video', youtube)).toBe(true);
+		expect(isAccountCompatibleWithMode('long_video', youtube)).toBe(true);
+	});
+
+	it('uses the capability catalog for other provider-format combinations', () => {
+		const capabilities = [{ provider: 'instagram', profile: 'image_post' }];
+		expect(isAccountCompatibleWithMode('image_post', instagram, capabilities)).toBe(true);
+		expect(isAccountCompatibleWithMode('long_video', instagram, capabilities)).toBe(false);
 	});
 
 	it('separates YouTube video metadata from social captions', () => {

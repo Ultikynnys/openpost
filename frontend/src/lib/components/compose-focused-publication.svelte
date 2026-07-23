@@ -26,6 +26,7 @@
 	import {
 		buildFocusedPublicationPayload,
 		composerMode,
+		isAccountCompatibleWithMode,
 		roleFieldsForMode,
 		type ComposerModeKey,
 		type FocusedComposerFields,
@@ -474,11 +475,7 @@
 	}
 
 	function isAccountCompatible(account: SocialAccount): boolean {
-		if (capabilities.length === 0) return true;
-		const provider = getPlatformKey(account.platform);
-		return capabilities.some(
-			(capability) => capability.provider === provider && capability.profile === mode
-		);
+		return isAccountCompatibleWithMode(mode, account, capabilities);
 	}
 
 	function capabilityForAccount(account: SocialAccount): Capability | null {

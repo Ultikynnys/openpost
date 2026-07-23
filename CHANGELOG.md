@@ -56,6 +56,8 @@ All notable changes to this project are documented in this file.
 
 ### Fixed
 
+- Prevented YouTube accounts from being selected for text, thread, link, image, carousel, or Story posts; YouTube remains available for Shorts and video uploads.
+- Displayed connected account handles with exactly one `@` prefix, including YouTube handles that already include it.
 - Clarified temporary account-selection deadlines, made empty Facebook and Instagram account results explain the Page requirements, and stopped requesting unused Instagram and TikTok permissions.
 - Gave production frontend builds enough bounded Node heap to finish static asset generation on release runners.
 - Loaded the embedded product video only after the tour opens and removed it again when the dialog closes.
