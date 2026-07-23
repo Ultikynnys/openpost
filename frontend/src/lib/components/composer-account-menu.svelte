@@ -12,6 +12,7 @@
 	import PencilIcon from 'lucide-svelte/icons/pencil';
 	import RotateCcwIcon from 'lucide-svelte/icons/rotate-ccw';
 	import Settings2Icon from 'lucide-svelte/icons/settings-2';
+	import TriangleAlertIcon from 'lucide-svelte/icons/triangle-alert';
 	import RiCheckLine from 'remixicon-svelte/icons/check-line';
 	import DestructiveConfirmDialog from './destructive-confirm-dialog.svelte';
 	import PlatformIcon from './platform-icon.svelte';
@@ -27,6 +28,8 @@
 		compatibleAccountIds?: string[];
 		customAccountIds?: string[];
 		settingsAccountIds?: string[];
+		accountSummaries?: Record<string, string>;
+		warningAccountIds?: string[];
 		activeAccountId?: string | null;
 		triggerLabel?: string;
 		triggerClass?: string;
@@ -47,6 +50,8 @@
 		compatibleAccountIds,
 		customAccountIds = [],
 		settingsAccountIds = [],
+		accountSummaries = {},
+		warningAccountIds = [],
 		activeAccountId = null,
 		triggerLabel = m.compose_target_accounts(),
 		triggerClass = '',
@@ -69,6 +74,7 @@
 	);
 	const customIds = $derived(new Set(customAccountIds));
 	const settingsIds = $derived(new Set(settingsAccountIds));
+	const warningIds = $derived(new Set(warningAccountIds));
 	const activeAccountIsCustom = $derived(
 		activeAccountId !== null && customIds.has(activeAccountId)
 	);
@@ -145,7 +151,7 @@
 				type="button"
 				variant={triggerVariant}
 				size="sm"
-				class={cn('h-9 shrink-0 gap-2 px-2.5 text-xs text-muted-foreground', triggerClass)}
+				class={cn('h-11 shrink-0 gap-2 px-2.5 text-xs text-muted-foreground sm:h-9', triggerClass)}
 				aria-label={`${triggerLabel}: ${selectedSummary}${activeAccountIsCustom ? `; ${m.compose_custom_state()}` : ''}`}
 				data-testid="composer-account-control"
 			>
@@ -161,7 +167,7 @@
 						{/each}
 						{#if hiddenAccountCount > 0}
 							<span
-								class="font-mono text-[10px] font-medium text-muted-foreground tabular-nums"
+								class="font-mono text-xs font-medium text-muted-foreground tabular-nums"
 								aria-hidden="true"
 							>
 								+{hiddenAccountCount}
@@ -191,14 +197,14 @@
 			<div class="min-w-0">
 				<p class="text-sm font-medium">{m.compose_publish_to()}</p>
 				{#if description}
-					<p class="truncate text-[11px] leading-4 text-muted-foreground">{description}</p>
+					<p class="truncate text-xs leading-4 text-muted-foreground">{description}</p>
 				{/if}
 			</div>
 			<Button
 				type="button"
 				variant="ghost"
 				size="sm"
-				class="h-8 shrink-0 px-2 text-xs text-muted-foreground"
+				class="h-11 shrink-0 px-2 text-xs text-muted-foreground sm:h-8"
 				onclick={selectedAccounts.length === compatibleIds.size ? onClearAll : onSelectAll}
 			>
 				{selectedAccounts.length === compatibleIds.size ? m.compose_clear() : m.common_all()}
@@ -241,6 +247,12 @@
 						<span class="min-w-0 flex-1 leading-tight">
 							<span class="flex min-w-0 items-center gap-2">
 								<span class="truncate font-medium">{getPlatformName(account.platform)}</span>
+								{#if warningIds.has(account.id)}
+									<TriangleAlertIcon
+										class="size-3.5 shrink-0 text-amber-600 dark:text-amber-300"
+										aria-label={m.compose_check_before_publishing()}
+									/>
+								{/if}
 								{#if custom}
 									<span
 										class="flex size-4 shrink-0 items-center justify-center text-primary"
@@ -252,11 +264,10 @@
 									</span>
 								{/if}
 							</span>
-							{#if accountUsername(account)}
-								<span class="block truncate text-[11px] leading-4 text-muted-foreground"
-									>{accountUsername(account)}</span
-								>
-							{/if}
+							<span class="block truncate text-xs leading-4 text-muted-foreground">
+								{#if accountUsername(account)}{accountUsername(account)} ·
+								{/if}{accountSummaries[account.id] ?? getPlatformName(account.platform)}
+							</span>
 						</span>
 						<span
 							class={cn(
