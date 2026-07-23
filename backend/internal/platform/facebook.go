@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 )
 
@@ -251,7 +252,7 @@ func (f *FacebookAdapter) Publish(ctx context.Context, accessToken, pageID strin
 	if req.ReplyToID != "" {
 		return f.publishCommentReply(ctx, accessToken, req.ReplyToID, req.Content)
 	}
-	if settingString(req.Settings, "post_type") == "story" || req.Profile == "story" {
+	if req.Profile == "story" || req.OutputProfile == "facebook.story" {
 		return f.publishStory(ctx, accessToken, pageID, req)
 	}
 	switch len(req.PlatformMediaIDs) {
@@ -262,7 +263,10 @@ func (f *FacebookAdapter) Publish(ctx context.Context, accessToken, pageID strin
 			return "", fmt.Errorf("facebook media publishing requires media metadata")
 		}
 		if len(req.PlatformMediaIDs) == 1 && isVideoMime(req.Media[0].MimeType) {
-			return f.publishVideo(ctx, accessToken, pageID, req.Content, req.PlatformMediaIDs[0])
+			if req.OutputProfile == "facebook.reel" || req.Profile == "short_video" {
+				return f.publishReel(ctx, accessToken, pageID, req, req.PlatformMediaIDs[0])
+			}
+			return f.publishVideo(ctx, accessToken, pageID, req, req.PlatformMediaIDs[0])
 		}
 		for _, mediaURL := range req.PlatformMediaIDs {
 			if !strings.HasPrefix(mediaURL, "https://") {
@@ -274,6 +278,49 @@ func (f *FacebookAdapter) Publish(ctx context.Context, accessToken, pageID strin
 		}
 		return f.publishMultiPhoto(ctx, accessToken, pageID, req.Content, req.PlatformMediaIDs)
 	}
+}
+
+func (f *FacebookAdapter) publishReel(ctx context.Context, accessToken, pageID string, req *PublishRequest, mediaURL string) (string, error) {
+	startResponse, err := DoFormURLEncoded(ctx, http.MethodPost, f.graphURL(pageID+"/video_reels"), map[string]string{
+		"upload_phase":        "start",
+		oauthParamAccessToken: accessToken,
+	}, nil)
+	if err != nil {
+		return "", fmt.Errorf("facebook reel upload start: %w", err)
+	}
+	var start struct {
+		VideoID   string `json:"video_id"`
+		UploadURL string `json:"upload_url"`
+	}
+	if err := json.Unmarshal(startResponse, &start); err != nil {
+		return "", fmt.Errorf("decoding facebook reel upload start: %w", err)
+	}
+	if start.VideoID == "" || start.UploadURL == "" {
+		return "", fmt.Errorf("facebook reel upload start did not return a video id and upload URL")
+	}
+	if _, err := DoRequest(ctx, http.MethodPost, start.UploadURL, nil, map[string]string{
+		headerAuthorization: "OAuth " + accessToken,
+		"file_url":          mediaURL,
+	}); err != nil {
+		return "", fmt.Errorf("facebook reel transfer: %w", err)
+	}
+	finishValues := map[string]string{
+		"upload_phase":        "finish",
+		"video_id":            start.VideoID,
+		"video_state":         "PUBLISHED",
+		"description":         strings.TrimSpace(firstNonEmptyString(settingString(req.Settings, "video_description"), req.Description, req.Content)),
+		oauthParamAccessToken: accessToken,
+	}
+	if title := firstNonEmptyString(settingString(req.Settings, "video_title"), req.Title); title != "" {
+		finishValues["title"] = title
+	}
+	if _, exists := req.Settings["share_to_feed"]; exists {
+		finishValues["share_to_feed"] = strconv.FormatBool(settingBool(req.Settings, "share_to_feed"))
+	}
+	if _, err := DoFormURLEncoded(ctx, http.MethodPost, f.graphURL(pageID+"/video_reels"), finishValues, nil); err != nil {
+		return "", fmt.Errorf("facebook reel publish: %w", err)
+	}
+	return start.VideoID, nil
 }
 
 func (f *FacebookAdapter) publishFeedPost(ctx context.Context, accessToken, pageID string, req *PublishRequest) (string, error) {
@@ -295,11 +342,6 @@ func (f *FacebookAdapter) publishFeedPost(ctx context.Context, accessToken, page
 	if err != nil {
 		return "", err
 	}
-	if firstComment := settingString(req.Settings, "first_comment"); firstComment != "" {
-		if _, err := f.publishCommentReply(ctx, accessToken, id, firstComment); err != nil {
-			return "", err
-		}
-	}
 	return id, nil
 }
 
@@ -317,11 +359,14 @@ func (f *FacebookAdapter) publishPhoto(ctx context.Context, accessToken, pageID,
 	return facebookPublishedID("facebook photo publish", respBody)
 }
 
-func (f *FacebookAdapter) publishVideo(ctx context.Context, accessToken, pageID, description, mediaURL string) (string, error) {
+func (f *FacebookAdapter) publishVideo(ctx context.Context, accessToken, pageID string, req *PublishRequest, mediaURL string) (string, error) {
 	values := map[string]string{
 		"file_url":            mediaURL,
-		"description":         strings.TrimSpace(description),
+		"description":         strings.TrimSpace(firstNonEmptyString(settingString(req.Settings, "video_description"), req.Description, req.Content)),
 		oauthParamAccessToken: accessToken,
+	}
+	if title := firstNonEmptyString(settingString(req.Settings, "video_title"), req.Title); title != "" {
+		values["title"] = title
 	}
 	respBody, err := DoFormURLEncoded(ctx, http.MethodPost, f.graphURL(pageID+"/videos"), values, nil)
 	if err != nil {

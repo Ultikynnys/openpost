@@ -37,12 +37,15 @@ func (f *fakePublisherStorage) Open(id string) (io.ReadCloser, error) {
 }
 
 type fakePublisherAdapter struct {
-	uploadedBody string
-	uploadCalls  int
-	publishCalls int
-	publishErr   error
-	externalID   string
-	lastRequest  *platform.PublishRequest
+	uploadedBody    string
+	uploadCalls     int
+	publishCalls    int
+	publishErr      error
+	publishErrors   []error
+	externalID      string
+	externalIDs     []string
+	lastRequest     *platform.PublishRequest
+	publishRequests []*platform.PublishRequest
 }
 
 func (f *fakePublisherAdapter) GenerateAuthURL(string) (string, map[string]string) {
@@ -72,8 +75,16 @@ func (f *fakePublisherAdapter) UploadMedia(_ context.Context, _, _, _ string, re
 func (f *fakePublisherAdapter) Publish(_ context.Context, _, _ string, req *platform.PublishRequest) (string, error) {
 	f.publishCalls++
 	f.lastRequest = req
+	requestCopy := *req
+	f.publishRequests = append(f.publishRequests, &requestCopy)
+	if index := f.publishCalls - 1; index < len(f.publishErrors) && f.publishErrors[index] != nil {
+		return "", f.publishErrors[index]
+	}
 	if f.publishErr != nil {
 		return "", f.publishErr
+	}
+	if index := f.publishCalls - 1; index < len(f.externalIDs) && f.externalIDs[index] != "" {
+		return f.externalIDs[index], nil
 	}
 	if f.externalID != "" {
 		return f.externalID, nil

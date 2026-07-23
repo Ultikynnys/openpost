@@ -40,7 +40,6 @@ func TestMastodonPublishAppliesStatusSettings(t *testing.T) {
 			"spoiler_text":            "Launch details",
 			"sensitive":               true,
 			"language":                "pt",
-			"scheduled_at":            "2026-07-04T22:00:00Z",
 			"poll_options":            "One\nTwo\nThree",
 			"poll_expires_in_seconds": float64(3600),
 			"poll_multiple":           true,
@@ -59,7 +58,9 @@ func TestMastodonPublishAppliesStatusSettings(t *testing.T) {
 	assertFormValue(t, postedValues, "spoiler_text", "Launch details")
 	assertFormValue(t, postedValues, "sensitive", "true")
 	assertFormValue(t, postedValues, "language", "pt")
-	assertFormValue(t, postedValues, "scheduled_at", "2026-07-04T22:00:00Z")
+	if postedValues.Has("scheduled_at") {
+		t.Fatalf("OpenPost scheduling must not be forwarded to Mastodon: %#v", postedValues)
+	}
 	assertFormValue(t, postedValues, "poll[expires_in]", "3600")
 	assertFormValue(t, postedValues, "poll[multiple]", "true")
 	assertFormValue(t, postedValues, "poll[hide_totals]", "true")

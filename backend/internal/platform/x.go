@@ -503,7 +503,7 @@ func (x *XAdapter) Publish(ctx context.Context, accessToken, _ string, req *Publ
 
 func buildXTweetPayload(req *PublishRequest) (map[string]interface{}, error) {
 	payload := map[string]interface{}{
-		jsonFieldText: req.Content,
+		jsonFieldText: contentWithSettingURL(req.Content, req.Settings),
 	}
 
 	attachmentKinds := 0
@@ -513,7 +513,11 @@ func buildXTweetPayload(req *PublishRequest) (map[string]interface{}, error) {
 			"media_ids": req.PlatformMediaIDs,
 		}
 	}
-	if quoteTweetID := settingString(req.Settings, "quote_tweet_id"); quoteTweetID != "" {
+	quoteTweetID, err := xQuoteTweetID(req.Settings)
+	if err != nil {
+		return nil, err
+	}
+	if quoteTweetID != "" {
 		attachmentKinds++
 		payload["quote_tweet_id"] = quoteTweetID
 	}
@@ -536,6 +540,19 @@ func buildXTweetPayload(req *PublishRequest) (map[string]interface{}, error) {
 		}
 		payload["reply_settings"] = replySettings
 	}
+	if communityID := settingString(req.Settings, "community_id"); communityID != "" {
+		payload["community_id"] = communityID
+	}
+	if locationID := settingString(req.Settings, "location_id"); locationID != "" {
+		payload["geo"] = map[string]interface{}{"place_id": locationID}
+	}
+	if taggedUserIDs := xTaggedUserIDs(req.MediaSettings); len(taggedUserIDs) > 0 {
+		mediaPayload, ok := payload["media"].(map[string]interface{})
+		if !ok {
+			return nil, fmt.Errorf("x tagged users require media")
+		}
+		mediaPayload["tagged_user_ids"] = taggedUserIDs
+	}
 	if settingBool(req.Settings, "paid_partnership") {
 		payload["paid_partnership"] = true
 	}
@@ -543,6 +560,57 @@ func buildXTweetPayload(req *PublishRequest) (map[string]interface{}, error) {
 		payload["made_with_ai"] = true
 	}
 	return payload, nil
+}
+
+func xQuoteTweetID(settings map[string]interface{}) (string, error) {
+	if legacyID := settingString(settings, "quote_tweet_id"); legacyID != "" {
+		return legacyID, nil
+	}
+	raw := settingString(settings, "quote_url")
+	if raw == "" {
+		return "", nil
+	}
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return "", fmt.Errorf("x quote_url is invalid")
+	}
+	host := strings.ToLower(parsed.Hostname())
+	if host != "x.com" && host != "twitter.com" && host != "www.x.com" && host != "www.twitter.com" {
+		return "", fmt.Errorf("x quote_url must be an X post URL")
+	}
+	parts := strings.Split(strings.Trim(parsed.Path, "/"), "/")
+	for index := 0; index+1 < len(parts); index++ {
+		if parts[index] != "status" {
+			continue
+		}
+		if _, err := strconv.ParseUint(parts[index+1], 10, 64); err != nil {
+			return "", fmt.Errorf("x quote_url contains an invalid post id")
+		}
+		return parts[index+1], nil
+	}
+	return "", fmt.Errorf("x quote_url must contain a status id")
+}
+
+func xTaggedUserIDs(mediaSettings []map[string]interface{}) []string {
+	seen := map[string]struct{}{}
+	result := []string{}
+	for _, settings := range mediaSettings {
+		raw := settingString(settings, "tagged_users")
+		for _, value := range strings.FieldsFunc(raw, func(r rune) bool {
+			return r == ',' || r == '\n' || r == ' '
+		}) {
+			value = strings.TrimSpace(value)
+			if value == "" {
+				continue
+			}
+			if _, exists := seen[value]; exists {
+				continue
+			}
+			seen[value] = struct{}{}
+			result = append(result, value)
+		}
+	}
+	return result
 }
 
 func xPollPayload(settings map[string]interface{}) map[string]interface{} {

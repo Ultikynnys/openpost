@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -29,6 +30,64 @@ func NewInstagramAdapter(clientID, clientSecret, redirectURI string) *InstagramA
 
 func (i *InstagramAdapter) graphURL(path string) string {
 	return facebookGraphBaseURL + "/" + i.graphVersion + "/" + strings.TrimPrefix(path, "/")
+}
+
+func (i *InstagramAdapter) SearchPublishingOptions(ctx context.Context, accessToken string, input PublishingOptionsInput) (PublishingOptionsPage, error) {
+	if input.Source != "instagram_locations" {
+		return PublishingOptionsPage{}, fmt.Errorf("instagram publishing option source %q is not supported", input.Source)
+	}
+	search := strings.TrimSpace(input.Search)
+	if search == "" {
+		return PublishingOptionsPage{}, nil
+	}
+	query := url.Values{
+		"q":                   {search},
+		"fields":              {"id,name,location"},
+		oauthParamAccessToken: {accessToken},
+	}
+	if input.Cursor != "" {
+		query.Set("after", input.Cursor)
+	}
+	limit := input.Limit
+	if limit <= 0 || limit > 100 {
+		limit = 25
+	}
+	query.Set("limit", strconv.Itoa(limit))
+	body, err := DoRequest(ctx, http.MethodGet, i.graphURL("pages/search")+"?"+query.Encode(), nil, nil)
+	if err != nil {
+		return PublishingOptionsPage{}, fmt.Errorf("searching Instagram locations: %w", err)
+	}
+	var response struct {
+		Data []struct {
+			ID       string `json:"id"`
+			Name     string `json:"name"`
+			Location *struct {
+				City    string `json:"city"`
+				Country string `json:"country"`
+			} `json:"location"`
+		} `json:"data"`
+		Paging struct {
+			Cursors struct {
+				After string `json:"after"`
+			} `json:"cursors"`
+		} `json:"paging"`
+	}
+	if err := json.Unmarshal(body, &response); err != nil {
+		return PublishingOptionsPage{}, fmt.Errorf("decoding Instagram locations: %w", err)
+	}
+	page := PublishingOptionsPage{NextCursor: response.Paging.Cursors.After}
+	for _, location := range response.Data {
+		if location.Location == nil {
+			continue
+		}
+		detail := strings.Trim(strings.Join([]string{location.Location.City, location.Location.Country}, ", "), ", ")
+		label := location.Name
+		if detail != "" {
+			label += " · " + detail
+		}
+		page.Options = append(page.Options, DestinationOption{Value: location.ID, Label: label})
+	}
+	return page, nil
 }
 
 func (i *InstagramAdapter) GenerateAuthURL(state string) (string, map[string]string) {
@@ -179,14 +238,14 @@ func (i *InstagramAdapter) Publish(ctx context.Context, accessToken, instagramUs
 			return "", fmt.Errorf("instagram requires a publicly-accessible HTTPS media URL. Set OPENPOST_MEDIA_URL to your public media base URL")
 		}
 	}
-	if settingString(req.Settings, "post_type") == "story" || req.Profile == "story" {
+	if instagramIsStory(req) {
 		return i.publishStories(ctx, accessToken, instagramUserID, req)
 	}
 	if len(req.PlatformMediaIDs) > 1 {
 		return i.publishCarousel(ctx, accessToken, instagramUserID, req)
 	}
 
-	containerID, err := i.createMediaContainer(ctx, accessToken, instagramUserID, req.Content, req.PlatformMediaIDs[0], isVideoMime(req.Media[0].MimeType), false, req)
+	containerID, err := i.createMediaContainer(ctx, accessToken, instagramUserID, req.Content, req.PlatformMediaIDs[0], isVideoMime(req.Media[0].MimeType), false, req, mediaSettingsAt(req, 0), mediaAltTextAt(req, 0))
 	if err != nil {
 		return "", err
 	}
@@ -197,21 +256,21 @@ func (i *InstagramAdapter) Publish(ctx context.Context, accessToken, instagramUs
 }
 
 //nolint:gocyclo
-func (i *InstagramAdapter) createMediaContainer(ctx context.Context, accessToken, instagramUserID, caption, mediaURL string, video bool, carouselItem bool, req *PublishRequest) (string, error) {
+func (i *InstagramAdapter) createMediaContainer(ctx context.Context, accessToken, instagramUserID, caption, mediaURL string, video bool, carouselItem bool, req *PublishRequest, mediaSettings map[string]interface{}, altText string) (string, error) {
 	values := map[string]string{
 		"caption":             strings.TrimSpace(caption),
 		oauthParamAccessToken: accessToken,
 	}
 	if video {
 		values["video_url"] = mediaURL
-		if settingString(req.Settings, "post_type") == "story" || req.Profile == "story" {
+		if instagramIsStory(req) {
 			values["media_type"] = "STORIES"
-		} else if settingBool(req.Settings, "is_reel") || req.Profile == "short_video" {
+		} else if instagramIsReel(req) {
 			values["media_type"] = "REELS"
 		}
 	} else {
 		values["image_url"] = mediaURL
-		if settingString(req.Settings, "post_type") == "story" || req.Profile == "story" {
+		if instagramIsStory(req) {
 			values["media_type"] = "STORIES"
 		}
 	}
@@ -220,16 +279,44 @@ func (i *InstagramAdapter) createMediaContainer(ctx context.Context, accessToken
 		delete(values, "caption")
 	}
 	if collaborators := settingString(req.Settings, "collaborators"); collaborators != "" && !carouselItem {
-		values["collaborators"] = collaborators
+		values["collaborators"] = stringListJSON(collaborators)
+	}
+	if locationID := settingString(req.Settings, "location_id"); locationID != "" && !carouselItem {
+		values["location_id"] = locationID
 	}
 	if settingBool(req.Settings, "is_trial_reel") && !carouselItem {
-		values["is_trial_reel"] = "true"
-	}
-	if graduation := settingString(req.Settings, "graduation_strategy"); graduation != "" && !carouselItem {
-		values["graduation_strategy"] = graduation
+		graduation := settingString(req.Settings, "graduation_strategy")
+		if graduation != "MANUAL" && graduation != "SS_PERFORMANCE" {
+			return "", fmt.Errorf("instagram trial reels require a valid graduation strategy")
+		}
+		trialParams, _ := json.Marshal(map[string]string{"graduation_strategy": graduation})
+		values["trial_params"] = string(trialParams)
 	}
 	if thumb := settingString(req.Settings, "thumbnail_timestamp_ms"); thumb != "" && video && !carouselItem {
 		values["thumb_offset"] = thumb
+	}
+	if coverURL := settingString(req.Settings, "cover_media_id"); strings.HasPrefix(coverURL, "https://") && video && !carouselItem {
+		values["cover_url"] = coverURL
+	}
+	if settingBool(req.Settings, "share_to_feed") && instagramIsReel(req) && !carouselItem {
+		values["share_to_feed"] = "true"
+	}
+	if altText != "" && !video {
+		values["alt_text"] = altText
+	}
+	if userTags := settingString(mediaSettings, "user_tags"); userTags != "" {
+		normalized, err := instagramMediaTags(userTags, "username", 20, !instagramIsStory(req))
+		if err != nil {
+			return "", err
+		}
+		values["user_tags"] = normalized
+	}
+	if productTags := settingString(mediaSettings, "product_tags"); productTags != "" {
+		normalized, err := instagramMediaTags(productTags, "product_id", 5, false)
+		if err != nil {
+			return "", err
+		}
+		values["product_tags"] = normalized
 	}
 
 	respBody, err := DoFormURLEncoded(ctx, http.MethodPost, i.graphURL(instagramUserID+"/media"), values, nil)
@@ -239,13 +326,46 @@ func (i *InstagramAdapter) createMediaContainer(ctx context.Context, accessToken
 	return instagramIDFromResponse("instagram media container", respBody)
 }
 
+func instagramMediaTags(raw, valueKey string, maximum int, coordinatesRequired bool) (string, error) {
+	var tags []map[string]interface{}
+	if err := json.Unmarshal([]byte(raw), &tags); err != nil {
+		return "", fmt.Errorf("instagram %s tags must be a JSON array", valueKey)
+	}
+	if len(tags) > maximum {
+		return "", fmt.Errorf("instagram supports at most %d %s tags", maximum, valueKey)
+	}
+	for _, tag := range tags {
+		if strings.TrimSpace(fmt.Sprint(tag[valueKey])) == "" {
+			return "", fmt.Errorf("instagram %s tag is missing %s", valueKey, valueKey)
+		}
+		for _, coordinate := range []string{"x", "y"} {
+			rawCoordinate, exists := tag[coordinate]
+			if !exists {
+				if coordinatesRequired {
+					return "", fmt.Errorf("instagram %s tag is missing %s", valueKey, coordinate)
+				}
+				continue
+			}
+			coordinateValue, ok := rawCoordinate.(float64)
+			if !ok || coordinateValue < 0 || coordinateValue > 1 {
+				return "", fmt.Errorf("instagram %s tag %s must be between 0 and 1", valueKey, coordinate)
+			}
+		}
+	}
+	encoded, err := json.Marshal(tags)
+	if err != nil {
+		return "", fmt.Errorf("encoding instagram %s tags: %w", valueKey, err)
+	}
+	return string(encoded), nil
+}
+
 func (i *InstagramAdapter) publishCarousel(ctx context.Context, accessToken, instagramUserID string, req *PublishRequest) (string, error) {
 	if len(req.PlatformMediaIDs) < 2 || len(req.PlatformMediaIDs) > 10 {
 		return "", fmt.Errorf("instagram carousel requires 2-10 media items")
 	}
 	childIDs := make([]string, 0, len(req.PlatformMediaIDs))
 	for index, mediaURL := range req.PlatformMediaIDs {
-		childID, err := i.createMediaContainer(ctx, accessToken, instagramUserID, "", mediaURL, isVideoMime(req.Media[index].MimeType), true, req)
+		childID, err := i.createMediaContainer(ctx, accessToken, instagramUserID, "", mediaURL, isVideoMime(req.Media[index].MimeType), true, req, mediaSettingsAt(req, index), mediaAltTextAt(req, index))
 		if err != nil {
 			return "", err
 		}
@@ -259,6 +379,12 @@ func (i *InstagramAdapter) publishCarousel(ctx context.Context, accessToken, ins
 		"children":            strings.Join(childIDs, ","),
 		"caption":             strings.TrimSpace(req.Content),
 		oauthParamAccessToken: accessToken,
+	}
+	if collaborators := settingString(req.Settings, "collaborators"); collaborators != "" {
+		values["collaborators"] = stringListJSON(collaborators)
+	}
+	if locationID := settingString(req.Settings, "location_id"); locationID != "" {
+		values["location_id"] = locationID
 	}
 	respBody, err := DoFormURLEncoded(ctx, http.MethodPost, i.graphURL(instagramUserID+"/media"), values, nil)
 	if err != nil {
@@ -277,7 +403,7 @@ func (i *InstagramAdapter) publishCarousel(ctx context.Context, accessToken, ins
 func (i *InstagramAdapter) publishStories(ctx context.Context, accessToken, instagramUserID string, req *PublishRequest) (string, error) {
 	ids := make([]string, 0, len(req.PlatformMediaIDs))
 	for index, mediaURL := range req.PlatformMediaIDs {
-		containerID, err := i.createMediaContainer(ctx, accessToken, instagramUserID, "", mediaURL, isVideoMime(req.Media[index].MimeType), false, req)
+		containerID, err := i.createMediaContainer(ctx, accessToken, instagramUserID, "", mediaURL, isVideoMime(req.Media[index].MimeType), false, req, mediaSettingsAt(req, index), mediaAltTextAt(req, index))
 		if err != nil {
 			return "", err
 		}
@@ -291,6 +417,40 @@ func (i *InstagramAdapter) publishStories(ctx context.Context, accessToken, inst
 		ids = append(ids, publishedID)
 	}
 	return strings.Join(ids, ","), nil
+}
+
+func instagramIsStory(req *PublishRequest) bool {
+	return req.Profile == "story" || req.OutputProfile == "instagram.story"
+}
+
+func instagramIsReel(req *PublishRequest) bool {
+	return req.Profile == "short_video" || req.OutputProfile == "instagram.reel"
+}
+
+func mediaSettingsAt(req *PublishRequest, index int) map[string]interface{} {
+	if index < 0 || index >= len(req.MediaSettings) {
+		return nil
+	}
+	return req.MediaSettings[index]
+}
+
+func mediaAltTextAt(req *PublishRequest, index int) string {
+	if index < 0 || index >= len(req.MediaAltTexts) {
+		return ""
+	}
+	return req.MediaAltTexts[index]
+}
+
+func stringListJSON(raw string) string {
+	values := strings.FieldsFunc(raw, func(r rune) bool { return r == ',' || r == '\n' })
+	clean := make([]string, 0, len(values))
+	for _, value := range values {
+		if value = strings.TrimSpace(value); value != "" {
+			clean = append(clean, value)
+		}
+	}
+	encoded, _ := json.Marshal(clean)
+	return string(encoded)
 }
 
 func (i *InstagramAdapter) publishCommentReply(ctx context.Context, accessToken, commentID, message string) (string, error) {

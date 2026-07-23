@@ -183,7 +183,7 @@ func TestYouTubeUploadMediaWithMetadata(t *testing.T) {
 		}
 		switch {
 		case req.Method == http.MethodPost && req.URL.Path == "/upload/youtube/v3/videos":
-			if req.URL.Query().Get("uploadType") != "resumable" || req.URL.Query().Get("part") != "snippet,status" {
+			if req.URL.Query().Get("uploadType") != "resumable" || req.URL.Query().Get("part") != "snippet,status,paidProductPlacementDetails" {
 				t.Fatalf("unexpected upload query %s", req.URL.RawQuery)
 			}
 			if req.Header.Get("X-Upload-Content-Length") != "11" {
@@ -260,6 +260,8 @@ func TestYouTubeUploadMediaWithMetadata(t *testing.T) {
 		Settings: map[string]interface{}{
 			"playlist_id":              "playlist-1",
 			"contains_synthetic_media": true,
+			"privacy":                  "private",
+			"category_id":              "22",
 		},
 		Reader:            bytes.NewBufferString("video-bytes"),
 		ThumbnailMimeType: "image/jpeg",
@@ -347,7 +349,11 @@ func TestYouTubeUploadMediaWithMetadataResumesAfterTransientFailure(t *testing.T
 		Size:        11,
 		Title:       "Launch Short",
 		Description: "Launch Short",
-		Reader:      bytes.NewBufferString("video-bytes"),
+		Settings: map[string]interface{}{
+			"privacy":     "private",
+			"category_id": "22",
+		},
+		Reader: bytes.NewBufferString("video-bytes"),
 	})
 	if err != nil {
 		t.Fatalf("UploadMediaWithMetadata returned error: %v", err)
@@ -386,10 +392,34 @@ func TestYouTubeUploadMediaWithMetadataSurfacesProcessingFailures(t *testing.T) 
 		Size:        11,
 		Title:       "Launch Short",
 		Description: "Launch Short",
-		Reader:      bytes.NewBufferString("video-bytes"),
+		Settings: map[string]interface{}{
+			"privacy":     "private",
+			"category_id": "22",
+		},
+		Reader: bytes.NewBufferString("video-bytes"),
 	})
 	if err == nil || !strings.Contains(err.Error(), "processing failed") || !strings.Contains(err.Error(), "unsupportedCodec") {
 		t.Fatalf("expected processing failure, got %v", err)
+	}
+}
+
+func TestYouTubeUploadRejectsMissingRequiredChoicesBeforeNetwork(t *testing.T) {
+	originalClient := httpClient
+	defer func() { httpClient = originalClient }()
+	httpClient = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		t.Fatalf("invalid YouTube metadata must fail before a request: %s %s", req.Method, req.URL.String())
+		return nil, nil
+	})}
+
+	adapter := NewYouTubeAdapter("", "", "")
+	_, err := adapter.UploadMediaWithMetadata(context.Background(), "access-token", "channel-1", UploadMediaRequest{
+		MimeType: "video/mp4",
+		Size:     5,
+		Title:    "Launch",
+		Reader:   bytes.NewBufferString("video"),
+	})
+	if err == nil || !strings.Contains(err.Error(), "privacy") {
+		t.Fatalf("expected explicit privacy error, got %v", err)
 	}
 }
 

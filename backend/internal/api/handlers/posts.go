@@ -14,6 +14,7 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/google/uuid"
 	"github.com/openpost/backend/internal/api/middleware"
+	databasemigrations "github.com/openpost/backend/internal/database/migrations"
 	"github.com/openpost/backend/internal/models"
 	"github.com/openpost/backend/internal/services/entitlements"
 	postservice "github.com/openpost/backend/internal/services/posts"
@@ -90,6 +91,7 @@ type PostDestinationResponse struct {
 
 type PostResponse struct {
 	ID                 string                    `json:"id" doc:"Post ID"`
+	PublicationID      string                    `json:"publication_id,omitempty" doc:"Canonical publication ID for compatibility-translated authoring"`
 	WorkspaceID        string                    `json:"workspace_id" doc:"Workspace ID"`
 	CreatedByID        string                    `json:"created_by" doc:"Creator user ID"`
 	ParentPostID       string                    `json:"parent_post_id,omitempty" doc:"Previous post ID when this is a thread reply"`
@@ -278,6 +280,13 @@ func postServiceError(err error, fallback string) error {
 	return huma.Error500InternalServerError(fallback)
 }
 
+func (h *PostHandler) translateLegacyPostMutation(ctx context.Context, postID string) error {
+	if err := databasemigrations.MigrateLegacyPublicationAuthoring(ctx, h.db); err != nil {
+		return err
+	}
+	return databasemigrations.RefreshLegacyPublicationAuthoring(ctx, h.db, postID)
+}
+
 //nolint:gocyclo
 func (h *PostHandler) CreatePost(api huma.API) {
 	huma.Register(api, huma.Operation{
@@ -400,6 +409,16 @@ func (h *PostHandler) CreatePost(api huma.API) {
 		if err != nil {
 			return nil, huma.Error500InternalServerError("failed to create post")
 		}
+		if err := databasemigrations.MigrateLegacyPublicationAuthoring(ctx, h.db); err != nil {
+			return nil, huma.Error500InternalServerError("failed to translate post into a publication")
+		}
+		if err := h.db.NewSelect().
+			Model(post).
+			Column("publication_id").
+			Where("id = ?", post.ID).
+			Scan(ctx); err != nil {
+			return nil, huma.Error500InternalServerError("failed to load translated publication")
+		}
 		if post.Status == statusScheduled {
 			if err := h.recordScheduledPostUsage(ctx, input.Body.WorkspaceID, 1, post.ScheduledAt); err != nil {
 				return nil, err
@@ -409,6 +428,7 @@ func (h *PostHandler) CreatePost(api huma.API) {
 		resp := &CreatePostOutput{}
 		resp.Body = &PostResponse{
 			ID:                 post.ID,
+			PublicationID:      post.PublicationID,
 			WorkspaceID:        post.WorkspaceID,
 			CreatedByID:        post.CreatedByID,
 			ParentPostID:       post.ParentPostID,
@@ -679,6 +699,7 @@ func (h *PostHandler) listPostMediaIDs(ctx context.Context, postIDs []string) (m
 func postResponseForList(p models.Post, destinations []PostDestinationResponse, mediaIDs []string) PostResponse {
 	resp := PostResponse{
 		ID:                 p.ID,
+		PublicationID:      p.PublicationID,
 		WorkspaceID:        p.WorkspaceID,
 		CreatedByID:        p.CreatedByID,
 		ParentPostID:       p.ParentPostID,
@@ -1154,6 +1175,9 @@ func (h *PostHandler) CreateThread(api huma.API) {
 		if err != nil {
 			return nil, huma.Error500InternalServerError("failed to create thread")
 		}
+		if err := databasemigrations.MigrateLegacyPublicationAuthoring(ctx, h.db); err != nil {
+			return nil, huma.Error500InternalServerError("failed to translate thread into a publication")
+		}
 		if status == statusScheduled {
 			if err := h.recordScheduledPostUsage(ctx, input.Body.WorkspaceID, int64(len(posts)), *input.Body.ScheduledAt); err != nil {
 				return nil, err
@@ -1189,6 +1213,7 @@ type PostMediaResponse struct {
 
 type PostDetailResponse struct {
 	ID                 string                    `json:"id" doc:"Post ID"`
+	PublicationID      string                    `json:"publication_id,omitempty" doc:"Canonical publication ID for compatibility-translated authoring"`
 	WorkspaceID        string                    `json:"workspace_id" doc:"Workspace ID"`
 	CreatedByID        string                    `json:"created_by" doc:"Creator user ID"`
 	Content            string                    `json:"content" doc:"Post content"`
@@ -1288,6 +1313,7 @@ func (h *PostHandler) GetPost(api huma.API) {
 
 		resp := &GetPostOutput{Body: &PostDetailResponse{
 			ID:                 post.ID,
+			PublicationID:      post.PublicationID,
 			WorkspaceID:        post.WorkspaceID,
 			CreatedByID:        post.CreatedByID,
 			Content:            post.Content,
@@ -1635,6 +1661,9 @@ func (h *PostHandler) UpdatePost(api huma.API) {
 		if err != nil {
 			return nil, huma.Error500InternalServerError(err.Error())
 		}
+		if err := h.translateLegacyPostMutation(ctx, post.ID); err != nil {
+			return nil, huma.Error500InternalServerError("failed to translate post update into the publication")
+		}
 
 		var respPost models.Post
 		if err := h.db.NewSelect().Model(&respPost).Where("id = ?", post.ID).Scan(ctx); err != nil {
@@ -1697,6 +1726,7 @@ func (h *PostHandler) UpdatePost(api huma.API) {
 
 		resp := &UpdatePostOutput{Body: &PostDetailResponse{
 			ID:                 respPost.ID,
+			PublicationID:      respPost.PublicationID,
 			WorkspaceID:        respPost.WorkspaceID,
 			CreatedByID:        respPost.CreatedByID,
 			Content:            respPost.Content,
@@ -1764,7 +1794,26 @@ func (h *PostHandler) DeletePost(api huma.API) {
 			if _, err := tx.NewDelete().Model(&models.Job{}).Where(publishPostJobPostIDWhere(h.db), jobTypePublishPost, post.ID).Exec(txCtx); err != nil {
 				return fmt.Errorf("failed to delete jobs: %w", err)
 			}
-			return postservice.DeletePostsCascadeTx(txCtx, tx, allIDs)
+			if post.PublicationID != "" {
+				if _, err := tx.NewDelete().
+					Model(&models.Job{}).
+					Where(publishPublicationJobPublicationIDWhere(h.db), jobTypePublishPublication, post.PublicationID).
+					Exec(txCtx); err != nil {
+					return fmt.Errorf("failed to delete publication jobs: %w", err)
+				}
+			}
+			if err := postservice.DeletePostsCascadeTx(txCtx, tx, allIDs); err != nil {
+				return err
+			}
+			if post.PublicationID != "" {
+				if _, err := tx.NewDelete().
+					Model((*models.Publication)(nil)).
+					Where("id = ?", post.PublicationID).
+					Exec(txCtx); err != nil {
+					return fmt.Errorf("failed to delete translated publication: %w", err)
+				}
+			}
+			return nil
 		})
 		if err != nil {
 			return nil, huma.Error500InternalServerError(err.Error())
@@ -1930,6 +1979,9 @@ func (h *PostHandler) UpsertVariants(api huma.API) {
 		if err != nil {
 			return nil, huma.Error500InternalServerError("failed to upsert variants")
 		}
+		if err := h.translateLegacyPostMutation(ctx, post.ID); err != nil {
+			return nil, huma.Error500InternalServerError("failed to translate post variants into the publication")
+		}
 
 		var variants []models.PostVariant
 		if err := h.db.NewSelect().
@@ -2069,6 +2121,9 @@ func (h *PostHandler) DeleteVariants(api huma.API) {
 			Exec(ctx)
 		if err != nil {
 			return nil, huma.Error500InternalServerError("failed to delete variants")
+		}
+		if err := h.translateLegacyPostMutation(ctx, post.ID); err != nil {
+			return nil, huma.Error500InternalServerError("failed to reset publication destination overrides")
 		}
 
 		return &DeleteVariantsOutput{Body: struct {

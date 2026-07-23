@@ -67,7 +67,8 @@ func TestXCapabilitiesExposePostSettings(t *testing.T) {
 	for _, setting := range capability.Settings {
 		keys = append(keys, setting.Key)
 	}
-	require.Contains(t, keys, "quote_tweet_id")
+	require.Contains(t, keys, "quote_url")
+	require.NotContains(t, keys, "quote_tweet_id")
 	require.Contains(t, keys, "poll_options")
 	require.Contains(t, keys, "poll_duration_minutes")
 	require.Contains(t, keys, "reply_settings")
@@ -97,7 +98,7 @@ func TestMastodonCapabilitiesExposeStatusSettings(t *testing.T) {
 	capability, ok := Find(ProviderMastodon, models.ContentProfileShortText)
 
 	require.True(t, ok)
-	require.True(t, capability.NativeScheduling)
+	require.False(t, capability.NativeScheduling)
 	keys := make([]string, 0, len(capability.Settings))
 	for _, setting := range capability.Settings {
 		keys = append(keys, setting.Key)
@@ -106,7 +107,7 @@ func TestMastodonCapabilitiesExposeStatusSettings(t *testing.T) {
 	require.Contains(t, keys, "spoiler_text")
 	require.Contains(t, keys, "sensitive")
 	require.Contains(t, keys, "language")
-	require.Contains(t, keys, "scheduled_at")
+	require.NotContains(t, keys, "scheduled_at")
 	require.Contains(t, keys, "poll_options")
 	require.Contains(t, keys, "poll_expires_in_seconds")
 }
@@ -125,10 +126,11 @@ func TestBlueskyCapabilitiesExposeVideoAndPostSettings(t *testing.T) {
 		keys = append(keys, setting.Key)
 	}
 	require.Contains(t, keys, "link_url")
-	require.Contains(t, keys, "quote_uri")
-	require.Contains(t, keys, "quote_cid")
+	require.Contains(t, keys, "quote_url")
+	require.NotContains(t, keys, "quote_uri")
+	require.NotContains(t, keys, "quote_cid")
 	require.Contains(t, keys, "self_labels")
-	require.Contains(t, keys, "mention_dids")
+	require.NotContains(t, keys, "mention_dids")
 }
 
 func TestLinkedInCapabilitiesExposeDocumentCarousel(t *testing.T) {
@@ -250,7 +252,7 @@ func TestValidateFlagsUnsupportedProviderSettings(t *testing.T) {
 	requireIssueCode(t, issues, "unsupported_setting")
 }
 
-func TestValidateEmitsProviderReviewAuditAndQuotaCodes(t *testing.T) {
+func TestValidateRequiresExplicitConsentAndKeepsQuotaWarnings(t *testing.T) {
 	tiktokIssues := Validate(ProviderTikTok, models.ContentProfileShortVideo, "caption", "", "", []MediaItem{{
 		ID:              "video-1",
 		MimeType:        "video/mp4",
@@ -261,8 +263,7 @@ func TestValidateEmitsProviderReviewAuditAndQuotaCodes(t *testing.T) {
 		URL:             "https://cdn.example/video.mp4",
 	}}, map[string]any{"content_posting_method": "DIRECT_POST", "privacy_level": "SELF_ONLY"})
 
-	requireIssueCode(t, tiktokIssues, "app_review_required")
-	requireIssueCode(t, tiktokIssues, "provider_audit_required")
+	requireIssueCode(t, tiktokIssues, "setting_required")
 
 	youtubeIssues := Validate(ProviderYouTube, models.ContentProfileLongVideo, "caption", "Title", "", []MediaItem{{
 		ID:             "video-1",
@@ -271,8 +272,34 @@ func TestValidateEmitsProviderReviewAuditAndQuotaCodes(t *testing.T) {
 		AnalysisStatus: "ready",
 	}}, map[string]any{"privacy": "private"})
 
-	requireIssueCode(t, youtubeIssues, "provider_audit_required")
 	requireIssueCode(t, youtubeIssues, "quota_warning")
+	requireNoIssueCode(t, youtubeIssues, "provider_audit_required")
+}
+
+func TestTikTokPrivacyIsRequiredOnlyForDirectPost(t *testing.T) {
+	media := []MediaItem{{
+		ID:              "video-1",
+		MimeType:        "video/mp4",
+		Size:            1024,
+		AnalysisStatus:  "ready",
+		PublicURLReady:  true,
+		PublicURLStatus: 200,
+		URL:             "https://cdn.example/video.mp4",
+	}}
+
+	directIssues := Validate(ProviderTikTok, models.ContentProfileShortVideo, "caption", "", "", media, map[string]any{
+		"content_posting_method": "DIRECT_POST",
+		"music_usage_confirmed":  true,
+	})
+	requireIssueForField(t, directIssues, "setting_required", "privacy_level")
+
+	inboxIssues := Validate(ProviderTikTok, models.ContentProfileShortVideo, "caption", "", "", media, map[string]any{
+		"content_posting_method": "UPLOAD",
+		"music_usage_confirmed":  true,
+	})
+	for _, issue := range inboxIssues {
+		require.False(t, issue.Code == "setting_required" && issue.Field == "privacy_level", inboxIssues)
+	}
 }
 
 func requireIssueCode(t *testing.T, issues []ValidationIssue, code string) {
@@ -283,4 +310,21 @@ func requireIssueCode(t *testing.T, issues []ValidationIssue, code string) {
 		}
 	}
 	require.Failf(t, "missing validation issue", "code %q not found in %#v", code, issues)
+}
+
+func requireIssueForField(t *testing.T, issues []ValidationIssue, code, field string) {
+	t.Helper()
+	for _, issue := range issues {
+		if issue.Code == code && issue.Field == field {
+			return
+		}
+	}
+	require.Failf(t, "missing validation issue", "code %q for field %q not found in %#v", code, field, issues)
+}
+
+func requireNoIssueCode(t *testing.T, issues []ValidationIssue, code string) {
+	t.Helper()
+	for _, issue := range issues {
+		require.NotEqual(t, code, issue.Code)
+	}
 }

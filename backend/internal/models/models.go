@@ -38,6 +38,16 @@ const (
 	ContentProfileLongVideo  = "long_video"
 )
 
+// Publishing intent values describe what the user wants to create. Provider
+// output profiles and media shape are resolved separately.
+const (
+	PublishingIntentPost       = "post"
+	PublishingIntentThread     = "thread"
+	PublishingIntentStory      = "story"
+	PublishingIntentShortVideo = "short_video"
+	PublishingIntentVideo      = "video"
+)
+
 // Rendition status values stored in renditions.status.
 const (
 	RenditionStatusDraft      = "draft"
@@ -412,6 +422,7 @@ type Publication struct {
 	WorkspaceID     string    `bun:",notnull" json:"workspace_id"`
 	CreatedByID     string    `bun:"created_by,notnull" json:"created_by"`
 	Title           string    `bun:",notnull" json:"title"`
+	Intent          string    `bun:"intent,notnull,default:'post'" json:"intent"`
 	ContentProfile  string    `bun:"content_profile,notnull,default:'short_text'" json:"content_profile"`
 	SourceText      string    `bun:"source_text,notnull,default:''" json:"source_text"`
 	SourceContent   string    `bun:"source_content,notnull" json:"source_content"` // legacy mirror until old post flows are removed
@@ -427,6 +438,32 @@ type Publication struct {
 	UpdatedAt       time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"updated_at"`
 }
 
+// PublicationSegment is an ordered canonical content unit. A post has one
+// segment; a thread and follow-up sequence can have many.
+type PublicationSegment struct {
+	bun.BaseModel `bun:"table:publication_segments"`
+
+	ID            string    `bun:",pk" json:"id"`
+	PublicationID string    `bun:"publication_id,notnull" json:"publication_id"`
+	Position      int       `bun:"position,notnull,default:0" json:"position"`
+	Body          string    `bun:"body,notnull,default:''" json:"body"`
+	Title         string    `bun:"title,notnull,default:''" json:"title"`
+	Description   string    `bun:"description,notnull,default:''" json:"description"`
+	URL           string    `bun:"url,notnull,default:''" json:"url"`
+	SettingsJSON  string    `bun:"settings_json,notnull,default:'{}'" json:"settings_json"`
+	CreatedAt     time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"created_at"`
+	UpdatedAt     time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"updated_at"`
+}
+
+type PublicationSegmentMedia struct {
+	bun.BaseModel `bun:"table:publication_segment_media"`
+
+	SegmentID    string `bun:"segment_id,pk" json:"segment_id"`
+	MediaID      string `bun:"media_id,pk" json:"media_id"`
+	DisplayOrder int    `bun:"display_order,notnull,default:0" json:"display_order"`
+	SettingsJSON string `bun:"settings_json,notnull,default:'{}'" json:"settings_json"`
+}
+
 type Rendition struct {
 	bun.BaseModel `bun:"table:renditions"`
 
@@ -435,6 +472,7 @@ type Rendition struct {
 	SocialAccountID string    `bun:"social_account_id,notnull" json:"social_account_id"`
 	Platform        string    `bun:",notnull" json:"platform"`
 	Profile         string    `bun:",notnull" json:"profile"`
+	OutputProfile   string    `bun:"output_profile,notnull,default:''" json:"output_profile"`
 	Body            string    `bun:",notnull,default:''" json:"body"`
 	Title           string    `bun:",notnull,default:''" json:"title"`
 	Description     string    `bun:",notnull,default:''" json:"description"`
@@ -445,6 +483,38 @@ type Rendition struct {
 	ErrorMessage    string    `bun:"error_message" json:"error_message"`
 	CreatedAt       time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"created_at"`
 	UpdatedAt       time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"updated_at"`
+}
+
+type RenditionSegment struct {
+	bun.BaseModel `bun:"table:rendition_segments"`
+
+	ID                   string    `bun:",pk" json:"id"`
+	RenditionID          string    `bun:"rendition_id,notnull" json:"rendition_id"`
+	PublicationSegmentID string    `bun:"publication_segment_id,notnull" json:"publication_segment_id"`
+	Position             int       `bun:"position,notnull,default:0" json:"position"`
+	Body                 string    `bun:"body,notnull,default:''" json:"body"`
+	Title                string    `bun:"title,notnull,default:''" json:"title"`
+	Description          string    `bun:"description,notnull,default:''" json:"description"`
+	URL                  string    `bun:"url,notnull,default:''" json:"url"`
+	SettingsJSON         string    `bun:"settings_json,notnull,default:'{}'" json:"settings_json"`
+	Status               string    `bun:"status,notnull,default:'draft'" json:"status"`
+	ExternalID           string    `bun:"external_id,notnull,default:''" json:"external_id"`
+	ExternalURL          string    `bun:"external_url,notnull,default:''" json:"external_url"`
+	ErrorMessage         string    `bun:"error_message,notnull,default:''" json:"error_message"`
+	CreatedAt            time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"created_at"`
+	UpdatedAt            time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"updated_at"`
+}
+
+type RenditionSegmentMedia struct {
+	bun.BaseModel `bun:"table:rendition_segment_media"`
+
+	RenditionSegmentID   string `bun:"rendition_segment_id,pk" json:"rendition_segment_id"`
+	MediaID              string `bun:"media_id,pk" json:"media_id"`
+	Role                 string `bun:"role,notnull,default:'attachment'" json:"role"`
+	DisplayOrder         int    `bun:"display_order,notnull,default:0" json:"display_order"`
+	AltText              string `bun:"alt_text,notnull,default:''" json:"alt_text"`
+	ThumbnailTimestampMS int    `bun:"thumbnail_timestamp_ms,notnull,default:0" json:"thumbnail_timestamp_ms"`
+	SettingsJSON         string `bun:"settings_json,notnull,default:'{}'" json:"settings_json"`
 }
 
 type RenditionMedia struct {

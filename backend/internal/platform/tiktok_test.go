@@ -43,6 +43,27 @@ func TestTikTokGenerateAuthURL(t *testing.T) {
 	}
 }
 
+func TestTikTokUploadCapabilityDoesNotRequireCreatorInfo(t *testing.T) {
+	originalClient := httpClient
+	defer func() { httpClient = originalClient }()
+	httpClient = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		t.Fatalf("upload capability resolution must not call TikTok: %s %s", req.Method, req.URL.String())
+		return nil, nil
+	})}
+
+	result, err := NewTikTokAdapter("", "", "").ResolveAccountPublishingCapabilities(
+		context.Background(),
+		"access",
+		AccountCapabilityInput{Settings: map[string]interface{}{"content_posting_method": "UPLOAD"}},
+	)
+	if err != nil {
+		t.Fatalf("ResolveAccountPublishingCapabilities returned error: %v", err)
+	}
+	if result.Revision != "tiktok-upload-v1" || len(result.Options) != 0 {
+		t.Fatalf("unexpected upload capability result %#v", result)
+	}
+}
+
 func TestTikTokExchangeCodeAndProfile(t *testing.T) {
 	originalClient := httpClient
 	defer func() { httpClient = originalClient }()
@@ -131,6 +152,10 @@ func TestTikTokPublishDirectVideoFromPublicURL(t *testing.T) {
 		Content:          "Launch video",
 		PlatformMediaIDs: []string{"https://media.example/video.mp4"},
 		Media:            []MediaItem{{ID: "media-1", MimeType: "video/mp4"}},
+		Settings: map[string]interface{}{
+			"content_posting_method": "DIRECT_POST",
+			"privacy_level":          "PUBLIC_TO_EVERYONE",
+		},
 	})
 	if err != nil {
 		t.Fatalf("Publish returned error: %v", err)
@@ -288,6 +313,83 @@ func TestTikTokPublishRequiresHTTPSVideoURL(t *testing.T) {
 	})
 	if err == nil || !strings.Contains(err.Error(), "publicly-accessible HTTPS") {
 		t.Fatalf("expected HTTPS URL error, got %v", err)
+	}
+}
+
+func TestTikTokPublishUploadPhotoUsesUploadContractWithoutDirectPostSettings(t *testing.T) {
+	originalClient := httpClient
+	defer func() { httpClient = originalClient }()
+
+	var initPayload map[string]any
+	httpClient = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		switch req.URL.String() {
+		case tiktokContentInitURL:
+			body, err := io.ReadAll(req.Body)
+			if err != nil {
+				t.Fatalf("reading photo init body: %v", err)
+			}
+			if err := json.Unmarshal(body, &initPayload); err != nil {
+				t.Fatalf("decoding photo init payload: %v", err)
+			}
+			return jsonResponse(req, `{"data":{"publish_id":"photo-upload-1"},"error":{"code":"ok"}}`), nil
+		case tiktokPublishStatusURL:
+			return jsonResponse(req, `{"data":{"status":"SEND_TO_USER_INBOX"},"error":{"code":"ok"}}`), nil
+		case tiktokCreatorInfoURL:
+			t.Fatal("photo upload must not query creator info or require direct-post privacy")
+			return nil, nil
+		default:
+			t.Fatalf("unexpected request %s %s", req.Method, req.URL.String())
+			return nil, nil
+		}
+	})}
+
+	adapter := NewTikTokAdapter("client-key", "client-secret", "https://app.example/callback")
+	externalID, err := adapter.Publish(context.Background(), "access", "open-1", &PublishRequest{
+		Profile:          "carousel",
+		Content:          "Photo description",
+		PlatformMediaIDs: []string{"https://media.example/one.webp", "https://media.example/two.jpeg"},
+		Media: []MediaItem{
+			{ID: "photo-1", MimeType: "image/webp"},
+			{ID: "photo-2", MimeType: "image/jpeg"},
+		},
+		Settings: map[string]interface{}{
+			"content_posting_method": "UPLOAD",
+			"photo_title":            "Photo title",
+			"comment":                true,
+			"auto_add_music":         true,
+		},
+	})
+	if err != nil {
+		t.Fatalf("Publish returned error: %v", err)
+	}
+	if externalID != "photo-upload-1" {
+		t.Fatalf("expected publish id, got %q", externalID)
+	}
+	if initPayload["post_mode"] != "MEDIA_UPLOAD" || initPayload["media_type"] != "PHOTO" {
+		t.Fatalf("unexpected photo upload mode: %#v", initPayload)
+	}
+	postInfo, ok := initPayload["post_info"].(map[string]any)
+	if !ok {
+		t.Fatalf("missing post_info: %#v", initPayload)
+	}
+	if postInfo["title"] != "Photo title" || postInfo["description"] != "Photo description" {
+		t.Fatalf("unexpected upload metadata: %#v", postInfo)
+	}
+	for _, key := range []string{"privacy_level", "disable_comment", "auto_add_music", "brand_content_toggle", "brand_organic_toggle"} {
+		if _, exists := postInfo[key]; exists {
+			t.Fatalf("upload post_info must not include direct-post field %q: %#v", key, postInfo)
+		}
+	}
+	sourceInfo, ok := initPayload["source_info"].(map[string]any)
+	if !ok {
+		t.Fatalf("missing source_info: %#v", initPayload)
+	}
+	images, ok := sourceInfo["photo_images"].([]any)
+	if !ok || len(images) != 2 {
+		t.Fatalf("expected official photo_images array, got %#v", sourceInfo)
+	}
+	if _, exists := sourceInfo["photo_urls"]; exists {
+		t.Fatalf("unexpected non-contract photo_urls field: %#v", sourceInfo)
 	}
 }
 

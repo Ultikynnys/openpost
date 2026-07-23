@@ -86,6 +86,9 @@ func RunMigrations(db *bun.DB) error {
 		}
 	}
 
+	if err := MigrateLegacyPublicationAuthoring(ctx, db); err != nil {
+		return fmt.Errorf("legacy publication authoring migration failed: %w", err)
+	}
 	return nil
 }
 

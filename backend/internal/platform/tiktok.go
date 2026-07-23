@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf16"
 )
 
 const (
@@ -22,7 +23,7 @@ const (
 	tiktokVideoInboxInitURL = "https://open.tiktokapis.com/v2/post/publish/inbox/video/init/"
 	tiktokContentInitURL    = "https://open.tiktokapis.com/v2/post/publish/content/init/"
 	tiktokPublishStatusURL  = "https://open.tiktokapis.com/v2/post/publish/status/fetch/"
-	tiktokTitleMaxRunes     = 2000
+	tiktokTitleMaxUnits     = 2200
 	tiktokMaxChunkSize      = 64 * 1024 * 1024
 )
 
@@ -199,7 +200,11 @@ func (t *TikTokAdapter) Publish(ctx context.Context, accessToken, _ string, req 
 	if len(req.Media) != 1 || !isVideoMime(req.Media[0].MimeType) {
 		return "", fmt.Errorf("tiktok video publishing requires exactly one video attachment")
 	}
-	if isTikTokUploadMode(req.Settings) {
+	postingMethod, err := tiktokPostingMethod(req.Settings)
+	if err != nil {
+		return "", err
+	}
+	if postingMethod == "UPLOAD" {
 		return t.publishInboxVideoFromURL(ctx, accessToken, req.PlatformMediaIDs[0])
 	}
 	return t.publishDirectVideoFromURL(ctx, accessToken, req)
@@ -218,7 +223,6 @@ func (t *TikTokAdapter) publishDirectVideoFromURL(ctx context.Context, accessTok
 			"disable_duet":         !settingBool(req.Settings, "duet"),
 			"disable_comment":      !settingBool(req.Settings, "comment"),
 			"disable_stitch":       !settingBool(req.Settings, "stitch"),
-			"auto_add_music":       settingBool(req.Settings, "auto_add_music"),
 			"brand_content_toggle": settingBool(req.Settings, "brand_content_toggle"),
 			"brand_organic_toggle": settingBool(req.Settings, "brand_organic_toggle"),
 			"is_aigc":              settingBool(req.Settings, "is_aigc"),
@@ -228,6 +232,9 @@ func (t *TikTokAdapter) publishDirectVideoFromURL(ctx context.Context, accessTok
 			"video_url": req.PlatformMediaIDs[0],
 		},
 		"post_mode": "DIRECT_POST",
+	}
+	if coverTimestamp := settingInt(req.Settings, "cover_timestamp_ms"); coverTimestamp > 0 {
+		payload["post_info"].(map[string]any)["video_cover_timestamp_ms"] = coverTimestamp
 	}
 
 	respBody, err := DoJSON(ctx, "POST", tiktokVideoInitURL, payload, map[string]string{
@@ -357,30 +364,46 @@ func (t *TikTokAdapter) publishPhotoPost(ctx context.Context, accessToken string
 	if !allTikTokPhotoImages(req.Media) {
 		return "", fmt.Errorf("tiktok photo posts support JPEG or WebP images only")
 	}
-	privacyLevel, err := t.privacyLevel(ctx, accessToken, req.Settings)
+	postingMethod, err := tiktokPostingMethod(req.Settings)
 	if err != nil {
 		return "", err
 	}
+	title := settingString(req.Settings, "photo_title")
+	description := strings.TrimSpace(req.Content)
+	if utf16Length(title) > 90 {
+		return "", fmt.Errorf("tiktok photo titles support at most 90 UTF-16 code units")
+	}
+	if utf16Length(description) > 4000 {
+		return "", fmt.Errorf("tiktok photo descriptions support at most 4000 UTF-16 code units")
+	}
+	postInfo := map[string]any{
+		"title":       title,
+		"description": description,
+	}
 	payload := map[string]any{
-		"post_info": map[string]any{
-			"title":                tiktokTitle(req.Content),
-			"description":          strings.TrimSpace(req.Content),
-			"privacy_level":        privacyLevel,
-			"disable_comment":      !settingBool(req.Settings, "comment"),
-			"auto_add_music":       settingBool(req.Settings, "auto_add_music"),
-			"brand_content_toggle": settingBool(req.Settings, "brand_content_toggle"),
-			"brand_organic_toggle": settingBool(req.Settings, "brand_organic_toggle"),
-			"is_aigc":              settingBool(req.Settings, "is_aigc"),
-		},
+		"post_info": postInfo,
 		"source_info": map[string]any{
-			"source":     "PULL_FROM_URL",
-			"photo_urls": req.PlatformMediaIDs,
+			"source":       "PULL_FROM_URL",
+			"photo_images": req.PlatformMediaIDs,
 		},
 		"post_mode":  "DIRECT_POST",
 		"media_type": "PHOTO",
 	}
-	if strings.EqualFold(settingString(req.Settings, "content_posting_method"), "UPLOAD") {
+	if coverIndex := settingInt(req.Settings, "cover_index"); coverIndex >= 0 {
+		payload["source_info"].(map[string]any)["photo_cover_index"] = coverIndex
+	}
+	if postingMethod == "UPLOAD" {
 		payload["post_mode"] = "MEDIA_UPLOAD"
+	} else {
+		privacyLevel, err := t.privacyLevel(ctx, accessToken, req.Settings)
+		if err != nil {
+			return "", err
+		}
+		postInfo["privacy_level"] = privacyLevel
+		postInfo["disable_comment"] = !settingBool(req.Settings, "comment")
+		postInfo["auto_add_music"] = settingBool(req.Settings, "auto_add_music")
+		postInfo["brand_content_toggle"] = settingBool(req.Settings, "brand_content_toggle")
+		postInfo["brand_organic_toggle"] = settingBool(req.Settings, "brand_organic_toggle")
 	}
 	respBody, err := DoJSON(ctx, "POST", tiktokContentInitURL, payload, map[string]string{
 		headerAuthorization: bearerPrefix + accessToken,
@@ -408,48 +431,78 @@ func (t *TikTokAdapter) publishPhotoPost(ctx context.Context, accessToken string
 
 func (t *TikTokAdapter) privacyLevel(ctx context.Context, accessToken string, settings map[string]interface{}) (string, error) {
 	requested := settingString(settings, "privacy_level")
+	if requested == "" {
+		return "", fmt.Errorf("tiktok creator info: privacy_level must be selected explicitly")
+	}
+	creatorInfo, err := t.loadCreatorInfo(ctx, accessToken)
+	if err != nil {
+		return "", err
+	}
+	for _, option := range creatorInfo.PrivacyLevelOptions {
+		if option == requested {
+			return requested, nil
+		}
+	}
+	return "", fmt.Errorf("tiktok creator info: privacy level %s is not available for this creator", requested)
+}
+
+type tiktokCreatorInfo struct {
+	PrivacyLevelOptions []string `json:"privacy_level_options"`
+	MaxVideoDurationSec int      `json:"max_video_post_duration_sec"`
+	DuetDisabled        bool     `json:"duet_disabled"`
+	StitchDisabled      bool     `json:"stitch_disabled"`
+	CommentDisabled     bool     `json:"comment_disabled"`
+}
+
+func (t *TikTokAdapter) loadCreatorInfo(ctx context.Context, accessToken string) (tiktokCreatorInfo, error) {
 	respBody, err := DoJSON(ctx, "POST", tiktokCreatorInfoURL, map[string]any{}, map[string]string{
 		headerAuthorization: bearerPrefix + accessToken,
 	})
 	if err != nil {
-		return "", fmt.Errorf("tiktok creator info: %w", err)
+		return tiktokCreatorInfo{}, fmt.Errorf("tiktok creator info: %w", err)
 	}
 
 	var creatorResp struct {
-		Data struct {
-			PrivacyLevelOptions []string `json:"privacy_level_options"`
-		} `json:"data"`
-		Error tiktokAPIError `json:"error"`
+		Data  tiktokCreatorInfo `json:"data"`
+		Error tiktokAPIError    `json:"error"`
 	}
 	if err := json.Unmarshal(respBody, &creatorResp); err != nil {
-		return "", fmt.Errorf("decoding tiktok creator info: %w", err)
+		return tiktokCreatorInfo{}, fmt.Errorf("decoding tiktok creator info: %w", err)
 	}
 	if err := creatorResp.Error.err("tiktok creator info"); err != nil {
-		return "", err
+		return tiktokCreatorInfo{}, err
 	}
+	return creatorResp.Data, nil
+}
 
-	if requested != "" {
-		for _, option := range creatorResp.Data.PrivacyLevelOptions {
-			if option == requested {
-				return requested, nil
-			}
-		}
-		return "", fmt.Errorf("tiktok creator info: privacy level %s is not available for this creator", requested)
+func (t *TikTokAdapter) ResolveAccountPublishingCapabilities(ctx context.Context, accessToken string, input AccountCapabilityInput) (AccountCapabilityResult, error) {
+	if isTikTokUploadMode(input.Settings) {
+		return AccountCapabilityResult{
+			Revision: "tiktok-upload-v1",
+		}, nil
 	}
-	for _, option := range creatorResp.Data.PrivacyLevelOptions {
-		if option == "PUBLIC_TO_EVERYONE" {
-			return option, nil
-		}
+	info, err := t.loadCreatorInfo(ctx, accessToken)
+	if err != nil {
+		return AccountCapabilityResult{}, err
 	}
-	for _, option := range creatorResp.Data.PrivacyLevelOptions {
-		if option == "SELF_ONLY" {
-			return option, nil
-		}
+	privacy := make([]DestinationOption, 0, len(info.PrivacyLevelOptions))
+	for _, option := range info.PrivacyLevelOptions {
+		privacy = append(privacy, DestinationOption{Value: option, Label: strings.ReplaceAll(strings.ToLower(option), "_", " ")})
 	}
-	if len(creatorResp.Data.PrivacyLevelOptions) > 0 {
-		return creatorResp.Data.PrivacyLevelOptions[0], nil
-	}
-	return "", fmt.Errorf("tiktok creator info: no privacy level options returned")
+	return AccountCapabilityResult{
+		Revision: "tiktok-creator-info-v1",
+		Options: map[string][]DestinationOption{
+			"tiktok_privacy_levels": privacy,
+		},
+		Constraints: map[string]interface{}{
+			"max_video_duration_seconds": info.MaxVideoDurationSec,
+		},
+		AvailableFeatures: map[string]bool{
+			"duet":    !info.DuetDisabled,
+			"stitch":  !info.StitchDisabled,
+			"comment": !info.CommentDisabled,
+		},
+	}, nil
 }
 
 func allTikTokMediaImages(media []MediaItem) bool {
@@ -629,15 +682,47 @@ func (e tiktokAPIError) err(label string) error {
 
 func tiktokTitle(content string) string {
 	title := strings.TrimSpace(content)
-	if title == "" {
-		return "#OpenPost"
+	return truncateUTF16(title, tiktokTitleMaxUnits)
+}
+
+func utf16Length(value string) int {
+	return len(utf16.Encode([]rune(value)))
+}
+
+func truncateUTF16(value string, limit int) string {
+	if limit <= 0 || value == "" {
+		return ""
 	}
-	return truncateRunes(title, tiktokTitleMaxRunes)
+	units := 0
+	runes := []rune(value)
+	for index, character := range runes {
+		next := utf16.RuneLen(character)
+		if next < 0 {
+			next = 1
+		}
+		if units+next > limit {
+			return string(runes[:index])
+		}
+		units += next
+	}
+	return value
 }
 
 func isTikTokUploadMode(settings map[string]interface{}) bool {
 	mode := strings.ToUpper(strings.TrimSpace(settingString(settings, "content_posting_method")))
 	return mode == "UPLOAD" || mode == "MEDIA_UPLOAD"
+}
+
+func tiktokPostingMethod(settings map[string]interface{}) (string, error) {
+	mode := strings.ToUpper(strings.TrimSpace(settingString(settings, "content_posting_method")))
+	switch mode {
+	case "DIRECT_POST":
+		return mode, nil
+	case "UPLOAD", "MEDIA_UPLOAD":
+		return "UPLOAD", nil
+	default:
+		return "", fmt.Errorf("tiktok publishing requires an explicit posting method")
+	}
 }
 
 func truncateRunes(value string, max int) string {

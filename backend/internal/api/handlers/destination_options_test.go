@@ -17,8 +17,9 @@ import (
 
 type destinationOptionsTestAdapter struct {
 	platform.Adapter
-	input platform.DestinationOptionsInput
-	token string
+	input       platform.DestinationOptionsInput
+	searchInput platform.PublishingOptionsInput
+	token       string
 }
 
 func (a *destinationOptionsTestAdapter) ListDestinationOptions(_ context.Context, accessToken string, input platform.DestinationOptionsInput) (map[string][]platform.DestinationOption, error) {
@@ -26,6 +27,15 @@ func (a *destinationOptionsTestAdapter) ListDestinationOptions(_ context.Context
 	a.input = input
 	return map[string][]platform.DestinationOption{
 		"youtube_playlists": {{Value: "playlist-1", Label: "Product videos"}},
+	}, nil
+}
+
+func (a *destinationOptionsTestAdapter) SearchPublishingOptions(_ context.Context, accessToken string, input platform.PublishingOptionsInput) (platform.PublishingOptionsPage, error) {
+	a.token = accessToken
+	a.searchInput = input
+	return platform.PublishingOptionsPage{
+		Options:    []platform.DestinationOption{{Value: "playlist-2", Label: "Lisbon launches"}},
+		NextCursor: "next-page",
 	}, nil
 }
 
@@ -80,4 +90,62 @@ func TestDestinationOptionsUsesConnectedAccountAndFreshToken(t *testing.T) {
 	require.Equal(t, "youtube-1", tokenSource.accountID)
 	require.Equal(t, "valid-access-token", adapter.token)
 	require.Equal(t, platform.DestinationOptionsInput{RegionCode: "PT", Language: "pt"}, adapter.input)
+}
+
+func TestPublishingOptionsForwardsSearchPaginationAndContext(t *testing.T) {
+	db := createHandlerTestDB(t, (*models.WorkspaceMember)(nil), (*models.SocialAccount)(nil))
+	ctx := context.Background()
+	_, err := db.NewInsert().Model(&models.WorkspaceMember{
+		WorkspaceID: "ws-1",
+		UserID:      "user-1",
+		Role:        models.WorkspaceRoleAdmin,
+	}).Exec(ctx)
+	require.NoError(t, err)
+	_, err = db.NewInsert().Model(&models.SocialAccount{
+		ID:             "youtube-1",
+		WorkspaceID:    "ws-1",
+		Slug:           "youtube-main",
+		Platform:       "youtube",
+		AccountID:      "channel-1",
+		AccessTokenEnc: []byte("encrypted"),
+		IsActive:       true,
+	}).Exec(ctx)
+	require.NoError(t, err)
+
+	adapter := &destinationOptionsTestAdapter{}
+	tokenSource := &destinationOptionsTokenSource{}
+	e := echo.New()
+	api := humaecho.NewWithGroup(e, e.Group("/api/v1"), huma.DefaultConfig("Test", "1.0.0"))
+	NewDestinationOptionsHandler(db, testAuthenticator{}, map[string]platform.Adapter{
+		"youtube": adapter,
+	}, tokenSource).RegisterRoutes(api)
+
+	req := httptest.NewRequestWithContext(
+		t.Context(),
+		http.MethodGet,
+		"/api/v1/accounts/youtube-1/publishing-options/youtube_playlists?search=Lisbon&locale=pt-PT&region=PT&cursor=opaque&context=youtube.short&limit=12",
+		nil,
+	)
+	req.Header.Set("Authorization", "Bearer web-token")
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	var output struct {
+		Options    []platform.DestinationOption `json:"options"`
+		NextCursor string                       `json:"next_cursor"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &output))
+	require.Equal(t, []platform.DestinationOption{{Value: "playlist-2", Label: "Lisbon launches"}}, output.Options)
+	require.Equal(t, "next-page", output.NextCursor)
+	require.Equal(t, platform.PublishingOptionsInput{
+		Source:     "youtube_playlists",
+		Search:     "Lisbon",
+		Locale:     "pt-PT",
+		RegionCode: "PT",
+		Cursor:     "opaque",
+		Context:    map[string]string{"value": "youtube.short"},
+		Limit:      12,
+	}, adapter.searchInput)
+	require.Equal(t, "valid-access-token", adapter.token)
 }

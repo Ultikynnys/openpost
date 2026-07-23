@@ -401,7 +401,12 @@ func (b *BlueskyAdapter) pollVideoJob(ctx context.Context, serviceToken, jobID s
 }
 
 func (b *BlueskyAdapter) Publish(ctx context.Context, accessToken, accountID string, req *PublishRequest) (string, error) {
-	record, err := b.buildPostRecord(accountID, req, time.Now().UTC())
+	prepared := *req
+	prepared.Settings = copyPlatformSettings(req.Settings)
+	if err := b.resolveBlueskyComposerReferences(ctx, accessToken, &prepared); err != nil {
+		return "", err
+	}
+	record, err := b.buildPostRecord(accountID, &prepared, time.Now().UTC())
 	if err != nil {
 		return "", err
 	}
@@ -425,6 +430,9 @@ func (b *BlueskyAdapter) Publish(ctx context.Context, accessToken, accountID str
 	}
 	if err := json.Unmarshal(respBody, &result); err != nil {
 		return "", fmt.Errorf("decoding bluesky post: %w", err)
+	}
+	if err := b.putThreadGate(ctx, accessToken, accountID, result.URI, &prepared); err != nil {
+		return "", err
 	}
 
 	externalID, _ := json.Marshal(map[string]interface{}{
@@ -451,6 +459,9 @@ func (b *BlueskyAdapter) buildPostRecord(_ string, req *PublishRequest, createdA
 			"values":            labels,
 		}
 	}
+	if languages := separatedSettingValues(req.Settings, "languages"); len(languages) > 0 {
+		record["langs"] = languages
+	}
 	if err := b.attachMediaToRecord(record, req); err != nil {
 		return nil, err
 	}
@@ -460,6 +471,140 @@ func (b *BlueskyAdapter) buildPostRecord(_ string, req *PublishRequest, createdA
 
 	attachReplyToRecord(record, req.ReplyToID)
 	return record, nil
+}
+
+func (b *BlueskyAdapter) resolveBlueskyComposerReferences(ctx context.Context, accessToken string, req *PublishRequest) error {
+	if quoteURL := settingString(req.Settings, "quote_url"); quoteURL != "" {
+		uri, cid, err := b.resolveBlueskyPostURL(ctx, accessToken, quoteURL)
+		if err != nil {
+			return err
+		}
+		req.Settings["quote_uri"] = uri
+		req.Settings["quote_cid"] = cid
+	}
+	mentions := map[string]string{}
+	for _, match := range blueskyMentionPattern.FindAllStringSubmatch(req.Content, -1) {
+		if len(match) < 2 {
+			continue
+		}
+		handle := strings.ToLower(strings.TrimSpace(match[1]))
+		did, err := b.resolveBlueskyHandle(ctx, accessToken, handle)
+		if err != nil {
+			return err
+		}
+		mentions[handle] = did
+	}
+	if len(mentions) > 0 {
+		encoded, _ := json.Marshal(mentions)
+		req.Settings["mention_dids"] = string(encoded)
+	}
+	return nil
+}
+
+func (b *BlueskyAdapter) resolveBlueskyPostURL(ctx context.Context, accessToken, raw string) (string, string, error) {
+	parsed, err := url.Parse(raw)
+	if err != nil || strings.ToLower(parsed.Hostname()) != "bsky.app" {
+		return "", "", fmt.Errorf("bluesky quote_url must be a bsky.app post URL")
+	}
+	parts := strings.Split(strings.Trim(parsed.Path, "/"), "/")
+	if len(parts) != 4 || parts[0] != "profile" || parts[2] != "post" {
+		return "", "", fmt.Errorf("bluesky quote_url must be a bsky.app post URL")
+	}
+	did := parts[1]
+	if !strings.HasPrefix(did, "did:") {
+		did, err = b.resolveBlueskyHandle(ctx, accessToken, did)
+		if err != nil {
+			return "", "", err
+		}
+	}
+	uri := "at://" + did + "/app.bsky.feed.post/" + parts[3]
+	endpoint := b.pdsURL + "/xrpc/app.bsky.feed.getPosts?uris=" + url.QueryEscape(uri)
+	response, err := DoRequest(ctx, "GET", endpoint, nil, map[string]string{
+		headerAuthorization: bearerPrefix + accessToken,
+	})
+	if err != nil {
+		return "", "", fmt.Errorf("resolving bluesky quote post: %w", err)
+	}
+	var result struct {
+		Posts []struct {
+			URI string `json:"uri"`
+			CID string `json:"cid"`
+		} `json:"posts"`
+	}
+	if err := json.Unmarshal(response, &result); err != nil {
+		return "", "", fmt.Errorf("decoding bluesky quote post: %w", err)
+	}
+	if len(result.Posts) == 0 || result.Posts[0].CID == "" {
+		return "", "", fmt.Errorf("bluesky quote post was not found")
+	}
+	return result.Posts[0].URI, result.Posts[0].CID, nil
+}
+
+func (b *BlueskyAdapter) resolveBlueskyHandle(ctx context.Context, accessToken, handle string) (string, error) {
+	endpoint := b.pdsURL + "/xrpc/com.atproto.identity.resolveHandle?handle=" + url.QueryEscape(handle)
+	response, err := DoRequest(ctx, "GET", endpoint, nil, map[string]string{
+		headerAuthorization: bearerPrefix + accessToken,
+	})
+	if err != nil {
+		return "", fmt.Errorf("resolving bluesky handle %s: %w", handle, err)
+	}
+	var result struct {
+		DID string `json:"did"`
+	}
+	if err := json.Unmarshal(response, &result); err != nil {
+		return "", fmt.Errorf("decoding bluesky handle %s: %w", handle, err)
+	}
+	if result.DID == "" {
+		return "", fmt.Errorf("bluesky handle %s could not be resolved", handle)
+	}
+	return result.DID, nil
+}
+
+func (b *BlueskyAdapter) putThreadGate(ctx context.Context, accessToken, accountID, postURI string, req *PublishRequest) error {
+	gate := firstNonEmptyString(settingString(req.Settings, "thread_gate"), settingString(req.Settings, "reply_gate"))
+	if gate == "" || gate == "everyone" || gate == "inherit" {
+		return nil
+	}
+	var allow []map[string]string
+	switch gate {
+	case "mentioned":
+		allow = []map[string]string{{bskyRecordTypeField: "app.bsky.feed.threadgate#mentionRule"}}
+	case "following":
+		allow = []map[string]string{{bskyRecordTypeField: "app.bsky.feed.threadgate#followingRule"}}
+	case "followers":
+		allow = []map[string]string{{bskyRecordTypeField: "app.bsky.feed.threadgate#followerRule"}}
+	case "nobody":
+		allow = []map[string]string{}
+	default:
+		return fmt.Errorf("bluesky reply gate %q is not supported", gate)
+	}
+	parts := strings.Split(postURI, "/")
+	rkey := parts[len(parts)-1]
+	payload := map[string]interface{}{
+		"repo":       accountID,
+		"collection": "app.bsky.feed.threadgate",
+		"rkey":       rkey,
+		"record": map[string]interface{}{
+			bskyRecordTypeField: "app.bsky.feed.threadgate",
+			"post":              postURI,
+			"allow":             allow,
+			"createdAt":         time.Now().UTC().Format(time.RFC3339Nano),
+		},
+	}
+	if _, err := DoJSON(ctx, "POST", b.pdsURL+"/xrpc/com.atproto.repo.putRecord", payload, map[string]string{
+		headerAuthorization: bearerPrefix + accessToken,
+	}); err != nil {
+		return fmt.Errorf("setting bluesky thread gate: %w", err)
+	}
+	return nil
+}
+
+func copyPlatformSettings(source map[string]interface{}) map[string]interface{} {
+	copy := make(map[string]interface{}, len(source))
+	for key, value := range source {
+		copy[key] = value
+	}
+	return copy
 }
 
 var (

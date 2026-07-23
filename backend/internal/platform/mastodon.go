@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"mime"
+	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
@@ -122,6 +123,65 @@ func (m *MastodonAdapter) GetProfile(ctx context.Context, accessToken string) (*
 	}, nil
 }
 
+func (m *MastodonAdapter) ResolveAccountPublishingCapabilities(ctx context.Context, accessToken string, _ AccountCapabilityInput) (AccountCapabilityResult, error) {
+	var instance struct {
+		Version       string `json:"version"`
+		Configuration struct {
+			Statuses struct {
+				MaxCharacters       int `json:"max_characters"`
+				MaxMediaAttachments int `json:"max_media_attachments"`
+			} `json:"statuses"`
+			Polls struct {
+				MaxOptions             int `json:"max_options"`
+				MaxCharactersPerOption int `json:"max_characters_per_option"`
+				MinExpiration          int `json:"min_expiration"`
+				MaxExpiration          int `json:"max_expiration"`
+			} `json:"polls"`
+			MediaAttachments struct {
+				ImageSizeLimit int64 `json:"image_size_limit"`
+				VideoSizeLimit int64 `json:"video_size_limit"`
+			} `json:"media_attachments"`
+		} `json:"configuration"`
+	}
+	response, err := DoRequest(ctx, http.MethodGet, m.instanceURL+"/api/v2/instance", nil, map[string]string{
+		headerAuthorization: bearerPrefix + accessToken,
+	})
+	if err != nil {
+		return AccountCapabilityResult{}, fmt.Errorf("loading Mastodon instance configuration: %w", err)
+	}
+	if err := json.Unmarshal(response, &instance); err != nil {
+		return AccountCapabilityResult{}, fmt.Errorf("decoding Mastodon instance configuration: %w", err)
+	}
+	constraints := map[string]interface{}{}
+	if instance.Configuration.Statuses.MaxCharacters > 0 {
+		constraints["text_limit"] = instance.Configuration.Statuses.MaxCharacters
+	}
+	if instance.Configuration.Statuses.MaxMediaAttachments > 0 {
+		constraints["media_max_count"] = instance.Configuration.Statuses.MaxMediaAttachments
+	}
+	if instance.Configuration.Polls.MaxOptions > 0 {
+		constraints["poll_max_options"] = instance.Configuration.Polls.MaxOptions
+	}
+	if instance.Configuration.Polls.MaxCharactersPerOption > 0 {
+		constraints["poll_option_max_length"] = instance.Configuration.Polls.MaxCharactersPerOption
+	}
+	if instance.Configuration.Polls.MinExpiration > 0 {
+		constraints["poll_min_expiration_seconds"] = instance.Configuration.Polls.MinExpiration
+	}
+	if instance.Configuration.Polls.MaxExpiration > 0 {
+		constraints["poll_max_expiration_seconds"] = instance.Configuration.Polls.MaxExpiration
+	}
+	return AccountCapabilityResult{
+		Revision:    "mastodon:" + firstNonEmptyString(instance.Version, "unknown"),
+		Constraints: constraints,
+		AvailableFeatures: map[string]bool{
+			"quote_url":          false,
+			"interaction_policy": false,
+			"focal_point":        true,
+		},
+	}, nil
+}
+
 func (m *MastodonAdapter) UploadMedia(ctx context.Context, accessToken, _ string, mimeType string, reader io.Reader) (string, error) {
 	ext := ".bin"
 	if exts, err := mime.ExtensionsByType(mimeType); err == nil && len(exts) > 0 {
@@ -195,9 +255,19 @@ func (m *MastodonAdapter) Publish(ctx context.Context, accessToken, _ string, re
 		if i < len(req.MediaAltTexts) {
 			altText = req.MediaAltTexts[i]
 		}
+		values := map[string]string{}
 		if altText != "" {
+			values["description"] = altText
+		}
+		if i < len(req.MediaSettings) {
+			if focalPoint := settingString(req.MediaSettings[i], "focal_point"); focalPoint != "" {
+				values["focus"] = focalPoint
+			}
+		}
+		if len(values) > 0 {
 			_, err := DoFormURLEncoded(ctx, "PUT", m.instanceURL+"/api/v1/media/"+mediaID, map[string]string{
-				"description": altText,
+				"description": values["description"],
+				"focus":       values["focus"],
 			}, map[string]string{
 				headerAuthorization: bearerPrefix + accessToken,
 			})
@@ -230,7 +300,7 @@ func (m *MastodonAdapter) Publish(ctx context.Context, accessToken, _ string, re
 
 func buildMastodonStatusForm(req *PublishRequest) (url.Values, error) {
 	formValues := url.Values{}
-	formValues.Set("status", req.Content)
+	formValues.Set("status", contentWithSettingURL(req.Content, req.Settings))
 
 	visibility := firstNonEmptyString(settingString(req.Settings, "visibility"), "public")
 	if !validMastodonVisibility(visibility) {
@@ -247,10 +317,6 @@ func buildMastodonStatusForm(req *PublishRequest) (url.Values, error) {
 	if language := settingString(req.Settings, "language"); language != "" {
 		formValues.Set("language", language)
 	}
-	if scheduledAt := firstNonEmptyString(settingString(req.Settings, "native_scheduled_at"), settingString(req.Settings, "scheduled_at")); scheduledAt != "" {
-		formValues.Set("scheduled_at", scheduledAt)
-	}
-
 	pollOptions := mastodonPollOptions(req.Settings)
 	if len(pollOptions) > 0 {
 		if len(req.PlatformMediaIDs) > 0 {

@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -216,7 +218,7 @@ func (t *ThreadsAdapter) Publish(ctx context.Context, accessToken, userID string
 		}
 	}
 
-	containerID, err := t.createContainer(ctx, accessToken, userID, req.Content, mediaURL, isVideo, req.ReplyToID)
+	containerID, err := t.createContainer(ctx, accessToken, userID, req.Content, mediaURL, isVideo, req)
 	if err != nil {
 		return "", err
 	}
@@ -238,6 +240,12 @@ func (t *ThreadsAdapter) createCarouselContainer(ctx context.Context, accessToke
 			oauthParamAccessToken: accessToken,
 			"is_carousel_item":    "true",
 		}
+		if settingBool(req.Settings, "spoiler") {
+			payload["is_spoiler_media"] = "true"
+		}
+		if altText := mediaAltTextAt(req, index); altText != "" {
+			payload["alt_text"] = altText
+		}
 		if isVideoMime(req.Media[index].MimeType) {
 			payload["media_type"] = "VIDEO"
 			payload["video_url"] = mediaURL
@@ -256,13 +264,16 @@ func (t *ThreadsAdapter) createCarouselContainer(ctx context.Context, accessToke
 	}
 
 	payload := map[string]string{
-		jsonFieldText:         req.Content,
+		jsonFieldText:         contentWithSettingURL(req.Content, req.Settings),
 		"media_type":          "CAROUSEL",
 		"children":            strings.Join(childIDs, ","),
 		oauthParamAccessToken: accessToken,
 	}
 	if req.ReplyToID != "" {
 		payload["reply_to_id"] = req.ReplyToID
+	}
+	if err := applyThreadsSettings(payload, req); err != nil {
+		return "", err
 	}
 	containerID, err := t.postContainer(ctx, userID, payload)
 	if err != nil {
@@ -313,7 +324,8 @@ func (t *ThreadsAdapter) ListComments(ctx context.Context, accessToken, _ string
 }
 
 func (t *ThreadsAdapter) ReplyToComment(ctx context.Context, accessToken, userID, commentID, message string) (string, error) {
-	containerID, err := t.createContainer(ctx, accessToken, userID, strings.TrimSpace(message), "", false, commentID)
+	req := &PublishRequest{Content: strings.TrimSpace(message), ReplyToID: commentID}
+	containerID, err := t.createContainer(ctx, accessToken, userID, req.Content, "", false, req)
 	if err != nil {
 		return "", err
 	}
@@ -384,7 +396,7 @@ func (t *ThreadsAdapter) waitForContainerReady(ctx context.Context, accessToken,
 	return fmt.Errorf("threads container not ready after %d attempts", maxAttempts)
 }
 
-func (t *ThreadsAdapter) createContainer(ctx context.Context, accessToken, userID, content, mediaURL string, isVideo bool, replyToID string) (string, error) {
+func (t *ThreadsAdapter) createContainer(ctx context.Context, accessToken, userID, content, mediaURL string, isVideo bool, req *PublishRequest) (string, error) {
 	payload := map[string]string{
 		jsonFieldText:         content,
 		oauthParamAccessToken: accessToken,
@@ -407,18 +419,186 @@ func (t *ThreadsAdapter) createContainer(ctx context.Context, accessToken, userI
 		payload["media_type"] = "TEXT"
 	}
 
-	if replyToID != "" {
-		payload["reply_to_id"] = replyToID
+	if req.ReplyToID != "" {
+		payload["reply_to_id"] = req.ReplyToID
+	}
+	if settingBool(req.Settings, "spoiler") {
+		payload["is_spoiler_media"] = "true"
+	}
+	if altText := mediaAltTextAt(req, 0); altText != "" {
+		payload["alt_text"] = altText
+	}
+	if err := applyThreadsSettings(payload, req); err != nil {
+		return "", err
 	}
 
 	containerID, err := t.postContainer(ctx, userID, payload)
 	if err != nil {
-		if replyToID != "" && strings.Contains(err.Error(), `"code":10`) {
+		if req.ReplyToID != "" && strings.Contains(err.Error(), `"code":10`) {
 			return "", fmt.Errorf("threads container creation (reply permission/check root ownership): %w", err)
 		}
 		return "", fmt.Errorf("threads container creation: %w", err)
 	}
 	return containerID, nil
+}
+
+//nolint:gocyclo
+func applyThreadsSettings(payload map[string]string, req *PublishRequest) error {
+	if replyControl := settingString(req.Settings, "reply_control"); replyControl != "" {
+		switch replyControl {
+		case "everyone", "accounts_you_follow", "mentioned_only", "parent_post_author_only", "followers_only":
+			payload["reply_control"] = replyControl
+		default:
+			return fmt.Errorf("threads reply_control %q is not supported", replyControl)
+		}
+	}
+	if topicTag := settingString(req.Settings, "topic_tag"); topicTag != "" {
+		payload["topic_tag"] = topicTag
+	}
+	if locationID := settingString(req.Settings, "location_id"); locationID != "" {
+		payload["location_id"] = locationID
+	}
+	if linkAttachment := firstNonEmptyString(settingString(req.Settings, "url"), settingString(req.Settings, "link_attachment")); linkAttachment != "" {
+		if len(req.PlatformMediaIDs) > 0 {
+			return fmt.Errorf("threads link attachments require a text post")
+		}
+		payload["link_attachment"] = linkAttachment
+	}
+	if settingBool(req.Settings, "ghost_post") {
+		payload["is_ghost_post"] = "true"
+	}
+	if settingBool(req.Settings, "reply_approvals") {
+		payload["enable_reply_approvals"] = "true"
+	}
+	options := separatedSettingValues(req.Settings, "poll_options")
+	textAttachment := settingString(req.Settings, "text_attachment_plaintext")
+	textAttachmentLink := settingString(req.Settings, "text_attachment_link_url")
+	gifID := settingString(req.Settings, "gif_id")
+	if textAttachmentLink != "" && textAttachment == "" {
+		return fmt.Errorf("threads text attachment links require text attachment content")
+	}
+	if textAttachment != "" {
+		if len([]rune(textAttachment)) > 10000 {
+			return fmt.Errorf("threads text attachments support at most 10000 characters")
+		}
+		if len(req.PlatformMediaIDs) > 0 {
+			return fmt.Errorf("threads text attachments require a text-only post")
+		}
+		if len(options) > 0 || payload["link_attachment"] != "" || gifID != "" {
+			return fmt.Errorf("threads text attachments cannot be combined with polls, link attachments, or GIFs")
+		}
+		attachment := map[string]string{"plaintext": textAttachment}
+		if textAttachmentLink != "" {
+			attachment["link_attachment_url"] = textAttachmentLink
+		}
+		encoded, err := json.Marshal(attachment)
+		if err != nil {
+			return fmt.Errorf("encoding threads text attachment: %w", err)
+		}
+		payload["text_attachment"] = string(encoded)
+	}
+	if gifID != "" {
+		if len(req.PlatformMediaIDs) > 0 {
+			return fmt.Errorf("threads GIF attachments require a text-only post")
+		}
+		if len(options) > 0 || payload["link_attachment"] != "" || textAttachment != "" {
+			return fmt.Errorf("threads GIF attachments cannot be combined with polls, link attachments, or text attachments")
+		}
+		encoded, err := json.Marshal(map[string]string{"gif_id": gifID, "provider": "GIPHY"})
+		if err != nil {
+			return fmt.Errorf("encoding threads GIF attachment: %w", err)
+		}
+		payload["gif_attachment"] = string(encoded)
+	}
+	if len(options) > 0 {
+		if len(req.PlatformMediaIDs) > 0 {
+			return fmt.Errorf("threads polls cannot be combined with media")
+		}
+		if payload["link_attachment"] != "" {
+			return fmt.Errorf("threads polls cannot be combined with a link attachment")
+		}
+		if len(options) < 2 || len(options) > 4 {
+			return fmt.Errorf("threads polls require 2-4 options")
+		}
+		poll := map[string]string{}
+		keys := []string{"option_a", "option_b", "option_c", "option_d"}
+		for index, option := range options {
+			if len([]rune(option)) > 25 {
+				return fmt.Errorf("threads poll options support at most 25 characters")
+			}
+			poll[keys[index]] = option
+		}
+		encoded, err := json.Marshal(poll)
+		if err != nil {
+			return fmt.Errorf("encoding threads poll: %w", err)
+		}
+		payload["poll_attachment"] = string(encoded)
+	}
+	return nil
+}
+
+func (t *ThreadsAdapter) SearchPublishingOptions(ctx context.Context, accessToken string, input PublishingOptionsInput) (PublishingOptionsPage, error) {
+	if input.Source != "threads_locations" {
+		return PublishingOptionsPage{}, fmt.Errorf("threads publishing option source %q is not supported", input.Source)
+	}
+	query := url.Values{
+		oauthParamAccessToken: {accessToken},
+		"fields":              {"id,name,address,city,country"},
+	}
+	if search := strings.TrimSpace(input.Search); search != "" {
+		query.Set("query", search)
+	}
+	if input.Cursor != "" {
+		query.Set("after", input.Cursor)
+	}
+	limit := input.Limit
+	if limit <= 0 || limit > 100 {
+		limit = 25
+	}
+	query.Set("limit", strconv.Itoa(limit))
+	body, err := DoRequest(ctx, http.MethodGet, "https://graph.threads.net/v1.0/location_search?"+query.Encode(), nil, nil)
+	if err != nil {
+		return PublishingOptionsPage{}, fmt.Errorf("searching Threads locations: %w", err)
+	}
+	var response struct {
+		Data []struct {
+			ID      string `json:"id"`
+			Name    string `json:"name"`
+			Address string `json:"address"`
+			City    string `json:"city"`
+			Country string `json:"country"`
+		} `json:"data"`
+		Paging struct {
+			Cursors struct {
+				After string `json:"after"`
+			} `json:"cursors"`
+		} `json:"paging"`
+	}
+	if err := json.Unmarshal(body, &response); err != nil {
+		return PublishingOptionsPage{}, fmt.Errorf("decoding Threads locations: %w", err)
+	}
+	page := PublishingOptionsPage{NextCursor: response.Paging.Cursors.After}
+	for _, location := range response.Data {
+		detail := strings.Trim(strings.Join([]string{location.City, location.Country}, ", "), ", ")
+		label := location.Name
+		if detail != "" {
+			label += " · " + detail
+		}
+		page.Options = append(page.Options, DestinationOption{Value: location.ID, Label: label})
+	}
+	return page, nil
+}
+
+func separatedSettingValues(settings map[string]interface{}, key string) []string {
+	raw := settingString(settings, key)
+	values := strings.FieldsFunc(raw, func(r rune) bool { return r == ',' || r == '\n' })
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		if value = strings.TrimSpace(value); value != "" {
+			result = append(result, value)
+		}
+	}
+	return result
 }
 
 func (t *ThreadsAdapter) postContainer(ctx context.Context, userID string, payload map[string]string) (string, error) {

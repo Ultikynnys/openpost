@@ -2,6 +2,7 @@ package platform
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/url"
@@ -274,5 +275,113 @@ func TestInstagramPublishRejectsNonHTTPSMediaURL(t *testing.T) {
 	})
 	if err == nil || !strings.Contains(err.Error(), "publicly-accessible HTTPS") {
 		t.Fatalf("expected HTTPS URL error, got %v", err)
+	}
+}
+
+func TestInstagramTrialReelUsesTrialParams(t *testing.T) {
+	t.Setenv("META_GRAPH_API_VERSION", "v25.0")
+	originalClient := httpClient
+	defer func() { httpClient = originalClient }()
+
+	var createForm url.Values
+	httpClient = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		if req.Method != http.MethodPost || req.URL.Path != "/v25.0/ig-1/media" {
+			t.Fatalf("unexpected request %s %s", req.Method, req.URL.String())
+		}
+		body, err := io.ReadAll(req.Body)
+		if err != nil {
+			t.Fatalf("reading create body: %v", err)
+		}
+		createForm, err = url.ParseQuery(string(body))
+		if err != nil {
+			t.Fatalf("parsing create form: %v", err)
+		}
+		return jsonResponse(req, `{"id":"container-1"}`), nil
+	})}
+
+	adapter := NewInstagramAdapter("", "", "")
+	_, err := adapter.createMediaContainer(
+		context.Background(),
+		"page-token",
+		"ig-1",
+		"Trial",
+		"https://media.example/reel.mp4",
+		true,
+		false,
+		&PublishRequest{
+			Profile:       "short_video",
+			OutputProfile: "instagram.reel",
+			Settings: map[string]interface{}{
+				"is_trial_reel":       true,
+				"graduation_strategy": "SS_PERFORMANCE",
+			},
+		},
+		nil,
+		"",
+	)
+	if err != nil {
+		t.Fatalf("createMediaContainer returned error: %v", err)
+	}
+	if createForm.Get("is_trial_reel") != "" || createForm.Get("graduation_strategy") != "" {
+		t.Fatalf("trial reel fields must be nested: %#v", createForm)
+	}
+	var trialParams map[string]string
+	if err := json.Unmarshal([]byte(createForm.Get("trial_params")), &trialParams); err != nil {
+		t.Fatalf("decoding trial_params: %v", err)
+	}
+	if trialParams["graduation_strategy"] != "SS_PERFORMANCE" {
+		t.Fatalf("unexpected trial_params %#v", trialParams)
+	}
+}
+
+func TestInstagramMediaTagsRequireStructuredCoordinates(t *testing.T) {
+	encoded, err := instagramMediaTags(
+		`[{"username":"rita","x":0.25,"y":0.75}]`,
+		"username",
+		20,
+		true,
+	)
+	if err != nil {
+		t.Fatalf("instagramMediaTags returned error: %v", err)
+	}
+	var tags []map[string]interface{}
+	if err := json.Unmarshal([]byte(encoded), &tags); err != nil {
+		t.Fatalf("decoding normalized tags: %v", err)
+	}
+	if len(tags) != 1 || tags[0]["username"] != "rita" || tags[0]["x"] != 0.25 || tags[0]["y"] != 0.75 {
+		t.Fatalf("unexpected normalized tags %#v", tags)
+	}
+
+	_, err = instagramMediaTags(`[{"username":"rita"}]`, "username", 20, true)
+	if err == nil || !strings.Contains(err.Error(), "missing x") {
+		t.Fatalf("expected missing coordinate error, got %v", err)
+	}
+}
+
+func TestInstagramSearchesOnlyPagesWithLocations(t *testing.T) {
+	t.Setenv("META_GRAPH_API_VERSION", "v25.0")
+	originalClient := httpClient
+	defer func() { httpClient = originalClient }()
+
+	httpClient = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		if req.Method != http.MethodGet || req.URL.Path != "/v25.0/pages/search" {
+			t.Fatalf("unexpected request %s %s", req.Method, req.URL.String())
+		}
+		if req.URL.Query().Get("q") != "Lisbon" || req.URL.Query().Get(oauthParamAccessToken) != "page-token" {
+			t.Fatalf("unexpected location query %#v", req.URL.Query())
+		}
+		return jsonResponse(req, `{"data":[{"id":"page-1","name":"OpenPost Lisbon","location":{"city":"Lisbon","country":"Portugal"}},{"id":"page-2","name":"No address"}],"paging":{"cursors":{"after":"next"}}}`), nil
+	})}
+
+	page, err := NewInstagramAdapter("", "", "").SearchPublishingOptions(context.Background(), "page-token", PublishingOptionsInput{
+		Source: "instagram_locations",
+		Search: "Lisbon",
+		Limit:  10,
+	})
+	if err != nil {
+		t.Fatalf("SearchPublishingOptions returned error: %v", err)
+	}
+	if page.NextCursor != "next" || len(page.Options) != 1 || page.Options[0].Value != "page-1" || page.Options[0].Label != "OpenPost Lisbon · Lisbon, Portugal" {
+		t.Fatalf("unexpected locations page %#v", page)
 	}
 }

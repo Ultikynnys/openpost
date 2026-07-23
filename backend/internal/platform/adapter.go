@@ -12,12 +12,14 @@ import (
 type PublishRequest struct {
 	Content          string // Post text content
 	Profile          string // OpenPost content profile, e.g. short_text, carousel, story, short_video
+	OutputProfile    string // Provider-qualified output profile, e.g. instagram.carousel
 	Title            string // Provider-specific title for video/link surfaces
 	Description      string // Provider-specific description for video/link surfaces
 	SettingsJSON     string // Raw provider settings JSON
 	Settings         map[string]interface{}
-	PlatformMediaIDs []string // Platform-specific media IDs from UploadMedia
-	MediaAltTexts    []string // Alt text for each media item (parallel to PlatformMediaIDs)
+	PlatformMediaIDs []string                 // Platform-specific media IDs from UploadMedia
+	MediaAltTexts    []string                 // Alt text for each media item (parallel to PlatformMediaIDs)
+	MediaSettings    []map[string]interface{} // Per-media settings parallel to PlatformMediaIDs
 	Media            []MediaItem
 	ReplyToID        string // External ID of parent post (empty for first post in thread)
 }
@@ -41,6 +43,10 @@ type UploadMediaRequest struct {
 	ThumbnailFilename string
 	ThumbnailSize     int64
 	ThumbnailReader   io.Reader
+	CaptionMimeType   string
+	CaptionFilename   string
+	CaptionSize       int64
+	CaptionReader     io.Reader
 }
 
 type MediaValidationIssue struct {
@@ -124,6 +130,50 @@ type DestinationOption struct {
 // provider's composer settings, such as playlists and publishing categories.
 type DestinationOptionsProvider interface {
 	ListDestinationOptions(ctx context.Context, accessToken string, input DestinationOptionsInput) (map[string][]DestinationOption, error)
+}
+
+type PublishingOptionsInput struct {
+	Source     string
+	Search     string
+	Locale     string
+	RegionCode string
+	Cursor     string
+	Context    map[string]string
+	Limit      int
+}
+
+type PublishingOptionsPage struct {
+	Options    []DestinationOption
+	NextCursor string
+}
+
+// PublishingOptionsProvider searches one account collection at a time. The
+// broad DestinationOptionsProvider remains a compatibility interface.
+type PublishingOptionsProvider interface {
+	SearchPublishingOptions(ctx context.Context, accessToken string, input PublishingOptionsInput) (PublishingOptionsPage, error)
+}
+
+type AccountCapabilityInput struct {
+	Intent        string
+	OutputProfile string
+	MediaShape    string
+	Locale        string
+	RegionCode    string
+	Settings      map[string]interface{}
+}
+
+type AccountCapabilityResult struct {
+	Revision          string
+	Options           map[string][]DestinationOption
+	Constraints       map[string]interface{}
+	AvailableFeatures map[string]bool
+	UnavailableReason string
+}
+
+// AccountCapabilityProvider resolves provider state that varies per connected
+// account, permission set, or instance.
+type AccountCapabilityProvider interface {
+	ResolveAccountPublishingCapabilities(ctx context.Context, accessToken string, input AccountCapabilityInput) (AccountCapabilityResult, error)
 }
 
 // TokenResult is a platform-agnostic token response.

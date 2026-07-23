@@ -158,6 +158,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/accounts/{account_id}/publishing-options/{source}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Search one account-specific publishing option collection */
+        get: operations["search-account-publishing-options"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/accounts/{platform}/auth-url": {
         parameters: {
             query?: never;
@@ -749,6 +766,23 @@ export interface paths {
         get: operations["list-capabilities"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/capabilities/resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Resolve publishing capabilities for connected accounts */
+        post: operations["resolve-publishing-capabilities"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1497,6 +1531,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/publications/{id}/renditions/{account_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete one saved publication destination
+         * @description This permanently removes the destination and its segment and media overrides. Deselecting an account does not call this operation.
+         */
+        delete: operations["delete-publication-rendition"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/publications/{id}/schedule": {
         parameters: {
             query?: never;
@@ -2133,23 +2187,29 @@ export interface components {
             profiles: components["schemas"]["Profile"][] | null;
         };
         Capability: {
+            capability_revision: string;
             caveats?: string[] | null;
             description_required?: boolean;
+            expires_at?: string;
+            intents: string[] | null;
             label: string;
             media: components["schemas"]["MediaConstraint"];
+            media_shapes: string[] | null;
             metadata?: {
                 [key: string]: string;
             };
             native_scheduling: boolean;
             openpost_queued: boolean;
+            output_profile: string;
             profile: string;
             provider: string;
             requires_app_review: boolean;
             requires_public_media: boolean;
-            settings?: components["schemas"]["SettingField"][] | null;
+            settings?: components["schemas"]["SettingDefinition"][] | null;
             /** Format: int64 */
             text_limit?: number;
             title_required?: boolean;
+            unavailable_reason?: string;
             validation_categories?: string[] | null;
         };
         ChangePasswordInputBody: {
@@ -2486,6 +2546,11 @@ export interface components {
             content_profile: string;
             /** @description Publication goal */
             goal?: string;
+            /**
+             * @description Publishing intent
+             * @enum {string}
+             */
+            intent?: "post" | "thread" | "story" | "short_video" | "video";
             /** @description Default ordered media */
             media?: components["schemas"]["PublicationMediaInput"][] | null;
             /** @description Publication metadata */
@@ -2499,6 +2564,8 @@ export interface components {
              * @description Optional schedule time
              */
             scheduled_at?: string;
+            /** @description Ordered canonical publication segments */
+            segments?: components["schemas"]["PublicationSegmentInput"][] | null;
             /** @description Accounts to create default renditions for */
             social_account_ids?: string[] | null;
             /** @description Canonical source text */
@@ -3129,6 +3196,9 @@ export interface components {
             /** Format: int64 */
             public_url_status: number;
             role?: string;
+            settings?: {
+                [key: string]: unknown;
+            };
             /** Format: int64 */
             size: number;
             /** Format: int64 */
@@ -3194,6 +3264,10 @@ export interface components {
             slot?: components["schemas"]["PostingScheduleResponse"];
             /** @description The suggested time in ISO 8601 format */
             slot_time: string;
+        };
+        Option: {
+            label: string;
+            value: string;
         };
         OrganizationMemberResponse: {
             /** @description User email */
@@ -3306,6 +3380,8 @@ export interface components {
             id: string;
             /** @description Attached media */
             media?: components["schemas"]["PostMediaResponse"][] | null;
+            /** @description Canonical publication ID for compatibility-translated authoring */
+            publication_id?: string;
             /**
              * Format: int64
              * @description Random delay in minutes (±N)
@@ -3358,6 +3434,8 @@ export interface components {
             media_ids?: string[] | null;
             /** @description Previous post ID when this is a thread reply */
             parent_post_id?: string;
+            /** @description Canonical publication ID for compatibility-translated authoring */
+            publication_id?: string;
             /**
              * Format: int64
              * @description Random delay in minutes (±N)
@@ -3551,6 +3629,10 @@ export interface components {
             media_id: string;
             /** @description Media role: attachment, cover, thumbnail */
             role?: string;
+            /** @description Media-item settings */
+            settings?: {
+                [key: string]: unknown;
+            };
             /**
              * Format: int64
              * @description Video thumbnail timestamp
@@ -3571,18 +3653,51 @@ export interface components {
             created_by: string;
             goal?: string;
             id: string;
+            intent: string;
             media: components["schemas"]["MediaSummary"][] | null;
             metadata: {
                 [key: string]: unknown;
             };
             renditions: components["schemas"]["RenditionResponse"][] | null;
             scheduled_at?: string;
+            segments: components["schemas"]["PublicationSegmentResponse"][] | null;
             source_text: string;
             source_url?: string;
             status: string;
             title: string;
             updated_at: string;
             workspace_id: string;
+        };
+        PublicationSegmentInput: {
+            /** @description Canonical segment body */
+            body?: string;
+            /** @description Canonical segment description */
+            description?: string;
+            /** @description Stable segment ID */
+            id?: string;
+            /** @description Ordered canonical segment media */
+            media?: components["schemas"]["PublicationMediaInput"][] | null;
+            /** @description Canonical segment settings */
+            settings?: {
+                [key: string]: unknown;
+            };
+            /** @description Canonical segment title */
+            title?: string;
+            /** @description Canonical segment URL */
+            url?: string;
+        };
+        PublicationSegmentResponse: {
+            body: string;
+            description: string;
+            id: string;
+            media: components["schemas"]["MediaSummary"][] | null;
+            /** Format: int64 */
+            position: number;
+            settings: {
+                [key: string]: unknown;
+            };
+            title: string;
+            url?: string;
         };
         PublicationUpdateBody: {
             /**
@@ -3599,6 +3714,11 @@ export interface components {
             content_profile?: string;
             /** @description Publication goal */
             goal?: string;
+            /**
+             * @description Publishing intent
+             * @enum {string}
+             */
+            intent?: "post" | "thread" | "story" | "short_video" | "video";
             /** @description Publication metadata */
             metadata?: {
                 [key: string]: unknown;
@@ -3608,6 +3728,8 @@ export interface components {
              * @description Optional schedule time
              */
             scheduled_at?: string;
+            /** @description Replacement ordered canonical segments */
+            segments?: components["schemas"]["PublicationSegmentInput"][] | null;
             /** @description Canonical source text */
             source_text?: string;
             /** @description Source URL */
@@ -3624,6 +3746,16 @@ export interface components {
             readonly $schema?: string;
             issues: components["schemas"]["ValidationIssue"][] | null;
             valid: boolean;
+        };
+        PublishingOptionsOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/PublishingOptionsOutputBody.json
+             */
+            readonly $schema?: string;
+            next_cursor?: string;
+            options: components["schemas"]["DestinationOption"][] | null;
         };
         "Readiness-checkResponse": {
             /**
@@ -3683,8 +3815,12 @@ export interface components {
             id?: string;
             /** @description Rendition-specific ordered media */
             media?: components["schemas"]["PublicationMediaInput"][] | null;
+            /** @description Resolved provider-qualified output profile */
+            output_profile?: string;
             /** @description Content profile override */
             profile?: string;
+            /** @description Ordered destination segments */
+            segments?: components["schemas"]["RenditionSegmentInput"][] | null;
             /** @description Provider-specific settings */
             settings?: {
                 [key: string]: unknown;
@@ -3702,15 +3838,55 @@ export interface components {
             external_url?: string;
             id: string;
             media: components["schemas"]["MediaSummary"][] | null;
+            output_profile: string;
             platform: string;
             profile: string;
             publication_id: string;
+            segments: components["schemas"]["RenditionSegmentResponse"][] | null;
             settings: {
                 [key: string]: unknown;
             };
             social_account_id: string;
             status: string;
             title: string;
+        };
+        RenditionSegmentInput: {
+            /** @description Destination segment body override */
+            body?: string;
+            /** @description Destination segment description override */
+            description?: string;
+            /** @description Existing rendition segment ID */
+            id?: string;
+            /** @description Destination segment ordered media */
+            media?: components["schemas"]["PublicationMediaInput"][] | null;
+            /** @description Canonical segment ID */
+            publication_segment_id?: string;
+            /** @description Segment-scoped destination settings */
+            settings?: {
+                [key: string]: unknown;
+            };
+            /** @description Destination segment title override */
+            title?: string;
+            /** @description Destination segment URL override */
+            url?: string;
+        };
+        RenditionSegmentResponse: {
+            body: string;
+            description: string;
+            error_message?: string;
+            external_id?: string;
+            external_url?: string;
+            id: string;
+            media: components["schemas"]["MediaSummary"][] | null;
+            /** Format: int64 */
+            position: number;
+            publication_segment_id: string;
+            settings: {
+                [key: string]: unknown;
+            };
+            status: string;
+            title: string;
+            url?: string;
         };
         ReplyInputBody: {
             /**
@@ -3768,6 +3944,102 @@ export interface components {
              */
             readonly $schema?: string;
             message: string;
+        };
+        ResolveCapabilitiesInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ResolveCapabilitiesInputBody.json
+             */
+            readonly $schema?: string;
+            /** @description Connected account IDs */
+            account_ids: string[] | null;
+            /** @description Destination settings keyed by connected account ID */
+            account_settings?: {
+                [key: string]: {
+                    [key: string]: unknown;
+                };
+            };
+            /**
+             * @description Publishing intent
+             * @enum {string}
+             */
+            intent: "post" | "thread" | "story" | "short_video" | "video";
+            /** @description BCP 47 locale for option labels */
+            locale?: string;
+            /** @description ISO 3166-1 alpha-2 region */
+            region?: string;
+            /** @description Ordered canonical segments */
+            segments: components["schemas"]["ResolveCapabilitySegmentInput"][] | null;
+            /** @description Canonical source URL */
+            source_url?: string;
+        };
+        ResolveCapabilitiesOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ResolveCapabilitiesOutputBody.json
+             */
+            readonly $schema?: string;
+            accounts: components["schemas"]["ResolvedAccountCapability"][] | null;
+        };
+        ResolveCapabilityMediaInput: {
+            /** @description Media attachment ID */
+            media_id: string;
+        };
+        ResolveCapabilitySegmentInput: {
+            /** @description Canonical segment body */
+            content?: string;
+            /** @description Canonical segment description */
+            description?: string;
+            /** @description Stable segment ID */
+            id: string;
+            /** @description Ordered segment media */
+            media?: components["schemas"]["ResolveCapabilityMediaInput"][] | null;
+            /** @description Canonical segment title */
+            title?: string;
+            /** @description Canonical segment URL */
+            url?: string;
+        };
+        ResolvedAccountCapability: {
+            account_id: string;
+            active_constraints: {
+                [key: string]: unknown;
+            };
+            capability_revision: string;
+            caveats?: string[] | null;
+            compatible: boolean;
+            description_required?: boolean;
+            dynamic_options?: {
+                [key: string]: components["schemas"]["Option"][] | null;
+            };
+            expires_at?: string;
+            intents: string[] | null;
+            issues: components["schemas"]["ValidationIssue"][] | null;
+            label: string;
+            media: components["schemas"]["MediaConstraint"];
+            media_shapes: string[] | null;
+            metadata?: {
+                [key: string]: string;
+            };
+            native_scheduling: boolean;
+            openpost_queued: boolean;
+            output_profile: string;
+            profile: string;
+            provider: string;
+            requires_app_review: boolean;
+            requires_public_media: boolean;
+            setting_groups: components["schemas"]["ResolvedSettingGroup"][] | null;
+            settings?: components["schemas"]["SettingDefinition"][] | null;
+            /** Format: int64 */
+            text_limit?: number;
+            title_required?: boolean;
+            unavailable_reason?: string;
+            validation_categories?: string[] | null;
+        };
+        ResolvedSettingGroup: {
+            key: string;
+            settings: components["schemas"]["SettingDefinition"][] | null;
         };
         RevokeAPITokenOutputBody: {
             /**
@@ -3905,14 +4177,55 @@ export interface components {
             totp_enabled: boolean;
             user: components["schemas"]["UserProfile"];
         };
-        SettingField: {
+        SettingCondition: {
+            key: string;
+            /** @enum {string} */
+            operator: "equals" | "not_equals" | "present" | "absent" | "in";
+            value?: unknown;
+        };
+        SettingConstraint: {
+            accept?: string[] | null;
+            /** Format: int64 */
+            max_items?: number;
+            /** Format: int64 */
+            max_length?: number;
+            /** Format: double */
+            maximum?: number;
+            /** Format: int64 */
+            min_items?: number;
+            /** Format: int64 */
+            min_length?: number;
+            /** Format: double */
+            minimum?: number;
+            pattern?: string;
+            unique_items?: boolean;
+        };
+        SettingDefinition: {
+            access_requirements?: string[] | null;
+            capability?: string;
+            conflicts?: components["schemas"]["SettingCondition"][] | null;
+            constraints?: components["schemas"]["SettingConstraint"];
+            control: string;
+            default?: unknown;
+            dependencies?: components["schemas"]["SettingCondition"][] | null;
+            /** @enum {string} */
+            group: "content" | "conversation" | "distribution" | "disclosure" | "media_accessibility";
             help?: string;
+            intents?: string[] | null;
             key: string;
             label: string;
+            media_shapes?: string[] | null;
+            message_key: string;
             options?: string[] | null;
             options_source?: string;
+            output_profiles?: string[] | null;
             required: boolean;
+            /** @enum {string} */
+            required_policy?: "never" | "always" | "when_available";
+            /** @enum {string} */
+            scope: "destination" | "segment" | "media_item";
             type: string;
+            unavailable_reason?: string;
         };
         SetupTOTPInputBody: {
             /**
@@ -4243,11 +4556,19 @@ export interface components {
         };
         ValidationIssue: {
             code: string;
+            fallback_message: string;
             field?: string;
             media_id?: string;
             message: string;
+            output_profile?: string;
+            parameters?: {
+                [key: string]: unknown;
+            };
             profile?: string;
             provider?: string;
+            scope?: string;
+            scope_id?: string;
+            segment_id?: string;
             severity: string;
         };
         VariantInput: {
@@ -4838,6 +5159,98 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DestinationOptionsOutputBody"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "search-account-publishing-options": {
+        parameters: {
+            query?: {
+                /** @description Case-insensitive label search */
+                search?: string;
+                /** @description BCP 47 locale */
+                locale?: string;
+                /** @description ISO 3166-1 alpha-2 region */
+                region?: string;
+                /** @description Opaque pagination cursor */
+                cursor?: string;
+                /** @description Optional output profile or setting context */
+                context?: string;
+                /** @description Page size */
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                /** @description Connected social account ID */
+                account_id: string;
+                /** @description Publishing option source */
+                source: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublishingOptionsOutputBody"];
                 };
             };
             /** @description Bad Request */
@@ -6839,6 +7252,84 @@ export interface operations {
             };
             /** @description Error */
             default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "resolve-publishing-capabilities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResolveCapabilitiesInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResolveCapabilitiesOutputBody"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -9934,6 +10425,88 @@ export interface operations {
             };
             /** @description Error */
             default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "delete-publication-rendition": {
+        parameters: {
+            query?: {
+                /** @description Explicit confirmation that saved destination settings may be deleted */
+                confirm?: boolean;
+            };
+            header?: never;
+            path: {
+                /** @description Publication ID */
+                id: string;
+                /** @description Connected account ID */
+                account_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActionOutputBody"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };

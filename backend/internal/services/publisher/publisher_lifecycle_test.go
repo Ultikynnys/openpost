@@ -25,7 +25,7 @@ func TestHandlePublishPublicationJobRecordsLifecycleEvents(t *testing.T) {
 
 	srv := newPublisherLifecycleTestServer(t, &fakePublisherAdapter{externalID: "external-1"})
 
-	require.NoError(t, srv.publishPublication(t, "publication-1"))
+	require.NoError(t, srv.publishPublication(t))
 
 	events := srv.lifecycleEvents(t)
 	requireLifecycleTypes(t, events, lifecycle.EventProviderProcessing, lifecycle.EventPublished)
@@ -41,12 +41,56 @@ func TestHandlePublishPublicationJobRecordsRetryAndFailureEvents(t *testing.T) {
 		Exec(context.Background())
 	require.NoError(t, err)
 
-	err = srv.publishPublication(t, "publication-1")
+	err = srv.publishPublication(t)
 
 	require.Error(t, err)
 	events := srv.lifecycleEvents(t)
 	requireLifecycleTypes(t, events, lifecycle.EventRetried, lifecycle.EventProviderProcessing, lifecycle.EventFailed)
 	require.Contains(t, events[len(events)-1].MetadataJSON, "provider rejected post")
+}
+
+func TestSegmentedRenditionRetryResumesWithoutDuplicatingPublishedPrefix(t *testing.T) {
+	t.Parallel()
+
+	adapter := &fakePublisherAdapter{
+		publishErrors: []error{nil, errors.New("second segment failed"), nil},
+		externalIDs:   []string{"external-root", "", "external-reply"},
+	}
+	srv := newPublisherLifecycleTestServer(t, adapter)
+	ctx := context.Background()
+	segments := []models.PublicationSegment{
+		{ID: "segment-1", PublicationID: "publication-1", Position: 0, Body: "Root", SettingsJSON: "{}"},
+		{ID: "segment-2", PublicationID: "publication-1", Position: 1, Body: "Reply", SettingsJSON: "{}"},
+	}
+	_, err := srv.db.NewInsert().Model(&segments).Exec(ctx)
+	require.NoError(t, err)
+	renditionSegments := []models.RenditionSegment{
+		{ID: "rendition-segment-1", RenditionID: "rendition-1", PublicationSegmentID: "segment-1", Position: 0, Body: "Root", SettingsJSON: "{}", Status: models.RenditionStatusReady},
+		{ID: "rendition-segment-2", RenditionID: "rendition-1", PublicationSegmentID: "segment-2", Position: 1, Body: "Reply", SettingsJSON: "{}", Status: models.RenditionStatusReady},
+	}
+	_, err = srv.db.NewInsert().Model(&renditionSegments).Exec(ctx)
+	require.NoError(t, err)
+
+	require.ErrorContains(t, srv.publishPublication(t), "second segment failed")
+	var first models.RenditionSegment
+	require.NoError(t, srv.db.NewSelect().Model(&first).Where("id = ?", "rendition-segment-1").Scan(ctx))
+	require.Equal(t, models.RenditionStatusPublished, first.Status)
+	require.Equal(t, "external-root", first.ExternalID)
+
+	require.NoError(t, srv.publishPublication(t))
+	require.Equal(t, 3, adapter.publishCalls)
+	require.Len(t, adapter.publishRequests, 3)
+	require.Equal(t, "", adapter.publishRequests[0].ReplyToID)
+	require.Equal(t, "external-root", adapter.publishRequests[1].ReplyToID)
+	require.Equal(t, "external-root", adapter.publishRequests[2].ReplyToID)
+	require.Equal(t, "Root", adapter.publishRequests[0].Content)
+	require.Equal(t, "Reply", adapter.publishRequests[1].Content)
+	require.Equal(t, "Reply", adapter.publishRequests[2].Content)
+
+	var second models.RenditionSegment
+	require.NoError(t, srv.db.NewSelect().Model(&second).Where("id = ?", "rendition-segment-2").Scan(ctx))
+	require.Equal(t, models.RenditionStatusPublished, second.Status)
+	require.Equal(t, "external-reply", second.ExternalID)
 }
 
 type publisherLifecycleTestServer struct {
@@ -67,6 +111,9 @@ func newPublisherLifecycleTestServer(t *testing.T, adapter *fakePublisherAdapter
 		(*models.SocialAccount)(nil),
 		(*models.Publication)(nil),
 		(*models.Rendition)(nil),
+		(*models.PublicationSegment)(nil),
+		(*models.RenditionSegment)(nil),
+		(*models.RenditionSegmentMedia)(nil),
 		(*models.RenditionMedia)(nil),
 		(*models.MediaAttachment)(nil),
 		(*models.PublicationLifecycleEvent)(nil),
@@ -127,9 +174,9 @@ func newPublisherLifecycleTestServer(t *testing.T, adapter *fakePublisherAdapter
 	return &publisherLifecycleTestServer{db: db, service: service}
 }
 
-func (s *publisherLifecycleTestServer) publishPublication(t *testing.T, publicationID string) error {
+func (s *publisherLifecycleTestServer) publishPublication(t *testing.T) error {
 	t.Helper()
-	payload, err := json.Marshal(map[string]string{"publication_id": publicationID})
+	payload, err := json.Marshal(map[string]string{"publication_id": "publication-1"})
 	require.NoError(t, err)
 	return s.service.HandlePublishPublicationJob(context.Background(), string(payload))
 }

@@ -259,6 +259,17 @@ func (s *Service) HandlePublishPublicationJob(ctx context.Context, jobPayload st
 
 //nolint:gocyclo
 func (s *Service) publishRendition(ctx context.Context, publication *models.Publication, rendition *models.Rendition) error {
+	var segments []models.RenditionSegment
+	if err := s.db.NewSelect().
+		Model(&segments).
+		Where("rendition_id = ?", rendition.ID).
+		Order("position ASC").
+		Scan(ctx); err == nil && len(segments) > 0 {
+		return s.publishRenditionSegments(ctx, publication, rendition, segments)
+	} else if err != nil && !isMissingNormalizedSegmentTable(err) {
+		return fmt.Errorf("loading rendition segments: %w", err)
+	}
+
 	account := new(models.SocialAccount)
 	if err := s.db.NewSelect().Model(account).Where("id = ?", rendition.SocialAccountID).Scan(ctx); err != nil {
 		return fmt.Errorf("account not found: %v", err)
@@ -271,13 +282,16 @@ func (s *Service) publishRendition(ctx context.Context, publication *models.Publ
 	if err != nil {
 		return fmt.Errorf("auth error: %v", err)
 	}
-	mediaAttachments, mediaAltTexts, err := s.loadRenditionMedia(ctx, rendition.ID)
+	mediaAttachments, mediaAltTexts, mediaSettings, err := s.loadRenditionMedia(ctx, rendition.ID)
 	if err != nil {
 		return err
 	}
 
 	settings := map[string]interface{}{}
 	_ = json.Unmarshal([]byte(rendition.SettingsJSON), &settings)
+	if err := s.hydratePublicSettingMediaURLs(ctx, publication.WorkspaceID, account.Platform, settings); err != nil {
+		return err
+	}
 	platformMediaIDs := make([]string, 0, len(mediaAttachments))
 	mediaItems := make([]platform.MediaItem, 0, len(mediaAttachments))
 	for _, media := range mediaAttachments {
@@ -301,12 +315,14 @@ func (s *Service) publishRendition(ctx context.Context, publication *models.Publ
 	req := &platform.PublishRequest{
 		Content:          rendition.Body,
 		Profile:          rendition.Profile,
+		OutputProfile:    rendition.OutputProfile,
 		Title:            firstNonEmptyPublisherString(rendition.Title, publication.Title),
 		Description:      rendition.Description,
 		SettingsJSON:     rendition.SettingsJSON,
 		Settings:         settings,
 		PlatformMediaIDs: platformMediaIDs,
 		MediaAltTexts:    mediaAltTexts,
+		MediaSettings:    mediaSettings,
 		Media:            mediaItems,
 	}
 	if err := s.checkMonthlyQuota(ctx, publication.WorkspaceID, entitlements.LimitProviderWriteCallsMonthly); err != nil {
@@ -357,6 +373,259 @@ func (s *Service) publishRendition(ctx context.Context, publication *models.Publ
 		"external_url": externalURL,
 	})
 	return nil
+}
+
+//nolint:gocyclo
+func (s *Service) publishRenditionSegments(
+	ctx context.Context,
+	publication *models.Publication,
+	rendition *models.Rendition,
+	segments []models.RenditionSegment,
+) error {
+	account := new(models.SocialAccount)
+	if err := s.db.NewSelect().Model(account).Where("id = ?", rendition.SocialAccountID).Scan(ctx); err != nil {
+		return fmt.Errorf("account not found: %v", err)
+	}
+	provider, providerKey, err := s.providerForAccount(account)
+	if err != nil {
+		return err
+	}
+	token, err := s.tm.GetValidAccessToken(ctx, account.ID)
+	if err != nil {
+		return fmt.Errorf("auth error: %v", err)
+	}
+	destinationSettings := map[string]interface{}{}
+	_ = json.Unmarshal([]byte(rendition.SettingsJSON), &destinationSettings)
+
+	parentExternalID := ""
+	rootExternalID := ""
+	rootExternalURL := ""
+	for index := range segments {
+		segment := &segments[index]
+		if segment.Status == models.RenditionStatusPublished {
+			if segment.ExternalID == "" {
+				return fmt.Errorf("published rendition segment %s is missing its external id", segment.ID)
+			}
+			if rootExternalID == "" {
+				rootExternalID = segment.ExternalID
+				rootExternalURL = segment.ExternalURL
+			}
+			parentExternalID = segment.ExternalID
+			continue
+		}
+
+		segmentSettings := map[string]interface{}{}
+		_ = json.Unmarshal([]byte(segment.SettingsJSON), &segmentSettings)
+		settings := mergePublisherSettings(destinationSettings, segmentSettings)
+		if err := s.hydratePublicSettingMediaURLs(ctx, publication.WorkspaceID, account.Platform, settings); err != nil {
+			return s.failRenditionSegment(ctx, segment, err)
+		}
+		mediaAttachments, mediaAltTexts, mediaSettings, err := s.loadRenditionSegmentMedia(ctx, segment.ID)
+		if err != nil {
+			return s.failRenditionSegment(ctx, segment, err)
+		}
+		platformMediaIDs := make([]string, 0, len(mediaAttachments))
+		mediaItems := make([]platform.MediaItem, 0, len(mediaAttachments))
+		uploadRendition := *rendition
+		uploadRendition.SettingsJSON = mustPublisherJSON(settings)
+		for _, media := range mediaAttachments {
+			s.recordPublicationLifecycleEvent(ctx, publication.WorkspaceID, publication.ID, rendition.ID, lifecycle.EventUploadStarted, lifecycle.StatusStarted, "segment media upload started", map[string]any{
+				"platform":   rendition.Platform,
+				"segment_id": segment.ID,
+				"media_id":   media.ID,
+			})
+			mediaID, uploadErr := s.platformMediaIDForRendition(ctx, &uploadRendition, account, provider, token, media)
+			if uploadErr != nil {
+				return s.failRenditionSegment(ctx, segment, fmt.Errorf("media upload failed for %s: %w", media.ID, uploadErr))
+			}
+			platformMediaIDs = append(platformMediaIDs, mediaID)
+			mediaItems = append(mediaItems, platform.MediaItem{
+				ID:               media.ID,
+				MimeType:         media.MimeType,
+				Size:             media.Size,
+				OriginalFilename: media.OriginalFilename,
+			})
+		}
+
+		if _, err := s.db.NewUpdate().Model(segment).
+			Set("status = ?", models.RenditionStatusPublishing).
+			Set("error_message = ''").
+			Set("updated_at = ?", time.Now().UTC()).
+			Where("id = ?", segment.ID).
+			Exec(ctx); err != nil {
+			return fmt.Errorf("marking rendition segment publishing: %w", err)
+		}
+
+		req := &platform.PublishRequest{
+			Content:          segment.Body,
+			Profile:          rendition.Profile,
+			OutputProfile:    rendition.OutputProfile,
+			Title:            firstNonEmptyPublisherString(segment.Title, rendition.Title, publication.Title),
+			Description:      firstNonEmptyPublisherString(segment.Description, rendition.Description),
+			SettingsJSON:     mustPublisherJSON(settings),
+			Settings:         settings,
+			PlatformMediaIDs: platformMediaIDs,
+			MediaAltTexts:    mediaAltTexts,
+			MediaSettings:    mediaSettings,
+			Media:            mediaItems,
+			ReplyToID:        parentExternalID,
+		}
+		if err := s.checkMonthlyQuota(ctx, publication.WorkspaceID, entitlements.LimitProviderWriteCallsMonthly); err != nil {
+			return s.failRenditionSegment(ctx, segment, err)
+		}
+		s.recordPublicationLifecycleEvent(ctx, publication.WorkspaceID, publication.ID, rendition.ID, lifecycle.EventProviderProcessing, lifecycle.StatusStarted, "rendition segment publish started", map[string]any{
+			"platform":     rendition.Platform,
+			"provider_key": providerKey,
+			"segment_id":   segment.ID,
+			"position":     segment.Position,
+		})
+		s.recordProviderWriteCall(ctx, publication.WorkspaceID)
+		externalID, publishErr := provider.Publish(ctx, token, account.AccountID, req)
+		if publishErr != nil && isExpiredTokenError(publishErr) {
+			token, err = s.tm.ForceRefreshAccessToken(ctx, account.ID)
+			if err != nil {
+				return s.failRenditionSegment(ctx, segment, fmt.Errorf("%s token refresh failed after expiry: %w", providerKey, err))
+			}
+			if quotaErr := s.checkMonthlyQuota(ctx, publication.WorkspaceID, entitlements.LimitProviderWriteCallsMonthly); quotaErr != nil {
+				return s.failRenditionSegment(ctx, segment, quotaErr)
+			}
+			s.recordProviderWriteCall(ctx, publication.WorkspaceID)
+			externalID, publishErr = provider.Publish(ctx, token, account.AccountID, req)
+		}
+		if publishErr != nil {
+			return s.failRenditionSegment(ctx, segment, publishErr)
+		}
+
+		externalURL := publisherExternalURL(externalID)
+		if _, err := s.db.NewUpdate().Model(segment).
+			Set("status = ?", models.RenditionStatusPublished).
+			Set("external_id = ?", externalID).
+			Set("external_url = ?", externalURL).
+			Set("error_message = ''").
+			Set("updated_at = ?", time.Now().UTC()).
+			Where("id = ?", segment.ID).
+			Exec(ctx); err != nil {
+			return fmt.Errorf("persisting rendition segment result: %w", err)
+		}
+		if rootExternalID == "" {
+			rootExternalID = externalID
+			rootExternalURL = externalURL
+		}
+		parentExternalID = externalID
+		s.recordPublishedPost(ctx, publication.WorkspaceID)
+		s.recordPublicationLifecycleEvent(ctx, publication.WorkspaceID, publication.ID, rendition.ID, lifecycle.EventPublished, lifecycle.StatusSucceeded, "rendition segment published", map[string]any{
+			"platform":     rendition.Platform,
+			"segment_id":   segment.ID,
+			"position":     segment.Position,
+			"external_id":  externalID,
+			"external_url": externalURL,
+		})
+	}
+
+	if _, err := s.db.NewUpdate().Model(rendition).
+		Set("status = ?", models.RenditionStatusPublished).
+		Set("external_id = ?", rootExternalID).
+		Set("external_url = ?", rootExternalURL).
+		Set("error_message = ''").
+		Set("updated_at = ?", time.Now().UTC()).
+		Where("id = ?", rendition.ID).
+		Exec(ctx); err != nil {
+		return fmt.Errorf("updating segmented rendition status: %w", err)
+	}
+	return nil
+}
+
+func (s *Service) failRenditionSegment(ctx context.Context, segment *models.RenditionSegment, failure error) error {
+	if failure == nil {
+		return nil
+	}
+	if _, err := s.db.NewUpdate().Model(segment).
+		Set("status = ?", models.RenditionStatusFailed).
+		Set("error_message = ?", failure.Error()).
+		Set("updated_at = ?", time.Now().UTC()).
+		Where("id = ?", segment.ID).
+		Exec(ctx); err != nil {
+		log.Printf("[Publisher] Failed to mark rendition segment %s failed: %v", segment.ID, err)
+	}
+	return failure
+}
+
+func (s *Service) loadRenditionSegmentMedia(ctx context.Context, segmentID string) ([]models.MediaAttachment, []string, []map[string]interface{}, error) {
+	var rows []struct {
+		AltText              string `bun:"alt_text"`
+		ThumbnailTimestampMS int    `bun:"thumbnail_timestamp_ms"`
+		SettingsJSON         string `bun:"settings_json"`
+		models.MediaAttachment
+	}
+	if err := s.db.NewSelect().
+		TableExpr("rendition_segment_media AS rsm").
+		ColumnExpr("rsm.alt_text, rsm.thumbnail_timestamp_ms, rsm.settings_json").
+		ColumnExpr("ma.*").
+		Join("JOIN media_attachments AS ma ON ma.id = rsm.media_id").
+		Where("rsm.rendition_segment_id = ?", segmentID).
+		Order("rsm.display_order ASC").
+		Scan(ctx, &rows); err != nil {
+		return nil, nil, nil, fmt.Errorf("fetching rendition segment media: %w", err)
+	}
+	media := make([]models.MediaAttachment, 0, len(rows))
+	altTexts := make([]string, 0, len(rows))
+	settings := make([]map[string]interface{}, 0, len(rows))
+	for _, row := range rows {
+		media = append(media, row.MediaAttachment)
+		altTexts = append(altTexts, firstNonEmptyPublisherString(row.AltText, row.MediaAttachment.AltText))
+		itemSettings := map[string]interface{}{}
+		_ = json.Unmarshal([]byte(row.SettingsJSON), &itemSettings)
+		if row.ThumbnailTimestampMS > 0 {
+			itemSettings["thumbnail_timestamp_ms"] = row.ThumbnailTimestampMS
+		}
+		settings = append(settings, itemSettings)
+	}
+	return media, altTexts, settings, nil
+}
+
+func mergePublisherSettings(base, overrides map[string]interface{}) map[string]interface{} {
+	out := make(map[string]interface{}, len(base)+len(overrides))
+	for key, value := range base {
+		out[key] = value
+	}
+	for key, value := range overrides {
+		out[key] = value
+	}
+	return out
+}
+
+func (s *Service) hydratePublicSettingMediaURLs(ctx context.Context, workspaceID, provider string, settings map[string]interface{}) error {
+	if provider != "instagram" {
+		return nil
+	}
+	for _, key := range []string{"cover_media_id"} {
+		mediaID := settingStringPublisher(settings, key)
+		if mediaID == "" || strings.HasPrefix(mediaID, "https://") {
+			continue
+		}
+		var media models.MediaAttachment
+		if err := s.db.NewSelect().
+			Model(&media).
+			Where("id = ? AND workspace_id = ?", mediaID, workspaceID).
+			Scan(ctx); err != nil {
+			return fmt.Errorf("loading %s media %s: %w", key, mediaID, err)
+		}
+		settings[key] = s.getPublicMediaURL(media)
+	}
+	return nil
+}
+
+func publisherExternalURL(externalID string) string {
+	if strings.HasPrefix(externalID, "http://") || strings.HasPrefix(externalID, "https://") {
+		return externalID
+	}
+	return ""
+}
+
+func isMissingNormalizedSegmentTable(err error) bool {
+	message := strings.ToLower(err.Error())
+	return strings.Contains(message, "no such table") ||
+		(strings.Contains(message, "relation") && strings.Contains(message, "does not exist"))
 }
 
 func (s *Service) publishRenditionReply(ctx context.Context, renditionID, body, parentID string, settings map[string]interface{}) error {
@@ -994,6 +1263,13 @@ func (s *Service) uploadRenditionMediaToPlatform(ctx context.Context, account *m
 		if thumbnailReader != nil {
 			defer thumbnailReader.Close()
 		}
+		caption, captionReader, err := s.openSettingMedia(ctx, settings, "caption_media_id", "")
+		if err != nil {
+			return "", err
+		}
+		if captionReader != nil {
+			defer captionReader.Close()
+		}
 		req := platform.UploadMediaRequest{
 			MimeType:    media.MimeType,
 			Filename:    firstNonEmptyPublisherString(media.OriginalFilename, filepath.Base(media.FilePath)),
@@ -1008,6 +1284,12 @@ func (s *Service) uploadRenditionMediaToPlatform(ctx context.Context, account *m
 			req.ThumbnailFilename = firstNonEmptyPublisherString(thumbnail.OriginalFilename, filepath.Base(thumbnail.FilePath))
 			req.ThumbnailSize = thumbnail.Size
 			req.ThumbnailReader = thumbnailReader
+		}
+		if caption != nil {
+			req.CaptionMimeType = caption.MimeType
+			req.CaptionFilename = firstNonEmptyPublisherString(caption.OriginalFilename, filepath.Base(caption.FilePath))
+			req.CaptionSize = caption.Size
+			req.CaptionReader = captionReader
 		}
 		return uploader.UploadMediaWithMetadata(ctx, token, account.AccountID, req)
 	}
@@ -1040,6 +1322,31 @@ func (s *Service) openThumbnailFromSettings(ctx context.Context, settings map[st
 	return &thumbnail, reader, nil
 }
 
+func (s *Service) openSettingMedia(ctx context.Context, settings map[string]interface{}, key, mimePrefix string) (*models.MediaAttachment, io.ReadCloser, error) {
+	mediaID := settingStringPublisher(settings, key)
+	if mediaID == "" {
+		return nil, nil, nil
+	}
+	if s.db == nil {
+		return nil, nil, fmt.Errorf("%s media lookup requires a database", key)
+	}
+	if s.storage == nil {
+		return nil, nil, fmt.Errorf("media storage is not configured")
+	}
+	var media models.MediaAttachment
+	if err := s.db.NewSelect().Model(&media).Where("id = ?", mediaID).Scan(ctx); err != nil {
+		return nil, nil, fmt.Errorf("loading %s media %s: %w", key, mediaID, err)
+	}
+	if mimePrefix != "" && !strings.HasPrefix(strings.ToLower(media.MimeType), mimePrefix) {
+		return nil, nil, fmt.Errorf("%s media %s must use a %s MIME type", key, mediaID, mimePrefix)
+	}
+	reader, err := s.storage.Open(filepath.Base(media.FilePath))
+	if err != nil {
+		return nil, nil, fmt.Errorf("opening %s media file %s: %w", key, media.FilePath, err)
+	}
+	return &media, reader, nil
+}
+
 func settingStringPublisher(settings map[string]interface{}, key string) string {
 	if settings == nil {
 		return ""
@@ -1054,29 +1361,36 @@ func settingStringPublisher(settings map[string]interface{}, key string) string 
 	}
 }
 
-func (s *Service) loadRenditionMedia(ctx context.Context, renditionID string) ([]models.MediaAttachment, []string, error) {
+func (s *Service) loadRenditionMedia(ctx context.Context, renditionID string) ([]models.MediaAttachment, []string, []map[string]interface{}, error) {
 	var rows []struct {
-		AltText string `bun:"alt_text"`
+		AltText              string `bun:"alt_text"`
+		ThumbnailTimestampMS int    `bun:"thumbnail_timestamp_ms"`
 		models.MediaAttachment
 	}
 	if err := s.db.NewSelect().
 		TableExpr("rendition_media AS rm").
-		ColumnExpr("rm.alt_text").
+		ColumnExpr("rm.alt_text, rm.thumbnail_timestamp_ms").
 		ColumnExpr("ma.*").
 		Join("JOIN media_attachments AS ma ON ma.id = rm.media_id").
 		Where("rm.rendition_id = ?", renditionID).
 		Order("rm.display_order ASC").
 		Scan(ctx, &rows); err != nil {
-		return nil, nil, fmt.Errorf("fetching rendition media: %w", err)
+		return nil, nil, nil, fmt.Errorf("fetching rendition media: %w", err)
 	}
 	media := make([]models.MediaAttachment, 0, len(rows))
 	altTexts := make([]string, 0, len(rows))
+	settings := make([]map[string]interface{}, 0, len(rows))
 	for _, row := range rows {
 		item := row.MediaAttachment
 		media = append(media, item)
 		altTexts = append(altTexts, firstNonEmptyPublisherString(row.AltText, item.AltText))
+		itemSettings := map[string]interface{}{}
+		if row.ThumbnailTimestampMS > 0 {
+			itemSettings["thumbnail_timestamp_ms"] = row.ThumbnailTimestampMS
+		}
+		settings = append(settings, itemSettings)
 	}
-	return media, altTexts, nil
+	return media, altTexts, settings, nil
 }
 
 func (s *Service) providerForAccount(account *models.SocialAccount) (platform.Adapter, string, error) {

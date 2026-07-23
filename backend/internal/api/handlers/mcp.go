@@ -3220,7 +3220,13 @@ func (h *MCPHandler) createPublication(ctx context.Context, userID string, args 
 	if err != nil {
 		return nil, &mcpError{Code: -32602, Message: err.Error()}
 	}
-	if err := publicationHandler.validateMediaBelongsToWorkspace(ctx, input.WorkspaceID, allMediaIDs(defaultMedia, renditions)); err != nil {
+	segmentInputs := []PublicationSegmentInput{{
+		Body:  input.SourceText,
+		Title: input.Title,
+		URL:   input.SourceURL,
+		Media: defaultMedia,
+	}}
+	if err := publicationHandler.validateMediaBelongsToWorkspace(ctx, input.WorkspaceID, allPublicationMediaIDs(defaultMedia, segmentInputs, renditions)); err != nil {
 		return nil, &mcpError{Code: -32602, Message: err.Error()}
 	}
 
@@ -3229,7 +3235,11 @@ func (h *MCPHandler) createPublication(ctx context.Context, userID string, args 
 		if _, err := tx.NewInsert().Model(publication).Exec(txCtx); err != nil {
 			return err
 		}
-		return publicationHandler.insertRenditions(txCtx, tx, publication, renditions, defaultMedia, accountMap)
+		segments, err := publicationHandler.insertPublicationSegments(txCtx, tx, publication, segmentInputs)
+		if err != nil {
+			return err
+		}
+		return publicationHandler.insertRenditions(txCtx, tx, publication, segments, segmentInputs, renditions, defaultMedia, accountMap)
 	})
 	if err != nil {
 		return nil, &mcpError{Code: -32603, Message: "failed to create publication"}
@@ -3291,6 +3301,7 @@ func newMCPPublication(input mcpCreatePublicationInput, userID string, now time.
 		WorkspaceID:     input.WorkspaceID,
 		CreatedByID:     userID,
 		Title:           publicationFirstNonEmpty(input.Title, firstMCPContentLine(input.SourceText), "Untitled publication"),
+		Intent:          publishingIntentForProfile(input.ContentProfile),
 		ContentProfile:  input.ContentProfile,
 		SourceText:      input.SourceText,
 		SourceContent:   input.SourceText,
@@ -3473,6 +3484,7 @@ func publicationMutationMCPError(err error, fallback string) *mcpError {
 	}
 }
 
+//nolint:gocyclo
 func (h *MCPHandler) setPublicationRenditions(ctx context.Context, userID string, args map[string]any) (any, *mcpError) {
 	var input struct {
 		PublicationID string           `json:"publication_id"`
@@ -3496,7 +3508,7 @@ func (h *MCPHandler) setPublicationRenditions(ctx context.Context, userID string
 	if err != nil {
 		return nil, &mcpError{Code: -32602, Message: err.Error()}
 	}
-	if err := handler.validateMediaBelongsToWorkspace(ctx, publication.WorkspaceID, allMediaIDs(nil, input.Renditions)); err != nil {
+	if err := handler.validateMediaBelongsToWorkspace(ctx, publication.WorkspaceID, allPublicationMediaIDs(nil, nil, input.Renditions)); err != nil {
 		return nil, &mcpError{Code: -32602, Message: err.Error()}
 	}
 	if err := h.db.RunInTx(ctx, &sql.TxOptions{}, func(txCtx context.Context, tx bun.Tx) error {
@@ -3516,7 +3528,11 @@ func (h *MCPHandler) setPublicationRenditions(ctx context.Context, userID string
 				return err
 			}
 		}
-		return handler.insertRenditions(txCtx, tx, currentPublication, input.Renditions, nil, accounts)
+		segments, segmentInputs, err := handler.loadCanonicalSegmentInputsWithDB(txCtx, tx, publication.ID)
+		if err != nil {
+			return err
+		}
+		return handler.insertRenditions(txCtx, tx, currentPublication, segments, segmentInputs, input.Renditions, nil, accounts)
 	}); err != nil {
 		return nil, publicationMutationMCPError(err, "failed to update publication renditions")
 	}

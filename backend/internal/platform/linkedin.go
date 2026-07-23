@@ -391,21 +391,57 @@ func (l *LinkedInAdapter) Publish(ctx context.Context, accessToken, personID str
 	return l.createPost(ctx, accessToken, authorURN, apiVersion, req)
 }
 
+//nolint:gocyclo
 func (l *LinkedInAdapter) createPost(ctx context.Context, accessToken, authorURN, apiVersion string, req *PublishRequest) (string, error) {
+	visibility := firstNonEmptyString(settingString(req.Settings, "visibility"), "PUBLIC")
+	if visibility != "PUBLIC" && visibility != "CONNECTIONS" {
+		return "", fmt.Errorf("linkedin visibility %q is not supported", visibility)
+	}
 	payload := map[string]interface{}{
 		"author":     authorURN,
 		"commentary": req.Content,
-		"visibility": "PUBLIC",
+		"visibility": visibility,
 		"distribution": map[string]interface{}{
 			"feedDistribution":               "MAIN_FEED",
 			"targetEntities":                 []interface{}{},
 			"thirdPartyDistributionChannels": []interface{}{},
 		},
 		"lifecycleState":            "PUBLISHED",
-		"isReshareDisabledByAuthor": false,
+		"isReshareDisabledByAuthor": settingBool(req.Settings, "reshare_disabled"),
 	}
 
-	if len(req.PlatformMediaIDs) > 0 {
+	if pollOptions := separatedSettingValues(req.Settings, "poll_options"); len(pollOptions) > 0 {
+		if len(req.PlatformMediaIDs) > 0 {
+			return "", fmt.Errorf("linkedin polls cannot be combined with media")
+		}
+		options := make([]map[string]string, 0, len(pollOptions))
+		for _, option := range pollOptions {
+			options = append(options, map[string]string{"text": option})
+		}
+		duration := firstNonEmptyString(settingString(req.Settings, "poll_duration"), "ONE_DAY")
+		payload["content"] = map[string]interface{}{
+			"poll": map[string]interface{}{
+				"question": strings.TrimSpace(req.Content),
+				"options":  options,
+				"settings": map[string]string{"duration": duration},
+			},
+		}
+	} else if len(req.PlatformMediaIDs) > 1 {
+		if len(req.PlatformMediaIDs) > 20 {
+			return "", fmt.Errorf("linkedin multi-image posts support up to 20 images")
+		}
+		images := make([]map[string]interface{}, 0, len(req.PlatformMediaIDs))
+		for index, mediaID := range req.PlatformMediaIDs {
+			image := map[string]interface{}{"id": mediaID}
+			if altText := mediaAltTextAt(req, index); altText != "" {
+				image["altText"] = altText
+			}
+			images = append(images, image)
+		}
+		payload["content"] = map[string]interface{}{
+			"multiImage": map[string]interface{}{"images": images},
+		}
+	} else if len(req.PlatformMediaIDs) > 0 {
 		mediaItem := map[string]interface{}{
 			"id": req.PlatformMediaIDs[0],
 		}
@@ -417,6 +453,14 @@ func (l *LinkedInAdapter) createPost(ctx context.Context, accessToken, authorURN
 		}
 		payload["content"] = map[string]interface{}{
 			"media": mediaItem,
+		}
+	} else if articleURL := firstNonEmptyString(settingString(req.Settings, "url"), settingString(req.Settings, "link_url")); articleURL != "" {
+		payload["content"] = map[string]interface{}{
+			"article": map[string]interface{}{
+				"source":      articleURL,
+				"title":       settingString(req.Settings, "article_title"),
+				"description": settingString(req.Settings, "article_description"),
+			},
 		}
 	}
 
@@ -697,6 +741,9 @@ func isLinkedInDocumentMime(mimeType string) bool {
 }
 
 func linkedInMediaTitle(req *PublishRequest) string {
+	if title := settingString(req.Settings, "document_title"); title != "" {
+		return title
+	}
 	if strings.TrimSpace(req.Title) != "" {
 		return strings.TrimSpace(req.Title)
 	}

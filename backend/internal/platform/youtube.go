@@ -6,20 +6,21 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
+	"net/textproto"
 	"net/url"
 	"strconv"
 	"strings"
 )
 
 const (
-	googleOAuthURL          = "https://accounts.google.com/o/oauth2/v2/auth"
-	googleTokenURL          = "https://oauth2.googleapis.com/token"
-	googleUserInfoURL       = "https://www.googleapis.com/oauth2/v2/userinfo"
-	youtubeAPIBaseURL       = "https://www.googleapis.com/youtube/v3"
-	youtubeUploadBaseURL    = "https://www.googleapis.com/upload/youtube/v3"
-	youtubeDefaultVideoName = "OpenPost video"
-	youtubeTitleMaxRunes    = 100
+	googleOAuthURL       = "https://accounts.google.com/o/oauth2/v2/auth"
+	googleTokenURL       = "https://oauth2.googleapis.com/token"
+	googleUserInfoURL    = "https://www.googleapis.com/oauth2/v2/userinfo"
+	youtubeAPIBaseURL    = "https://www.googleapis.com/youtube/v3"
+	youtubeUploadBaseURL = "https://www.googleapis.com/upload/youtube/v3"
+	youtubeTitleMaxRunes = 100
 )
 
 type YouTubeAdapter struct {
@@ -235,6 +236,32 @@ func (y *YouTubeAdapter) ListDestinationOptions(ctx context.Context, accessToken
 	}, nil
 }
 
+func (y *YouTubeAdapter) ResolveAccountPublishingCapabilities(ctx context.Context, accessToken string, input AccountCapabilityInput) (AccountCapabilityResult, error) {
+	options, err := y.ListDestinationOptions(ctx, accessToken, DestinationOptionsInput{
+		RegionCode: input.RegionCode,
+		Language:   localeLanguageCode(input.Locale),
+	})
+	if err != nil {
+		return AccountCapabilityResult{}, err
+	}
+	return AccountCapabilityResult{
+		Revision: "youtube-account-options-v1",
+		Options:  options,
+		AvailableFeatures: map[string]bool{
+			"thumbnail_media_id": true,
+			"caption_media_id":   true,
+		},
+	}, nil
+}
+
+func localeLanguageCode(locale string) string {
+	locale = strings.TrimSpace(locale)
+	if index := strings.IndexAny(locale, "-_"); index >= 0 {
+		return locale[:index]
+	}
+	return locale
+}
+
 func (y *YouTubeAdapter) listYouTubePlaylists(ctx context.Context, accessToken string) ([]DestinationOption, error) {
 	options := []DestinationOption{}
 	pageToken := ""
@@ -336,6 +363,7 @@ func (y *YouTubeAdapter) UploadMedia(_ context.Context, _ string, _ string, _ st
 	return "", fmt.Errorf("youtube video upload requires post metadata")
 }
 
+//nolint:gocyclo
 func (y *YouTubeAdapter) UploadMediaWithMetadata(ctx context.Context, accessToken, _ string, req UploadMediaRequest) (string, error) {
 	if req.Reader == nil {
 		return "", fmt.Errorf("youtube upload requires a video reader")
@@ -357,18 +385,37 @@ func (y *YouTubeAdapter) UploadMediaWithMetadata(ctx context.Context, accessToke
 	if mediaSize != int64(len(mediaBytes)) {
 		return "", fmt.Errorf("youtube upload size mismatch: expected %d bytes, read %d", mediaSize, len(mediaBytes))
 	}
+	title := youtubeTitle(req)
+	if title == "" {
+		return "", fmt.Errorf("youtube upload requires an explicit title")
+	}
+	privacy := settingString(req.Settings, "privacy")
+	switch privacy {
+	case "public", "unlisted", "private":
+	default:
+		return "", fmt.Errorf("youtube upload requires an explicit supported privacy setting")
+	}
+	categoryID := settingString(req.Settings, "category_id")
+	if categoryID == "" {
+		return "", fmt.Errorf("youtube upload requires a category selected for this region")
+	}
 
 	metadata := youtubeVideoInsertRequest{
 		Snippet: youtubeVideoSnippet{
-			Title:       youtubeTitle(req),
+			Title:       title,
 			Description: strings.TrimSpace(req.Description),
 			Tags:        youtubeTags(req.Settings),
-			CategoryID:  settingString(req.Settings, "category_id"),
+			CategoryID:  categoryID,
 		},
 		Status: youtubeVideoStatus{
-			PrivacyStatus:           firstNonEmptyString(settingString(req.Settings, "privacy"), "private"),
+			PrivacyStatus:           privacy,
+			License:                 firstNonEmptyString(settingString(req.Settings, "license"), "youtube"),
+			Embeddable:              settingBoolDefault(req.Settings, "embeddable", true),
 			SelfDeclaredMadeForKids: settingBool(req.Settings, "self_declared_made_for_kids"),
 			ContainsSyntheticMedia:  settingBool(req.Settings, "contains_synthetic_media"),
+		},
+		PaidProductPlacementDetails: youtubePaidProductPlacementDetails{
+			HasPaidProductPlacement: settingBool(req.Settings, "paid_placement"),
 		},
 	}
 
@@ -390,11 +437,79 @@ func (y *YouTubeAdapter) UploadMediaWithMetadata(ctx context.Context, accessToke
 			return "", err
 		}
 	}
+	if req.CaptionReader != nil {
+		if err := y.insertYouTubeCaption(ctx, accessToken, videoID, req); err != nil {
+			return "", err
+		}
+	}
 	if err := y.checkYouTubeProcessingStatus(ctx, accessToken, videoID); err != nil {
 		return "", err
 	}
 
 	return videoID, nil
+}
+
+func (y *YouTubeAdapter) insertYouTubeCaption(ctx context.Context, accessToken, videoID string, req UploadMediaRequest) error {
+	language := strings.TrimSpace(settingString(req.Settings, "caption_language"))
+	if language == "" {
+		return fmt.Errorf("youtube caption_language is required when a caption file is attached")
+	}
+	captionBytes, err := io.ReadAll(req.CaptionReader)
+	if err != nil {
+		return fmt.Errorf("reading youtube caption file: %w", err)
+	}
+	if len(captionBytes) == 0 {
+		return fmt.Errorf("youtube caption file cannot be empty")
+	}
+	if req.CaptionSize > 0 && req.CaptionSize != int64(len(captionBytes)) {
+		return fmt.Errorf("youtube caption size mismatch: expected %d bytes, read %d", req.CaptionSize, len(captionBytes))
+	}
+
+	metadata := map[string]interface{}{
+		"snippet": map[string]interface{}{
+			"videoId":  videoID,
+			"language": language,
+			"name":     firstNonEmptyString(req.CaptionFilename, language),
+			"isDraft":  false,
+		},
+	}
+	metadataBytes, err := jsonMarshal(metadata)
+	if err != nil {
+		return fmt.Errorf("marshaling youtube caption metadata: %w", err)
+	}
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	metadataHeader := textproto.MIMEHeader{}
+	metadataHeader.Set(headerContentType, contentTypeJSON+"; charset=UTF-8")
+	metadataPart, err := writer.CreatePart(metadataHeader)
+	if err != nil {
+		return fmt.Errorf("creating youtube caption metadata part: %w", err)
+	}
+	if _, err := metadataPart.Write(metadataBytes); err != nil {
+		return fmt.Errorf("writing youtube caption metadata: %w", err)
+	}
+	captionHeader := textproto.MIMEHeader{}
+	captionHeader.Set(headerContentType, firstNonEmptyString(req.CaptionMimeType, "text/vtt"))
+	captionPart, err := writer.CreatePart(captionHeader)
+	if err != nil {
+		return fmt.Errorf("creating youtube caption media part: %w", err)
+	}
+	if _, err := captionPart.Write(captionBytes); err != nil {
+		return fmt.Errorf("writing youtube caption media: %w", err)
+	}
+	if err := writer.Close(); err != nil {
+		return fmt.Errorf("closing youtube caption request: %w", err)
+	}
+
+	endpoint := youtubeUploadBaseURL + "/captions?part=snippet&uploadType=multipart"
+	response, err := doYouTubeRequest(ctx, http.MethodPost, endpoint, &body, map[string]string{
+		headerAuthorization: bearerPrefix + accessToken,
+		headerContentType:   "multipart/related; boundary=" + writer.Boundary(),
+	})
+	if err != nil {
+		return fmt.Errorf("youtube caption upload: %w", err)
+	}
+	return youtubeAPIError("youtube caption upload", response.statusCode, response.body)
 }
 
 func (y *YouTubeAdapter) setYouTubeThumbnail(ctx context.Context, accessToken, videoID string, req UploadMediaRequest) error {
@@ -428,7 +543,7 @@ func (y *YouTubeAdapter) startYouTubeResumableUpload(ctx context.Context, access
 	}
 
 	params := url.Values{}
-	params.Set("part", "snippet,status")
+	params.Set("part", "snippet,status,paidProductPlacementDetails")
 	params.Set("uploadType", "resumable")
 	params.Set("notifySubscribers", fmt.Sprint(settingBool(req.Settings, "notify_subscribers")))
 	endpoint := youtubeUploadBaseURL + "/videos?" + params.Encode()
@@ -667,17 +782,6 @@ func validateYouTubeMedia(media []MediaItem) []MediaValidationIssue {
 
 func youtubeTitle(req UploadMediaRequest) string {
 	title := firstNonEmptyString(settingString(req.Settings, "title"), strings.TrimSpace(req.Title))
-	if title == "" {
-		for _, line := range strings.Split(req.Description, "\n") {
-			if trimmed := strings.TrimSpace(line); trimmed != "" {
-				title = trimmed
-				break
-			}
-		}
-	}
-	if title == "" {
-		title = youtubeDefaultVideoName
-	}
 	return truncateRunes(title, youtubeTitleMaxRunes)
 }
 
@@ -720,8 +824,9 @@ func bearerHeaders(accessToken string) map[string]string {
 }
 
 type youtubeVideoInsertRequest struct {
-	Snippet youtubeVideoSnippet `json:"snippet"`
-	Status  youtubeVideoStatus  `json:"status"`
+	Snippet                     youtubeVideoSnippet                `json:"snippet"`
+	Status                      youtubeVideoStatus                 `json:"status"`
+	PaidProductPlacementDetails youtubePaidProductPlacementDetails `json:"paidProductPlacementDetails,omitempty"`
 }
 
 type youtubeVideoSnippet struct {
@@ -733,8 +838,14 @@ type youtubeVideoSnippet struct {
 
 type youtubeVideoStatus struct {
 	PrivacyStatus           string `json:"privacyStatus"`
+	License                 string `json:"license,omitempty"`
+	Embeddable              bool   `json:"embeddable"`
 	SelfDeclaredMadeForKids bool   `json:"selfDeclaredMadeForKids,omitempty"`
 	ContainsSyntheticMedia  bool   `json:"containsSyntheticMedia,omitempty"`
+}
+
+type youtubePaidProductPlacementDetails struct {
+	HasPaidProductPlacement bool `json:"hasPaidProductPlacement"`
 }
 
 type youtubePlaylistItemInsertRequest struct {
