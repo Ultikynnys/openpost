@@ -18,7 +18,7 @@
 	import AppToast from '$lib/components/app-toast.svelte';
 	import DestructiveConfirmDialog from '$lib/components/destructive-confirm-dialog.svelte';
 	import MoreHorizontalIcon from 'lucide-svelte/icons/ellipsis';
-	import { getPlatformName, getPlatformColor } from '$lib/utils';
+	import { formatAccountHandle, getPlatformName, getPlatformColor } from '$lib/utils';
 	import PlatformIcon from '$lib/components/platform-icon.svelte';
 	import LoaderIcon from 'lucide-svelte/icons/loader-2';
 	import UsersIcon from 'lucide-svelte/icons/users';
@@ -182,7 +182,8 @@
 	}
 
 	function accountDisplayName(account: SocialAccount): string {
-		if (account.account_username) return `@${account.account_username}`;
+		const handle = formatAccountHandle(account.account_username);
+		if (handle) return handle;
 		if (account.instance_url) return account.instance_url.replace('https://', '');
 		return account.account_id || account.platform;
 	}

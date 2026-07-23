@@ -63,6 +63,11 @@ export function getPlatformName(platform: string): string {
 	}
 }
 
+export function formatAccountHandle(username: string | null | undefined): string {
+	const normalizedUsername = username?.trim().replace(/^@+/, '');
+	return normalizedUsername ? `@${normalizedUsername}` : '';
+}
+
 export function getStatusColor(status: string): string {
 	const colors: Record<string, string> = {
 		draft: 'bg-muted text-muted-foreground',
