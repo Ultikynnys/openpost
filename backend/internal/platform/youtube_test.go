@@ -253,11 +253,14 @@ func TestYouTubeUploadMediaWithMetadata(t *testing.T) {
 
 	adapter := NewYouTubeAdapter("client-id", "client-secret", "https://app.example/callback")
 	videoID, err := adapter.UploadMediaWithMetadata(context.Background(), "access-token", "channel-1", UploadMediaRequest{
-		MimeType:          "video/mp4",
-		Size:              11,
-		Title:             "Launch Short",
-		Description:       "Launch Short\nDetailed description",
-		Settings:          map[string]interface{}{"playlist_id": "playlist-1"},
+		MimeType:    "video/mp4",
+		Size:        11,
+		Title:       "Launch Short",
+		Description: "Launch Short\nDetailed description",
+		Settings: map[string]interface{}{
+			"playlist_id":              "playlist-1",
+			"contains_synthetic_media": true,
+		},
 		Reader:            bytes.NewBufferString("video-bytes"),
 		ThumbnailMimeType: "image/jpeg",
 		ThumbnailFilename: "cover.jpg",
@@ -272,6 +275,9 @@ func TestYouTubeUploadMediaWithMetadata(t *testing.T) {
 	}
 	if metadata.Snippet.Title != "Launch Short" || metadata.Status.PrivacyStatus != "private" {
 		t.Fatalf("unexpected metadata: %#v", metadata)
+	}
+	if !metadata.Status.ContainsSyntheticMedia {
+		t.Fatal("expected synthetic media disclosure in upload metadata")
 	}
 	if uploadedBody != "video-bytes" {
 		t.Fatalf("unexpected media body %q", uploadedBody)

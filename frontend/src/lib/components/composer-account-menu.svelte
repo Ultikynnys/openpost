@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tick } from 'svelte';
 	import type { SocialAccount } from '$lib/api/client';
 	import { Button } from '$lib/components/ui/button';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
@@ -10,6 +11,7 @@
 	import Link2Icon from 'lucide-svelte/icons/link-2';
 	import PencilIcon from 'lucide-svelte/icons/pencil';
 	import RotateCcwIcon from 'lucide-svelte/icons/rotate-ccw';
+	import Settings2Icon from 'lucide-svelte/icons/settings-2';
 	import RiCheckLine from 'remixicon-svelte/icons/check-line';
 	import DestructiveConfirmDialog from './destructive-confirm-dialog.svelte';
 	import PlatformIcon from './platform-icon.svelte';
@@ -24,6 +26,7 @@
 		selectedAccountIds: string[];
 		compatibleAccountIds?: string[];
 		customAccountIds?: string[];
+		settingsAccountIds?: string[];
 		activeAccountId?: string | null;
 		triggerLabel?: string;
 		triggerClass?: string;
@@ -35,6 +38,7 @@
 		onEditShared?: () => void;
 		onCustomize?: (account: SocialAccount) => void;
 		onReset?: (account: SocialAccount) => void;
+		onSettings?: (account: SocialAccount) => void;
 	}
 
 	let {
@@ -42,6 +46,7 @@
 		selectedAccountIds,
 		compatibleAccountIds,
 		customAccountIds = [],
+		settingsAccountIds = [],
 		activeAccountId = null,
 		triggerLabel = m.compose_target_accounts(),
 		triggerClass = '',
@@ -52,7 +57,8 @@
 		onClearAll,
 		onEditShared,
 		onCustomize,
-		onReset
+		onReset,
+		onSettings
 	}: Props = $props();
 
 	let open = $state(false);
@@ -62,6 +68,7 @@
 		new Set(compatibleAccountIds ?? accounts.map((account) => account.id))
 	);
 	const customIds = $derived(new Set(customAccountIds));
+	const settingsIds = $derived(new Set(settingsAccountIds));
 	const activeAccountIsCustom = $derived(
 		activeAccountId !== null && customIds.has(activeAccountId)
 	);
@@ -96,6 +103,12 @@
 	function customize(account: SocialAccount) {
 		onCustomize?.(account);
 		open = false;
+	}
+
+	async function editSettings(account: SocialAccount) {
+		open = false;
+		await tick();
+		onSettings?.(account);
 	}
 
 	function requestCustomChange(account: SocialAccount, action: PendingCustomChange['action']) {
@@ -257,6 +270,20 @@
 							{#if selected}<RiCheckLine class="size-3.5" />{/if}
 						</span>
 					</label>
+
+					{#if compatible && selected && onSettings && settingsIds.has(account.id)}
+						<Button
+							type="button"
+							variant="ghost"
+							size="icon"
+							class="size-11 shrink-0 text-muted-foreground"
+							aria-label={`${m.compose_platform_settings()}: ${accountLabel(account)}`}
+							data-testid="composer-account-settings"
+							onclick={() => editSettings(account)}
+						>
+							<Settings2Icon class="size-4" />
+						</Button>
+					{/if}
 
 					{#if compatible && selected && onCustomize}
 						<DropdownMenu.Root>

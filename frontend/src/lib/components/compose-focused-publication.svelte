@@ -12,9 +12,9 @@
 	import * as Popover from '$lib/components/ui/popover';
 	import { Textarea } from '$lib/components/ui/textarea';
 	import ComposerAccountMenu from './composer-account-menu.svelte';
+	import DestinationSettingsDialog from './destination-settings-dialog.svelte';
 	import InlineNotice from './inline-notice.svelte';
 	import PageLoading from './page-loading.svelte';
-	import PlatformIcon from './platform-icon.svelte';
 	import { getLocaleTag } from '$lib/i18n';
 	import { getPlatformKey, getPlatformName } from '$lib/utils';
 	import { CalendarDate, isEqualDay } from '@internationalized/date';
@@ -45,7 +45,6 @@
 	import LoaderIcon from 'lucide-svelte/icons/loader-2';
 	import SaveIcon from 'lucide-svelte/icons/save';
 	import SendIcon from 'lucide-svelte/icons/send';
-	import Settings2Icon from 'lucide-svelte/icons/settings-2';
 	import UploadIcon from 'lucide-svelte/icons/upload';
 	import XIcon from 'lucide-svelte/icons/x';
 	import { m } from '$lib/paraglide/messages';
@@ -57,6 +56,7 @@
 	type ValidationIssue = components['schemas']['ValidationIssue'];
 	type ProviderReadinessItem = components['schemas']['ProviderReadinessItem'];
 	type SettingField = components['schemas']['SettingField'];
+	type DestinationOption = components['schemas']['DestinationOption'];
 
 	interface FocusedMedia {
 		id: string;
@@ -92,7 +92,11 @@
 	let thumbnailMedia = $state<FocusedMedia | null>(null);
 	let thumbnailMediaId = $state('');
 	let settingsByAccount = $state<Record<string, Record<string, unknown>>>({});
-	let customizeAccountId = $state('');
+	let settingsDialogOpen = $state(false);
+	let settingsAccountId = $state('');
+	let destinationOptionsByAccount = $state<Record<string, Record<string, DestinationOption[]>>>({});
+	let destinationOptionsErrors = $state<Record<string, string>>({});
+	let destinationOptionsLoadingAccountId = $state('');
 	let selectedDate = $state<CalendarDate | undefined>(undefined);
 	let selectedTime = $state<string | null>(null);
 	let showSchedulePopover = $state(false);
@@ -111,6 +115,7 @@
 	let readinessRequestSequence = 0;
 	let mediaUploadRequestSequence = 0;
 	let thumbnailUploadRequestSequence = 0;
+	let destinationOptionsRequestSequence = 0;
 	let publicationContextRequestId = '';
 
 	const modeMeta = $derived(composerMode(mode));
@@ -124,6 +129,11 @@
 			.map((account) => capabilityForAccount(account))
 			.filter((capability): capability is Capability => capability !== null)
 	);
+	const settingsAccount = $derived(
+		accounts.find((account) => account.id === settingsAccountId) ?? null
+	);
+	const settingsDialogFields = $derived(settingsAccount ? visibleSettings(settingsAccount) : []);
+	const settingsDialogValues = $derived(settingsAccount ? settingsForAccount(settingsAccount) : {});
 	const hasYouTubeTarget = $derived(
 		selectedAccounts.some((account) => getPlatformKey(account.platform) === 'youtube')
 	);
@@ -414,6 +424,7 @@
 		readinessRequestSequence += 1;
 		mediaUploadRequestSequence += 1;
 		thumbnailUploadRequestSequence += 1;
+		destinationOptionsRequestSequence += 1;
 		publicationId = '';
 		accounts = [];
 		selectedAccountIds = [];
@@ -421,7 +432,11 @@
 		providerReadinessWorkspaceId = '';
 		providerReadinessLoading = false;
 		providerReadinessError = '';
-		customizeAccountId = '';
+		settingsDialogOpen = false;
+		settingsAccountId = '';
+		destinationOptionsByAccount = {};
+		destinationOptionsErrors = {};
+		destinationOptionsLoadingAccountId = '';
 		media = [];
 		thumbnailMedia = null;
 		thumbnailMediaId = '';
@@ -447,7 +462,8 @@
 
 	function clearAllAccounts() {
 		selectedAccountIds = [];
-		customizeAccountId = '';
+		settingsDialogOpen = false;
+		settingsAccountId = '';
 		validationIssues = [];
 	}
 
@@ -461,8 +477,10 @@
 		} else {
 			selectedAccountIds = [];
 		}
-		if (customizeAccountId && !selectedAccountIds.includes(customizeAccountId))
-			customizeAccountId = '';
+		if (settingsAccountId && !selectedAccountIds.includes(settingsAccountId)) {
+			settingsDialogOpen = false;
+			settingsAccountId = '';
+		}
 	}
 
 	function toggleAccount(account: SocialAccount) {
@@ -470,6 +488,10 @@
 		selectedAccountIds = selectedAccountIds.includes(account.id)
 			? selectedAccountIds.filter((id) => id !== account.id)
 			: [...selectedAccountIds, account.id];
+		if (!selectedAccountIds.includes(account.id) && settingsAccountId === account.id) {
+			settingsDialogOpen = false;
+			settingsAccountId = '';
+		}
 		settingsByAccount = normalizeAllAccountSettings(settingsByAccount);
 		validationIssues = [];
 	}
@@ -721,6 +743,67 @@
 		});
 	}
 
+	function openDestinationSettings(account: SocialAccount) {
+		settingsByAccount = {
+			...settingsByAccount,
+			[account.id]: settingsForAccount(account)
+		};
+		settingsAccountId = account.id;
+		settingsDialogOpen = true;
+		void loadDestinationOptions(account);
+	}
+
+	async function loadDestinationOptions(account: SocialAccount, force = false) {
+		const optionSources = visibleSettings(account)
+			.map((setting) => setting.options_source)
+			.filter((source): source is string => Boolean(source));
+		if (optionSources.length === 0) return;
+		if (!force && destinationOptionsByAccount[account.id]) return;
+
+		const requestSequence = ++destinationOptionsRequestSequence;
+		destinationOptionsLoadingAccountId = account.id;
+		destinationOptionsErrors = { ...destinationOptionsErrors, [account.id]: '' };
+		const [language, regionCode] = getLocaleTag().split('-');
+		try {
+			const { data, error: loadError } = await client.GET(
+				'/accounts/{account_id}/destination-options',
+				{
+					params: {
+						path: { account_id: account.id },
+						query: { region_code: regionCode, language }
+					}
+				}
+			);
+			if (loadError) {
+				throw new Error(loadError.detail || m.compose_load_provider_options_failed());
+			}
+			if (requestSequence !== destinationOptionsRequestSequence) return;
+
+			const optionGroups: Record<string, DestinationOption[]> = {};
+			for (const [source, options] of Object.entries(data?.options ?? {})) {
+				optionGroups[source] = options ?? [];
+			}
+			destinationOptionsByAccount = {
+				...destinationOptionsByAccount,
+				[account.id]: optionGroups
+			};
+		} catch (loadError) {
+			if (requestSequence !== destinationOptionsRequestSequence) return;
+			destinationOptionsErrors = {
+				...destinationOptionsErrors,
+				[account.id]:
+					loadError instanceof Error ? loadError.message : m.compose_load_provider_options_failed()
+			};
+		} finally {
+			if (
+				requestSequence === destinationOptionsRequestSequence &&
+				destinationOptionsLoadingAccountId === account.id
+			) {
+				destinationOptionsLoadingAccountId = '';
+			}
+		}
+	}
+
 	function selectedSettingsInput(): Record<string, Record<string, unknown>> {
 		return Object.fromEntries(
 			selectedAccounts.map((account) => [account.id, settingsForAccount(account)])
@@ -889,15 +972,6 @@
 	function accountLabel(account: SocialAccount): string {
 		return account.account_username || account.slug || getPlatformName(account.platform);
 	}
-
-	function settingAsString(account: SocialAccount, key: string): string {
-		const value = settingsForAccount(account)[key];
-		return typeof value === 'string' || typeof value === 'number' ? String(value) : '';
-	}
-
-	function settingAsBoolean(account: SocialAccount, key: string): boolean {
-		return Boolean(settingsForAccount(account)[key]);
-	}
 </script>
 
 <div class="flex min-h-0 flex-1 flex-col bg-background" data-testid="focused-composer">
@@ -918,12 +992,16 @@
 							{accounts}
 							{selectedAccountIds}
 							compatibleAccountIds={compatibleAccounts.map((account) => account.id)}
+							settingsAccountIds={selectedAccounts
+								.filter((account) => visibleSettings(account).length > 0)
+								.map((account) => account.id)}
 							triggerLabel={m.compose_target_accounts()}
 							triggerClass="h-11 md:h-8"
 							description={m.compose_accounts_compatible({ format: modeMeta.label })}
 							onToggle={toggleAccount}
 							onSelectAll={selectAllAccounts}
 							onClearAll={clearAllAccounts}
+							onSettings={openDestinationSettings}
 						/>
 					{/if}
 				</div>
@@ -1190,112 +1268,6 @@
 					</div>
 				</section>
 
-				<section class="space-y-3 border-t pt-5">
-					<div class="flex flex-wrap items-center justify-between gap-3">
-						<div>
-							<h2 class="text-sm font-semibold">{m.compose_platform_settings()}</h2>
-							<p class="text-xs text-muted-foreground">
-								{m.compose_platform_settings_body()}
-							</p>
-						</div>
-					</div>
-					<div class="flex flex-wrap gap-2">
-						{#each selectedAccounts as account (account.id)}
-							<Button
-								type="button"
-								variant={customizeAccountId === account.id ? 'default' : 'outline'}
-								size="sm"
-								class="h-8 gap-1.5 text-xs"
-								onclick={() =>
-									(customizeAccountId = customizeAccountId === account.id ? '' : account.id)}
-							>
-								<Settings2Icon class="h-3.5 w-3.5" />
-								{m.compose_customize_output({ platform: getPlatformName(account.platform) })}
-							</Button>
-						{/each}
-					</div>
-
-					{#if customizeAccountId}
-						{@const account = selectedAccounts.find((item) => item.id === customizeAccountId)}
-						{#if account}
-							{@const settings = visibleSettings(account)}
-							<div class="rounded-md border bg-background p-4">
-								<div class="mb-3 flex items-center gap-2">
-									<PlatformIcon platform={account.platform} class="h-4 w-4" />
-									<h3 class="text-sm font-semibold">
-										{m.compose_customize_output({ platform: getPlatformName(account.platform) })}
-									</h3>
-								</div>
-								{#if settings.length === 0}
-									<p class="text-sm text-muted-foreground">
-										{m.compose_platform_fields_main({
-											platform: getPlatformName(account.platform)
-										})}
-									</p>
-								{:else}
-									<div class="grid gap-3 sm:grid-cols-2">
-										{#each settings as setting (setting.key)}
-											<div class={setting.type === 'textarea' ? 'sm:col-span-2' : ''}>
-												<label class="text-xs font-medium" for="setting-{account.id}-{setting.key}">
-													{setting.label}
-												</label>
-												{#if setting.type === 'boolean'}
-													<label class="mt-2 flex items-center gap-2 text-sm">
-														<input
-															type="checkbox"
-															class="size-4 rounded border"
-															checked={settingAsBoolean(account, setting.key)}
-															onchange={(event) =>
-																updateAccountSetting(
-																	account,
-																	setting.key,
-																	event.currentTarget.checked
-																)}
-														/>
-														<span>{setting.label}</span>
-													</label>
-												{:else if setting.type === 'select'}
-													<select
-														id="setting-{account.id}-{setting.key}"
-														class="mt-1 h-9 w-full rounded-md border bg-background px-2 text-sm"
-														value={settingAsString(account, setting.key)}
-														onchange={(event) =>
-															updateAccountSetting(account, setting.key, event.currentTarget.value)}
-													>
-														{#each setting.options ?? [] as option (option)}
-															<option value={option}>{option}</option>
-														{/each}
-													</select>
-												{:else if setting.type === 'textarea'}
-													<Textarea
-														id="setting-{account.id}-{setting.key}"
-														class="mt-1 min-h-24"
-														value={settingAsString(account, setting.key)}
-														oninput={(event) =>
-															updateAccountSetting(account, setting.key, event.currentTarget.value)}
-													/>
-												{:else}
-													<Input
-														id="setting-{account.id}-{setting.key}"
-														class="mt-1"
-														type={setting.type === 'number' ? 'number' : 'text'}
-														value={settingAsString(account, setting.key)}
-														oninput={(event) =>
-															updateAccountSetting(account, setting.key, event.currentTarget.value)}
-													/>
-												{/if}
-												{#if setting.help}
-													<p class="mt-1 text-xs text-muted-foreground">{setting.help}</p>
-												{/if}
-											</div>
-										{/each}
-									</div>
-								{/if}
-							</div>
-						{/if}
-					{/if}
-				</section>
-
 				{#if localBlockers.length > 0 || blockingIssues.length > 0 || warningIssues.length > 0}
 					<section
 						class="space-y-2 border-t pt-5 text-sm"
@@ -1323,3 +1295,19 @@
 		</div>
 	{/if}
 </div>
+
+<DestinationSettingsDialog
+	bind:open={settingsDialogOpen}
+	account={settingsAccount}
+	settings={settingsDialogFields}
+	values={settingsDialogValues}
+	optionGroups={settingsAccount ? (destinationOptionsByAccount[settingsAccount.id] ?? {}) : {}}
+	optionsLoading={settingsAccount?.id === destinationOptionsLoadingAccountId}
+	optionsError={settingsAccount ? (destinationOptionsErrors[settingsAccount.id] ?? '') : ''}
+	onChange={(key, value) => {
+		if (settingsAccount) updateAccountSetting(settingsAccount, key, value);
+	}}
+	onRetry={() => {
+		if (settingsAccount) void loadDestinationOptions(settingsAccount, true);
+	}}
+/>

@@ -368,6 +368,7 @@ func (y *YouTubeAdapter) UploadMediaWithMetadata(ctx context.Context, accessToke
 		Status: youtubeVideoStatus{
 			PrivacyStatus:           firstNonEmptyString(settingString(req.Settings, "privacy"), "private"),
 			SelfDeclaredMadeForKids: settingBool(req.Settings, "self_declared_made_for_kids"),
+			ContainsSyntheticMedia:  settingBool(req.Settings, "contains_synthetic_media"),
 		},
 	}
 
@@ -733,6 +734,7 @@ type youtubeVideoSnippet struct {
 type youtubeVideoStatus struct {
 	PrivacyStatus           string `json:"privacyStatus"`
 	SelfDeclaredMadeForKids bool   `json:"selfDeclaredMadeForKids,omitempty"`
+	ContainsSyntheticMedia  bool   `json:"containsSyntheticMedia,omitempty"`
 }
 
 type youtubePlaylistItemInsertRequest struct {

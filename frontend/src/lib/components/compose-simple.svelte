@@ -58,11 +58,7 @@
 		workspaceScheduleFromISO,
 		workspaceScheduleToISO
 	} from './compose/schedule-timezone';
-	import {
-		composerMode,
-		isAccountCompatibleWithMode,
-		type ComposerModeKey
-	} from './compose/modes';
+	import { composerMode, isAccountCompatibleWithMode, type ComposerModeKey } from './compose/modes';
 	import { soundPreferences } from '$lib/stores/sound-preferences.svelte';
 	import InlineNotice from './inline-notice.svelte';
 	import DestructiveConfirmDialog from './destructive-confirm-dialog.svelte';

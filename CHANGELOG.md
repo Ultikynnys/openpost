@@ -21,6 +21,7 @@ All notable changes to this project are documented in this file.
 
 ### Changed
 
+- Moved destination-specific composer settings into account cog dialogs in the Publish to menu, with structured tag, category, and playlist controls for YouTube.
 - Rewrote the landing, pricing, security, open-source, changelog, platform, comparison, and tools pages around current product behavior, and refreshed the canonical composer, accounts, media, and settings screenshots.
 - Restored the OpenPost composer screenshot as the product-demo preview while keeping the recorded video behind the play action.
 - Updated the project to Go 1.26.5 and current patched `x/image`, `x/net`, `x/text`, and `cookie` dependencies.
@@ -57,6 +58,7 @@ All notable changes to this project are documented in this file.
 
 ### Fixed
 
+- Sent the YouTube synthetic-media disclosure selected in composer settings with the video upload metadata.
 - Prevented YouTube accounts from being selected for text, thread, link, image, carousel, or Story posts; YouTube remains available for Shorts and video uploads.
 - Displayed connected account handles with exactly one `@` prefix, including YouTube handles that already include it.
 - Clarified temporary account-selection deadlines, made empty Facebook and Instagram account results explain the Page requirements, and stopped requesting unused Instagram and TikTok permissions.

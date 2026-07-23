@@ -45,6 +45,20 @@ func TestCapabilitiesExposeValidationCategories(t *testing.T) {
 	require.Contains(t, capability.ValidationCategories, "thumbnail")
 }
 
+func TestYouTubeCapabilitiesExposeStructuredPublishingSettings(t *testing.T) {
+	capability, ok := Find(ProviderYouTube, models.ContentProfileLongVideo)
+
+	require.True(t, ok)
+	settings := map[string]SettingField{}
+	for _, setting := range capability.Settings {
+		settings[setting.Key] = setting
+	}
+	require.Equal(t, "tags", settings["tags"].Type)
+	require.Equal(t, "youtube_categories", settings["category_id"].OptionsSource)
+	require.True(t, settings["category_id"].Required)
+	require.Equal(t, "youtube_playlists", settings["playlist_id"].OptionsSource)
+}
+
 func TestXCapabilitiesExposePostSettings(t *testing.T) {
 	capability, ok := Find(ProviderX, models.ContentProfileShortText)
 

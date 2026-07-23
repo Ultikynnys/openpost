@@ -208,11 +208,7 @@ export function isAccountCompatibleWithMode(
 	capabilities: readonly ComposerCapabilityTarget[] = []
 ): boolean {
 	const provider = getPlatformKey(account.platform);
-	if (
-		provider === 'youtube' &&
-		mode !== 'short_video' &&
-		mode !== 'long_video'
-	) {
+	if (provider === 'youtube' && mode !== 'short_video' && mode !== 'long_video') {
 		return false;
 	}
 	if (capabilities.length === 0) return true;

@@ -41,13 +41,7 @@
 						"type": "string"
 					}
 				},
-				"required": [
-					"id",
-					"name",
-					"token_prefix",
-					"scope",
-					"created_at"
-				],
+				"required": ["id", "name", "token_prefix", "scope", "created_at"],
 				"type": "object"
 			},
 			"AcceptAccountPolicyInputBody": {
@@ -55,9 +49,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/AcceptAccountPolicyInputBody.json"
-						],
+						"examples": ["https://example.com/schemas/AcceptAccountPolicyInputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -67,9 +59,7 @@
 						"type": "boolean"
 					}
 				},
-				"required": [
-					"accepted_legal"
-				],
+				"required": ["accepted_legal"],
 				"type": "object"
 			},
 			"AcceptWorkspaceInvitationInputBody": {
@@ -77,9 +67,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/AcceptWorkspaceInvitationInputBody.json"
-						],
+						"examples": ["https://example.com/schemas/AcceptWorkspaceInvitationInputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -90,9 +78,7 @@
 						"type": "string"
 					}
 				},
-				"required": [
-					"token"
-				],
+				"required": ["token"],
 				"type": "object"
 			},
 			"AcceptWorkspaceInvitationOutputBody": {
@@ -100,9 +86,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/AcceptWorkspaceInvitationOutputBody.json"
-						],
+						"examples": ["https://example.com/schemas/AcceptWorkspaceInvitationOutputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -117,11 +101,7 @@
 						"type": "string"
 					}
 				},
-				"required": [
-					"workspace_id",
-					"role",
-					"accepted"
-				],
+				"required": ["workspace_id", "role", "accepted"],
 				"type": "object"
 			},
 			"AccountDeletionImpact": {
@@ -129,9 +109,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/AccountDeletionImpact.json"
-						],
+						"examples": ["https://example.com/schemas/AccountDeletionImpact.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -140,10 +118,7 @@
 						"items": {
 							"$ref": "#/components/schemas/DeletionBlocker"
 						},
-						"type": [
-							"array",
-							"null"
-						]
+						"type": ["array", "null"]
 					},
 					"instance_admin_transfer": {
 						"$ref": "#/components/schemas/DeletionInstanceAdminTransfer"
@@ -160,10 +135,7 @@
 						"items": {
 							"$ref": "#/components/schemas/DeletionOwnershipTransfer"
 						},
-						"type": [
-							"array",
-							"null"
-						]
+						"type": ["array", "null"]
 					},
 					"posts": {
 						"format": "int64",
@@ -199,9 +171,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/AccountExport.json"
-						],
+						"examples": ["https://example.com/schemas/AccountExport.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -210,10 +180,7 @@
 						"items": {
 							"$ref": "#/components/schemas/AccountExportToken"
 						},
-						"type": [
-							"array",
-							"null"
-						]
+						"type": ["array", "null"]
 					},
 					"format_version": {
 						"type": "string"
@@ -226,37 +193,25 @@
 						"items": {
 							"$ref": "#/components/schemas/AccountExportMedia"
 						},
-						"type": [
-							"array",
-							"null"
-						]
+						"type": ["array", "null"]
 					},
 					"organizations": {
 						"items": {
 							"$ref": "#/components/schemas/AccountExportOrganization"
 						},
-						"type": [
-							"array",
-							"null"
-						]
+						"type": ["array", "null"]
 					},
 					"posts": {
 						"items": {
 							"$ref": "#/components/schemas/AccountExportPost"
 						},
-						"type": [
-							"array",
-							"null"
-						]
+						"type": ["array", "null"]
 					},
 					"publications": {
 						"items": {
 							"$ref": "#/components/schemas/AccountExportPublication"
 						},
-						"type": [
-							"array",
-							"null"
-						]
+						"type": ["array", "null"]
 					},
 					"shared_workspace_content_excluded": {
 						"type": "boolean"
@@ -265,10 +220,7 @@
 						"items": {
 							"$ref": "#/components/schemas/AccountExportSocialAccount"
 						},
-						"type": [
-							"array",
-							"null"
-						]
+						"type": ["array", "null"]
 					},
 					"user": {
 						"$ref": "#/components/schemas/AccountExportUser"
@@ -277,10 +229,7 @@
 						"items": {
 							"$ref": "#/components/schemas/AccountExportWorkspace"
 						},
-						"type": [
-							"array",
-							"null"
-						]
+						"type": ["array", "null"]
 					}
 				},
 				"required": [
@@ -368,12 +317,7 @@
 						"type": "string"
 					}
 				},
-				"required": [
-					"id",
-					"name",
-					"role",
-					"created_at"
-				],
+				"required": ["id", "name", "role", "created_at"],
 				"type": "object"
 			},
 			"AccountExportPost": {
@@ -407,13 +351,7 @@
 						"type": "string"
 					}
 				},
-				"required": [
-					"id",
-					"workspace_id",
-					"content",
-					"status",
-					"created_at"
-				],
+				"required": ["id", "workspace_id", "content", "status", "created_at"],
 				"type": "object"
 			},
 			"AccountExportPublication": {
@@ -539,13 +477,7 @@
 						"type": "string"
 					}
 				},
-				"required": [
-					"id",
-					"name",
-					"token_prefix",
-					"scope",
-					"created_at"
-				],
+				"required": ["id", "name", "token_prefix", "scope", "created_at"],
 				"type": "object"
 			},
 			"AccountExportUser": {
@@ -581,14 +513,7 @@
 						"type": "string"
 					}
 				},
-				"required": [
-					"id",
-					"email",
-					"display_name",
-					"avatar_url",
-					"is_admin",
-					"created_at"
-				],
+				"required": ["id", "email", "display_name", "avatar_url", "is_admin", "created_at"],
 				"type": "object"
 			},
 			"AccountExportWorkspace": {
@@ -614,13 +539,7 @@
 						"type": "string"
 					}
 				},
-				"required": [
-					"id",
-					"name",
-					"role",
-					"timezone",
-					"created_at"
-				],
+				"required": ["id", "name", "role", "timezone", "created_at"],
 				"type": "object"
 			},
 			"AccountReauthenticationInputBody": {
@@ -628,9 +547,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/AccountReauthenticationInputBody.json"
-						],
+						"examples": ["https://example.com/schemas/AccountReauthenticationInputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -640,9 +557,7 @@
 						"type": "string"
 					}
 				},
-				"required": [
-					"current_password"
-				],
+				"required": ["current_password"],
 				"type": "object"
 			},
 			"AccountResponse": {
@@ -650,9 +565,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/AccountResponse.json"
-						],
+						"examples": ["https://example.com/schemas/AccountResponse.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -735,9 +648,7 @@
 						"type": "string"
 					}
 				},
-				"required": [
-					"id"
-				],
+				"required": ["id"],
 				"type": "object"
 			},
 			"AccountSelectionResponse": {
@@ -745,9 +656,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/AccountSelectionResponse.json"
-						],
+						"examples": ["https://example.com/schemas/AccountSelectionResponse.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -766,10 +675,7 @@
 						"items": {
 							"$ref": "#/components/schemas/AccountSelectionOption"
 						},
-						"type": [
-							"array",
-							"null"
-						]
+						"type": ["array", "null"]
 					},
 					"platform": {
 						"description": "Social platform key",
@@ -780,13 +686,7 @@
 						"type": "string"
 					}
 				},
-				"required": [
-					"id",
-					"platform",
-					"workspace_id",
-					"expires_at",
-					"options"
-				],
+				"required": ["id", "platform", "workspace_id", "expires_at", "options"],
 				"type": "object"
 			},
 			"ActionOutputBody": {
@@ -794,9 +694,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/ActionOutputBody.json"
-						],
+						"examples": ["https://example.com/schemas/ActionOutputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -808,9 +706,7 @@
 						"type": "string"
 					}
 				},
-				"required": [
-					"message"
-				],
+				"required": ["message"],
 				"type": "object"
 			},
 			"ApproveCLIAuthInputBody": {
@@ -818,9 +714,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/ApproveCLIAuthInputBody.json"
-						],
+						"examples": ["https://example.com/schemas/ApproveCLIAuthInputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -845,9 +739,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/AuthConfigurationOutputBody.json"
-						],
+						"examples": ["https://example.com/schemas/AuthConfigurationOutputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -877,11 +769,7 @@
 						"type": "string"
 					}
 				},
-				"required": [
-					"registration_enabled",
-					"password_reset_enabled",
-					"legal_acceptance_required"
-				],
+				"required": ["registration_enabled", "password_reset_enabled", "legal_acceptance_required"],
 				"type": "object"
 			},
 			"AuthOutputBody": {
@@ -889,9 +777,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/AuthOutputBody.json"
-						],
+						"examples": ["https://example.com/schemas/AuthOutputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -901,10 +787,7 @@
 						"items": {
 							"type": "string"
 						},
-						"type": [
-							"array",
-							"null"
-						]
+						"type": ["array", "null"]
 					},
 					"mfa_token": {
 						"description": "Pending MFA token for follow-up verification",
@@ -922,9 +805,7 @@
 						"$ref": "#/components/schemas/UserProfile"
 					}
 				},
-				"required": [
-					"requires_mfa"
-				],
+				"required": ["requires_mfa"],
 				"type": "object"
 			},
 			"BatchDeleteMediaInputBody": {
@@ -932,9 +813,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/BatchDeleteMediaInputBody.json"
-						],
+						"examples": ["https://example.com/schemas/BatchDeleteMediaInputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -944,15 +823,10 @@
 						"items": {
 							"type": "string"
 						},
-						"type": [
-							"array",
-							"null"
-						]
+						"type": ["array", "null"]
 					}
 				},
-				"required": [
-					"media_ids"
-				],
+				"required": ["media_ids"],
 				"type": "object"
 			},
 			"BatchDeleteMediaOutputBody": {
@@ -960,9 +834,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/BatchDeleteMediaOutputBody.json"
-						],
+						"examples": ["https://example.com/schemas/BatchDeleteMediaOutputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -977,16 +849,10 @@
 						"items": {
 							"type": "string"
 						},
-						"type": [
-							"array",
-							"null"
-						]
+						"type": ["array", "null"]
 					}
 				},
-				"required": [
-					"deleted",
-					"failed_ids"
-				],
+				"required": ["deleted", "failed_ids"],
 				"type": "object"
 			},
 			"BeginPasskeyLoginInputBody": {
@@ -994,9 +860,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/BeginPasskeyLoginInputBody.json"
-						],
+						"examples": ["https://example.com/schemas/BeginPasskeyLoginInputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -1006,9 +870,7 @@
 						"type": "string"
 					}
 				},
-				"required": [
-					"mfa_token"
-				],
+				"required": ["mfa_token"],
 				"type": "object"
 			},
 			"BeginPasskeyRegistrationInputBody": {
@@ -1016,9 +878,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/BeginPasskeyRegistrationInputBody.json"
-						],
+						"examples": ["https://example.com/schemas/BeginPasskeyRegistrationInputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -1032,10 +892,7 @@
 						"type": "string"
 					}
 				},
-				"required": [
-					"current_password",
-					"name"
-				],
+				"required": ["current_password", "name"],
 				"type": "object"
 			},
 			"BillingStatusResponse": {
@@ -1043,9 +900,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/BillingStatusResponse.json"
-						],
+						"examples": ["https://example.com/schemas/BillingStatusResponse.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -1115,9 +970,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/BillingURLResponse.json"
-						],
+						"examples": ["https://example.com/schemas/BillingURLResponse.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -1131,9 +984,7 @@
 						"type": "string"
 					}
 				},
-				"required": [
-					"url"
-				],
+				"required": ["url"],
 				"type": "object"
 			},
 			"BlueskyLoginInputBody": {
@@ -1141,9 +992,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/BlueskyLoginInputBody.json"
-						],
+						"examples": ["https://example.com/schemas/BlueskyLoginInputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -1161,11 +1010,7 @@
 						"type": "string"
 					}
 				},
-				"required": [
-					"workspace_id",
-					"handle",
-					"app_password"
-				],
+				"required": ["workspace_id", "handle", "app_password"],
 				"type": "object"
 			},
 			"CLIAuthDecisionOutputBody": {
@@ -1173,9 +1018,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/CLIAuthDecisionOutputBody.json"
-						],
+						"examples": ["https://example.com/schemas/CLIAuthDecisionOutputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -1184,9 +1027,7 @@
 						"type": "boolean"
 					}
 				},
-				"required": [
-					"ok"
-				],
+				"required": ["ok"],
 				"type": "object"
 			},
 			"CapabilitiesOutputBody": {
@@ -1194,9 +1035,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/CapabilitiesOutputBody.json"
-						],
+						"examples": ["https://example.com/schemas/CapabilitiesOutputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -1206,26 +1045,17 @@
 						"items": {
 							"$ref": "#/components/schemas/Capability"
 						},
-						"type": [
-							"array",
-							"null"
-						]
+						"type": ["array", "null"]
 					},
 					"profiles": {
 						"description": "Content profiles supported by OpenPost",
 						"items": {
 							"$ref": "#/components/schemas/Profile"
 						},
-						"type": [
-							"array",
-							"null"
-						]
+						"type": ["array", "null"]
 					}
 				},
-				"required": [
-					"profiles",
-					"capabilities"
-				],
+				"required": ["profiles", "capabilities"],
 				"type": "object"
 			},
 			"Capability": {
@@ -1235,10 +1065,7 @@
 						"items": {
 							"type": "string"
 						},
-						"type": [
-							"array",
-							"null"
-						]
+						"type": ["array", "null"]
 					},
 					"description_required": {
 						"type": "boolean"
@@ -1277,10 +1104,7 @@
 						"items": {
 							"$ref": "#/components/schemas/SettingField"
 						},
-						"type": [
-							"array",
-							"null"
-						]
+						"type": ["array", "null"]
 					},
 					"text_limit": {
 						"format": "int64",
@@ -1293,10 +1117,7 @@
 						"items": {
 							"type": "string"
 						},
-						"type": [
-							"array",
-							"null"
-						]
+						"type": ["array", "null"]
 					}
 				},
 				"required": [
@@ -1316,9 +1137,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/ChangePasswordInputBody.json"
-						],
+						"examples": ["https://example.com/schemas/ChangePasswordInputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -1334,10 +1153,7 @@
 						"type": "string"
 					}
 				},
-				"required": [
-					"current_password",
-					"new_password"
-				],
+				"required": ["current_password", "new_password"],
 				"type": "object"
 			},
 			"ChangePasswordOutputBody": {
@@ -1345,9 +1161,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/ChangePasswordOutputBody.json"
-						],
+						"examples": ["https://example.com/schemas/ChangePasswordOutputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -1360,10 +1174,7 @@
 						"type": "integer"
 					}
 				},
-				"required": [
-					"message",
-					"revoked_sessions"
-				],
+				"required": ["message", "revoked_sessions"],
 				"type": "object"
 			},
 			"CommentActionOutputBody": {
@@ -1371,9 +1182,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/CommentActionOutputBody.json"
-						],
+						"examples": ["https://example.com/schemas/CommentActionOutputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -1385,9 +1194,7 @@
 						"type": "string"
 					}
 				},
-				"required": [
-					"message"
-				],
+				"required": ["message"],
 				"type": "object"
 			},
 			"CommentListResponse": {
@@ -1395,9 +1202,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/CommentListResponse.json"
-						],
+						"examples": ["https://example.com/schemas/CommentListResponse.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -1406,15 +1211,10 @@
 						"items": {
 							"$ref": "#/components/schemas/CommentResponse"
 						},
-						"type": [
-							"array",
-							"null"
-						]
+						"type": ["array", "null"]
 					}
 				},
-				"required": [
-					"comments"
-				],
+				"required": ["comments"],
 				"type": "object"
 			},
 			"CommentReplyInputBody": {
@@ -1422,9 +1222,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/CommentReplyInputBody.json"
-						],
+						"examples": ["https://example.com/schemas/CommentReplyInputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -1434,9 +1232,7 @@
 						"type": "string"
 					}
 				},
-				"required": [
-					"body"
-				],
+				"required": ["body"],
 				"type": "object"
 			},
 			"CommentResponse": {
@@ -1496,9 +1292,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/CompleteAccountSelectionInputBody.json"
-						],
+						"examples": ["https://example.com/schemas/CompleteAccountSelectionInputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -1508,9 +1302,7 @@
 						"type": "string"
 					}
 				},
-				"required": [
-					"selection_id"
-				],
+				"required": ["selection_id"],
 				"type": "object"
 			},
 			"CompleteMediaUploadSessionInputBody": {
@@ -1518,9 +1310,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/CompleteMediaUploadSessionInputBody.json"
-						],
+						"examples": ["https://example.com/schemas/CompleteMediaUploadSessionInputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -1530,9 +1320,7 @@
 						"type": "string"
 					}
 				},
-				"required": [
-					"workspace_id"
-				],
+				"required": ["workspace_id"],
 				"type": "object"
 			},
 			"ConfirmTOTPSetupInputBody": {
@@ -1540,9 +1328,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/ConfirmTOTPSetupInputBody.json"
-						],
+						"examples": ["https://example.com/schemas/ConfirmTOTPSetupInputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -1558,10 +1344,7 @@
 						"type": "string"
 					}
 				},
-				"required": [
-					"challenge_id",
-					"code"
-				],
+				"required": ["challenge_id", "code"],
 				"type": "object"
 			},
 			"CreateAPITokenInputBody": {
@@ -1569,9 +1352,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/CreateAPITokenInputBody.json"
-						],
+						"examples": ["https://example.com/schemas/CreateAPITokenInputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -1594,9 +1375,7 @@
 						"type": "string"
 					}
 				},
-				"required": [
-					"name"
-				],
+				"required": ["name"],
 				"type": "object"
 			},
 			"CreateAPITokenOutputBody": {
@@ -1604,9 +1383,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/CreateAPITokenOutputBody.json"
-						],
+						"examples": ["https://example.com/schemas/CreateAPITokenOutputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -1619,10 +1396,7 @@
 						"type": "string"
 					}
 				},
-				"required": [
-					"token",
-					"item"
-				],
+				"required": ["token", "item"],
 				"type": "object"
 			},
 			"CreateBillingCheckoutInputBody": {
@@ -1630,9 +1404,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/CreateBillingCheckoutInputBody.json"
-						],
+						"examples": ["https://example.com/schemas/CreateBillingCheckoutInputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -1650,9 +1422,7 @@
 						"type": "string"
 					}
 				},
-				"required": [
-					"plan_id"
-				],
+				"required": ["plan_id"],
 				"type": "object"
 			},
 			"CreateBillingPortalInputBody": {
@@ -1660,9 +1430,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/CreateBillingPortalInputBody.json"
-						],
+						"examples": ["https://example.com/schemas/CreateBillingPortalInputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -1683,9 +1451,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/CreateMCPOAuthAuthorizationInputBody.json"
-						],
+						"examples": ["https://example.com/schemas/CreateMCPOAuthAuthorizationInputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -1731,12 +1497,7 @@
 						"type": "string"
 					}
 				},
-				"required": [
-					"approved",
-					"response_type",
-					"client_id",
-					"redirect_uri"
-				],
+				"required": ["approved", "response_type", "client_id", "redirect_uri"],
 				"type": "object"
 			},
 			"CreateMCPOAuthAuthorizationOutputBody": {
@@ -1744,9 +1505,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/CreateMCPOAuthAuthorizationOutputBody.json"
-						],
+						"examples": ["https://example.com/schemas/CreateMCPOAuthAuthorizationOutputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -1756,9 +1515,7 @@
 						"type": "string"
 					}
 				},
-				"required": [
-					"redirect_url"
-				],
+				"required": ["redirect_url"],
 				"type": "object"
 			},
 			"CreateMediaUploadSessionInputBody": {
@@ -1766,9 +1523,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/CreateMediaUploadSessionInputBody.json"
-						],
+						"examples": ["https://example.com/schemas/CreateMediaUploadSessionInputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -1795,11 +1550,7 @@
 						"type": "string"
 					}
 				},
-				"required": [
-					"workspace_id",
-					"filename",
-					"size"
-				],
+				"required": ["workspace_id", "filename", "size"],
 				"type": "object"
 			},
 			"CreateMediaUploadSessionOutputBody": {
@@ -1807,9 +1558,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/CreateMediaUploadSessionOutputBody.json"
-						],
+						"examples": ["https://example.com/schemas/CreateMediaUploadSessionOutputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -1827,11 +1576,7 @@
 						"description": "Direct upload request details"
 					}
 				},
-				"required": [
-					"media_id",
-					"upload",
-					"complete_url"
-				],
+				"required": ["media_id", "upload", "complete_url"],
 				"type": "object"
 			},
 			"CreateOrganizationBillingCheckoutInputBody": {
@@ -1851,9 +1596,7 @@
 						"type": "string"
 					}
 				},
-				"required": [
-					"plan_id"
-				],
+				"required": ["plan_id"],
 				"type": "object"
 			},
 			"CreatePostInputBody": {
@@ -1861,9 +1604,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/CreatePostInputBody.json"
-						],
+						"examples": ["https://example.com/schemas/CreatePostInputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -1877,10 +1618,7 @@
 						"items": {
 							"type": "string"
 						},
-						"type": [
-							"array",
-							"null"
-						]
+						"type": ["array", "null"]
 					},
 					"random_delay_minutes": {
 						"description": "Random delay in minutes (±N) to add for natural posting",
@@ -1897,10 +1635,7 @@
 						"items": {
 							"type": "string"
 						},
-						"type": [
-							"array",
-							"null"
-						]
+						"type": ["array", "null"]
 					},
 					"thread_draft": {
 						"description": "Optional thread draft JSON (encoded with __openpost_thread__: prefix) for a parent post that drafts a multi-post thread. Mutually exclusive with a thread blob in content: the new field is preferred.",
@@ -1911,11 +1646,7 @@
 						"type": "string"
 					}
 				},
-				"required": [
-					"workspace_id",
-					"content",
-					"social_account_ids"
-				],
+				"required": ["workspace_id", "content", "social_account_ids"],
 				"type": "object"
 			},
 			"CreatePostingScheduleInputBody": {
@@ -1923,9 +1654,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/CreatePostingScheduleInputBody.json"
-						],
+						"examples": ["https://example.com/schemas/CreatePostingScheduleInputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -1969,12 +1698,7 @@
 						"type": "string"
 					}
 				},
-				"required": [
-					"workspace_id",
-					"utc_hour",
-					"utc_minute",
-					"day_of_week"
-				],
+				"required": ["workspace_id", "utc_hour", "utc_minute", "day_of_week"],
 				"type": "object"
 			},
 			"CreatePromptInputBody": {
@@ -1982,9 +1706,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/CreatePromptInputBody.json"
-						],
+						"examples": ["https://example.com/schemas/CreatePromptInputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -2006,10 +1728,7 @@
 						"type": "string"
 					}
 				},
-				"required": [
-					"text",
-					"category"
-				],
+				"required": ["text", "category"],
 				"type": "object"
 			},
 			"CreatePublicationInputBody": {
@@ -2017,9 +1736,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/CreatePublicationInputBody.json"
-						],
+						"examples": ["https://example.com/schemas/CreatePublicationInputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -2041,10 +1758,7 @@
 						"items": {
 							"$ref": "#/components/schemas/PublicationMediaInput"
 						},
-						"type": [
-							"array",
-							"null"
-						]
+						"type": ["array", "null"]
 					},
 					"metadata": {
 						"additionalProperties": {},
@@ -2056,10 +1770,7 @@
 						"items": {
 							"$ref": "#/components/schemas/RenditionInput"
 						},
-						"type": [
-							"array",
-							"null"
-						]
+						"type": ["array", "null"]
 					},
 					"scheduled_at": {
 						"description": "Optional schedule time",
@@ -2071,10 +1782,7 @@
 						"items": {
 							"type": "string"
 						},
-						"type": [
-							"array",
-							"null"
-						]
+						"type": ["array", "null"]
 					},
 					"source_text": {
 						"description": "Canonical source text",
@@ -2093,12 +1801,7 @@
 						"type": "string"
 					}
 				},
-				"required": [
-					"workspace_id",
-					"title",
-					"content_profile",
-					"source_text"
-				],
+				"required": ["workspace_id", "title", "content_profile", "source_text"],
 				"type": "object"
 			},
 			"CreateThreadInputBody": {
@@ -2106,9 +1809,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/CreateThreadInputBody.json"
-						],
+						"examples": ["https://example.com/schemas/CreateThreadInputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -2119,10 +1820,7 @@
 							"$ref": "#/components/schemas/ThreadPostInput"
 						},
 						"minItems": 2,
-						"type": [
-							"array",
-							"null"
-						]
+						"type": ["array", "null"]
 					},
 					"random_delay_minutes": {
 						"description": "Random delay in minutes (±N) to add for natural posting",
@@ -2139,21 +1837,14 @@
 						"items": {
 							"type": "string"
 						},
-						"type": [
-							"array",
-							"null"
-						]
+						"type": ["array", "null"]
 					},
 					"workspace_id": {
 						"description": "Target workspace ID",
 						"type": "string"
 					}
 				},
-				"required": [
-					"workspace_id",
-					"social_account_ids",
-					"posts"
-				],
+				"required": ["workspace_id", "social_account_ids", "posts"],
 				"type": "object"
 			},
 			"CreateThreadOutputBody": {
@@ -2161,9 +1852,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/CreateThreadOutputBody.json"
-						],
+						"examples": ["https://example.com/schemas/CreateThreadOutputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -2173,15 +1862,10 @@
 						"items": {
 							"type": "string"
 						},
-						"type": [
-							"array",
-							"null"
-						]
+						"type": ["array", "null"]
 					}
 				},
-				"required": [
-					"post_ids"
-				],
+				"required": ["post_ids"],
 				"type": "object"
 			},
 			"CreateWorkspaceInputBody": {
@@ -2189,9 +1873,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/CreateWorkspaceInputBody.json"
-						],
+						"examples": ["https://example.com/schemas/CreateWorkspaceInputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -2207,9 +1889,7 @@
 						"type": "string"
 					}
 				},
-				"required": [
-					"name"
-				],
+				"required": ["name"],
 				"type": "object"
 			},
 			"CreateWorkspaceInvitationInputBody": {
@@ -2217,9 +1897,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/CreateWorkspaceInvitationInputBody.json"
-						],
+						"examples": ["https://example.com/schemas/CreateWorkspaceInvitationInputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -2231,18 +1909,11 @@
 					},
 					"role": {
 						"description": "Workspace role to grant",
-						"enum": [
-							"admin",
-							"editor",
-							"viewer"
-						],
+						"enum": ["admin", "editor", "viewer"],
 						"type": "string"
 					}
 				},
-				"required": [
-					"email",
-					"role"
-				],
+				"required": ["email", "role"],
 				"type": "object"
 			},
 			"CreateWorkspaceOutputBody": {
@@ -2250,9 +1921,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/CreateWorkspaceOutputBody.json"
-						],
+						"examples": ["https://example.com/schemas/CreateWorkspaceOutputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -2270,12 +1939,7 @@
 						"type": "string"
 					}
 				},
-				"required": [
-					"id",
-					"organization_id",
-					"name",
-					"created_at"
-				],
+				"required": ["id", "organization_id", "name", "created_at"],
 				"type": "object"
 			},
 			"DeleteAccountInputBody": {
@@ -2283,9 +1947,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/DeleteAccountInputBody.json"
-						],
+						"examples": ["https://example.com/schemas/DeleteAccountInputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -2300,10 +1962,7 @@
 						"type": "string"
 					}
 				},
-				"required": [
-					"current_password",
-					"confirm_email"
-				],
+				"required": ["current_password", "confirm_email"],
 				"type": "object"
 			},
 			"DeleteAccountOutputBody": {
@@ -2311,9 +1970,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/DeleteAccountOutputBody.json"
-						],
+						"examples": ["https://example.com/schemas/DeleteAccountOutputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -2322,9 +1979,7 @@
 						"type": "boolean"
 					}
 				},
-				"required": [
-					"deleted"
-				],
+				"required": ["deleted"],
 				"type": "object"
 			},
 			"DeleteMediaOutputBody": {
@@ -2332,9 +1987,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/DeleteMediaOutputBody.json"
-						],
+						"examples": ["https://example.com/schemas/DeleteMediaOutputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -2344,9 +1997,7 @@
 						"type": "string"
 					}
 				},
-				"required": [
-					"message"
-				],
+				"required": ["message"],
 				"type": "object"
 			},
 			"DeletePostOutputBody": {
@@ -2354,9 +2005,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/DeletePostOutputBody.json"
-						],
+						"examples": ["https://example.com/schemas/DeletePostOutputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -2366,9 +2015,7 @@
 						"type": "string"
 					}
 				},
-				"required": [
-					"message"
-				],
+				"required": ["message"],
 				"type": "object"
 			},
 			"DeletePostingScheduleOutputBody": {
@@ -2376,9 +2023,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/DeletePostingScheduleOutputBody.json"
-						],
+						"examples": ["https://example.com/schemas/DeletePostingScheduleOutputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -2388,9 +2033,7 @@
 						"type": "string"
 					}
 				},
-				"required": [
-					"message"
-				],
+				"required": ["message"],
 				"type": "object"
 			},
 			"DeletePromptOutputBody": {
@@ -2398,9 +2041,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/DeletePromptOutputBody.json"
-						],
+						"examples": ["https://example.com/schemas/DeletePromptOutputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -2410,9 +2051,7 @@
 						"type": "string"
 					}
 				},
-				"required": [
-					"message"
-				],
+				"required": ["message"],
 				"type": "object"
 			},
 			"DeleteProviderAppResponse": {
@@ -2420,9 +2059,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/DeleteProviderAppResponse.json"
-						],
+						"examples": ["https://example.com/schemas/DeleteProviderAppResponse.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -2432,9 +2069,7 @@
 						"type": "boolean"
 					}
 				},
-				"required": [
-					"requires_restart"
-				],
+				"required": ["requires_restart"],
 				"type": "object"
 			},
 			"DeleteVariantsOutputBody": {
@@ -2442,9 +2077,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/DeleteVariantsOutputBody.json"
-						],
+						"examples": ["https://example.com/schemas/DeleteVariantsOutputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -2454,9 +2087,7 @@
 						"type": "string"
 					}
 				},
-				"required": [
-					"message"
-				],
+				"required": ["message"],
 				"type": "object"
 			},
 			"DeletionBlocker": {
@@ -2475,10 +2106,7 @@
 						"type": "string"
 					}
 				},
-				"required": [
-					"code",
-					"message"
-				],
+				"required": ["code", "message"],
 				"type": "object"
 			},
 			"DeletionInstanceAdminTransfer": {
@@ -2488,9 +2116,7 @@
 						"type": "string"
 					}
 				},
-				"required": [
-					"successor_email"
-				],
+				"required": ["successor_email"],
 				"type": "object"
 			},
 			"DeletionOwnershipTransfer": {
@@ -2506,11 +2132,7 @@
 						"type": "string"
 					}
 				},
-				"required": [
-					"organization_id",
-					"organization_name",
-					"successor_email"
-				],
+				"required": ["organization_id", "organization_name", "successor_email"],
 				"type": "object"
 			},
 			"DenyCLIAuthInputBody": {
@@ -2518,9 +2140,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/DenyCLIAuthInputBody.json"
-						],
+						"examples": ["https://example.com/schemas/DenyCLIAuthInputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -2544,10 +2164,7 @@
 						"type": "string"
 					}
 				},
-				"required": [
-					"value",
-					"label"
-				],
+				"required": ["value", "label"],
 				"type": "object"
 			},
 			"DestinationOptionsOutputBody": {
@@ -2555,9 +2172,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/DestinationOptionsOutputBody.json"
-						],
+						"examples": ["https://example.com/schemas/DestinationOptionsOutputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -2567,17 +2182,12 @@
 							"items": {
 								"$ref": "#/components/schemas/DestinationOption"
 							},
-							"type": [
-								"array",
-								"null"
-							]
+							"type": ["array", "null"]
 						},
 						"type": "object"
 					}
 				},
-				"required": [
-					"options"
-				],
+				"required": ["options"],
 				"type": "object"
 			},
 			"DirectMediaUploadTarget": {
@@ -2607,13 +2217,7 @@
 						"type": "string"
 					}
 				},
-				"required": [
-					"method",
-					"url",
-					"headers",
-					"expires_at",
-					"object_key"
-				],
+				"required": ["method", "url", "headers", "expires_at", "object_key"],
 				"type": "object"
 			},
 			"DisableTOTPInputBody": {
@@ -2621,9 +2225,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/DisableTOTPInputBody.json"
-						],
+						"examples": ["https://example.com/schemas/DisableTOTPInputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -2633,9 +2235,7 @@
 						"type": "string"
 					}
 				},
-				"required": [
-					"current_password"
-				],
+				"required": ["current_password"],
 				"type": "object"
 			},
 			"ErrorDetail": {
@@ -2660,18 +2260,14 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/ErrorModel.json"
-						],
+						"examples": ["https://example.com/schemas/ErrorModel.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
 					},
 					"detail": {
 						"description": "A human-readable explanation specific to this occurrence of the problem.",
-						"examples": [
-							"Property foo is required but is missing."
-						],
+						"examples": ["Property foo is required but is missing."],
 						"type": "string"
 					},
 					"errors": {
@@ -2679,40 +2275,29 @@
 						"items": {
 							"$ref": "#/components/schemas/ErrorDetail"
 						},
-						"type": [
-							"array",
-							"null"
-						]
+						"type": ["array", "null"]
 					},
 					"instance": {
 						"description": "A URI reference that identifies the specific occurrence of the problem.",
-						"examples": [
-							"https://example.com/error-log/abc123"
-						],
+						"examples": ["https://example.com/error-log/abc123"],
 						"format": "uri",
 						"type": "string"
 					},
 					"status": {
 						"description": "HTTP status code",
-						"examples": [
-							400
-						],
+						"examples": [400],
 						"format": "int64",
 						"type": "integer"
 					},
 					"title": {
 						"description": "A short, human-readable summary of the problem type. This value should not change between occurrences of the error.",
-						"examples": [
-							"Bad Request"
-						],
+						"examples": ["Bad Request"],
 						"type": "string"
 					},
 					"type": {
 						"default": "about:blank",
 						"description": "A URI reference to human-readable documentation for the error.",
-						"examples": [
-							"https://example.com/errors/example"
-						],
+						"examples": ["https://example.com/errors/example"],
 						"format": "uri",
 						"type": "string"
 					}
@@ -2724,9 +2309,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/ExchangeCodeInputBody.json"
-						],
+						"examples": ["https://example.com/schemas/ExchangeCodeInputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -2748,12 +2331,7 @@
 						"type": "string"
 					}
 				},
-				"required": [
-					"workspace_id",
-					"server_name",
-					"instance_url",
-					"code"
-				],
+				"required": ["workspace_id", "server_name", "instance_url", "code"],
 				"type": "object"
 			},
 			"FinishPasskeyLoginInputBody": {
@@ -2761,9 +2339,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/FinishPasskeyLoginInputBody.json"
-						],
+						"examples": ["https://example.com/schemas/FinishPasskeyLoginInputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -2776,10 +2352,7 @@
 						"description": "WebAuthn assertion response"
 					}
 				},
-				"required": [
-					"challenge_id",
-					"credential"
-				],
+				"required": ["challenge_id", "credential"],
 				"type": "object"
 			},
 			"FinishPasskeyRegistrationInputBody": {
@@ -2787,9 +2360,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/FinishPasskeyRegistrationInputBody.json"
-						],
+						"examples": ["https://example.com/schemas/FinishPasskeyRegistrationInputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -2806,11 +2377,7 @@
 						"type": "string"
 					}
 				},
-				"required": [
-					"challenge_id",
-					"name",
-					"credential"
-				],
+				"required": ["challenge_id", "name", "credential"],
 				"type": "object"
 			},
 			"GetAuthURLOutputBody": {
@@ -2818,9 +2385,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/GetAuthURLOutputBody.json"
-						],
+						"examples": ["https://example.com/schemas/GetAuthURLOutputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -2830,9 +2395,7 @@
 						"type": "string"
 					}
 				},
-				"required": [
-					"url"
-				],
+				"required": ["url"],
 				"type": "object"
 			},
 			"GetCLIAuthSessionOutputBody": {
@@ -2840,9 +2403,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/GetCLIAuthSessionOutputBody.json"
-						],
+						"examples": ["https://example.com/schemas/GetCLIAuthSessionOutputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -2877,9 +2438,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/GetMediaUsageOutputBody.json"
-						],
+						"examples": ["https://example.com/schemas/GetMediaUsageOutputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -2894,16 +2453,10 @@
 						"items": {
 							"$ref": "#/components/schemas/MediaUsageItem"
 						},
-						"type": [
-							"array",
-							"null"
-						]
+						"type": ["array", "null"]
 					}
 				},
-				"required": [
-					"usage",
-					"count"
-				],
+				"required": ["usage", "count"],
 				"type": "object"
 			},
 			"GetPromptCategoriesOutputBody": {
@@ -2911,9 +2464,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/GetPromptCategoriesOutputBody.json"
-						],
+						"examples": ["https://example.com/schemas/GetPromptCategoriesOutputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -2923,15 +2474,10 @@
 						"items": {
 							"type": "string"
 						},
-						"type": [
-							"array",
-							"null"
-						]
+						"type": ["array", "null"]
 					}
 				},
-				"required": [
-					"categories"
-				],
+				"required": ["categories"],
 				"type": "object"
 			},
 			"GetVariantsOutputBody": {
@@ -2939,9 +2485,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/GetVariantsOutputBody.json"
-						],
+						"examples": ["https://example.com/schemas/GetVariantsOutputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -2951,15 +2495,10 @@
 						"items": {
 							"$ref": "#/components/schemas/VariantResponse"
 						},
-						"type": [
-							"array",
-							"null"
-						]
+						"type": ["array", "null"]
 					}
 				},
-				"required": [
-					"variants"
-				],
+				"required": ["variants"],
 				"type": "object"
 			},
 			"GetWorkspaceSettingsOutputBody": {
@@ -2967,9 +2506,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/GetWorkspaceSettingsOutputBody.json"
-						],
+						"examples": ["https://example.com/schemas/GetWorkspaceSettingsOutputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -3027,9 +2564,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/Health-checkResponse.json"
-						],
+						"examples": ["https://example.com/schemas/Health-checkResponse.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -3039,9 +2574,7 @@
 						"type": "string"
 					}
 				},
-				"required": [
-					"status"
-				],
+				"required": ["status"],
 				"type": "object"
 			},
 			"Item": {
@@ -3122,15 +2655,7 @@
 						"type": "string"
 					}
 				},
-				"required": [
-					"id",
-					"type",
-					"status",
-					"run_at",
-					"attempts",
-					"max_attempts",
-					"created_at"
-				],
+				"required": ["id", "type", "status", "run_at", "attempts", "max_attempts", "created_at"],
 				"type": "object"
 			},
 			"ListMediaOutputBody": {
@@ -3138,9 +2663,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/ListMediaOutputBody.json"
-						],
+						"examples": ["https://example.com/schemas/ListMediaOutputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -3150,10 +2673,7 @@
 						"items": {
 							"$ref": "#/components/schemas/MediaListItem"
 						},
-						"type": [
-							"array",
-							"null"
-						]
+						"type": ["array", "null"]
 					},
 					"total": {
 						"description": "Total count matching filter",
@@ -3161,10 +2681,7 @@
 						"type": "integer"
 					}
 				},
-				"required": [
-					"media",
-					"total"
-				],
+				"required": ["media", "total"],
 				"type": "object"
 			},
 			"LoginInputBody": {
@@ -3172,9 +2689,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/LoginInputBody.json"
-						],
+						"examples": ["https://example.com/schemas/LoginInputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -3189,10 +2704,7 @@
 						"type": "string"
 					}
 				},
-				"required": [
-					"email",
-					"password"
-				],
+				"required": ["email", "password"],
 				"type": "object"
 			},
 			"LogoutOutputBody": {
@@ -3200,9 +2712,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/LogoutOutputBody.json"
-						],
+						"examples": ["https://example.com/schemas/LogoutOutputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -3211,9 +2721,7 @@
 						"type": "string"
 					}
 				},
-				"required": [
-					"message"
-				],
+				"required": ["message"],
 				"type": "object"
 			},
 			"MCPActivityItem": {
@@ -3265,13 +2773,7 @@
 						"type": "string"
 					}
 				},
-				"required": [
-					"id",
-					"tool_name",
-					"status",
-					"duration_ms",
-					"created_at"
-				],
+				"required": ["id", "tool_name", "status", "duration_ms", "created_at"],
 				"type": "object"
 			},
 			"MastodonServerInfo": {
@@ -3286,10 +2788,7 @@
 						"type": "string"
 					}
 				},
-				"required": [
-					"name",
-					"instance_url"
-				],
+				"required": ["name", "instance_url"],
 				"type": "object"
 			},
 			"MediaConstraint": {
@@ -3299,19 +2798,13 @@
 						"items": {
 							"type": "string"
 						},
-						"type": [
-							"array",
-							"null"
-						]
+						"type": ["array", "null"]
 					},
 					"aspect_ratios": {
 						"items": {
 							"type": "string"
 						},
-						"type": [
-							"array",
-							"null"
-						]
+						"type": ["array", "null"]
 					},
 					"max_count": {
 						"format": "int64",
@@ -3572,9 +3065,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/MediaUploadResult.json"
-						],
+						"examples": ["https://example.com/schemas/MediaUploadResult.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -3609,15 +3100,7 @@
 						"type": "string"
 					}
 				},
-				"required": [
-					"id",
-					"mime_type",
-					"url",
-					"size",
-					"deduped",
-					"alt_text",
-					"original_filename"
-				],
+				"required": ["id", "mime_type", "url", "size", "deduped", "alt_text", "original_filename"],
 				"type": "object"
 			},
 			"MediaUsageItem": {
@@ -3640,12 +3123,7 @@
 						"type": "string"
 					}
 				},
-				"required": [
-					"post_id",
-					"content",
-					"status",
-					"scheduled_at"
-				],
+				"required": ["post_id", "content", "status", "scheduled_at"],
 				"type": "object"
 			},
 			"MessageOutputBody": {
@@ -3653,9 +3131,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/MessageOutputBody.json"
-						],
+						"examples": ["https://example.com/schemas/MessageOutputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -3664,9 +3140,7 @@
 						"type": "string"
 					}
 				},
-				"required": [
-					"message"
-				],
+				"required": ["message"],
 				"type": "object"
 			},
 			"NextAvailableSlotOutputBody": {
@@ -3674,9 +3148,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/NextAvailableSlotOutputBody.json"
-						],
+						"examples": ["https://example.com/schemas/NextAvailableSlotOutputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -3694,10 +3166,7 @@
 						"type": "string"
 					}
 				},
-				"required": [
-					"slot_time",
-					"message"
-				],
+				"required": ["slot_time", "message"],
 				"type": "object"
 			},
 			"OrganizationMemberResponse": {
@@ -3716,11 +3185,7 @@
 						"type": "string"
 					}
 				},
-				"required": [
-					"user_id",
-					"email",
-					"role"
-				],
+				"required": ["user_id", "email", "role"],
 				"type": "object"
 			},
 			"OrganizationResponse": {
@@ -3743,12 +3208,7 @@
 						"type": "string"
 					}
 				},
-				"required": [
-					"id",
-					"name",
-					"role",
-					"created_at"
-				],
+				"required": ["id", "name", "role", "created_at"],
 				"type": "object"
 			},
 			"OrganizationTeamOutputBody": {
@@ -3756,9 +3216,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/OrganizationTeamOutputBody.json"
-						],
+						"examples": ["https://example.com/schemas/OrganizationTeamOutputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -3771,16 +3229,10 @@
 						"items": {
 							"$ref": "#/components/schemas/OrganizationMemberResponse"
 						},
-						"type": [
-							"array",
-							"null"
-						]
+						"type": ["array", "null"]
 					}
 				},
-				"required": [
-					"members",
-					"current_seats"
-				],
+				"required": ["members", "current_seats"],
 				"type": "object"
 			},
 			"PasskeyCeremonyOutputBody": {
@@ -3788,9 +3240,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/PasskeyCeremonyOutputBody.json"
-						],
+						"examples": ["https://example.com/schemas/PasskeyCeremonyOutputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -3800,10 +3250,7 @@
 					},
 					"options": {}
 				},
-				"required": [
-					"challenge_id",
-					"options"
-				],
+				"required": ["challenge_id", "options"],
 				"type": "object"
 			},
 			"PasskeySummary": {
@@ -3828,12 +3275,7 @@
 						"type": "string"
 					}
 				},
-				"required": [
-					"id",
-					"name",
-					"created_at",
-					"last_used_at"
-				],
+				"required": ["id", "name", "created_at", "last_used_at"],
 				"type": "object"
 			},
 			"PollCLIAuthInputBody": {
@@ -3841,9 +3283,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/PollCLIAuthInputBody.json"
-						],
+						"examples": ["https://example.com/schemas/PollCLIAuthInputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -3852,9 +3292,7 @@
 						"type": "string"
 					}
 				},
-				"required": [
-					"device_code"
-				],
+				"required": ["device_code"],
 				"type": "object"
 			},
 			"PollCLIAuthOutputBody": {
@@ -3862,9 +3300,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/PollCLIAuthOutputBody.json"
-						],
+						"examples": ["https://example.com/schemas/PollCLIAuthOutputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -3888,11 +3324,7 @@
 						"type": "string"
 					}
 				},
-				"required": [
-					"status",
-					"expires_in",
-					"interval"
-				],
+				"required": ["status", "expires_in", "interval"],
 				"type": "object"
 			},
 			"PostDestinationResponse": {
@@ -3915,11 +3347,7 @@
 						"type": "string"
 					}
 				},
-				"required": [
-					"social_account_id",
-					"platform",
-					"status"
-				],
+				"required": ["social_account_id", "platform", "status"],
 				"type": "object"
 			},
 			"PostDetailResponse": {
@@ -3927,9 +3355,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/PostDetailResponse.json"
-						],
+						"examples": ["https://example.com/schemas/PostDetailResponse.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -3955,10 +3381,7 @@
 						"items": {
 							"$ref": "#/components/schemas/PostDestinationResponse"
 						},
-						"type": [
-							"array",
-							"null"
-						]
+						"type": ["array", "null"]
 					},
 					"id": {
 						"description": "Post ID",
@@ -3969,10 +3392,7 @@
 						"items": {
 							"$ref": "#/components/schemas/PostMediaResponse"
 						},
-						"type": [
-							"array",
-							"null"
-						]
+						"type": ["array", "null"]
 					},
 					"random_delay_minutes": {
 						"description": "Random delay in minutes (±N)",
@@ -4033,13 +3453,7 @@
 						"type": "string"
 					}
 				},
-				"required": [
-					"media_id",
-					"display_order",
-					"file_path",
-					"mime_type",
-					"alt_text"
-				],
+				"required": ["media_id", "display_order", "file_path", "mime_type", "alt_text"],
 				"type": "object"
 			},
 			"PostResponse": {
@@ -4047,9 +3461,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/PostResponse.json"
-						],
+						"examples": ["https://example.com/schemas/PostResponse.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -4075,10 +3487,7 @@
 						"items": {
 							"$ref": "#/components/schemas/PostDestinationResponse"
 						},
-						"type": [
-							"array",
-							"null"
-						]
+						"type": ["array", "null"]
 					},
 					"id": {
 						"description": "Post ID",
@@ -4089,10 +3498,7 @@
 						"items": {
 							"type": "string"
 						},
-						"type": [
-							"array",
-							"null"
-						]
+						"type": ["array", "null"]
 					},
 					"parent_post_id": {
 						"description": "Previous post ID when this is a thread reply",
@@ -4142,9 +3548,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/PostingScheduleResponse.json"
-						],
+						"examples": ["https://example.com/schemas/PostingScheduleResponse.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -4227,11 +3631,7 @@
 						"type": "string"
 					}
 				},
-				"required": [
-					"key",
-					"name",
-					"description"
-				],
+				"required": ["key", "name", "description"],
 				"type": "object"
 			},
 			"PromptResponse": {
@@ -4239,9 +3639,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/PromptResponse.json"
-						],
+						"examples": ["https://example.com/schemas/PromptResponse.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -4275,13 +3673,7 @@
 						"type": "string"
 					}
 				},
-				"required": [
-					"id",
-					"text",
-					"category",
-					"is_built_in",
-					"created_at"
-				],
+				"required": ["id", "text", "category", "is_built_in", "created_at"],
 				"type": "object"
 			},
 			"ProviderAppResponse": {
@@ -4351,10 +3743,7 @@
 						"items": {
 							"type": "string"
 						},
-						"type": [
-							"array",
-							"null"
-						]
+						"type": ["array", "null"]
 					},
 					"configured": {
 						"description": "Whether this provider can currently be connected",
@@ -4385,12 +3774,7 @@
 						"type": "string"
 					}
 				},
-				"required": [
-					"platform",
-					"display_name",
-					"auth_mode",
-					"configured"
-				],
+				"required": ["platform", "display_name", "auth_mode", "configured"],
 				"type": "object"
 			},
 			"ProviderReadinessItem": {
@@ -4400,37 +3784,25 @@
 						"items": {
 							"type": "string"
 						},
-						"type": [
-							"array",
-							"null"
-						]
+						"type": ["array", "null"]
 					},
 					"app_review_warnings": {
 						"items": {
 							"type": "string"
 						},
-						"type": [
-							"array",
-							"null"
-						]
+						"type": ["array", "null"]
 					},
 					"blocking_issues": {
 						"items": {
 							"type": "string"
 						},
-						"type": [
-							"array",
-							"null"
-						]
+						"type": ["array", "null"]
 					},
 					"capability_caveats": {
 						"items": {
 							"type": "string"
 						},
-						"type": [
-							"array",
-							"null"
-						]
+						"type": ["array", "null"]
 					},
 					"configured_app_state": {
 						"type": "string"
@@ -4443,19 +3815,13 @@
 						"items": {
 							"type": "string"
 						},
-						"type": [
-							"array",
-							"null"
-						]
+						"type": ["array", "null"]
 					},
 					"next_actions": {
 						"items": {
 							"type": "string"
 						},
-						"type": [
-							"array",
-							"null"
-						]
+						"type": ["array", "null"]
 					},
 					"provider": {
 						"type": "string"
@@ -4467,28 +3833,19 @@
 						"items": {
 							"type": "string"
 						},
-						"type": [
-							"array",
-							"null"
-						]
+						"type": ["array", "null"]
 					},
 					"required_scopes": {
 						"items": {
 							"type": "string"
 						},
-						"type": [
-							"array",
-							"null"
-						]
+						"type": ["array", "null"]
 					},
 					"supported_profiles": {
 						"items": {
 							"type": "string"
 						},
-						"type": [
-							"array",
-							"null"
-						]
+						"type": ["array", "null"]
 					}
 				},
 				"required": [
@@ -4506,9 +3863,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/ProviderReadinessOutputBody.json"
-						],
+						"examples": ["https://example.com/schemas/ProviderReadinessOutputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -4517,15 +3872,10 @@
 						"items": {
 							"$ref": "#/components/schemas/ProviderReadinessItem"
 						},
-						"type": [
-							"array",
-							"null"
-						]
+						"type": ["array", "null"]
 					}
 				},
-				"required": [
-					"providers"
-				],
+				"required": ["providers"],
 				"type": "object"
 			},
 			"PublicMediaHealth": {
@@ -4553,11 +3903,7 @@
 						"type": "string"
 					}
 				},
-				"required": [
-					"status",
-					"checked_count",
-					"failing_count"
-				],
+				"required": ["status", "checked_count", "failing_count"],
 				"type": "object"
 			},
 			"PublicationLifecycleEventResponse": {
@@ -4628,9 +3974,7 @@
 						"type": "integer"
 					}
 				},
-				"required": [
-					"media_id"
-				],
+				"required": ["media_id"],
 				"type": "object"
 			},
 			"PublicationResponse": {
@@ -4638,9 +3982,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/PublicationResponse.json"
-						],
+						"examples": ["https://example.com/schemas/PublicationResponse.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -4670,10 +4012,7 @@
 						"items": {
 							"$ref": "#/components/schemas/MediaSummary"
 						},
-						"type": [
-							"array",
-							"null"
-						]
+						"type": ["array", "null"]
 					},
 					"metadata": {
 						"additionalProperties": {},
@@ -4683,10 +4022,7 @@
 						"items": {
 							"$ref": "#/components/schemas/RenditionResponse"
 						},
-						"type": [
-							"array",
-							"null"
-						]
+						"type": ["array", "null"]
 					},
 					"scheduled_at": {
 						"type": "string"
@@ -4731,9 +4067,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/PublicationUpdateBody.json"
-						],
+						"examples": ["https://example.com/schemas/PublicationUpdateBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -4784,9 +4118,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/PublicationValidationOutputBody.json"
-						],
+						"examples": ["https://example.com/schemas/PublicationValidationOutputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -4795,19 +4127,13 @@
 						"items": {
 							"$ref": "#/components/schemas/ValidationIssue"
 						},
-						"type": [
-							"array",
-							"null"
-						]
+						"type": ["array", "null"]
 					},
 					"valid": {
 						"type": "boolean"
 					}
 				},
-				"required": [
-					"valid",
-					"issues"
-				],
+				"required": ["valid", "issues"],
 				"type": "object"
 			},
 			"Readiness-checkResponse": {
@@ -4815,9 +4141,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/Readiness-checkResponse.json"
-						],
+						"examples": ["https://example.com/schemas/Readiness-checkResponse.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -4831,10 +4155,7 @@
 						"type": "string"
 					}
 				},
-				"required": [
-					"status",
-					"database"
-				],
+				"required": ["status", "database"],
 				"type": "object"
 			},
 			"RegisterInputBody": {
@@ -4842,9 +4163,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/RegisterInputBody.json"
-						],
+						"examples": ["https://example.com/schemas/RegisterInputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -4865,10 +4184,7 @@
 						"type": "string"
 					}
 				},
-				"required": [
-					"email",
-					"password"
-				],
+				"required": ["email", "password"],
 				"type": "object"
 			},
 			"RemoveAvatarOutputBody": {
@@ -4876,9 +4192,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/RemoveAvatarOutputBody.json"
-						],
+						"examples": ["https://example.com/schemas/RemoveAvatarOutputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -4888,9 +4202,7 @@
 						"type": "boolean"
 					}
 				},
-				"required": [
-					"removed"
-				],
+				"required": ["removed"],
 				"type": "object"
 			},
 			"RemovePasskeyInputBody": {
@@ -4898,9 +4210,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/RemovePasskeyInputBody.json"
-						],
+						"examples": ["https://example.com/schemas/RemovePasskeyInputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -4910,9 +4220,7 @@
 						"type": "string"
 					}
 				},
-				"required": [
-					"current_password"
-				],
+				"required": ["current_password"],
 				"type": "object"
 			},
 			"RenditionInput": {
@@ -4935,10 +4243,7 @@
 						"items": {
 							"$ref": "#/components/schemas/PublicationMediaInput"
 						},
-						"type": [
-							"array",
-							"null"
-						]
+						"type": ["array", "null"]
 					},
 					"profile": {
 						"description": "Content profile override",
@@ -4958,9 +4263,7 @@
 						"type": "string"
 					}
 				},
-				"required": [
-					"social_account_id"
-				],
+				"required": ["social_account_id"],
 				"type": "object"
 			},
 			"RenditionResponse": {
@@ -4988,10 +4291,7 @@
 						"items": {
 							"$ref": "#/components/schemas/MediaSummary"
 						},
-						"type": [
-							"array",
-							"null"
-						]
+						"type": ["array", "null"]
 					},
 					"platform": {
 						"type": "string"
@@ -5036,9 +4336,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/ReplyInputBody.json"
-						],
+						"examples": ["https://example.com/schemas/ReplyInputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -5052,10 +4350,7 @@
 						"items": {
 							"$ref": "#/components/schemas/PublicationMediaInput"
 						},
-						"type": [
-							"array",
-							"null"
-						]
+						"type": ["array", "null"]
 					},
 					"parent_id": {
 						"description": "External comment or post ID to reply to",
@@ -5072,9 +4367,7 @@
 						"type": "object"
 					}
 				},
-				"required": [
-					"body"
-				],
+				"required": ["body"],
 				"type": "object"
 			},
 			"RequestPasswordResetInputBody": {
@@ -5082,9 +4375,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/RequestPasswordResetInputBody.json"
-						],
+						"examples": ["https://example.com/schemas/RequestPasswordResetInputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -5095,9 +4386,7 @@
 						"type": "string"
 					}
 				},
-				"required": [
-					"email"
-				],
+				"required": ["email"],
 				"type": "object"
 			},
 			"ResetPasswordInputBody": {
@@ -5105,9 +4394,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/ResetPasswordInputBody.json"
-						],
+						"examples": ["https://example.com/schemas/ResetPasswordInputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -5124,10 +4411,7 @@
 						"type": "string"
 					}
 				},
-				"required": [
-					"token",
-					"new_password"
-				],
+				"required": ["token", "new_password"],
 				"type": "object"
 			},
 			"ResetPasswordOutputBody": {
@@ -5135,9 +4419,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/ResetPasswordOutputBody.json"
-						],
+						"examples": ["https://example.com/schemas/ResetPasswordOutputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -5146,9 +4428,7 @@
 						"type": "string"
 					}
 				},
-				"required": [
-					"message"
-				],
+				"required": ["message"],
 				"type": "object"
 			},
 			"RevokeAPITokenOutputBody": {
@@ -5156,9 +4436,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/RevokeAPITokenOutputBody.json"
-						],
+						"examples": ["https://example.com/schemas/RevokeAPITokenOutputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -5167,9 +4445,7 @@
 						"type": "boolean"
 					}
 				},
-				"required": [
-					"revoked"
-				],
+				"required": ["revoked"],
 				"type": "object"
 			},
 			"RevokeUserSessionOutputBody": {
@@ -5177,9 +4453,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/RevokeUserSessionOutputBody.json"
-						],
+						"examples": ["https://example.com/schemas/RevokeUserSessionOutputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -5191,10 +4465,7 @@
 						"type": "boolean"
 					}
 				},
-				"required": [
-					"revoked",
-					"revoked_current"
-				],
+				"required": ["revoked", "revoked_current"],
 				"type": "object"
 			},
 			"RevokeWorkspaceInvitationOutputBody": {
@@ -5202,9 +4473,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/RevokeWorkspaceInvitationOutputBody.json"
-						],
+						"examples": ["https://example.com/schemas/RevokeWorkspaceInvitationOutputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -5213,9 +4482,7 @@
 						"type": "boolean"
 					}
 				},
-				"required": [
-					"revoked"
-				],
+				"required": ["revoked"],
 				"type": "object"
 			},
 			"SaveProviderAppInputBody": {
@@ -5223,9 +4490,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/SaveProviderAppInputBody.json"
-						],
+						"examples": ["https://example.com/schemas/SaveProviderAppInputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -5259,10 +4524,7 @@
 						"type": "string"
 					}
 				},
-				"required": [
-					"provider",
-					"client_id"
-				],
+				"required": ["provider", "client_id"],
 				"type": "object"
 			},
 			"SaveProviderAppResponse": {
@@ -5270,9 +4532,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/SaveProviderAppResponse.json"
-						],
+						"examples": ["https://example.com/schemas/SaveProviderAppResponse.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -5289,11 +4549,7 @@
 						"type": "boolean"
 					}
 				},
-				"required": [
-					"app",
-					"existed",
-					"requires_restart"
-				],
+				"required": ["app", "existed", "requires_restart"],
 				"type": "object"
 			},
 			"ScheduleDay": {
@@ -5313,28 +4569,17 @@
 						"items": {
 							"$ref": "#/components/schemas/ScheduleDayPlatform"
 						},
-						"type": [
-							"array",
-							"null"
-						]
+						"type": ["array", "null"]
 					},
 					"workspaces": {
 						"description": "Per-workspace breakdown",
 						"items": {
 							"$ref": "#/components/schemas/ScheduleDayWorkspace"
 						},
-						"type": [
-							"array",
-							"null"
-						]
+						"type": ["array", "null"]
 					}
 				},
-				"required": [
-					"date",
-					"count",
-					"platforms",
-					"workspaces"
-				],
+				"required": ["date", "count", "platforms", "workspaces"],
 				"type": "object"
 			},
 			"ScheduleDayPlatform": {
@@ -5350,10 +4595,7 @@
 						"type": "string"
 					}
 				},
-				"required": [
-					"platform",
-					"count"
-				],
+				"required": ["platform", "count"],
 				"type": "object"
 			},
 			"ScheduleDayWorkspace": {
@@ -5369,10 +4611,7 @@
 						"type": "string"
 					}
 				},
-				"required": [
-					"workspace_id",
-					"count"
-				],
+				"required": ["workspace_id", "count"],
 				"type": "object"
 			},
 			"ScheduleOverviewOutputBody": {
@@ -5380,9 +4619,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/ScheduleOverviewOutputBody.json"
-						],
+						"examples": ["https://example.com/schemas/ScheduleOverviewOutputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -5392,10 +4629,7 @@
 						"items": {
 							"$ref": "#/components/schemas/ScheduleDay"
 						},
-						"type": [
-							"array",
-							"null"
-						]
+						"type": ["array", "null"]
 					},
 					"month": {
 						"description": "Month of the overview (1-12)",
@@ -5407,10 +4641,7 @@
 						"items": {
 							"type": "string"
 						},
-						"type": [
-							"array",
-							"null"
-						]
+						"type": ["array", "null"]
 					},
 					"selected_platform": {
 						"description": "Currently selected platform filter",
@@ -5425,10 +4656,7 @@
 						"items": {
 							"$ref": "#/components/schemas/WorkspaceResp"
 						},
-						"type": [
-							"array",
-							"null"
-						]
+						"type": ["array", "null"]
 					},
 					"year": {
 						"description": "Year of the overview",
@@ -5452,9 +4680,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/SecurityStatusOutputBody.json"
-						],
+						"examples": ["https://example.com/schemas/SecurityStatusOutputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -5464,19 +4690,13 @@
 						"items": {
 							"type": "string"
 						},
-						"type": [
-							"array",
-							"null"
-						]
+						"type": ["array", "null"]
 					},
 					"passkeys": {
 						"items": {
 							"$ref": "#/components/schemas/PasskeySummary"
 						},
-						"type": [
-							"array",
-							"null"
-						]
+						"type": ["array", "null"]
 					},
 					"totp_enabled": {
 						"description": "Whether authenticator-based 2FA is enabled",
@@ -5486,12 +4706,7 @@
 						"$ref": "#/components/schemas/UserProfile"
 					}
 				},
-				"required": [
-					"user",
-					"totp_enabled",
-					"passkeys",
-					"methods"
-				],
+				"required": ["user", "totp_enabled", "passkeys", "methods"],
 				"type": "object"
 			},
 			"SettingField": {
@@ -5510,10 +4725,7 @@
 						"items": {
 							"type": "string"
 						},
-						"type": [
-							"array",
-							"null"
-						]
+						"type": ["array", "null"]
 					},
 					"options_source": {
 						"type": "string"
@@ -5525,12 +4737,7 @@
 						"type": "string"
 					}
 				},
-				"required": [
-					"key",
-					"label",
-					"type",
-					"required"
-				],
+				"required": ["key", "label", "type", "required"],
 				"type": "object"
 			},
 			"SetupTOTPInputBody": {
@@ -5538,9 +4745,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/SetupTOTPInputBody.json"
-						],
+						"examples": ["https://example.com/schemas/SetupTOTPInputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -5550,9 +4755,7 @@
 						"type": "string"
 					}
 				},
-				"required": [
-					"current_password"
-				],
+				"required": ["current_password"],
 				"type": "object"
 			},
 			"SetupTOTPOutputBody": {
@@ -5560,9 +4763,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/SetupTOTPOutputBody.json"
-						],
+						"examples": ["https://example.com/schemas/SetupTOTPOutputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -5580,12 +4781,7 @@
 						"type": "string"
 					}
 				},
-				"required": [
-					"challenge_id",
-					"manual_entry_key",
-					"otpauth_url",
-					"qr_code_data_url"
-				],
+				"required": ["challenge_id", "manual_entry_key", "otpauth_url", "qr_code_data_url"],
 				"type": "object"
 			},
 			"StartCLIAuthInputBody": {
@@ -5593,9 +4789,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/StartCLIAuthInputBody.json"
-						],
+						"examples": ["https://example.com/schemas/StartCLIAuthInputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -5617,12 +4811,7 @@
 						"type": "string"
 					}
 				},
-				"required": [
-					"client_name",
-					"client_version",
-					"client_os",
-					"requested_scopes"
-				],
+				"required": ["client_name", "client_version", "client_os", "requested_scopes"],
 				"type": "object"
 			},
 			"StartCLIAuthOutputBody": {
@@ -5630,9 +4819,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/StartCLIAuthOutputBody.json"
-						],
+						"examples": ["https://example.com/schemas/StartCLIAuthOutputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -5655,13 +4842,7 @@
 						"type": "string"
 					}
 				},
-				"required": [
-					"device_code",
-					"user_code",
-					"verification_url",
-					"expires_in",
-					"interval"
-				],
+				"required": ["device_code", "user_code", "verification_url", "expires_in", "interval"],
 				"type": "object"
 			},
 			"SuggestScheduleInputBody": {
@@ -5669,9 +4850,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/SuggestScheduleInputBody.json"
-						],
+						"examples": ["https://example.com/schemas/SuggestScheduleInputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -5686,10 +4865,7 @@
 						"type": "string"
 					}
 				},
-				"required": [
-					"workspace_id",
-					"posts_per_day"
-				],
+				"required": ["workspace_id", "posts_per_day"],
 				"type": "object"
 			},
 			"SuggestScheduleOutputBody": {
@@ -5697,9 +4873,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/SuggestScheduleOutputBody.json"
-						],
+						"examples": ["https://example.com/schemas/SuggestScheduleOutputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -5713,16 +4887,10 @@
 						"items": {
 							"$ref": "#/components/schemas/PostingScheduleResponse"
 						},
-						"type": [
-							"array",
-							"null"
-						]
+						"type": ["array", "null"]
 					}
 				},
-				"required": [
-					"schedules",
-					"message"
-				],
+				"required": ["schedules", "message"],
 				"type": "object"
 			},
 			"ThreadPostInput": {
@@ -5737,15 +4905,10 @@
 						"items": {
 							"type": "string"
 						},
-						"type": [
-							"array",
-							"null"
-						]
+						"type": ["array", "null"]
 					}
 				},
-				"required": [
-					"content"
-				],
+				"required": ["content"],
 				"type": "object"
 			},
 			"UpdateAccountInputBody": {
@@ -5753,9 +4916,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/UpdateAccountInputBody.json"
-						],
+						"examples": ["https://example.com/schemas/UpdateAccountInputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -5765,9 +4926,7 @@
 						"type": "string"
 					}
 				},
-				"required": [
-					"slug"
-				],
+				"required": ["slug"],
 				"type": "object"
 			},
 			"UpdateMediaFavoriteOutputBody": {
@@ -5775,9 +4934,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/UpdateMediaFavoriteOutputBody.json"
-						],
+						"examples": ["https://example.com/schemas/UpdateMediaFavoriteOutputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -5787,9 +4944,7 @@
 						"type": "boolean"
 					}
 				},
-				"required": [
-					"is_favorite"
-				],
+				"required": ["is_favorite"],
 				"type": "object"
 			},
 			"UpdateMediaInputBody": {
@@ -5797,9 +4952,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/UpdateMediaInputBody.json"
-						],
+						"examples": ["https://example.com/schemas/UpdateMediaInputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -5809,9 +4962,7 @@
 						"type": "string"
 					}
 				},
-				"required": [
-					"alt_text"
-				],
+				"required": ["alt_text"],
 				"type": "object"
 			},
 			"UpdateMediaOutputBody": {
@@ -5819,9 +4970,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/UpdateMediaOutputBody.json"
-						],
+						"examples": ["https://example.com/schemas/UpdateMediaOutputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -5831,9 +4980,7 @@
 						"type": "string"
 					}
 				},
-				"required": [
-					"message"
-				],
+				"required": ["message"],
 				"type": "object"
 			},
 			"UpdatePostInputBody": {
@@ -5841,9 +4988,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/UpdatePostInputBody.json"
-						],
+						"examples": ["https://example.com/schemas/UpdatePostInputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -5857,10 +5002,7 @@
 						"items": {
 							"type": "string"
 						},
-						"type": [
-							"array",
-							"null"
-						]
+						"type": ["array", "null"]
 					},
 					"random_delay_minutes": {
 						"description": "Random delay in minutes (±N) to add for natural posting",
@@ -5876,10 +5018,7 @@
 						"items": {
 							"type": "string"
 						},
-						"type": [
-							"array",
-							"null"
-						]
+						"type": ["array", "null"]
 					},
 					"thread_draft": {
 						"description": "Thread draft JSON (encoded with __openpost_thread__: prefix). Send a non-null value to set or replace the draft; send an empty string to clear it and revert to a single post. Send null (or omit) to leave the existing draft unchanged.",
@@ -5893,9 +5032,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/UpdatePostingScheduleInputBody.json"
-						],
+						"examples": ["https://example.com/schemas/UpdatePostingScheduleInputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -5931,9 +5068,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/UpdateProfileInputBody.json"
-						],
+						"examples": ["https://example.com/schemas/UpdateProfileInputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -5956,9 +5091,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/UpdateWorkspaceSettingsInputBody.json"
-						],
+						"examples": ["https://example.com/schemas/UpdateWorkspaceSettingsInputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -6005,9 +5138,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/UpdateWorkspaceSettingsOutputBody.json"
-						],
+						"examples": ["https://example.com/schemas/UpdateWorkspaceSettingsOutputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -6065,9 +5196,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/UpsertRenditionsInputBody.json"
-						],
+						"examples": ["https://example.com/schemas/UpsertRenditionsInputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -6077,15 +5206,10 @@
 						"items": {
 							"$ref": "#/components/schemas/RenditionInput"
 						},
-						"type": [
-							"array",
-							"null"
-						]
+						"type": ["array", "null"]
 					}
 				},
-				"required": [
-					"renditions"
-				],
+				"required": ["renditions"],
 				"type": "object"
 			},
 			"UpsertVariantsInputBody": {
@@ -6093,9 +5217,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/UpsertVariantsInputBody.json"
-						],
+						"examples": ["https://example.com/schemas/UpsertVariantsInputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -6105,15 +5227,10 @@
 						"items": {
 							"$ref": "#/components/schemas/VariantInput"
 						},
-						"type": [
-							"array",
-							"null"
-						]
+						"type": ["array", "null"]
 					}
 				},
-				"required": [
-					"variants"
-				],
+				"required": ["variants"],
 				"type": "object"
 			},
 			"UpsertVariantsOutputBody": {
@@ -6121,9 +5238,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/UpsertVariantsOutputBody.json"
-						],
+						"examples": ["https://example.com/schemas/UpsertVariantsOutputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -6133,15 +5248,10 @@
 						"items": {
 							"$ref": "#/components/schemas/VariantResponse"
 						},
-						"type": [
-							"array",
-							"null"
-						]
+						"type": ["array", "null"]
 					}
 				},
-				"required": [
-					"variants"
-				],
+				"required": ["variants"],
 				"type": "object"
 			},
 			"UserProfile": {
@@ -6149,9 +5259,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/UserProfile.json"
-						],
+						"examples": ["https://example.com/schemas/UserProfile.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -6286,11 +5394,7 @@
 						"type": "string"
 					}
 				},
-				"required": [
-					"severity",
-					"code",
-					"message"
-				],
+				"required": ["severity", "code", "message"],
 				"type": "object"
 			},
 			"VariantInput": {
@@ -6313,10 +5417,7 @@
 						"type": "string"
 					}
 				},
-				"required": [
-					"social_account_id",
-					"is_unsynced"
-				],
+				"required": ["social_account_id", "is_unsynced"],
 				"type": "object"
 			},
 			"VariantResponse": {
@@ -6372,9 +5473,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/VerifyTOTPLoginInputBody.json"
-						],
+						"examples": ["https://example.com/schemas/VerifyTOTPLoginInputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -6390,10 +5489,7 @@
 						"type": "string"
 					}
 				},
-				"required": [
-					"mfa_token",
-					"code"
-				],
+				"required": ["mfa_token", "code"],
 				"type": "object"
 			},
 			"WorkspaceInvitationResponse": {
@@ -6401,9 +5497,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/WorkspaceInvitationResponse.json"
-						],
+						"examples": ["https://example.com/schemas/WorkspaceInvitationResponse.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -6484,11 +5578,7 @@
 						"type": "string"
 					}
 				},
-				"required": [
-					"user_id",
-					"email",
-					"role"
-				],
+				"required": ["user_id", "email", "role"],
 				"type": "object"
 			},
 			"WorkspaceResp": {
@@ -6507,11 +5597,7 @@
 						"type": "string"
 					}
 				},
-				"required": [
-					"id",
-					"name",
-					"created_at"
-				],
+				"required": ["id", "name", "created_at"],
 				"type": "object"
 			},
 			"WorkspaceTeamOutputBody": {
@@ -6519,9 +5605,7 @@
 				"properties": {
 					"$schema": {
 						"description": "A URL to the JSON Schema for this object.",
-						"examples": [
-							"https://example.com/schemas/WorkspaceTeamOutputBody.json"
-						],
+						"examples": ["https://example.com/schemas/WorkspaceTeamOutputBody.json"],
 						"format": "uri",
 						"readOnly": true,
 						"type": "string"
@@ -6534,26 +5618,16 @@
 						"items": {
 							"$ref": "#/components/schemas/WorkspaceInvitationResponse"
 						},
-						"type": [
-							"array",
-							"null"
-						]
+						"type": ["array", "null"]
 					},
 					"members": {
 						"items": {
 							"$ref": "#/components/schemas/WorkspaceMemberResponse"
 						},
-						"type": [
-							"array",
-							"null"
-						]
+						"type": ["array", "null"]
 					}
 				},
-				"required": [
-					"members",
-					"invitations",
-					"current_seats"
-				],
+				"required": ["members", "invitations", "current_seats"],
 				"type": "object"
 			}
 		}
@@ -6588,10 +5662,7 @@
 									"items": {
 										"$ref": "#/components/schemas/AccountResponse"
 									},
-									"type": [
-										"array",
-										"null"
-									]
+									"type": ["array", "null"]
 								}
 							}
 						},
@@ -6609,9 +5680,7 @@
 					}
 				},
 				"summary": "List connected social accounts for a workspace",
-				"tags": [
-					"Accounts"
-				]
+				"tags": ["Accounts"]
 			}
 		},
 		"/accounts/bluesky/login": {
@@ -6673,9 +5742,7 @@
 					}
 				},
 				"summary": "Connect Bluesky account using app password",
-				"tags": [
-					"Accounts"
-				]
+				"tags": ["Accounts"]
 			}
 		},
 		"/accounts/mastodon/exchange": {
@@ -6727,9 +5794,7 @@
 					}
 				},
 				"summary": "Exchange Mastodon OOB authorization code",
-				"tags": [
-					"Accounts"
-				]
+				"tags": ["Accounts"]
 			}
 		},
 		"/accounts/mastodon/servers": {
@@ -6743,10 +5808,7 @@
 									"items": {
 										"$ref": "#/components/schemas/MastodonServerInfo"
 									},
-									"type": [
-										"array",
-										"null"
-									]
+									"type": ["array", "null"]
 								}
 							}
 						},
@@ -6764,9 +5826,7 @@
 					}
 				},
 				"summary": "List configured Mastodon servers",
-				"tags": [
-					"Accounts"
-				]
+				"tags": ["Accounts"]
 			}
 		},
 		"/accounts/providers": {
@@ -6780,10 +5840,7 @@
 									"items": {
 										"$ref": "#/components/schemas/ProviderInfo"
 									},
-									"type": [
-										"array",
-										"null"
-									]
+									"type": ["array", "null"]
 								}
 							}
 						},
@@ -6801,9 +5858,7 @@
 					}
 				},
 				"summary": "List configured account providers",
-				"tags": [
-					"Accounts"
-				]
+				"tags": ["Accounts"]
 			}
 		},
 		"/accounts/selections/{connection_id}": {
@@ -6874,9 +5929,7 @@
 					}
 				},
 				"summary": "Get pending OAuth account-selection options",
-				"tags": [
-					"Accounts"
-				]
+				"tags": ["Accounts"]
 			}
 		},
 		"/accounts/selections/{connection_id}/complete": {
@@ -6967,9 +6020,7 @@
 					}
 				},
 				"summary": "Complete OAuth account selection and save the selected account",
-				"tags": [
-					"Accounts"
-				]
+				"tags": ["Accounts"]
 			}
 		},
 		"/accounts/{account_id}": {
@@ -7021,9 +6072,7 @@
 					}
 				},
 				"summary": "Disconnect a social account",
-				"tags": [
-					"Accounts"
-				]
+				"tags": ["Accounts"]
 			},
 			"patch": {
 				"operationId": "update-account",
@@ -7120,9 +6169,7 @@
 					}
 				},
 				"summary": "Update a social account",
-				"tags": [
-					"Accounts"
-				]
+				"tags": ["Accounts"]
 			}
 		},
 		"/accounts/{account_id}/destination-options": {
@@ -7235,9 +6282,7 @@
 					}
 				},
 				"summary": "List account-specific publishing options",
-				"tags": [
-					"Accounts"
-				]
+				"tags": ["Accounts"]
 			}
 		},
 		"/accounts/{platform}/auth-url": {
@@ -7339,9 +6384,7 @@
 					}
 				},
 				"summary": "Get OAuth authorization URL for a platform",
-				"tags": [
-					"Accounts"
-				]
+				"tags": ["Accounts"]
 			}
 		},
 		"/admin/provider-apps": {
@@ -7355,10 +6398,7 @@
 									"items": {
 										"$ref": "#/components/schemas/ProviderAppResponse"
 									},
-									"type": [
-										"array",
-										"null"
-									]
+									"type": ["array", "null"]
 								}
 							}
 						},
@@ -7376,9 +6416,7 @@
 					}
 				},
 				"summary": "List configured provider apps",
-				"tags": [
-					"Admin"
-				]
+				"tags": ["Admin"]
 			},
 			"post": {
 				"operationId": "save-provider-app",
@@ -7415,9 +6453,7 @@
 					}
 				},
 				"summary": "Create or update a provider app",
-				"tags": [
-					"Admin"
-				]
+				"tags": ["Admin"]
 			}
 		},
 		"/admin/provider-apps/{id}": {
@@ -7458,9 +6494,7 @@
 					}
 				},
 				"summary": "Delete a provider app",
-				"tags": [
-					"Admin"
-				]
+				"tags": ["Admin"]
 			}
 		},
 		"/api-tokens": {
@@ -7474,10 +6508,7 @@
 									"items": {
 										"$ref": "#/components/schemas/APITokenResponse"
 									},
-									"type": [
-										"array",
-										"null"
-									]
+									"type": ["array", "null"]
 								}
 							}
 						},
@@ -7495,9 +6526,7 @@
 					}
 				},
 				"summary": "List API tokens",
-				"tags": [
-					"Auth"
-				]
+				"tags": ["Auth"]
 			},
 			"post": {
 				"operationId": "create-api-token",
@@ -7564,9 +6593,7 @@
 					}
 				},
 				"summary": "Create an API token",
-				"tags": [
-					"Auth"
-				]
+				"tags": ["Auth"]
 			}
 		},
 		"/api-tokens/{id}": {
@@ -7627,9 +6654,7 @@
 					}
 				},
 				"summary": "Revoke an API token",
-				"tags": [
-					"Auth"
-				]
+				"tags": ["Auth"]
 			}
 		},
 		"/auth/account": {
@@ -7715,9 +6740,7 @@
 					}
 				},
 				"summary": "Permanently delete the current account",
-				"tags": [
-					"Auth"
-				]
+				"tags": ["Auth"]
 			}
 		},
 		"/auth/account/deletion-impact": {
@@ -7756,9 +6779,7 @@
 					}
 				},
 				"summary": "Preview the impact and blockers for account deletion",
-				"tags": [
-					"Auth"
-				]
+				"tags": ["Auth"]
 			}
 		},
 		"/auth/account/export": {
@@ -7824,9 +6845,7 @@
 					}
 				},
 				"summary": "Export the current user's account data",
-				"tags": [
-					"Auth"
-				]
+				"tags": ["Auth"]
 			}
 		},
 		"/auth/config": {
@@ -7855,9 +6874,7 @@
 					}
 				},
 				"summary": "Get public authentication configuration",
-				"tags": [
-					"Auth"
-				]
+				"tags": ["Auth"]
 			}
 		},
 		"/auth/legal-acceptance": {
@@ -7926,9 +6943,7 @@
 					}
 				},
 				"summary": "Accept the current account policy",
-				"tags": [
-					"Auth"
-				]
+				"tags": ["Auth"]
 			}
 		},
 		"/auth/login": {
@@ -7994,9 +7009,7 @@
 					}
 				},
 				"summary": "Login with email and password",
-				"tags": [
-					"Auth"
-				]
+				"tags": ["Auth"]
 			}
 		},
 		"/auth/login/passkey/options": {
@@ -8065,9 +7078,7 @@
 					}
 				},
 				"summary": "Begin MFA login with a passkey",
-				"tags": [
-					"Auth"
-				]
+				"tags": ["Auth"]
 			}
 		},
 		"/auth/login/passkey/verify": {
@@ -8143,9 +7154,7 @@
 					}
 				},
 				"summary": "Complete MFA login with a passkey",
-				"tags": [
-					"Auth"
-				]
+				"tags": ["Auth"]
 			}
 		},
 		"/auth/login/totp": {
@@ -8221,9 +7230,7 @@
 					}
 				},
 				"summary": "Complete MFA login with a TOTP code",
-				"tags": [
-					"Auth"
-				]
+				"tags": ["Auth"]
 			}
 		},
 		"/auth/logout": {
@@ -8269,9 +7276,7 @@
 					}
 				},
 				"summary": "Log out the current web session",
-				"tags": [
-					"Auth"
-				]
+				"tags": ["Auth"]
 			}
 		},
 		"/auth/me": {
@@ -8300,9 +7305,7 @@
 					}
 				},
 				"summary": "Get current authenticated user",
-				"tags": [
-					"Auth"
-				]
+				"tags": ["Auth"]
 			}
 		},
 		"/auth/password": {
@@ -8381,9 +7384,7 @@
 					}
 				},
 				"summary": "Change the current account password",
-				"tags": [
-					"Auth"
-				]
+				"tags": ["Auth"]
 			}
 		},
 		"/auth/password-reset/confirm": {
@@ -8459,9 +7460,7 @@
 					}
 				},
 				"summary": "Reset a password with a single-use token",
-				"tags": [
-					"Auth"
-				]
+				"tags": ["Auth"]
 			}
 		},
 		"/auth/password-reset/request": {
@@ -8530,9 +7529,7 @@
 					}
 				},
 				"summary": "Request a password reset link",
-				"tags": [
-					"Auth"
-				]
+				"tags": ["Auth"]
 			}
 		},
 		"/auth/profile": {
@@ -8601,9 +7598,7 @@
 					}
 				},
 				"summary": "Update current user profile",
-				"tags": [
-					"Auth"
-				]
+				"tags": ["Auth"]
 			}
 		},
 		"/auth/profile/avatar": {
@@ -8652,9 +7647,7 @@
 					}
 				},
 				"summary": "Remove current user profile avatar",
-				"tags": [
-					"Auth"
-				]
+				"tags": ["Auth"]
 			}
 		},
 		"/auth/register": {
@@ -8740,9 +7733,7 @@
 					}
 				},
 				"summary": "Register a new user",
-				"tags": [
-					"Auth"
-				]
+				"tags": ["Auth"]
 			}
 		},
 		"/auth/security": {
@@ -8771,9 +7762,7 @@
 					}
 				},
 				"summary": "Get account security settings",
-				"tags": [
-					"Auth"
-				]
+				"tags": ["Auth"]
 			}
 		},
 		"/auth/security/passkeys/begin": {
@@ -8842,9 +7831,7 @@
 					}
 				},
 				"summary": "Begin passkey registration for the current user",
-				"tags": [
-					"Auth"
-				]
+				"tags": ["Auth"]
 			}
 		},
 		"/auth/security/passkeys/finish": {
@@ -8913,9 +7900,7 @@
 					}
 				},
 				"summary": "Finish passkey registration for the current user",
-				"tags": [
-					"Auth"
-				]
+				"tags": ["Auth"]
 			}
 		},
 		"/auth/security/passkeys/{passkey_id}/remove": {
@@ -9006,9 +7991,7 @@
 					}
 				},
 				"summary": "Remove a passkey from the current user",
-				"tags": [
-					"Auth"
-				]
+				"tags": ["Auth"]
 			}
 		},
 		"/auth/security/totp/confirm": {
@@ -9077,9 +8060,7 @@
 					}
 				},
 				"summary": "Confirm TOTP enrollment with a verification code",
-				"tags": [
-					"Auth"
-				]
+				"tags": ["Auth"]
 			}
 		},
 		"/auth/security/totp/disable": {
@@ -9148,9 +8129,7 @@
 					}
 				},
 				"summary": "Disable TOTP for the current user",
-				"tags": [
-					"Auth"
-				]
+				"tags": ["Auth"]
 			}
 		},
 		"/auth/security/totp/setup": {
@@ -9229,9 +8208,7 @@
 					}
 				},
 				"summary": "Start TOTP enrollment for the current user",
-				"tags": [
-					"Auth"
-				]
+				"tags": ["Auth"]
 			}
 		},
 		"/auth/sessions": {
@@ -9245,10 +8222,7 @@
 									"items": {
 										"$ref": "#/components/schemas/UserSessionSummary"
 									},
-									"type": [
-										"array",
-										"null"
-									]
+									"type": ["array", "null"]
 								}
 							}
 						},
@@ -9276,9 +8250,7 @@
 					}
 				},
 				"summary": "List active web sessions",
-				"tags": [
-					"Auth"
-				]
+				"tags": ["Auth"]
 			}
 		},
 		"/auth/sessions/{session_id}": {
@@ -9349,9 +8321,7 @@
 					}
 				},
 				"summary": "Revoke an active web session",
-				"tags": [
-					"Auth"
-				]
+				"tags": ["Auth"]
 			}
 		},
 		"/billing/checkout": {
@@ -9430,9 +8400,7 @@
 					}
 				},
 				"summary": "Create billing checkout",
-				"tags": [
-					"Billing"
-				]
+				"tags": ["Billing"]
 			}
 		},
 		"/billing/portal": {
@@ -9511,9 +8479,7 @@
 					}
 				},
 				"summary": "Create billing portal session",
-				"tags": [
-					"Billing"
-				]
+				"tags": ["Billing"]
 			}
 		},
 		"/billing/status": {
@@ -9594,9 +8560,7 @@
 					}
 				},
 				"summary": "Get billing status",
-				"tags": [
-					"Billing"
-				]
+				"tags": ["Billing"]
 			}
 		},
 		"/capabilities": {
@@ -9625,9 +8589,7 @@
 					}
 				},
 				"summary": "List provider publishing capabilities",
-				"tags": [
-					"Capabilities"
-				]
+				"tags": ["Capabilities"]
 			}
 		},
 		"/cli/auth/approve": {
@@ -9706,9 +8668,7 @@
 					}
 				},
 				"summary": "Approve CLI device authorization",
-				"tags": [
-					"Auth"
-				]
+				"tags": ["Auth"]
 			}
 		},
 		"/cli/auth/deny": {
@@ -9787,9 +8747,7 @@
 					}
 				},
 				"summary": "Deny CLI device authorization",
-				"tags": [
-					"Auth"
-				]
+				"tags": ["Auth"]
 			}
 		},
 		"/cli/auth/poll": {
@@ -9876,9 +8834,7 @@
 					}
 				},
 				"summary": "Poll CLI device authorization",
-				"tags": [
-					"Auth"
-				]
+				"tags": ["Auth"]
 			}
 		},
 		"/cli/auth/session": {
@@ -9937,9 +8893,7 @@
 					}
 				},
 				"summary": "Get pending CLI authorization details",
-				"tags": [
-					"Auth"
-				]
+				"tags": ["Auth"]
 			}
 		},
 		"/cli/auth/start": {
@@ -10008,9 +8962,7 @@
 					}
 				},
 				"summary": "Start CLI device authorization",
-				"tags": [
-					"Auth"
-				]
+				"tags": ["Auth"]
 			}
 		},
 		"/comments/{id}": {
@@ -10101,9 +9053,7 @@
 					}
 				},
 				"summary": "Delete a provider comment",
-				"tags": [
-					"Publications"
-				]
+				"tags": ["Publications"]
 			}
 		},
 		"/comments/{id}/hide": {
@@ -10194,9 +9144,7 @@
 					}
 				},
 				"summary": "Hide a provider comment",
-				"tags": [
-					"Publications"
-				]
+				"tags": ["Publications"]
 			}
 		},
 		"/comments/{id}/reply": {
@@ -10297,9 +9245,7 @@
 					}
 				},
 				"summary": "Reply to a provider comment",
-				"tags": [
-					"Publications"
-				]
+				"tags": ["Publications"]
 			}
 		},
 		"/health": {
@@ -10328,9 +9274,7 @@
 					}
 				},
 				"summary": "Health check",
-				"tags": [
-					"System"
-				]
+				"tags": ["System"]
 			}
 		},
 		"/jobs": {
@@ -10388,10 +9332,7 @@
 									"items": {
 										"$ref": "#/components/schemas/JobResponse"
 									},
-									"type": [
-										"array",
-										"null"
-									]
+									"type": ["array", "null"]
 								}
 							}
 						},
@@ -10445,9 +9386,7 @@
 					}
 				},
 				"summary": "List recent background jobs",
-				"tags": [
-					"Jobs"
-				]
+				"tags": ["Jobs"]
 			}
 		},
 		"/mcp/activity": {
@@ -10484,10 +9423,7 @@
 									"items": {
 										"$ref": "#/components/schemas/MCPActivityItem"
 									},
-									"type": [
-										"array",
-										"null"
-									]
+									"type": ["array", "null"]
 								}
 							}
 						},
@@ -10535,9 +9471,7 @@
 					}
 				},
 				"summary": "List recent MCP tool calls",
-				"tags": [
-					"MCP"
-				]
+				"tags": ["MCP"]
 			}
 		},
 		"/mcp/oauth/authorize": {
@@ -10616,9 +9550,7 @@
 					}
 				},
 				"summary": "Create or deny an MCP OAuth authorization response",
-				"tags": [
-					"Auth"
-				]
+				"tags": ["Auth"]
 			}
 		},
 		"/media": {
@@ -10732,9 +9664,7 @@
 					}
 				},
 				"summary": "List media attachments for a workspace",
-				"tags": [
-					"Media"
-				]
+				"tags": ["Media"]
 			}
 		},
 		"/media/batch-delete": {
@@ -10803,9 +9733,7 @@
 					}
 				},
 				"summary": "Delete multiple media attachments at once",
-				"tags": [
-					"Media"
-				]
+				"tags": ["Media"]
 			}
 		},
 		"/media/upload-session": {
@@ -10874,9 +9802,7 @@
 					}
 				},
 				"summary": "Create a direct-to-storage media upload session",
-				"tags": [
-					"Media"
-				]
+				"tags": ["Media"]
 			}
 		},
 		"/media/upload-session/{id}/complete": {
@@ -10967,9 +9893,7 @@
 					}
 				},
 				"summary": "Complete a direct-to-storage media upload session",
-				"tags": [
-					"Media"
-				]
+				"tags": ["Media"]
 			}
 		},
 		"/media/{id}": {
@@ -11040,9 +9964,7 @@
 					}
 				},
 				"summary": "Delete a media attachment (only if not used in any post)",
-				"tags": [
-					"Media"
-				]
+				"tags": ["Media"]
 			},
 			"patch": {
 				"operationId": "update-media",
@@ -11121,9 +10043,7 @@
 					}
 				},
 				"summary": "Update media metadata (alt text)",
-				"tags": [
-					"Media"
-				]
+				"tags": ["Media"]
 			}
 		},
 		"/media/{id}/favorite": {
@@ -11194,9 +10114,7 @@
 					}
 				},
 				"summary": "Toggle favorite status of a media attachment",
-				"tags": [
-					"Media"
-				]
+				"tags": ["Media"]
 			}
 		},
 		"/media/{id}/usage": {
@@ -11267,9 +10185,7 @@
 					}
 				},
 				"summary": "Get posts that use a media attachment",
-				"tags": [
-					"Media"
-				]
+				"tags": ["Media"]
 			}
 		},
 		"/organizations": {
@@ -11283,10 +10199,7 @@
 									"items": {
 										"$ref": "#/components/schemas/OrganizationResponse"
 									},
-									"type": [
-										"array",
-										"null"
-									]
+									"type": ["array", "null"]
 								}
 							}
 						},
@@ -11304,9 +10217,7 @@
 					}
 				},
 				"summary": "List organizations for the current user",
-				"tags": [
-					"Workspaces"
-				]
+				"tags": ["Workspaces"]
 			}
 		},
 		"/organizations/{id}/billing/checkout": {
@@ -11397,9 +10308,7 @@
 					}
 				},
 				"summary": "Create organization billing checkout",
-				"tags": [
-					"Billing"
-				]
+				"tags": ["Billing"]
 			}
 		},
 		"/organizations/{id}/billing/portal": {
@@ -11480,9 +10389,7 @@
 					}
 				},
 				"summary": "Create organization billing portal session",
-				"tags": [
-					"Billing"
-				]
+				"tags": ["Billing"]
 			}
 		},
 		"/organizations/{id}/billing/status": {
@@ -11553,9 +10460,7 @@
 					}
 				},
 				"summary": "Get organization billing status",
-				"tags": [
-					"Billing"
-				]
+				"tags": ["Billing"]
 			}
 		},
 		"/organizations/{id}/team": {
@@ -11626,9 +10531,7 @@
 					}
 				},
 				"summary": "List organization members",
-				"tags": [
-					"Workspaces"
-				]
+				"tags": ["Workspaces"]
 			}
 		},
 		"/posting-schedules": {
@@ -11654,10 +10557,7 @@
 									"items": {
 										"$ref": "#/components/schemas/PostingScheduleResponse"
 									},
-									"type": [
-										"array",
-										"null"
-									]
+									"type": ["array", "null"]
 								}
 							}
 						},
@@ -11695,9 +10595,7 @@
 					}
 				},
 				"summary": "List posting schedules for a workspace",
-				"tags": [
-					"Posting Schedules"
-				]
+				"tags": ["Posting Schedules"]
 			},
 			"post": {
 				"operationId": "create-posting-schedule",
@@ -11764,9 +10662,7 @@
 					}
 				},
 				"summary": "Create a new posting schedule slot",
-				"tags": [
-					"Posting Schedules"
-				]
+				"tags": ["Posting Schedules"]
 			}
 		},
 		"/posting-schedules/next-slot": {
@@ -11827,9 +10723,7 @@
 					}
 				},
 				"summary": "Get the next available posting time slot",
-				"tags": [
-					"Posting Schedules"
-				]
+				"tags": ["Posting Schedules"]
 			}
 		},
 		"/posting-schedules/suggest": {
@@ -11898,9 +10792,7 @@
 					}
 				},
 				"summary": "Generate a suggested posting schedule",
-				"tags": [
-					"Posting Schedules"
-				]
+				"tags": ["Posting Schedules"]
 			}
 		},
 		"/posting-schedules/{id}": {
@@ -11971,9 +10863,7 @@
 					}
 				},
 				"summary": "Delete a posting schedule slot",
-				"tags": [
-					"Posting Schedules"
-				]
+				"tags": ["Posting Schedules"]
 			},
 			"patch": {
 				"operationId": "update-posting-schedule",
@@ -12062,9 +10952,7 @@
 					}
 				},
 				"summary": "Update a posting schedule slot",
-				"tags": [
-					"Posting Schedules"
-				]
+				"tags": ["Posting Schedules"]
 			}
 		},
 		"/posts": {
@@ -12132,10 +11020,7 @@
 									"items": {
 										"$ref": "#/components/schemas/PostResponse"
 									},
-									"type": [
-										"array",
-										"null"
-									]
+									"type": ["array", "null"]
 								}
 							}
 						},
@@ -12189,9 +11074,7 @@
 					}
 				},
 				"summary": "List posts for a workspace",
-				"tags": [
-					"Posts"
-				]
+				"tags": ["Posts"]
 			},
 			"post": {
 				"operationId": "create-post",
@@ -12258,9 +11141,7 @@
 					}
 				},
 				"summary": "Create a new post",
-				"tags": [
-					"Posts"
-				]
+				"tags": ["Posts"]
 			}
 		},
 		"/posts/schedule-overview": {
@@ -12351,9 +11232,7 @@
 					}
 				},
 				"summary": "Get monthly schedule overview",
-				"tags": [
-					"Posts"
-				]
+				"tags": ["Posts"]
 			}
 		},
 		"/posts/thread": {
@@ -12422,9 +11301,7 @@
 					}
 				},
 				"summary": "Create a thread of posts",
-				"tags": [
-					"Posts"
-				]
+				"tags": ["Posts"]
 			}
 		},
 		"/posts/{id}": {
@@ -12505,9 +11382,7 @@
 					}
 				},
 				"summary": "Delete a post",
-				"tags": [
-					"Posts"
-				]
+				"tags": ["Posts"]
 			},
 			"get": {
 				"operationId": "get-post",
@@ -12566,9 +11441,7 @@
 					}
 				},
 				"summary": "Get a single post",
-				"tags": [
-					"Posts"
-				]
+				"tags": ["Posts"]
 			},
 			"patch": {
 				"operationId": "update-post",
@@ -12657,9 +11530,7 @@
 					}
 				},
 				"summary": "Update a post",
-				"tags": [
-					"Posts"
-				]
+				"tags": ["Posts"]
 			}
 		},
 		"/posts/{id}/variants": {
@@ -12730,9 +11601,7 @@
 					}
 				},
 				"summary": "Delete all variants for a post (reset to unified content)",
-				"tags": [
-					"Posts"
-				]
+				"tags": ["Posts"]
 			},
 			"get": {
 				"operationId": "get-post-variants",
@@ -12801,9 +11670,7 @@
 					}
 				},
 				"summary": "Get per-platform content variants for a post",
-				"tags": [
-					"Posts"
-				]
+				"tags": ["Posts"]
 			},
 			"put": {
 				"operationId": "upsert-post-variants",
@@ -12892,9 +11759,7 @@
 					}
 				},
 				"summary": "Upsert per-platform content variants for a post",
-				"tags": [
-					"Posts"
-				]
+				"tags": ["Posts"]
 			}
 		},
 		"/prompts": {
@@ -12930,10 +11795,7 @@
 									"items": {
 										"$ref": "#/components/schemas/PromptResponse"
 									},
-									"type": [
-										"array",
-										"null"
-									]
+									"type": ["array", "null"]
 								}
 							}
 						},
@@ -12951,9 +11813,7 @@
 					}
 				},
 				"summary": "List writing prompts",
-				"tags": [
-					"Prompts"
-				]
+				"tags": ["Prompts"]
 			},
 			"post": {
 				"operationId": "create-prompt",
@@ -13020,9 +11880,7 @@
 					}
 				},
 				"summary": "Create a custom writing prompt",
-				"tags": [
-					"Prompts"
-				]
+				"tags": ["Prompts"]
 			}
 		},
 		"/prompts/categories": {
@@ -13051,9 +11909,7 @@
 					}
 				},
 				"summary": "Get available prompt categories",
-				"tags": [
-					"Prompts"
-				]
+				"tags": ["Prompts"]
 			}
 		},
 		"/prompts/random": {
@@ -13104,9 +11960,7 @@
 					}
 				},
 				"summary": "Get a random writing prompt",
-				"tags": [
-					"Prompts"
-				]
+				"tags": ["Prompts"]
 			}
 		},
 		"/prompts/{id}": {
@@ -13187,9 +12041,7 @@
 					}
 				},
 				"summary": "Delete a custom prompt",
-				"tags": [
-					"Prompts"
-				]
+				"tags": ["Prompts"]
 			}
 		},
 		"/provider-readiness": {
@@ -13261,9 +12113,7 @@
 					}
 				},
 				"summary": "Inspect provider readiness for a workspace",
-				"tags": [
-					"Provider Readiness"
-				]
+				"tags": ["Provider Readiness"]
 			}
 		},
 		"/publications": {
@@ -13332,10 +12182,7 @@
 									"items": {
 										"$ref": "#/components/schemas/PublicationResponse"
 									},
-									"type": [
-										"array",
-										"null"
-									]
+									"type": ["array", "null"]
 								}
 							}
 						},
@@ -13384,9 +12231,7 @@
 					}
 				},
 				"summary": "List publications",
-				"tags": [
-					"Publications"
-				]
+				"tags": ["Publications"]
 			},
 			"post": {
 				"operationId": "create-publication",
@@ -13453,9 +12298,7 @@
 					}
 				},
 				"summary": "Create a publication",
-				"tags": [
-					"Publications"
-				]
+				"tags": ["Publications"]
 			}
 		},
 		"/publications/{id}": {
@@ -13516,9 +12359,7 @@
 					}
 				},
 				"summary": "Get a publication",
-				"tags": [
-					"Publications"
-				]
+				"tags": ["Publications"]
 			},
 			"put": {
 				"operationId": "update-publication",
@@ -13567,9 +12408,7 @@
 					}
 				},
 				"summary": "Update a publication",
-				"tags": [
-					"Publications"
-				]
+				"tags": ["Publications"]
 			}
 		},
 		"/publications/{id}/events": {
@@ -13606,10 +12445,7 @@
 									"items": {
 										"$ref": "#/components/schemas/PublicationLifecycleEventResponse"
 									},
-									"type": [
-										"array",
-										"null"
-									]
+									"type": ["array", "null"]
 								}
 							}
 						},
@@ -13647,9 +12483,7 @@
 					}
 				},
 				"summary": "List publication lifecycle events",
-				"tags": [
-					"Publications"
-				]
+				"tags": ["Publications"]
 			}
 		},
 		"/publications/{id}/publish-now": {
@@ -13690,9 +12524,7 @@
 					}
 				},
 				"summary": "Publish a publication now",
-				"tags": [
-					"Publications"
-				]
+				"tags": ["Publications"]
 			}
 		},
 		"/publications/{id}/renditions": {
@@ -13743,9 +12575,7 @@
 					}
 				},
 				"summary": "Replace or upsert publication renditions",
-				"tags": [
-					"Publications"
-				]
+				"tags": ["Publications"]
 			}
 		},
 		"/publications/{id}/schedule": {
@@ -13786,9 +12616,7 @@
 					}
 				},
 				"summary": "Schedule a publication",
-				"tags": [
-					"Publications"
-				]
+				"tags": ["Publications"]
 			}
 		},
 		"/publications/{id}/validate": {
@@ -13829,9 +12657,7 @@
 					}
 				},
 				"summary": "Validate publication renditions",
-				"tags": [
-					"Publications"
-				]
+				"tags": ["Publications"]
 			}
 		},
 		"/ready": {
@@ -13870,9 +12696,7 @@
 					}
 				},
 				"summary": "Readiness check",
-				"tags": [
-					"System"
-				]
+				"tags": ["System"]
 			}
 		},
 		"/renditions/{id}/comments": {
@@ -13963,9 +12787,7 @@
 					}
 				},
 				"summary": "List comments for a published rendition",
-				"tags": [
-					"Publications"
-				]
+				"tags": ["Publications"]
 			}
 		},
 		"/renditions/{id}/reply": {
@@ -14016,9 +12838,7 @@
 					}
 				},
 				"summary": "Queue an explicit provider reply",
-				"tags": [
-					"Publications"
-				]
+				"tags": ["Publications"]
 			}
 		},
 		"/workspace-invitations/accept": {
@@ -14107,9 +12927,7 @@
 					}
 				},
 				"summary": "Accept a workspace invitation",
-				"tags": [
-					"Workspaces"
-				]
+				"tags": ["Workspaces"]
 			}
 		},
 		"/workspaces": {
@@ -14123,10 +12941,7 @@
 									"items": {
 										"$ref": "#/components/schemas/Item"
 									},
-									"type": [
-										"array",
-										"null"
-									]
+									"type": ["array", "null"]
 								}
 							}
 						},
@@ -14144,9 +12959,7 @@
 					}
 				},
 				"summary": "List workspaces for the current user",
-				"tags": [
-					"Workspaces"
-				]
+				"tags": ["Workspaces"]
 			},
 			"post": {
 				"operationId": "create-workspace",
@@ -14183,9 +12996,7 @@
 					}
 				},
 				"summary": "Create a new workspace",
-				"tags": [
-					"Workspaces"
-				]
+				"tags": ["Workspaces"]
 			}
 		},
 		"/workspaces/{id}/invitations": {
@@ -14296,9 +13107,7 @@
 					}
 				},
 				"summary": "Create a workspace invitation",
-				"tags": [
-					"Workspaces"
-				]
+				"tags": ["Workspaces"]
 			}
 		},
 		"/workspaces/{id}/invitations/{invitation_id}": {
@@ -14379,9 +13188,7 @@
 					}
 				},
 				"summary": "Revoke a pending workspace invitation",
-				"tags": [
-					"Workspaces"
-				]
+				"tags": ["Workspaces"]
 			}
 		},
 		"/workspaces/{id}/settings": {
@@ -14452,9 +13259,7 @@
 					}
 				},
 				"summary": "Get workspace settings",
-				"tags": [
-					"Workspaces"
-				]
+				"tags": ["Workspaces"]
 			},
 			"patch": {
 				"operationId": "update-workspace-settings",
@@ -14543,9 +13348,7 @@
 					}
 				},
 				"summary": "Update workspace settings",
-				"tags": [
-					"Workspaces"
-				]
+				"tags": ["Workspaces"]
 			}
 		},
 		"/workspaces/{id}/team": {
@@ -14616,9 +13419,7 @@
 					}
 				},
 				"summary": "List workspace members and pending invitations",
-				"tags": [
-					"Workspaces"
-				]
+				"tags": ["Workspaces"]
 			}
 		}
 	}
