@@ -12,6 +12,33 @@ function socialAccount(id: string, workspaceID: string, username: string) {
   };
 }
 
+function resolvedBlueskyCapability(accountID: string) {
+  return {
+    account_id: accountID,
+    provider: "bluesky",
+    profile: "short_text",
+    output_profile: "bluesky.post",
+    label: "Bluesky post",
+    text_limit: 300,
+    media: {
+      min_count: 0,
+      max_count: 4,
+      allowed_mimes: [],
+      requires_public_url: false,
+      requires_https_fetchable: false,
+    },
+    intents: ["post"],
+    media_shapes: ["text"],
+    settings: [],
+    setting_groups: [],
+    compatible: true,
+    active_constraints: {},
+    issues: [],
+    capability_revision: "test-v1",
+    dynamic_options: {},
+  };
+}
+
 test("composer ignores stale accounts and recovers the current workspace", async ({
   page,
   request,
@@ -250,7 +277,7 @@ test("activity clears cross-workspace data and preserves a valid view on refresh
   ).toBeVisible();
 });
 
-test("simple composer sends workspace-local wall time as the exact scheduled instant", async ({
+test("unified composer sends workspace-local wall time as the exact scheduled instant", async ({
   page,
   request,
 }) => {
@@ -282,9 +309,17 @@ test("simple composer sends workspace-local wall time as the exact scheduled ins
       ],
     });
   });
+  await page.route("**/api/v1/capabilities/resolve", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        accounts: [resolvedBlueskyCapability("timezone-account")],
+      },
+    });
+  });
 
   let scheduledAt = "";
-  await page.route("**/api/v1/posts", async (route) => {
+  await page.route("**/api/v1/publications", async (route) => {
     if (route.request().method() === "POST") {
       const payload = route.request().postDataJSON() as {
         scheduled_at?: string;
@@ -292,18 +327,53 @@ test("simple composer sends workspace-local wall time as the exact scheduled ins
       if (payload.scheduled_at) scheduledAt = payload.scheduled_at;
       await route.fulfill({
         contentType: "application/json",
-        json: { id: "scheduled-timezone-post" },
+        json: {
+          id: "scheduled-timezone-publication",
+          workspace_id: workspace.id,
+          intent: "post",
+          content_profile: "short_text",
+          source_text: "Schedule in the workspace timezone.",
+          status: "draft",
+          segments: [],
+          renditions: [],
+        },
       });
       return;
     }
     await route.continue();
   });
   await page.route(
-    "**/api/v1/posts/scheduled-timezone-post/variants",
+    "**/api/v1/publications/scheduled-timezone-publication",
+    async (route) => {
+      if (route.request().method() === "PUT") {
+        const payload = route.request().postDataJSON() as {
+          scheduled_at?: string;
+        };
+        if (payload.scheduled_at) scheduledAt = payload.scheduled_at;
+        await route.fulfill({ contentType: "application/json", json: {} });
+        return;
+      }
+      await route.continue();
+    },
+  );
+  await page.route(
+    "**/api/v1/publications/scheduled-timezone-publication/renditions",
     async (route) => {
       await route.fulfill({ contentType: "application/json", json: {} });
     },
   );
+  await page.route("**/api/v1/publications/*/validate", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: { valid: true, issues: [] },
+    });
+  });
+  await page.route("**/api/v1/publications/*/schedule", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: { message: "Scheduled!" },
+    });
+  });
 
   await page.goto("/");
   await expect(page.getByTestId("composer-account-control")).toBeVisible();
@@ -314,9 +384,9 @@ test("simple composer sends workspace-local wall time as the exact scheduled ins
     .getByRole("button", { name: "Schedule", exact: true })
     .first()
     .click();
-  const dialog = page.getByRole("dialog");
+  const dialog = page.getByTestId("schedule-dialog-shell");
   await expect(dialog).toContainText("America/New_York");
-  await dialog.getByLabel("Schedule time").fill("July 21 2099 9am");
+  await dialog.getByLabel("Schedule time").fill("2099-07-21T09:00");
   await dialog.getByRole("button", { name: "Schedule", exact: true }).click();
 
   await expect(page.getByText("Scheduled!", { exact: true })).toBeVisible();
@@ -365,8 +435,16 @@ test("an in-flight autosave cannot attach an old-workspace draft after switching
       ],
     });
   });
-  await page.route("**/api/v1/posts/*/variants", async (route) => {
-    await route.fulfill({ contentType: "application/json", json: {} });
+  await page.route("**/api/v1/capabilities/resolve", async (route) => {
+    const payload = route.request().postDataJSON() as {
+      account_ids: string[];
+    };
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        accounts: payload.account_ids.map(resolvedBlueskyCapability),
+      },
+    });
   });
 
   let releaseFirstSave!: () => void;
@@ -382,7 +460,7 @@ test("an in-flight autosave cannot attach an old-workspace draft after switching
     (resolveFinished) => (markFirstSaveFinished = resolveFinished),
   );
   const savedWorkspaceIDs: string[] = [];
-  await page.route("**/api/v1/posts", async (route) => {
+  await page.route("**/api/v1/publications", async (route) => {
     if (route.request().method() !== "POST") {
       await route.continue();
       return;
@@ -394,14 +472,32 @@ test("an in-flight autosave cannot attach an old-workspace draft after switching
       await firstSaveGate;
       await route.fulfill({
         contentType: "application/json",
-        json: { id: "draft-workspace-a" },
+        json: {
+          id: "draft-workspace-a",
+          workspace_id: first.id,
+          intent: "post",
+          content_profile: "short_text",
+          source_text: "Move this unsaved content safely.",
+          status: "draft",
+          segments: [],
+          renditions: [],
+        },
       });
       markFirstSaveFinished();
       return;
     }
     await route.fulfill({
       contentType: "application/json",
-      json: { id: "draft-workspace-b" },
+      json: {
+        id: "draft-workspace-b",
+        workspace_id: second.id,
+        intent: "post",
+        content_profile: "short_text",
+        source_text: "Move this unsaved content safely to workspace B.",
+        status: "draft",
+        segments: [],
+        renditions: [],
+      },
     });
   });
 
@@ -423,7 +519,7 @@ test("an in-flight autosave cannot attach an old-workspace draft after switching
   await page
     .getByLabel("Post text")
     .fill("Move this unsaved content safely to workspace B.");
-  await expect(page).toHaveURL(/\/posts\/draft-workspace-b$/, {
+  await expect(page).toHaveURL(/\/publications\/draft-workspace-b$/, {
     timeout: 10_000,
   });
   expect(savedWorkspaceIDs).toEqual([first.id, second.id]);

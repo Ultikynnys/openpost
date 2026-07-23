@@ -89,22 +89,28 @@ test("first autosave establishes the draft URL and keeps draft actions in one co
   await page.emulateMedia({ reducedMotion: "no-preference" });
 
   await page.getByLabel("Post text").fill(content);
-  await expect(page).toHaveURL(/\/posts\/[a-zA-Z0-9-]+$/, { timeout: 10_000 });
+  await expect(page).toHaveURL(/\/publications\/[a-zA-Z0-9-]+$/, {
+    timeout: 10_000,
+  });
   await expect(page.getByTestId("sidebar-new-post")).toBeVisible();
   await expect(homeBrand).toHaveAttribute("data-swap-position", "before");
   await expect(homeBrand).toHaveAttribute("inert", "");
   await expect(newPostAction).toHaveAttribute("data-swap-position", "active");
   await expect(newPostAction).not.toHaveAttribute("inert", "");
-  await expect(page.getByTestId("composer-delete")).toBeVisible();
   await expect(
     page.getByRole("button", { name: "Schedule", exact: true }).first(),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Save draft", exact: true }),
   ).toBeVisible();
   await expect(page.getByText("Editing draft post")).toHaveCount(0);
   await expect(page.getByText("Saved", { exact: true })).toHaveCount(0);
 
   await page.reload();
   await expect(page.getByLabel("Post text")).toHaveValue(content);
-  await expect(page.getByTestId("composer-delete")).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Save changes", exact: true }),
+  ).toBeVisible();
   await expect(
     page.getByRole("button", { name: "Schedule", exact: true }).first(),
   ).toBeVisible();
@@ -154,7 +160,10 @@ test("desktop planning sidebar resumes drafts and stays out of mobile navigation
     },
   });
   expect(draft.ok()).toBeTruthy();
-  const draftBody = (await draft.json()) as { id: string };
+  const draftBody = (await draft.json()) as {
+    id: string;
+    publication_id: string;
+  };
 
   await authenticatePage(page, auth.token);
   await page.goto("/");
@@ -177,7 +186,11 @@ test("desktop planning sidebar resumes drafts and stays out of mobile navigation
       name: "Resume draft: Resume the launch announcement",
     })
     .click();
-  await expect(page).toHaveURL(new RegExp(`/posts/${draftBody.id}$`));
+  await expect(page).toHaveURL(
+    new RegExp(
+      `/publications/${encodeURIComponent(draftBody.publication_id)}$`,
+    ),
+  );
 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");

@@ -345,9 +345,9 @@ test("portrait calendar and composer reject past creation and rescheduling", asy
     page.getByText("Choose a future date and time.", { exact: true }),
   ).toBeVisible();
   const mobileScheduleButton = page
-    .getByTestId("mobile-composer-controls")
+    .getByTestId("composer-action-controls")
     .getByRole("button", {
-      name: "Schedule post: Schedule",
+      name: "Schedule",
       exact: true,
     });
   await expect(mobileScheduleButton).toBeVisible();
@@ -480,15 +480,9 @@ test("the day drawer keeps scheduled posts compact and icon-led", async ({
   const destinations = drawer.getByTestId("day-post-destinations");
   await expect(destinations).toHaveAttribute("aria-label", "Destinations: 3");
   await expect(destinations.locator("svg")).toHaveCount(3);
-  await expect(
-    drawer.getByText("Bluesky", { exact: true }),
-  ).not.toBeVisible();
-  await expect(
-    drawer.getByText("LinkedIn", { exact: true }),
-  ).not.toBeVisible();
-  await expect(
-    drawer.getByText("Threads", { exact: true }),
-  ).not.toBeVisible();
+  await expect(drawer.getByText("Bluesky", { exact: true })).not.toBeVisible();
+  await expect(drawer.getByText("LinkedIn", { exact: true })).not.toBeVisible();
+  await expect(drawer.getByText("Threads", { exact: true })).not.toBeVisible();
 
   const drawerBox = await drawer.boundingBox();
   expect(drawerBox).not.toBeNull();
@@ -497,5 +491,5 @@ test("the day drawer keeps scheduled posts compact and icon-led", async ({
   await page.setViewportSize({ width: 390, height: 844 });
   const portraitDrawerBox = await drawer.boundingBox();
   expect(portraitDrawerBox).not.toBeNull();
-	expect(portraitDrawerBox!.width).toBeCloseTo(390, 3);
+  expect(portraitDrawerBox!.width).toBeCloseTo(390, 3);
 });

@@ -28,6 +28,11 @@
 		replaceState(resolve('/'), {});
 	}
 
+	function handleDraftCreated(id: string) {
+		ui.setActiveComposerDraft(id);
+		replaceState(`/publications/${encodeURIComponent(id)}`, {});
+	}
+
 	function rememberSampleCampaignChoice() {
 		localStorage.setItem(SAMPLE_CAMPAIGN_DISMISSED_KEY, 'true');
 	}
@@ -63,6 +68,7 @@
 					{initialScheduleDate}
 					{initialWorkspaceId}
 					onSuccess={handleComposerReset}
+					onDraftCreated={handleDraftCreated}
 				>
 					{#snippet modeControl()}
 						<ComposeModeSelect

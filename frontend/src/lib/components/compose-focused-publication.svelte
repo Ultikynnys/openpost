@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount, type Snippet } from 'svelte';
+	import { onDestroy, onMount, type Snippet } from 'svelte';
 	import { client, type SocialAccount } from '$lib/api/client';
 	import type { components } from '$lib/api/types';
 	import { getAuthenticatedMediaByID } from '$lib/media-url';
@@ -84,6 +84,7 @@
 		initialWorkspaceId?: string | null;
 		onSuccess?: () => void;
 		onCancel?: () => void;
+		onDraftCreated?: (id: string) => void;
 		modeControl?: Snippet;
 	}
 
@@ -94,6 +95,7 @@
 		initialWorkspaceId = null,
 		onSuccess,
 		onCancel,
+		onDraftCreated,
 		modeControl
 	}: Props = $props();
 
@@ -128,11 +130,15 @@
 	let validationIssues = $state<ValidationIssue[]>([]);
 	let loading = $state(true);
 	let accountsLoading = $state(false);
+	let accountsError = $state('');
 	let uploading = $state(false);
 	let uploadingThumbnail = $state(false);
 	let saving = $state(false);
+	let autoSaving = $state(false);
 	let error = $state('');
 	let success = $state('');
+	let scheduleError = $state('');
+	let suggestingSlot = $state(false);
 	let schedulingSettings = $state<FocusedSchedulingSettings>(defaultFocusedSchedulingSettings());
 	let schedulingSettingsWorkspaceId = $state('');
 	let workspaceChangeSequence = 0;
@@ -142,6 +148,11 @@
 	let thumbnailUploadRequestSequence = 0;
 	let destinationOptionsRequestSequence = 0;
 	let capabilityResolveRequestSequence = 0;
+	let nextSlotRequestSequence = 0;
+	let saveGeneration = 0;
+	let autoSaveReady = false;
+	let autoSaveTimer: ReturnType<typeof setTimeout> | null = null;
+	let lastSavedSnapshot = '';
 	let publicationContextRequestId = '';
 	let resolvedCapabilities = $state<Record<string, ResolvedAccountCapability>>({});
 	let capabilityResolveLoading = $state(false);
@@ -175,7 +186,7 @@
 	const blockingIssues = $derived(validationIssues.filter((issue) => issue.severity === 'error'));
 	const warningIssues = $derived(validationIssues.filter((issue) => issue.severity === 'warning'));
 	const localBlockers = $derived(formBlockers());
-	const canSaveDraft = $derived(Boolean(selectedWorkspaceId) && !saving);
+	const canSaveDraft = $derived(Boolean(selectedWorkspaceId) && !saving && !autoSaving);
 	const selectedReadinessProviders = $derived(
 		selectedAccounts.map((account) => getPlatformKey(account.platform))
 	);
@@ -247,8 +258,15 @@
 
 	onMount(async () => {
 		segments = emptySegmentsForMode(mode);
+		selectedWorkspaceId =
+			initialPublication?.workspace_id ||
+			initialWorkspaceId ||
+			workspaceCtx.currentWorkspace?.id ||
+			'';
 		await loadInitialData();
 	});
+
+	onDestroy(clearAutoSaveTimer);
 
 	$effect(() => {
 		if (
@@ -264,13 +282,29 @@
 
 	$effect(() => {
 		const workspaceId = workspaceCtx.currentWorkspace?.id ?? '';
-		if (!loading && !isEditMode && workspaceId && workspaceId !== selectedWorkspaceId) {
+		if (!isEditMode && workspaceId && workspaceId !== selectedWorkspaceId) {
 			void changeWorkspace(workspaceId);
 		}
 	});
 
+	$effect(() => {
+		const snapshot = saveSnapshot();
+		if (
+			!autoSaveReady ||
+			loading ||
+			saving ||
+			autoSaving ||
+			!hasDraftContent() ||
+			snapshot === lastSavedSnapshot
+		) {
+			return;
+		}
+		scheduleAutoSave(snapshot);
+	});
+
 	async function loadInitialData() {
 		loading = true;
+		autoSaveReady = false;
 		error = '';
 		try {
 			if (initialPublication) {
@@ -282,8 +316,6 @@
 			const { data: capabilityData, error: capError } = await client.GET('/capabilities', {});
 			if (capError) throw new Error(capError.detail || m.compose_load_capabilities_failed());
 			capabilities = capabilityData?.capabilities ?? [];
-			selectedWorkspaceId =
-				selectedWorkspaceId || initialWorkspaceId || workspaceCtx.currentWorkspace?.id || '';
 			if (selectedWorkspaceId) {
 				if (schedulingSettingsWorkspaceId !== selectedWorkspaceId) {
 					await loadSchedulingSettings(selectedWorkspaceId);
@@ -295,15 +327,18 @@
 				applyInitialScheduleDate();
 				await resolveSelectedCapabilities();
 			}
+			markAutoSaveBaseline();
 		} catch (err) {
 			error = err instanceof Error ? err.message : m.compose_load_composer_failed();
 		} finally {
 			loading = false;
+			autoSaveReady = true;
 		}
 	}
 
 	async function loadInitialPublicationContext(publication: Publication) {
 		loading = true;
+		autoSaveReady = false;
 		selectedWorkspaceId = publication.workspace_id;
 		hydratedPublicationId = '';
 		resetWorkspaceScopedState();
@@ -317,12 +352,14 @@
 				loadProviderReadiness(publication.workspace_id)
 			]);
 			await resolveSelectedCapabilities();
+			markAutoSaveBaseline();
 		} catch (err) {
 			if (initialPublication?.id === publication.id) {
 				error = err instanceof Error ? err.message : m.compose_load_composer_failed();
 			}
 		} finally {
 			loading = false;
+			autoSaveReady = true;
 		}
 	}
 
@@ -350,24 +387,27 @@
 		}
 	}
 
-	async function loadAccounts(workspaceId = selectedWorkspaceId) {
-		if (!workspaceId) return;
+	async function loadAccounts(workspaceId = selectedWorkspaceId): Promise<boolean> {
+		if (!workspaceId) return false;
 		const requestSequence = ++accountsRequestSequence;
 		accountsLoading = true;
+		accountsError = '';
 		try {
 			const { data, error: err } = await client.GET('/accounts', {
 				params: { query: { workspace_id: workspaceId } }
 			});
 			if (err) throw new Error(err.detail || m.compose_load_accounts_failed());
 			if (requestSequence !== accountsRequestSequence || selectedWorkspaceId !== workspaceId)
-				return;
+				return false;
 			accounts = (data ?? []).filter((account) => account.is_active);
 			normalizeSelectedAccounts();
 			settingsByAccount = normalizeAllAccountSettings(settingsByAccount);
+			return true;
 		} catch (err) {
 			if (requestSequence === accountsRequestSequence && selectedWorkspaceId === workspaceId) {
-				error = err instanceof Error ? err.message : m.compose_load_accounts_failed();
+				accountsError = err instanceof Error ? err.message : m.compose_load_accounts_failed();
 			}
+			return false;
 		} finally {
 			if (requestSequence === accountsRequestSequence && selectedWorkspaceId === workspaceId) {
 				accountsLoading = false;
@@ -524,8 +564,11 @@
 
 	async function changeWorkspace(workspaceId: string) {
 		const changeSequence = ++workspaceChangeSequence;
+		const changedExistingWorkspace = Boolean(selectedWorkspaceId);
+		autoSaveReady = false;
 		selectedWorkspaceId = workspaceId;
 		resetWorkspaceScopedState();
+		if (changedExistingWorkspace) success = m.compose_workspace_context_reset();
 		try {
 			const settingsReady = await loadSchedulingSettings(workspaceId);
 			if (
@@ -541,15 +584,25 @@
 			if (changeSequence === workspaceChangeSequence && selectedWorkspaceId === workspaceId) {
 				error = err instanceof Error ? err.message : m.compose_load_workspace_settings_failed();
 			}
+		} finally {
+			if (changeSequence === workspaceChangeSequence && selectedWorkspaceId === workspaceId) {
+				loading = false;
+				autoSaveReady = true;
+				queueAutoSave();
+			}
 		}
 	}
 
 	function resetWorkspaceScopedState() {
+		clearAutoSaveTimer();
+		saveGeneration += 1;
+		lastSavedSnapshot = '';
 		accountsRequestSequence += 1;
 		readinessRequestSequence += 1;
 		mediaUploadRequestSequence += 1;
 		thumbnailUploadRequestSequence += 1;
 		destinationOptionsRequestSequence += 1;
+		nextSlotRequestSequence += 1;
 		publicationId = '';
 		accounts = [];
 		selectedAccountIds = [];
@@ -580,10 +633,19 @@
 		schedulingSettings = defaultFocusedSchedulingSettings();
 		schedulingSettingsWorkspaceId = '';
 		accountsLoading = false;
+		accountsError = '';
 		uploading = false;
 		uploadingThumbnail = false;
+		autoSaving = false;
+		suggestingSlot = false;
+		scheduleError = '';
 		error = '';
 		success = '';
+	}
+
+	async function retryAccounts() {
+		const loaded = await loadAccounts();
+		if (loaded) await resolveSelectedCapabilities();
 	}
 
 	function selectAllAccounts() {
@@ -771,6 +833,7 @@
 	function updateField(key: FocusedFieldKey, value: string) {
 		fields = { ...fields, [key]: value };
 		validationIssues = [];
+		queueAutoSave();
 	}
 
 	function updateThreadSegment(segmentId: string, content: string) {
@@ -778,6 +841,7 @@
 			segment.id === segmentId ? { ...segment, content } : segment
 		);
 		validationIssues = [];
+		queueAutoSave();
 	}
 
 	function addThreadSegment() {
@@ -785,6 +849,7 @@
 		segments = [...segments, { id, content: '', media: [], settingsByAccount: {} }];
 		activeSettingsSegmentId = id;
 		validationIssues = [];
+		queueAutoSave();
 	}
 
 	function removeThreadSegment(segmentId: string) {
@@ -795,11 +860,13 @@
 		}
 		validationIssues = [];
 		void resolveSelectedCapabilities();
+		queueAutoSave();
 	}
 
 	function updateMediaAltText(mediaId: string, altText: string) {
 		media = media.map((item) => (item.id === mediaId ? { ...item, altText } : item));
 		validationIssues = [];
+		queueAutoSave();
 	}
 
 	function fieldValue(key: FocusedFieldKey): string {
@@ -1013,9 +1080,27 @@
 		})} ${selectedTime}`;
 	}
 
+	function scheduleInputValue(): string {
+		if (!selectedDate || !selectedTime) return '';
+		return `${selectedDate.toString()}T${selectedTime}`;
+	}
+
+	function updateScheduleInput(value: string) {
+		const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(value);
+		if (!match) {
+			selectedDate = undefined;
+			selectedTime = null;
+			return;
+		}
+		selectedDate = new CalendarDate(Number(match[1]), Number(match[2]), Number(match[3]));
+		selectedTime = `${match[4]}:${match[5]}`;
+		scheduleError = '';
+	}
+
 	function clearSchedule() {
 		selectedDate = undefined;
 		selectedTime = null;
+		scheduleError = '';
 		showSchedulePopover = false;
 	}
 
@@ -1023,7 +1108,55 @@
 		if (selectedDate || !initialScheduleDate) return;
 		const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(initialScheduleDate);
 		if (!match) return;
-		selectedDate = new CalendarDate(Number(match[1]), Number(match[2]), Number(match[3]));
+		const requestedDate = new CalendarDate(Number(match[1]), Number(match[2]), Number(match[3]));
+		if (requestedDate.compare(workspaceClock(scheduleTimezoneLabel).date) < 0) {
+			error = m.compose_schedule_future();
+			return;
+		}
+		selectedDate = requestedDate;
+	}
+
+	async function fillNextSlot() {
+		if (!selectedWorkspaceId || !selectedWorkspaceSettingsReady) return;
+		const requestSequence = ++nextSlotRequestSequence;
+		const workspaceId = selectedWorkspaceId;
+		const timezone = scheduleTimezoneLabel;
+		suggestingSlot = true;
+		scheduleError = '';
+		try {
+			const { data, error: nextSlotError } = await client.GET('/posting-schedules/next-slot', {
+				params: { query: { workspace_id: workspaceId } }
+			});
+			if (
+				requestSequence !== nextSlotRequestSequence ||
+				selectedWorkspaceId !== workspaceId ||
+				scheduleTimezoneLabel !== timezone
+			) {
+				return;
+			}
+			if (nextSlotError) {
+				throw new Error(nextSlotError.detail || m.compose_next_free_slot_failed());
+			}
+			const schedule = data?.slot_time
+				? workspaceScheduleFromISO(data.slot_time, scheduleTimezoneLabel)
+				: null;
+			if (!schedule) {
+				scheduleError = m.compose_no_free_slot();
+				return;
+			}
+			selectedDate = schedule.date;
+			selectedTime = schedule.time;
+		} catch (nextSlotError) {
+			if (requestSequence !== nextSlotRequestSequence || selectedWorkspaceId !== workspaceId) {
+				return;
+			}
+			scheduleError =
+				nextSlotError instanceof Error ? nextSlotError.message : m.compose_next_free_slot_failed();
+		} finally {
+			if (requestSequence === nextSlotRequestSequence && selectedWorkspaceId === workspaceId) {
+				suggestingSlot = false;
+			}
+		}
 	}
 
 	function formBlockers(): string[] {
@@ -1437,11 +1570,99 @@
 		});
 	}
 
-	async function persistPublication(): Promise<string> {
+	function hasDraftContent(): boolean {
+		return (
+			media.length > 0 ||
+			Boolean(thumbnailMediaId) ||
+			Object.values(fields).some((value) => value?.trim()) ||
+			segments.some(
+				(segment) =>
+					segment.content.trim() ||
+					segment.title?.trim() ||
+					segment.description?.trim() ||
+					segment.url?.trim() ||
+					segment.media.length > 0
+			)
+		);
+	}
+
+	function saveSnapshot(): string {
+		return JSON.stringify(publicationPayload());
+	}
+
+	function markAutoSaveBaseline() {
+		clearAutoSaveTimer();
+		lastSavedSnapshot = saveSnapshot();
+	}
+
+	function clearAutoSaveTimer() {
+		if (!autoSaveTimer) return;
+		clearTimeout(autoSaveTimer);
+		autoSaveTimer = null;
+	}
+
+	function scheduleAutoSave(snapshot: string) {
+		clearAutoSaveTimer();
+		autoSaveTimer = setTimeout(() => {
+			autoSaveTimer = null;
+			if (saveSnapshot() !== snapshot) return;
+			void saveDraftAutomatically(snapshot);
+		}, 2000);
+	}
+
+	function queueAutoSave() {
+		if (!autoSaveReady || loading || saving || autoSaving || !hasDraftContent()) return;
+		const snapshot = saveSnapshot();
+		if (snapshot !== lastSavedSnapshot) scheduleAutoSave(snapshot);
+	}
+
+	async function saveDraftAutomatically(snapshot: string) {
+		if (
+			!selectedWorkspaceId ||
+			!hasDraftContent() ||
+			saving ||
+			autoSaving ||
+			snapshot === lastSavedSnapshot
+		) {
+			return;
+		}
+		const generation = saveGeneration;
+		const workspaceId = selectedWorkspaceId;
+		const startingPublicationId = publicationId;
+		autoSaving = true;
+		try {
+			await persistPublication({ generation, workspaceId, startingPublicationId });
+			if (
+				generation !== saveGeneration ||
+				selectedWorkspaceId !== workspaceId ||
+				(startingPublicationId && publicationId !== startingPublicationId)
+			) {
+				return;
+			}
+			lastSavedSnapshot = snapshot;
+			ui.triggerRefresh();
+		} catch (saveError) {
+			if (generation === saveGeneration && selectedWorkspaceId === workspaceId) {
+				error =
+					saveError instanceof Error ? saveError.message : m.compose_save_publication_failed();
+			}
+		} finally {
+			if (generation === saveGeneration && selectedWorkspaceId === workspaceId) {
+				autoSaving = false;
+			}
+		}
+	}
+
+	async function persistPublication(context?: {
+		generation: number;
+		workspaceId: string;
+		startingPublicationId: string;
+	}): Promise<string> {
 		const payload = publicationPayload();
-		if (publicationId) {
+		const targetPublicationId = context?.startingPublicationId ?? publicationId;
+		if (targetPublicationId) {
 			const { error: updateError } = await client.PUT('/publications/{id}', {
-				params: { path: { id: publicationId } },
+				params: { path: { id: targetPublicationId } },
 				body: {
 					title: payload.title,
 					intent: payload.intent,
@@ -1457,18 +1678,28 @@
 			});
 			if (updateError) throw new Error(updateError.detail || m.compose_save_publication_failed());
 			const { error: renditionError } = await client.PUT('/publications/{id}/renditions', {
-				params: { path: { id: publicationId } },
+				params: { path: { id: targetPublicationId } },
 				body: { renditions: payload.renditions }
 			});
 			if (renditionError) throw new Error(renditionError.detail || m.compose_save_outputs_failed());
-			return publicationId;
+			return targetPublicationId;
 		}
 
 		const { data, error: createError } = await client.POST('/publications', {
 			body: payload
 		});
 		if (createError) throw new Error(createError.detail || m.compose_create_publication_failed());
+		if (
+			context &&
+			(context.generation !== saveGeneration ||
+				context.workspaceId !== selectedWorkspaceId ||
+				context.startingPublicationId !== publicationId)
+		) {
+			return data.id;
+		}
 		publicationId = data.id;
+		ui.setActiveComposerDraft(data.id);
+		onDraftCreated?.(data.id);
 		return data.id;
 	}
 
@@ -1510,6 +1741,7 @@
 				return;
 			}
 		}
+		clearAutoSaveTimer();
 		saving = true;
 		error = '';
 		success = '';
@@ -1549,6 +1781,7 @@
 			} else {
 				success = isEditMode ? m.compose_changes_saved() : m.compose_draft_saved();
 			}
+			lastSavedSnapshot = saveSnapshot();
 			ui.triggerRefresh();
 			if (isEditMode && action !== 'validate') onSuccess?.();
 		} catch (err) {
@@ -1619,7 +1852,13 @@
 						{@render modeControl()}
 					{/if}
 					{#if onCancel}
-						<Button variant="ghost" size="sm" class="h-8" onclick={onCancel} disabled={saving}>
+						<Button
+							variant="ghost"
+							size="sm"
+							class="h-11 md:h-8"
+							onclick={onCancel}
+							disabled={saving || autoSaving}
+						>
 							{m.common_cancel()}
 						</Button>
 					{/if}
@@ -1644,15 +1883,18 @@
 					{/if}
 				</div>
 
-				<div class="flex min-w-0 flex-wrap items-center justify-end gap-1.5 md:gap-2">
+				<div
+					class="flex w-full min-w-0 items-center justify-end gap-1.5 md:w-auto md:gap-2"
+					data-testid="composer-action-controls"
+				>
 					<Button
 						variant="ghost"
 						size="sm"
-						class="h-8 gap-1.5"
+						class="h-11 min-w-0 flex-1 gap-1.5 md:h-8 md:flex-none"
 						disabled={!canSaveDraft}
 						onclick={() => runAction('draft')}
 					>
-						{#if saving}
+						{#if saving || autoSaving}
 							<LoaderIcon class="h-3.5 w-3.5 animate-spin" />
 						{:else}
 							<SaveIcon class="h-3.5 w-3.5" />
@@ -1665,16 +1907,48 @@
 								<Button
 									{...props}
 									size="sm"
-									class="h-8 gap-1.5"
-									disabled={saving || !selectedWorkspaceSettingsReady}
+									class="h-11 min-w-0 flex-1 gap-1.5 md:h-8 md:flex-none"
+									disabled={saving || autoSaving || !selectedWorkspaceSettingsReady}
 								>
 									<CalendarClockIcon class="h-3.5 w-3.5" />
 									{scheduleLabel()}
 								</Button>
 							{/snippet}
 						</Popover.Trigger>
-						<Popover.Content class="w-auto max-w-[calc(100vw-2rem)] p-0" align="end">
-							<div class="p-3">
+						<Popover.Content
+							class="w-[min(24rem,calc(100vw-1rem))] p-0"
+							align="end"
+							data-testid="schedule-dialog-shell"
+						>
+							<div class="space-y-3 p-3">
+								<div>
+									<p class="text-sm font-medium">{m.compose_schedule()}</p>
+									<p class="text-xs text-muted-foreground">
+										{m.compose_schedule_timezone({ timezone: scheduleTimezoneLabel })}
+									</p>
+								</div>
+								<Button
+									type="button"
+									variant="secondary"
+									class="h-11 w-full"
+									disabled={suggestingSlot}
+									onclick={fillNextSlot}
+								>
+									{#if suggestingSlot}
+										<LoaderIcon class="size-4 animate-spin" />
+									{/if}
+									{m.compose_next_free_slot()}
+								</Button>
+								<Input
+									type="datetime-local"
+									aria-label={m.compose_schedule_time()}
+									class="h-11"
+									value={scheduleInputValue()}
+									oninput={(event) => updateScheduleInput(event.currentTarget.value)}
+								/>
+								{#if scheduleError}
+									<p class="text-xs text-destructive">{scheduleError}</p>
+								{/if}
 								<Calendar
 									type="single"
 									bind:value={selectedDate}
@@ -1689,12 +1963,13 @@
 											<Button
 												variant={selectedTime === time ? 'default' : 'outline'}
 												size="sm"
-												class="h-8 text-xs"
+												class="h-11 text-xs md:h-9"
 												onclick={() => {
 													if (!selectedDate) {
 														selectedDate = workspaceClock(scheduleTimezoneLabel).date;
 													}
 													selectedTime = time;
+													scheduleError = '';
 												}}
 											>
 												{time}
@@ -1702,31 +1977,51 @@
 										{/each}
 									</div>
 								</div>
-								{#if selectedDate || selectedTime}
-									<div class="mt-3 flex gap-2 border-t pt-3">
-										<Button variant="ghost" size="sm" class="flex-1 text-xs" onclick={clearSchedule}
-											>{m.compose_clear()}</Button
-										>
+								<p class="text-xs text-muted-foreground">
+									{#if selectedDate && selectedTime}
+										{m.compose_selected_schedule({ schedule: scheduleLabel() })}
+									{:else}
+										{m.compose_select_date_time()}
+									{/if}
+								</p>
+								<div class="flex gap-2 border-t pt-3">
+									<Button
+										variant="outline"
+										size="sm"
+										class="h-11 flex-1 text-xs md:h-9"
+										onclick={() => (showSchedulePopover = false)}
+									>
+										{m.common_cancel()}
+									</Button>
+									{#if selectedDate || selectedTime}
 										<Button
+											variant="ghost"
 											size="sm"
-											class="flex-1 text-xs"
-											disabled={!canSchedule || !getScheduledAt()}
-											onclick={() => {
-												showSchedulePopover = false;
-												runAction('schedule');
-											}}
+											class="h-11 flex-1 text-xs md:h-9"
+											onclick={clearSchedule}
 										>
-											{m.compose_schedule()}
+											{m.compose_clear()}
 										</Button>
-									</div>
-								{/if}
+									{/if}
+									<Button
+										size="sm"
+										class="h-11 flex-1 text-xs md:h-9"
+										disabled={!canSchedule || !getScheduledAt()}
+										onclick={() => {
+											showSchedulePopover = false;
+											runAction('schedule');
+										}}
+									>
+										{m.compose_schedule()}
+									</Button>
+								</div>
 							</div>
 						</Popover.Content>
 					</Popover.Root>
 					<Button
 						variant="outline"
 						size="sm"
-						class="h-8 gap-1.5"
+						class="h-11 min-w-0 flex-1 gap-1.5 md:h-8 md:flex-none"
 						disabled={!canQueue}
 						onclick={() => runAction('publish')}
 					>
@@ -1745,6 +2040,27 @@
 	{:else}
 		<div class="min-h-0 flex-1 overflow-y-auto">
 			<div class="mx-auto w-full max-w-3xl space-y-6 px-4 py-5 md:px-6">
+				{#if accountsError}
+					<div data-testid="composer-accounts-load-error">
+						<InlineNotice tone="error" message={accountsError}>
+							{#snippet actions()}
+								<Button
+									type="button"
+									variant="outline"
+									size="sm"
+									class="h-11 md:h-9"
+									disabled={accountsLoading}
+									onclick={retryAccounts}
+								>
+									{#if accountsLoading}
+										<LoaderIcon class="size-3.5 animate-spin" />
+									{/if}
+									{m.common_retry()}
+								</Button>
+							{/snippet}
+						</InlineNotice>
+					</div>
+				{/if}
 				{#if error}
 					<InlineNotice tone="error" message={error} />
 				{/if}
@@ -1766,7 +2082,7 @@
 					</InlineNotice>
 				{/if}
 
-				{#if accounts.length === 0}
+				{#if accounts.length === 0 && !accountsError}
 					<div class="rounded-lg border bg-muted/20 px-4 py-3 text-sm text-muted-foreground">
 						{m.compose_connect_compatible()}
 					</div>
@@ -1827,11 +2143,12 @@
 											{/if}
 											<div
 												class="flex items-center justify-between gap-2 border-t bg-background px-2 py-1.5 text-xs"
+												data-testid="composer-media-actions"
 											>
 												<span class="min-w-0 truncate">{item.filename || item.id}</span>
 												<button
 													type="button"
-													class="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+													class="flex size-11 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none md:size-9"
 													aria-label={m.compose_remove_media()}
 													onclick={() => removeMedia(item.id)}
 												>
@@ -1845,7 +2162,7 @@
 													</label>
 													<Input
 														id="media-alt-{item.id}"
-														class="mt-1 h-9"
+														class="mt-1 h-11 md:h-9"
 														value={item.altText ?? ''}
 														placeholder={m.compose_alt_text_placeholder()}
 														oninput={(event) =>

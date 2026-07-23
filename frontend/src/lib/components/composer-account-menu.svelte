@@ -264,9 +264,14 @@
 									</span>
 								{/if}
 							</span>
-							<span class="block truncate text-xs leading-4 text-muted-foreground">
-								{#if accountUsername(account)}{accountUsername(account)} ·
-								{/if}{accountSummaries[account.id] ?? getPlatformName(account.platform)}
+							<span class="flex min-w-0 items-center gap-1 text-xs leading-4 text-muted-foreground">
+								{#if accountUsername(account)}
+									<span class="truncate">{accountUsername(account)}</span>
+									<span aria-hidden="true">·</span>
+								{/if}
+								<span class="truncate"
+									>{accountSummaries[account.id] ?? getPlatformName(account.platform)}</span
+								>
 							</span>
 						</span>
 						<span

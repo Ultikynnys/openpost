@@ -60,6 +60,7 @@ All notable changes to this project are documented in this file.
 
 ### Fixed
 
+- Restored publication autosave, safe workspace switching, next-slot scheduling, legacy draft redirects, and canonical publication drafts in the planner after the composer update.
 - Preserved segment and destination state through legacy draft migration and retries, and aligned X, Meta, LinkedIn, Mastodon, Bluesky, YouTube, and TikTok request payloads with their declared setting contracts.
 - Sent the YouTube synthetic-media disclosure selected in composer settings with the video upload metadata.
 - Prevented YouTube accounts from being selected for text, thread, link, image, carousel, or Story posts; YouTube remains available for Shorts and video uploads.

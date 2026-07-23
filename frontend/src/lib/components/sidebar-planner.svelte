@@ -2,6 +2,7 @@
 	import { getLocalTimeZone, today, type DateValue } from '@internationalized/date';
 	import { SvelteMap } from 'svelte/reactivity';
 	import { client, type Post, type ScheduleOverview } from '$lib/api/client';
+	import type { components } from '$lib/api/types';
 	import { getDraftPresentation } from '$lib/components/compose/draft-utils';
 	import * as CalendarUi from '$lib/components/ui/calendar';
 	import { Skeleton } from '$lib/components/ui/skeleton';
@@ -16,10 +17,21 @@
 
 	let { onNavigate }: { onNavigate: (href: string) => void } = $props();
 
+	type Publication = components['schemas']['PublicationResponse'];
+	type PlannerDraft = {
+		id: string;
+		href: string;
+		title: string;
+		isThread: boolean;
+		postCount: number;
+		hasMedia: boolean;
+		createdAt: string;
+	};
+
 	let selectedDate = $state<DateValue | undefined>(undefined);
 	let calendarPlaceholder = $state<DateValue>(today(getLocalTimeZone()));
 	let overview = $state<ScheduleOverview | null>(null);
-	let drafts = $state.raw<Post[]>([]);
+	let drafts = $state.raw<PlannerDraft[]>([]);
 	let loadingSchedule = $state(true);
 	let loadingDrafts = $state(true);
 	let overviewRequest = 0;
@@ -85,18 +97,71 @@
 		}
 
 		try {
-			const { data, error } = await client.GET('/posts', {
-				params: {
-					query: { workspace_id: currentWorkspaceId, status: 'draft', limit: 8 }
-				}
-			});
+			const [legacyResult, publicationResult] = await Promise.all([
+				client.GET('/posts', {
+					params: {
+						query: { workspace_id: currentWorkspaceId, status: 'draft', limit: 8 }
+					}
+				}),
+				client.GET('/publications', {
+					params: {
+						query: {
+							workspace_id: currentWorkspaceId,
+							status: 'draft',
+							limit: 8,
+							offset: 0
+						}
+					}
+				})
+			]);
 			if (request !== draftsRequest) return;
-			drafts = error || !data ? [] : data;
+			const publications = publicationResult.error ? [] : (publicationResult.data ?? []);
+			const publicationIDs = new Set(publications.map((publication) => publication.id));
+			const legacyPosts = legacyResult.error ? [] : (legacyResult.data ?? []);
+			drafts = [
+				...publications.map(publicationDraft),
+				...legacyPosts
+					.filter((post) => !post.publication_id || !publicationIDs.has(post.publication_id))
+					.map(legacyDraft)
+			]
+				.sort((left, right) => right.createdAt.localeCompare(left.createdAt))
+				.slice(0, 8);
 		} catch {
 			if (request === draftsRequest) drafts = [];
 		} finally {
 			if (request === draftsRequest) loadingDrafts = false;
 		}
+	}
+
+	function publicationDraft(publication: Publication): PlannerDraft {
+		const segments = publication.segments ?? [];
+		return {
+			id: publication.id,
+			href: `/publications/${encodeURIComponent(publication.id)}`,
+			title:
+				publication.source_text.trim() ||
+				publication.title.trim() ||
+				m.calendar_untitled_publication(),
+			isThread: publication.intent === 'thread',
+			postCount: Math.max(1, segments.length),
+			hasMedia:
+				(publication.media?.length ?? 0) > 0 ||
+				segments.some((segment) => (segment.media?.length ?? 0) > 0),
+			createdAt: publication.created_at
+		};
+	}
+
+	function legacyDraft(post: Post): PlannerDraft {
+		const presentation = getDraftPresentation(post);
+		return {
+			id: post.id,
+			href: `/posts/${post.id}`,
+			title: presentation.title,
+			isThread: presentation.isThread,
+			postCount: presentation.postCount,
+			hasMedia: presentation.hasMedia,
+			createdAt: post.created_at
+		};
 	}
 
 	function handleDateChange(date: DateValue | undefined) {
@@ -135,7 +200,7 @@
 					class="size-3 text-sidebar-foreground/42 transition-colors group-hover:text-sidebar-foreground"
 				/>
 			</button>
-			<span class="text-[11px] text-sidebar-foreground/48 tabular-nums">
+			<span class="text-xs text-sidebar-foreground/48 tabular-nums">
 				{#if loadingSchedule}{m.sidebar_schedule_loading()}{:else}{m.sidebar_schedule_count({
 						count: scheduledCount
 					})}{/if}
@@ -157,16 +222,16 @@
 	<section class="min-h-0 border-b border-sidebar-border px-2 py-3">
 		<div class="mb-1 flex h-7 items-center justify-between px-2">
 			<div class="flex items-center gap-1.5">
-				<span class="text-[11px] font-medium tracking-[0.1em] text-sidebar-foreground/52 uppercase"
+				<span class="text-xs font-medium tracking-[0.1em] text-sidebar-foreground/52 uppercase"
 					>{m.sidebar_drafts()}</span
 				>
 				{#if !loadingDrafts && drafts.length > 0}
-					<span class="text-[11px] text-sidebar-foreground/38 tabular-nums">{drafts.length}</span>
+					<span class="text-xs text-sidebar-foreground/38 tabular-nums">{drafts.length}</span>
 				{/if}
 			</div>
 			<button
 				type="button"
-				class="rounded-sm px-1.5 py-1 text-[11px] font-medium text-sidebar-foreground/58 hover:bg-sidebar-accent hover:text-sidebar-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-none"
+				class="rounded-sm px-1.5 py-1 text-xs font-medium text-sidebar-foreground/58 hover:bg-sidebar-accent hover:text-sidebar-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-none"
 				onclick={() => onNavigate('/activity?tab=drafts')}
 			>
 				{m.sidebar_view_all()}
@@ -196,13 +261,12 @@
 		{:else}
 			<ul class="max-h-40 space-y-0.5 overflow-y-auto" data-testid="sidebar-draft-list">
 				{#each drafts as draft (draft.id)}
-					{@const presentation = getDraftPresentation(draft)}
 					<li>
 						<button
 							type="button"
 							class="group flex min-h-9 w-full items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-none"
-							onclick={() => onNavigate(`/posts/${draft.id}`)}
-							aria-label={m.sidebar_resume_draft({ title: presentation.title })}
+							onclick={() => onNavigate(draft.href)}
+							aria-label={m.sidebar_resume_draft({ title: draft.title })}
 						>
 							<span
 								class="flex size-6 shrink-0 items-center justify-center rounded-md bg-sidebar-accent/70 text-sidebar-foreground/58 group-hover:text-sidebar-foreground"
@@ -211,15 +275,15 @@
 							</span>
 							<span class="min-w-0 flex-1">
 								<span class="block truncate text-xs font-medium text-sidebar-foreground/88"
-									>{presentation.title}</span
+									>{draft.title}</span
 								>
-								{#if presentation.isThread}
-									<span class="block text-[10px] leading-3.5 text-sidebar-foreground/45"
-										>{m.sidebar_thread_count({ count: presentation.postCount })}</span
+								{#if draft.isThread}
+									<span class="block text-xs leading-4 text-sidebar-foreground/45"
+										>{m.sidebar_thread_count({ count: draft.postCount })}</span
 									>
 								{/if}
 							</span>
-							{#if presentation.hasMedia}
+							{#if draft.hasMedia}
 								<ImageIcon
 									class="size-3 shrink-0 text-sidebar-foreground/38"
 									aria-label={m.sidebar_has_media()}

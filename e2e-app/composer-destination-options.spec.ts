@@ -171,6 +171,31 @@ test("Threads destination options stay scoped and touch accessible on mobile", a
       },
     });
   });
+  await page.route("**/api/v1/publications/publication-1", async (route) => {
+    if (route.request().method() === "PUT") {
+      publicationPayload = {
+        ...(publicationPayload ?? {}),
+        ...JSON.parse(route.request().postData() ?? "{}"),
+      };
+      await route.fulfill({ contentType: "application/json", json: {} });
+      return;
+    }
+    await route.continue();
+  });
+  await page.route(
+    "**/api/v1/publications/publication-1/renditions",
+    async (route) => {
+      if (route.request().method() === "PUT") {
+        publicationPayload = {
+          ...(publicationPayload ?? {}),
+          ...JSON.parse(route.request().postData() ?? "{}"),
+        };
+        await route.fulfill({ contentType: "application/json", json: {} });
+        return;
+      }
+      await route.continue();
+    },
+  );
 
   await page.goto("/");
   await page.getByLabel("Post text").fill("A scoped Threads poll");

@@ -96,6 +96,39 @@ test("composer schedules a publication from the selected time", async ({
       },
     });
   });
+  await page.route("**/api/v1/capabilities/resolve", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        accounts: [
+          {
+            account_id: "bluesky-main",
+            provider: "bluesky",
+            profile: "short_video",
+            output_profile: "bluesky.video",
+            label: "Bluesky video",
+            text_limit: 300,
+            media: {
+              min_count: 0,
+              max_count: 4,
+              allowed_mimes: [],
+              requires_public_url: false,
+              requires_https_fetchable: false,
+            },
+            intents: ["short_video"],
+            media_shapes: ["video"],
+            settings: [],
+            setting_groups: [],
+            compatible: true,
+            active_constraints: {},
+            issues: [],
+            capability_revision: "test-v1",
+            dynamic_options: {},
+          },
+        ],
+      },
+    });
+  });
   await page.route("**/api/v1/publications", async (route) => {
     if (route.request().method() === "POST") {
       publicationPayload = JSON.parse(
@@ -120,6 +153,34 @@ test("composer schedules a publication from the selected time", async ({
 
     await route.continue();
   });
+  await page.route(
+    "**/api/v1/publications/publication-schedule",
+    async (route) => {
+      if (route.request().method() === "PUT") {
+        publicationPayload = {
+          ...(publicationPayload ?? {}),
+          ...(route.request().postDataJSON() as PostPayload),
+        };
+        await route.fulfill({ contentType: "application/json", json: {} });
+        return;
+      }
+      await route.continue();
+    },
+  );
+  await page.route(
+    "**/api/v1/publications/publication-schedule/renditions",
+    async (route) => {
+      if (route.request().method() === "PUT") {
+        publicationPayload = {
+          ...(publicationPayload ?? {}),
+          ...(route.request().postDataJSON() as PostPayload),
+        };
+        await route.fulfill({ contentType: "application/json", json: {} });
+        return;
+      }
+      await route.continue();
+    },
+  );
   await page.route("**/api/v1/publications/*/validate", async (route) => {
     if (route.request().method() === "POST") {
       await route.fulfill({

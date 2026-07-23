@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"slices"
 	"sort"
 	"strings"
@@ -352,17 +353,18 @@ func (h *PublicationHandler) deleteRendition(api huma.API) {
 		if !input.Confirm {
 			return nil, huma.Error400BadRequest("confirm=true is required to delete a saved destination")
 		}
-		if _, err := h.loadPublicationForEdit(ctx, input.PathID, middleware.GetUserID(ctx)); err != nil {
+		publication, err := h.loadPublicationForEdit(ctx, input.PathID, middleware.GetUserID(ctx))
+		if err != nil {
 			return nil, err
 		}
 		var deleted bool
-		err := h.db.RunInTx(ctx, &sql.TxOptions{}, func(txCtx context.Context, tx bun.Tx) error {
-			if _, err := h.loadEditablePublicationTx(txCtx, tx, input.PathID); err != nil {
+		err = h.db.RunInTx(ctx, &sql.TxOptions{}, func(txCtx context.Context, tx bun.Tx) error {
+			if _, err := h.loadEditablePublicationTx(txCtx, tx, publication.ID); err != nil {
 				return err
 			}
 			result, err := tx.NewDelete().
 				Model((*models.Rendition)(nil)).
-				Where("publication_id = ? AND social_account_id = ?", input.PathID, input.AccountID).
+				Where("publication_id = ? AND social_account_id = ?", publication.ID, input.AccountID).
 				Exec(txCtx)
 			if err != nil {
 				return err
@@ -786,10 +788,11 @@ func (h *PublicationHandler) validatePublication(api huma.API) {
 		Tags:        []string{tagPublications},
 		Middlewares: huma.Middlewares{middleware.AuthMiddleware(api, h.auth)},
 	}, func(ctx context.Context, input *PublicationActionInput) (*PublicationValidationOutput, error) {
-		if _, err := h.loadPublication(ctx, input.PathID, middleware.GetUserID(ctx)); err != nil {
+		publication, err := h.loadPublication(ctx, input.PathID, middleware.GetUserID(ctx))
+		if err != nil {
 			return nil, err
 		}
-		issues, err := h.validatePublicationByID(ctx, input.PathID)
+		issues, err := h.validatePublicationByID(ctx, publication.ID)
 		if err != nil {
 			return nil, err
 		}
@@ -809,15 +812,16 @@ func (h *PublicationHandler) schedulePublication(api huma.API) {
 		Tags:        []string{tagPublications},
 		Middlewares: huma.Middlewares{middleware.AuthMiddleware(api, h.auth)},
 	}, func(ctx context.Context, input *PublicationActionInput) (*ActionOutput, error) {
-		if _, err := h.loadPublicationForEdit(ctx, input.PathID, middleware.GetUserID(ctx)); err != nil {
+		publication, err := h.loadPublicationForEdit(ctx, input.PathID, middleware.GetUserID(ctx))
+		if err != nil {
 			return nil, err
 		}
-		if issues, err := h.validatePublicationByID(ctx, input.PathID); err != nil {
+		if issues, err := h.validatePublicationByID(ctx, publication.ID); err != nil {
 			return nil, err
 		} else if hasBlockingIssues(issues) {
 			return nil, publicationMutationHTTPError(errPublicationValidationBlocked, "publication capability validation failed")
 		}
-		jobID, err := h.queueScheduledPublication(ctx, input.PathID)
+		jobID, err := h.queueScheduledPublication(ctx, publication.ID)
 		if err != nil {
 			return nil, publicationMutationHTTPError(err, "failed to enqueue publication")
 		}
@@ -834,15 +838,16 @@ func (h *PublicationHandler) publishNow(api huma.API) {
 		Tags:        []string{tagPublications},
 		Middlewares: huma.Middlewares{middleware.AuthMiddleware(api, h.auth)},
 	}, func(ctx context.Context, input *PublicationActionInput) (*ActionOutput, error) {
-		if _, err := h.loadPublicationForEdit(ctx, input.PathID, middleware.GetUserID(ctx)); err != nil {
+		publication, err := h.loadPublicationForEdit(ctx, input.PathID, middleware.GetUserID(ctx))
+		if err != nil {
 			return nil, err
 		}
-		if issues, err := h.validatePublicationByID(ctx, input.PathID); err != nil {
+		if issues, err := h.validatePublicationByID(ctx, publication.ID); err != nil {
 			return nil, err
 		} else if hasBlockingIssues(issues) {
 			return nil, publicationMutationHTTPError(errPublicationValidationBlocked, "publication capability validation failed")
 		}
-		jobID, err := h.queuePublicationNow(ctx, input.PathID)
+		jobID, err := h.queuePublicationNow(ctx, publication.ID)
 		if err != nil {
 			return nil, publicationMutationHTTPError(err, "failed to enqueue publication")
 		}
@@ -1616,6 +1621,7 @@ func (h *PublicationHandler) loadRenditionSegmentMediaWithDB(
 }
 
 func (h *PublicationHandler) loadPublication(ctx context.Context, publicationID, userID string) (*models.Publication, error) {
+	publicationID = publicationPathID(publicationID)
 	var publication models.Publication
 	if err := h.db.NewSelect().Model(&publication).Where("id = ?", publicationID).Scan(ctx); err != nil {
 		return nil, huma.Error404NotFound("publication not found")
@@ -1641,6 +1647,7 @@ func (h *PublicationHandler) loadPublicationForEdit(ctx context.Context, publica
 }
 
 func (h *PublicationHandler) loadEditablePublicationTx(ctx context.Context, tx bun.Tx, publicationID string) (*models.Publication, error) {
+	publicationID = publicationPathID(publicationID)
 	if err := lockPublicationMutationTx(ctx, tx, publicationID); err != nil {
 		return nil, err
 	}
@@ -1661,6 +1668,14 @@ func (h *PublicationHandler) loadEditablePublicationTx(ctx context.Context, tx b
 		return nil, err
 	}
 	return &publication, nil
+}
+
+func publicationPathID(value string) string {
+	decoded, err := url.PathUnescape(value)
+	if err != nil {
+		return value
+	}
+	return decoded
 }
 
 func lockPublicationMutationTx(ctx context.Context, tx bun.Tx, publicationID string) error {

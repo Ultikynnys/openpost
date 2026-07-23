@@ -72,6 +72,40 @@ test("composer renders account-specific renditions", async ({
       },
     });
   });
+  await page.route("**/api/v1/capabilities/resolve", async (route) => {
+    const payload = route.request().postDataJSON() as {
+      account_ids: string[];
+    };
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        accounts: payload.account_ids.map((accountID) => ({
+          account_id: accountID,
+          provider: "bluesky",
+          profile: "short_video",
+          output_profile: "bluesky.video",
+          label: "Bluesky video",
+          text_limit: 300,
+          media: {
+            min_count: 0,
+            max_count: 1,
+            allowed_mimes: [],
+            requires_public_url: false,
+            requires_https_fetchable: false,
+          },
+          intents: ["short_video"],
+          media_shapes: ["video"],
+          settings: [],
+          setting_groups: [],
+          compatible: true,
+          active_constraints: {},
+          issues: [],
+          capability_revision: "test-v1",
+          dynamic_options: {},
+        })),
+      },
+    });
+  });
   await page.route("**/api/v1/publications", async (route) => {
     if (route.request().method() === "POST") {
       publicationPayload = JSON.parse(
@@ -96,6 +130,34 @@ test("composer renders account-specific renditions", async ({
 
     await route.continue();
   });
+  await page.route(
+    "**/api/v1/publications/publication-preview",
+    async (route) => {
+      if (route.request().method() === "PUT") {
+        publicationPayload = {
+          ...(publicationPayload ?? {}),
+          ...(route.request().postDataJSON() as PostPayload),
+        };
+        await route.fulfill({ contentType: "application/json", json: {} });
+        return;
+      }
+      await route.continue();
+    },
+  );
+  await page.route(
+    "**/api/v1/publications/publication-preview/renditions",
+    async (route) => {
+      if (route.request().method() === "PUT") {
+        publicationPayload = {
+          ...(publicationPayload ?? {}),
+          ...(route.request().postDataJSON() as PostPayload),
+        };
+        await route.fulfill({ contentType: "application/json", json: {} });
+        return;
+      }
+      await route.continue();
+    },
+  );
 
   await page.goto("/");
   await page.getByTestId("composer-mode-select").click();

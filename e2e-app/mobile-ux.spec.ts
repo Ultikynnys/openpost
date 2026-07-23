@@ -49,6 +49,56 @@ test("mobile shell and composer expose touch-first controls without overflow", a
       ],
     });
   });
+  await page.route("**/api/v1/capabilities/resolve", async (route) => {
+    const languageSetting = {
+      key: "languages",
+      message_key: "publishing.setting.languages",
+      label: "Languages",
+      group: "distribution",
+      control: "tag_input",
+      type: "tags",
+      scope: "destination",
+      intents: ["post"],
+      output_profiles: ["bluesky.post"],
+      media_shapes: ["text"],
+      required: false,
+      required_policy: "never",
+      constraints: {},
+    };
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        accounts: [
+          {
+            account_id: "mobile-bluesky",
+            provider: "bluesky",
+            profile: "short_text",
+            output_profile: "bluesky.post",
+            label: "Bluesky post",
+            text_limit: 300,
+            media: {
+              min_count: 0,
+              max_count: 4,
+              allowed_mimes: [],
+              requires_public_url: false,
+              requires_https_fetchable: false,
+            },
+            intents: ["post"],
+            media_shapes: ["text"],
+            settings: [languageSetting],
+            setting_groups: [
+              { key: "distribution", settings: [languageSetting] },
+            ],
+            compatible: true,
+            active_constraints: {},
+            issues: [],
+            capability_revision: "test-v1",
+            dynamic_options: {},
+          },
+        ],
+      },
+    });
+  });
 
   await page.goto("/");
 
@@ -101,7 +151,7 @@ test("mobile shell and composer expose touch-first controls without overflow", a
   ).toContainText(nextWorkspace);
   await page.keyboard.press("Escape");
 
-  const controls = page.getByTestId("mobile-composer-controls");
+  const controls = page.getByTestId("composer-action-controls");
   await expect(controls).toBeVisible();
   const overflow = await controls.evaluate((element) => ({
     clientWidth: element.clientWidth,
@@ -113,13 +163,12 @@ test("mobile shell and composer expose touch-first controls without overflow", a
   expect(overflow.scrollWidth).toBeLessThanOrEqual(overflow.clientWidth);
   expect(Math.max(...overflow.childRightEdges)).toBeLessThanOrEqual(390);
 
-  await expect(page.getByTestId("desktop-composer-controls")).toHaveCount(0);
   await expect(page.getByTestId("composer-account-control")).toHaveCount(1);
   await expect(
-    page.getByRole("button", { name: "Publish", exact: true }),
+    controls.getByRole("button", { name: "Publish Now", exact: true }),
   ).toHaveCount(1);
   await expect(
-    page.getByRole("button", { name: /^Schedule post:/ }),
+    controls.getByRole("button", { name: "Schedule", exact: true }),
   ).toHaveCount(1);
 
   await expectMinimumTouchTarget(
@@ -127,12 +176,16 @@ test("mobile shell and composer expose touch-first controls without overflow", a
     "post type selector",
   );
   await expectMinimumTouchTarget(
-    page.getByRole("button", { name: "Add post", exact: true }),
-    "add post button",
+    page.locator('label:has(input[type="file"])').first(),
+    "media upload label",
   );
   await expectMinimumTouchTarget(
-    page.locator('label:has(input[type="file"][accept="image/*,video/*"])'),
-    "media upload label",
+    controls.getByRole("button", { name: "Save draft", exact: true }),
+    "save draft button",
+  );
+  await expectMinimumTouchTarget(
+    controls.getByRole("button", { name: "Schedule", exact: true }),
+    "schedule button",
   );
 
   await expect(
@@ -155,70 +208,32 @@ test("mobile shell and composer expose touch-first controls without overflow", a
   await accountControl.click();
   const accountRow = page.getByTestId("composer-account-row");
   await expect(accountRow).toHaveCount(1);
+  await expect(accountRow).toContainText("Bluesky post");
   await expectMinimumTouchTarget(
-    page.getByTestId("composer-account-actions"),
-    "account actions",
+    page.getByTestId("composer-account-settings"),
+    "destination settings",
   );
-  await page.getByTestId("composer-account-actions").click();
-  await expectMinimumTouchTarget(
-    page.getByTestId("composer-account-customize"),
-    "account customization action",
-  );
-  await page.getByTestId("composer-account-customize").click();
+  await page.getByTestId("composer-account-settings").click();
+  const settingsDialog = page.getByRole("dialog");
   await expect(
-    accountControl.getByTestId("composer-active-custom-indicator"),
+    settingsDialog.getByRole("heading", { name: "Bluesky settings" }),
   ).toBeVisible();
-  await accountControl.click();
-  await expect(
-    page.getByTestId("composer-account-custom-indicator"),
-  ).toBeVisible();
-  await page.getByTestId("composer-account-toggle").click();
-  const removeCustomDialog = page.getByRole("dialog");
-  await expect(
-    removeCustomDialog.getByRole("heading", {
-      name: "Remove Bluesky @openpost_mobile from this post?",
-    }),
-  ).toBeVisible();
-  await removeCustomDialog.getByRole("button", { name: "Cancel" }).click();
-  await expect(
-    accountControl.getByTestId("composer-active-custom-indicator"),
-  ).toBeVisible();
-  await accountControl.click();
-  await expect(
-    page.getByTestId("composer-account-row").getByRole("checkbox"),
-  ).toBeChecked();
-  await page.getByTestId("composer-account-actions").click();
-  await expectMinimumTouchTarget(
-    page.getByTestId("composer-account-reset"),
-    "account reset action",
-  );
-  await page.getByTestId("composer-account-reset").click();
-  const resetCustomDialog = page.getByRole("dialog");
-  await expect(
-    resetCustomDialog.getByRole("heading", {
-      name: "Reset Bluesky @openpost_mobile to shared content?",
-    }),
-  ).toBeVisible();
-  await resetCustomDialog
-    .getByRole("button", { name: "Reset version" })
-    .click();
-  await expect(
-    accountControl.getByTestId("composer-active-custom-indicator"),
-  ).toHaveCount(0);
+  const settingsBox = await settingsDialog.boundingBox();
+  expect(settingsBox?.height).toBeGreaterThanOrEqual(800);
+  await settingsDialog.getByRole("button", { name: "Done" }).click();
 
   await page.setViewportSize({ width: 1280, height: 800 });
-  await expect(page.getByTestId("mobile-composer-controls")).toHaveCount(0);
-  await expect(page.getByTestId("desktop-composer-controls")).toBeVisible();
+  await expect(controls).toBeVisible();
   await expect(page.getByTestId("composer-account-control")).toHaveCount(1);
   await expect(
-    page.getByRole("button", { name: "Publish", exact: true }),
+    controls.getByRole("button", { name: "Publish Now", exact: true }),
   ).toHaveCount(1);
   await expect(
     page.getByRole("button", { name: "Schedule", exact: true }),
   ).toHaveCount(1);
 });
 
-test("attached media actions are visible on touch and subtle on desktop", async ({
+test("attached media controls stay touch accessible on mobile and desktop", async ({
   page,
   request,
 }) => {
@@ -267,29 +282,28 @@ test("attached media actions are visible on touch and subtle on desktop", async 
     },
   });
   expect(draftResponse.ok()).toBeTruthy();
-  const draft = (await draftResponse.json()) as { id: string };
+  const draft = (await draftResponse.json()) as {
+    id: string;
+    publication_id: string;
+  };
 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(`/posts/${draft.id}`);
+  await expect(page).toHaveURL(
+    new RegExp(
+      `/publications/${draft.publication_id.replace(":", "(?::|%3A)")}$`,
+    ),
+  );
   const actions = page.getByTestId("composer-media-actions");
   await expect(actions).toBeVisible();
-  await expect(
-    page.getByRole("button", { name: "Add alt text" }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("button", { name: "Remove media" }),
-  ).toBeVisible();
-  await page.getByRole("button", { name: "Add alt text" }).click();
-  await expect(page.getByRole("textbox", { name: "Alt text" })).toBeVisible();
-  await page.getByRole("button", { name: "Done" }).click();
-  await expect(page.getByRole("textbox", { name: "Alt text" })).toHaveCount(0);
+  const removeMedia = page.getByRole("button", { name: "Remove media" });
+  await expectMinimumTouchTarget(removeMedia, "remove media button");
+  const altText = page.getByRole("textbox", { name: "Alt text" });
+  await expect(altText).toBeVisible();
+  await altText.fill("A single-pixel accessibility fixture.");
 
   await page.setViewportSize({ width: 1280, height: 800 });
-  await expect(actions).toHaveCSS("opacity", "0");
-  await page.getByRole("button", { name: "Add alt text" }).focus();
-  await expect(actions).toHaveCSS("opacity", "1");
-  await page.getByRole("button", { name: "Add alt text" }).blur();
-  await expect(actions).toHaveCSS("opacity", "0");
-  await actions.locator("xpath=..").hover();
-  await expect(actions).toHaveCSS("opacity", "1");
+  await expect(actions).toBeVisible();
+  await expect(altText).toHaveValue("A single-pixel accessibility fixture.");
+  await expect(removeMedia).toBeVisible();
 });

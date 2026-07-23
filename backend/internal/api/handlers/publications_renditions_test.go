@@ -18,6 +18,11 @@ import (
 	"github.com/uptrace/bun"
 )
 
+func TestPublicationPathIDDecodesLegacyPublicationIDs(t *testing.T) {
+	require.Equal(t, "legacy-publication:post-1", publicationPathID("legacy-publication%3Apost-1"))
+	require.Equal(t, "publication-1", publicationPathID("publication-1"))
+}
+
 func TestUpsertPublicationRenditionsPreservesOmittedRenditionsUntilExplicitDelete(t *testing.T) {
 	db := createHandlerTestDB(t,
 		(*models.WorkspaceMember)(nil),
