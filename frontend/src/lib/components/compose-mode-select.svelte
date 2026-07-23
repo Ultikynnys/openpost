@@ -2,9 +2,6 @@
 	import * as Select from '$lib/components/ui/select';
 	import { cn } from '$lib/utils';
 	import AlignLeftIcon from 'lucide-svelte/icons/align-left';
-	import ImageIcon from 'lucide-svelte/icons/image';
-	import ImagesIcon from 'lucide-svelte/icons/images';
-	import LinkIcon from 'lucide-svelte/icons/link';
 	import ListIcon from 'lucide-svelte/icons/list';
 	import PlayIcon from 'lucide-svelte/icons/play';
 	import SmartphoneIcon from 'lucide-svelte/icons/smartphone';
@@ -18,14 +15,11 @@
 	} from './compose/modes';
 
 	const modeIcons: Partial<Record<ComposerModeKey, typeof AlignLeftIcon>> = {
-		short_text: AlignLeftIcon,
+		post: AlignLeftIcon,
 		thread: ListIcon,
-		link_share: LinkIcon,
-		image_post: ImageIcon,
-		carousel: ImagesIcon,
 		story: SmartphoneIcon,
 		short_video: PlayIcon,
-		long_video: VideoIcon
+		video: VideoIcon
 	};
 
 	interface Props {
@@ -75,7 +69,7 @@
 			{/if}
 			<Select.Group class="px-1.5 py-1">
 				<Select.GroupHeading
-					class="px-2 py-1 font-mono text-[0.625rem] font-medium tracking-[0.12em] uppercase"
+					class="px-2 py-1 font-mono text-xs font-medium tracking-[0.12em] uppercase"
 				>
 					{group.key === 'write' ? m.compose_group_write() : m.compose_group_media()}
 				</Select.GroupHeading>
@@ -90,7 +84,7 @@
 						<Icon class="mt-0.5 size-4 text-muted-foreground" />
 						<span class="min-w-0 flex-col items-start! gap-0!">
 							<span class="text-xs/4 font-medium text-foreground">{modeCopy.label}</span>
-							<span class="line-clamp-2 text-[0.6875rem]/4 text-muted-foreground">
+							<span class="line-clamp-2 text-xs/4 text-muted-foreground">
 								{modeCopy.description}
 							</span>
 						</span>

@@ -215,7 +215,7 @@
 	const hasContent = $derived(hasAnyContent(posts));
 	const totalChars = $derived(posts.reduce((sum, p) => sum + p.content.length, 0));
 	const isThread = $derived(posts.length > 1);
-	const legacyMode = $derived<ComposerModeKey>(isThread ? 'thread' : 'short_text');
+	const legacyMode = $derived<ComposerModeKey>(isThread ? 'thread' : 'post');
 	const legacyModeMeta = $derived(composerMode(legacyMode));
 	const compatibleAccounts = $derived(
 		accounts.filter((account) => isAccountCompatibleWithMode(legacyMode, account))
@@ -2834,7 +2834,7 @@
 																<div class="mt-1 flex justify-end gap-1">
 																	<button
 																		type="button"
-																		class="text-[10px] text-white/70 hover:text-white"
+																		class="text-xs text-white/70 hover:text-white"
 																		onclick={() => (editingAltMediaId = null)}
 																		>{m.common_done()}</button
 																	>
@@ -2853,7 +2853,7 @@
 												: 'pointer-events-none opacity-0'}"
 										>
 											{#if isThread}<span
-													class="text-[10px] font-medium text-muted-foreground/60 tabular-nums"
+													class="text-xs font-medium text-muted-foreground/60 tabular-nums"
 													>#{i + 1}</span
 												>{/if}
 
@@ -2920,7 +2920,7 @@
 																	transform="rotate(-90 10 10)"
 																/>
 															</svg>
-															<span class="text-[10px] text-muted-foreground/60 tabular-nums"
+															<span class="text-xs text-muted-foreground/60 tabular-nums"
 																>{getEditorContentForPost(post).length}/{editorMaxChars}</span
 															>
 														</div>

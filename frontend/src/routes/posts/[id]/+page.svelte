@@ -34,6 +34,12 @@
 			});
 			if (err) throw new Error(err.detail || m.post_edit_load_failed());
 			if (requestSequence !== postRequestSequence || postId !== id) return;
+			if (data?.publication_id) {
+				await goto(resolve('/publications/[id]', { id: data.publication_id }), {
+					replaceState: true
+				});
+				return;
+			}
 			post = data
 				? { ...data, media: data.media ?? [], destinations: data.destinations ?? [] }
 				: null;

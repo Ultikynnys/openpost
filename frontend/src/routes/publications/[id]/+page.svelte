@@ -9,7 +9,11 @@
 	import InlineNotice from '$lib/components/inline-notice.svelte';
 	import ComposeFocusedPublication from '$lib/components/compose-focused-publication.svelte';
 	import { ui } from '$lib/stores/ui.svelte';
-	import { COMPOSER_MODE_KEYS, type ComposerModeKey } from '$lib/components/compose/modes';
+	import {
+		COMPOSER_MODE_KEYS,
+		intentForLegacyProfile,
+		type ComposerModeKey
+	} from '$lib/components/compose/modes';
 	import { m } from '$lib/paraglide/messages';
 
 	type Publication = components['schemas']['PublicationResponse'];
@@ -43,9 +47,10 @@
 	}
 
 	function publicationMode(item: Publication): ComposerModeKey {
-		return COMPOSER_MODE_KEYS.includes(item.content_profile as ComposerModeKey)
-			? (item.content_profile as ComposerModeKey)
-			: 'link_share';
+		if (COMPOSER_MODE_KEYS.includes(item.intent as ComposerModeKey)) {
+			return item.intent as ComposerModeKey;
+		}
+		return intentForLegacyProfile(item.content_profile);
 	}
 
 	async function handleSuccess() {

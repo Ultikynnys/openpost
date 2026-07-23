@@ -11,70 +11,53 @@ const youtube = { id: 'yt-1', platform: 'youtube', account_username: 'OpenPost' 
 const tiktok = { id: 'tt-1', platform: 'tiktok', account_username: 'openpost' };
 const instagram = { id: 'ig-1', platform: 'instagram', account_username: 'openpost' };
 
-describe('composer mode role mapping', () => {
-	it('keeps the format picker aligned with user intent instead of media API shapes', () => {
-		expect(SELECTABLE_COMPOSER_MODES.map((mode) => mode.label)).toEqual([
-			'Post',
-			'Thread',
-			'Link',
-			'Image',
-			'Carousel',
-			'Story',
-			'Short video',
-			'Video'
+describe('composer intent mapping', () => {
+	it('offers only user publishing intents', () => {
+		expect(SELECTABLE_COMPOSER_MODES.map((mode) => mode.key)).toEqual([
+			'post',
+			'thread',
+			'story',
+			'short_video',
+			'video'
 		]);
 	});
 
-	it('groups every selectable format once without hiding secondary types', () => {
+	it('groups every intent once', () => {
 		expect(
 			COMPOSER_MODE_GROUPS.map((group) => ({
 				label: group.label,
 				modes: group.modes.map((mode) => mode.key)
 			}))
 		).toEqual([
-			{ label: 'Write', modes: ['short_text', 'thread', 'link_share'] },
-			{
-				label: 'Media',
-				modes: ['image_post', 'carousel', 'story', 'short_video', 'long_video']
-			}
+			{ label: 'Write', modes: ['post', 'thread'] },
+			{ label: 'Media', modes: ['story', 'short_video', 'video'] }
 		]);
 		expect(COMPOSER_MODE_GROUPS.flatMap((group) => group.modes)).toEqual(SELECTABLE_COMPOSER_MODES);
 	});
 
-	it('uses post text for short text', () => {
-		expect(roleFieldsForMode('short_text', [])).toEqual([
-			expect.objectContaining({ key: 'postText', label: 'Post text' })
+	it('uses shared text and link fields for Post', () => {
+		expect(roleFieldsForMode('post', [])).toEqual([
+			expect.objectContaining({ key: 'postText', label: 'Post text' }),
+			expect.objectContaining({ key: 'linkUrl', label: 'Link URL' })
 		]);
 	});
 
-	it('uses link URL plus post text for link shares', () => {
-		expect(roleFieldsForMode('link_share', [])).toEqual([
-			expect.objectContaining({ key: 'linkUrl', label: 'Link URL' }),
-			expect.objectContaining({ key: 'postText', label: 'Post text' })
-		]);
+	it('keeps thread bodies in the ordered segment editor', () => {
+		expect(roleFieldsForMode('thread', [])).toEqual([]);
 	});
 
-	it('uses caption for image posts', () => {
-		expect(roleFieldsForMode('image_post', [instagram])).toEqual([
-			expect.objectContaining({ key: 'caption', label: 'Caption', hint: 'Caption · Instagram' })
-		]);
-	});
-
-	it('offers YouTube only for video formats supported by the public API', () => {
-		expect(isAccountCompatibleWithMode('short_text', youtube)).toBe(false);
+	it('offers YouTube only for its public video outputs', () => {
+		expect(isAccountCompatibleWithMode('post', youtube)).toBe(false);
 		expect(isAccountCompatibleWithMode('thread', youtube)).toBe(false);
-		expect(isAccountCompatibleWithMode('link_share', youtube)).toBe(false);
-		expect(isAccountCompatibleWithMode('image_post', youtube)).toBe(false);
-		expect(isAccountCompatibleWithMode('carousel', youtube)).toBe(false);
 		expect(isAccountCompatibleWithMode('story', youtube)).toBe(false);
 		expect(isAccountCompatibleWithMode('short_video', youtube)).toBe(true);
-		expect(isAccountCompatibleWithMode('long_video', youtube)).toBe(true);
+		expect(isAccountCompatibleWithMode('video', youtube)).toBe(true);
 	});
 
-	it('uses the capability catalog for other provider-format combinations', () => {
-		const capabilities = [{ provider: 'instagram', profile: 'image_post' }];
-		expect(isAccountCompatibleWithMode('image_post', instagram, capabilities)).toBe(true);
-		expect(isAccountCompatibleWithMode('long_video', instagram, capabilities)).toBe(false);
+	it('uses resolved capability intents for other providers', () => {
+		const capabilities = [{ provider: 'instagram', profile: 'image_post', intents: ['post'] }];
+		expect(isAccountCompatibleWithMode('post', instagram, capabilities)).toBe(true);
+		expect(isAccountCompatibleWithMode('video', instagram, capabilities)).toBe(false);
 	});
 
 	it('separates YouTube video metadata from social captions', () => {
@@ -84,37 +67,36 @@ describe('composer mode role mapping', () => {
 			expect.objectContaining({ key: 'caption', label: 'Caption', hint: 'Caption · TikTok' })
 		]);
 	});
-
-	it('keeps long video YouTube-style first and adds caption for feed video targets', () => {
-		expect(roleFieldsForMode('long_video', [youtube, instagram])).toEqual([
-			expect.objectContaining({ key: 'videoTitle', label: 'Video title' }),
-			expect.objectContaining({ key: 'videoDescription', label: 'Video description' }),
-			expect.objectContaining({ key: 'caption', label: 'Caption', hint: 'Caption · Instagram' })
-		]);
-	});
 });
 
 describe('focused publication payloads', () => {
-	it('maps YouTube title and description into rendition title and description', () => {
+	it('maps Video metadata and explicit destination choices', () => {
 		const payload = buildFocusedPublicationPayload({
-			mode: 'long_video',
+			mode: 'video',
 			workspaceId: 'ws-1',
 			accounts: [youtube],
 			fields: {
 				videoTitle: 'Launch walkthrough',
-				videoDescription: 'A complete tour of the release.',
-				caption: 'Watch the new release.'
+				videoDescription: 'A complete tour of the release.'
 			},
-			mediaIds: ['video-1'],
-			thumbnailMediaId: 'thumb-1'
+			media: [{ id: 'video-1', mimeType: 'video/mp4' }],
+			thumbnailMediaId: 'thumb-1',
+			settingsByAccount: { 'yt-1': { privacy: 'private' } },
+			resolvedByAccount: {
+				'yt-1': {
+					profile: 'long_video',
+					outputProfile: 'youtube.video',
+					revision: 'youtube.video:v1'
+				}
+			}
 		});
 
+		expect(payload.intent).toBe('video');
 		expect(payload.source_text).toBe('A complete tour of the release.');
-		expect(payload.title).toBe('Launch walkthrough');
-		expect(payload.renditions).toHaveLength(1);
 		expect(payload.renditions[0]).toMatchObject({
 			social_account_id: 'yt-1',
 			profile: 'long_video',
+			output_profile: 'youtube.video',
 			body: 'A complete tour of the release.',
 			title: 'Launch walkthrough',
 			description: 'A complete tour of the release.',
@@ -127,32 +109,98 @@ describe('focused publication payloads', () => {
 		});
 	});
 
-	it('maps mixed short-video targets without overloading one textarea', () => {
+	it('preserves ordered thread segments and segment-scoped settings', () => {
 		const payload = buildFocusedPublicationPayload({
-			mode: 'short_video',
+			mode: 'thread',
 			workspaceId: 'ws-1',
-			accounts: [youtube, tiktok],
-			fields: {
-				videoTitle: 'Launch in 60 seconds',
-				videoDescription: 'The YouTube description.',
-				caption: 'The TikTok caption.'
-			},
-			mediaIds: ['video-1']
+			accounts: [tiktok],
+			fields: {},
+			media: [],
+			segments: [
+				{
+					id: 'segment-1',
+					content: 'First',
+					media: [],
+					settingsByAccount: { 'tt-1': { reply_control: 'everyone' } }
+				},
+				{ id: 'segment-2', content: 'Second', media: [] }
+			],
+			resolvedByAccount: {
+				'tt-1': { profile: 'thread', outputProfile: 'tiktok.thread' }
+			}
 		});
 
-		expect(payload.renditions).toEqual([
+		expect(payload.segments.map((segment) => segment.body)).toEqual(['First', 'Second']);
+		expect(payload.renditions[0].segments).toEqual([
 			expect.objectContaining({
-				social_account_id: 'yt-1',
-				body: 'The YouTube description.',
-				title: 'Launch in 60 seconds',
-				description: 'The YouTube description.'
+				publication_segment_id: 'segment-1',
+				body: 'First',
+				settings: { reply_control: 'everyone' }
 			}),
 			expect.objectContaining({
-				social_account_id: 'tt-1',
-				body: 'The TikTok caption.',
-				title: 'Launch in 60 seconds',
-				description: 'The YouTube description.'
+				publication_segment_id: 'segment-2',
+				body: 'Second',
+				settings: {}
 			})
 		]);
+	});
+
+	it('stores first comments as follow-up segments and media options on the destination item', () => {
+		const linkedin = { id: 'li-1', platform: 'linkedin', account_username: 'OpenPost' };
+		const payload = buildFocusedPublicationPayload({
+			mode: 'post',
+			workspaceId: 'ws-1',
+			accounts: [linkedin],
+			fields: { postText: 'Release notes' },
+			media: [
+				{
+					id: 'image-1',
+					mimeType: 'image/jpeg',
+					altText: 'A product screen',
+					settingsByAccount: {
+						'li-1': {
+							alt_text: 'A destination-specific description',
+							tagged_user_ids: 'person-1, person-2'
+						}
+					}
+				}
+			],
+			segments: [
+				{
+					id: 'segment-1',
+					content: 'Release notes',
+					media: [
+						{
+							id: 'image-1',
+							mimeType: 'image/jpeg',
+							altText: 'A product screen',
+							settingsByAccount: {
+								'li-1': {
+									alt_text: 'A destination-specific description',
+									tagged_user_ids: 'person-1, person-2'
+								}
+							}
+						}
+					],
+					settingsByAccount: { 'li-1': { first_comment: 'Read the full changelog.' } }
+				}
+			],
+			resolvedByAccount: {
+				'li-1': { profile: 'image_post', outputProfile: 'linkedin.image' }
+			}
+		});
+
+		expect(payload.renditions[0].segments).toHaveLength(2);
+		expect(payload.renditions[0].segments[0].media[0]).toMatchObject({
+			media_id: 'image-1',
+			alt_text: 'A destination-specific description',
+			settings: { tagged_user_ids: 'person-1, person-2' }
+		});
+		expect(payload.renditions[0].segments[1]).toMatchObject({
+			publication_segment_id: 'segment-1',
+			body: 'Read the full changelog.',
+			settings: {},
+			media: []
+		});
 	});
 });

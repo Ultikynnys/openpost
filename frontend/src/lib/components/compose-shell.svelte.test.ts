@@ -13,12 +13,12 @@ vi.mock('$lib/api/client', () => ({
 }));
 
 describe('ComposeShell', () => {
-	it('defaults to the legacy composer shell instead of the unified rails', async () => {
+	it('uses the unified publication composer for the default post intent', async () => {
 		const screen = await render(ComposeShell);
 		const modeSelect = screen.getByTestId('composer-mode-select');
 
 		await expect.element(modeSelect).toBeVisible();
-		await expect.element(screen.getByTestId('legacy-composer-shell')).toBeVisible();
+		await expect.element(screen.getByTestId('focused-composer')).toBeVisible();
 		await expect.element(modeSelect).toHaveTextContent('Post');
 		expect(screen.container.textContent).not.toContain('Format-first composer');
 		expect(screen.container.textContent).not.toContain('Renditions');
