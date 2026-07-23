@@ -38,6 +38,7 @@ type RouteDeps struct {
 	MediaSigner                  *mediasigner.Signer
 	Entitlement                  entitlements.Service
 	TokenEncryptor               *servicecrypto.TokenEncryptor
+	TokenSource                  handlers.AccessTokenSource
 	MFAService                   *mfa.Service
 	PasswordResetSender          passwordmail.Sender
 	AccountPolicy                handlers.AccountPolicy
@@ -122,6 +123,7 @@ func RegisterHumaRoutes(api huma.API, deps RouteDeps) {
 	handlers.NewProviderAppHandler(providerapps.NewService(deps.DB, deps.TokenEncryptor), deps.DB, deps.Authenticator).RegisterRoutes(api)
 	handlers.NewCapabilityHandler().RegisterRoutes(api)
 	handlers.NewProviderReadinessHandler(deps.DB, deps.Authenticator, deps.Providers).RegisterRoutes(api)
+	handlers.NewDestinationOptionsHandler(deps.DB, deps.Authenticator, deps.Providers, deps.TokenSource).RegisterRoutes(api)
 	handlers.NewPublicationHandler(deps.DB, deps.Authenticator, deps.Entitlement).RegisterRoutes(api)
 	handlers.NewCommentHandler(deps.DB, deps.Authenticator, deps.Providers, deps.TokenEncryptor).RegisterRoutes(api)
 

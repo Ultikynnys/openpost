@@ -244,6 +244,7 @@ func main() {
 		MediaSigner:         mediaSigner,
 		Entitlement:         entitlementService,
 		TokenEncryptor:      tokenEncryptor,
+		TokenSource:         tokenManager,
 		MFAService:          mfaService,
 		PasswordResetSender: passwordResetSender,
 		AccountPolicy: handlers.AccountPolicy{

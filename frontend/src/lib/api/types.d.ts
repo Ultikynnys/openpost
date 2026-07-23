@@ -141,6 +141,23 @@ export interface paths {
         patch: operations["update-account"];
         trace?: never;
     };
+    "/accounts/{account_id}/destination-options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List account-specific publishing options */
+        get: operations["get-account-destination-options"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/accounts/{platform}/auth-url": {
         parameters: {
             query?: never;
@@ -2677,6 +2694,21 @@ export interface components {
             device_code?: string;
             user_code?: string;
         };
+        DestinationOption: {
+            label: string;
+            value: string;
+        };
+        DestinationOptionsOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/DestinationOptionsOutputBody.json
+             */
+            readonly $schema?: string;
+            options: {
+                [key: string]: components["schemas"]["DestinationOption"][] | null;
+            };
+        };
         DirectMediaUploadTarget: {
             /** @description Upload URL expiration time */
             expires_at: string;
@@ -3878,6 +3910,7 @@ export interface components {
             key: string;
             label: string;
             options?: string[] | null;
+            options_source?: string;
             required: boolean;
             type: string;
         };
@@ -4772,6 +4805,88 @@ export interface operations {
             };
             /** @description Internal Server Error */
             500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "get-account-destination-options": {
+        parameters: {
+            query?: {
+                /** @description ISO 3166-1 alpha-2 region code */
+                region_code?: string;
+                /** @description Language code for provider labels */
+                language?: string;
+            };
+            header?: never;
+            path: {
+                /** @description Connected social account ID */
+                account_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DestinationOptionsOutputBody"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -28,12 +28,13 @@ type Profile struct {
 }
 
 type SettingField struct {
-	Key      string   `json:"key"`
-	Label    string   `json:"label"`
-	Type     string   `json:"type"`
-	Required bool     `json:"required"`
-	Options  []string `json:"options,omitempty"`
-	Help     string   `json:"help,omitempty"`
+	Key           string   `json:"key"`
+	Label         string   `json:"label"`
+	Type          string   `json:"type"`
+	Required      bool     `json:"required"`
+	Options       []string `json:"options,omitempty"`
+	OptionsSource string   `json:"options_source,omitempty"`
+	Help          string   `json:"help,omitempty"`
 }
 
 type MediaConstraint struct {
@@ -606,9 +607,9 @@ func youtubeSettings() []SettingField {
 		{Key: "privacy", Label: "Privacy", Type: "select", Required: true, Options: []string{"public", "unlisted", "private"}},
 		{Key: "title", Label: "Title", Type: "text"},
 		{Key: "description", Label: "Description", Type: "textarea"},
-		{Key: "tags", Label: "Tags", Type: "text"},
-		{Key: "category_id", Label: "Category", Type: "text"},
-		{Key: "playlist_id", Label: "Playlist", Type: "text"},
+		{Key: "tags", Label: "Tags", Type: "tags", Help: "Add terms that help people find the video."},
+		{Key: "category_id", Label: "Category", Type: "select", Required: true, OptionsSource: "youtube_categories"},
+		{Key: "playlist_id", Label: "Playlist", Type: "select", OptionsSource: "youtube_playlists"},
 		{Key: "thumbnail_media_id", Label: "Thumbnail", Type: "media"},
 		{Key: "self_declared_made_for_kids", Label: "Made for kids", Type: "boolean"},
 		{Key: "contains_synthetic_media", Label: "Synthetic media", Type: "boolean"},

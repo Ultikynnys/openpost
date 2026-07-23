@@ -10,6 +10,7 @@ All notable changes to this project are documented in this file.
 
 ### Added
 
+- Added authenticated, account-specific publishing options so composer fields can load live provider data such as YouTube playlists and regional video categories.
 - Added server-enforced `mcp:read` access for inspection-only agent connections, with mutation tools hidden and mutation attempts rejected at runtime.
 - Added a local five-destination sample campaign and reusable launch kit for reviewing agent-prepared renditions before connecting accounts or publishing.
 - Rebuilt the public platform and comparison guides and added six in-browser tools for character counting, post previews, thread splitting, handle checks, LinkedIn formatting, and timezone-aware posting plans.

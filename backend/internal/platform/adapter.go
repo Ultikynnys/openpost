@@ -110,6 +110,22 @@ type SelectedAccount struct {
 	Token            *TokenResult
 }
 
+type DestinationOptionsInput struct {
+	RegionCode string
+	Language   string
+}
+
+type DestinationOption struct {
+	Value string `json:"value"`
+	Label string `json:"label"`
+}
+
+// DestinationOptionsProvider exposes account-specific choices used by a
+// provider's composer settings, such as playlists and publishing categories.
+type DestinationOptionsProvider interface {
+	ListDestinationOptions(ctx context.Context, accessToken string, input DestinationOptionsInput) (map[string][]DestinationOption, error)
+}
+
 // TokenResult is a platform-agnostic token response.
 type TokenResult struct {
 	AccessToken  string            `json:"access_token"`

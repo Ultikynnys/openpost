@@ -112,6 +112,53 @@ func TestYouTubeExchangeRefreshAndSelectChannel(t *testing.T) {
 	}
 }
 
+func TestYouTubeListsDestinationOptions(t *testing.T) {
+	originalClient := httpClient
+	defer func() { httpClient = originalClient }()
+
+	httpClient = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		if req.Header.Get(headerAuthorization) != "Bearer access-token" {
+			t.Fatalf("unexpected auth header %q", req.Header.Get(headerAuthorization))
+		}
+		switch req.URL.Path {
+		case "/youtube/v3/playlists":
+			if req.URL.Query().Get("mine") != "true" || req.URL.Query().Get("maxResults") != "50" {
+				t.Fatalf("unexpected playlists query %s", req.URL.RawQuery)
+			}
+			if req.URL.Query().Get("pageToken") == "" {
+				return jsonResponse(req, `{"nextPageToken":"next","items":[{"id":"playlist-1","snippet":{"title":"Product videos"}}]}`), nil
+			}
+			if req.URL.Query().Get("pageToken") != "next" {
+				t.Fatalf("unexpected playlist page token %q", req.URL.Query().Get("pageToken"))
+			}
+			return jsonResponse(req, `{"items":[{"id":"playlist-2","snippet":{"title":"Tutorials"}}]}`), nil
+		case "/youtube/v3/videoCategories":
+			if req.URL.Query().Get("regionCode") != "PT" || req.URL.Query().Get("hl") != "pt" {
+				t.Fatalf("unexpected categories query %s", req.URL.RawQuery)
+			}
+			return jsonResponse(req, `{"items":[{"id":"22","snippet":{"assignable":true,"title":"Pessoas e blogues"}},{"id":"24","snippet":{"assignable":false,"title":"Entertainment"}}]}`), nil
+		default:
+			t.Fatalf("unexpected request %s %s", req.Method, req.URL.String())
+			return nil, nil
+		}
+	})}
+
+	adapter := NewYouTubeAdapter("client-id", "client-secret", "https://app.example/callback")
+	options, err := adapter.ListDestinationOptions(context.Background(), "access-token", DestinationOptionsInput{
+		RegionCode: "pt",
+		Language:   "pt",
+	})
+	if err != nil {
+		t.Fatalf("ListDestinationOptions returned error: %v", err)
+	}
+	if len(options["youtube_playlists"]) != 2 || options["youtube_playlists"][1].Value != "playlist-2" {
+		t.Fatalf("unexpected playlist options: %#v", options["youtube_playlists"])
+	}
+	if len(options["youtube_categories"]) != 1 || options["youtube_categories"][0].Label != "Pessoas e blogues" {
+		t.Fatalf("unexpected category options: %#v", options["youtube_categories"])
+	}
+}
+
 func TestYouTubeUploadMediaWithMetadata(t *testing.T) {
 	originalClient := httpClient
 	defer func() { httpClient = originalClient }()

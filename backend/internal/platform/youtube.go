@@ -220,6 +220,118 @@ func (y *YouTubeAdapter) listChannels(ctx context.Context, accessToken string) (
 	return channelsResp.Items, nil
 }
 
+func (y *YouTubeAdapter) ListDestinationOptions(ctx context.Context, accessToken string, input DestinationOptionsInput) (map[string][]DestinationOption, error) {
+	playlists, err := y.listYouTubePlaylists(ctx, accessToken)
+	if err != nil {
+		return nil, err
+	}
+	categories, err := y.listYouTubeVideoCategories(ctx, accessToken, input)
+	if err != nil {
+		return nil, err
+	}
+	return map[string][]DestinationOption{
+		"youtube_playlists":  playlists,
+		"youtube_categories": categories,
+	}, nil
+}
+
+func (y *YouTubeAdapter) listYouTubePlaylists(ctx context.Context, accessToken string) ([]DestinationOption, error) {
+	options := []DestinationOption{}
+	pageToken := ""
+	for {
+		params := url.Values{}
+		params.Set("part", "snippet")
+		params.Set("mine", "true")
+		params.Set("maxResults", "50")
+		if pageToken != "" {
+			params.Set("pageToken", pageToken)
+		}
+		endpoint := youtubeAPIBaseURL + "/playlists?" + params.Encode()
+		respBody, err := DoRequest(ctx, http.MethodGet, endpoint, nil, bearerHeaders(accessToken))
+		if err != nil {
+			return nil, fmt.Errorf("youtube playlists: %w", err)
+		}
+
+		var response struct {
+			NextPageToken string `json:"nextPageToken"`
+			Items         []struct {
+				ID      string `json:"id"`
+				Snippet struct {
+					Title string `json:"title"`
+				} `json:"snippet"`
+			} `json:"items"`
+			Error struct {
+				Message string `json:"message"`
+			} `json:"error"`
+		}
+		if err := json.Unmarshal(respBody, &response); err != nil {
+			return nil, fmt.Errorf("decoding youtube playlists: %w", err)
+		}
+		if response.Error.Message != "" {
+			return nil, fmt.Errorf("youtube playlists: %s", response.Error.Message)
+		}
+		for _, item := range response.Items {
+			if item.ID == "" || strings.TrimSpace(item.Snippet.Title) == "" {
+				continue
+			}
+			options = append(options, DestinationOption{Value: item.ID, Label: item.Snippet.Title})
+		}
+		if response.NextPageToken == "" || response.NextPageToken == pageToken {
+			return options, nil
+		}
+		pageToken = response.NextPageToken
+	}
+}
+
+func (y *YouTubeAdapter) listYouTubeVideoCategories(ctx context.Context, accessToken string, input DestinationOptionsInput) ([]DestinationOption, error) {
+	regionCode := strings.ToUpper(strings.TrimSpace(input.RegionCode))
+	if len(regionCode) != 2 {
+		regionCode = "US"
+	}
+	language := strings.TrimSpace(input.Language)
+	if language == "" {
+		language = "en"
+	}
+
+	params := url.Values{}
+	params.Set("part", "snippet")
+	params.Set("regionCode", regionCode)
+	params.Set("hl", language)
+	endpoint := youtubeAPIBaseURL + "/videoCategories?" + params.Encode()
+	respBody, err := DoRequest(ctx, http.MethodGet, endpoint, nil, bearerHeaders(accessToken))
+	if err != nil {
+		return nil, fmt.Errorf("youtube video categories: %w", err)
+	}
+
+	var response struct {
+		Items []struct {
+			ID      string `json:"id"`
+			Snippet struct {
+				Assignable bool   `json:"assignable"`
+				Title      string `json:"title"`
+			} `json:"snippet"`
+		} `json:"items"`
+		Error struct {
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(respBody, &response); err != nil {
+		return nil, fmt.Errorf("decoding youtube video categories: %w", err)
+	}
+	if response.Error.Message != "" {
+		return nil, fmt.Errorf("youtube video categories: %s", response.Error.Message)
+	}
+
+	options := make([]DestinationOption, 0, len(response.Items))
+	for _, item := range response.Items {
+		if !item.Snippet.Assignable || item.ID == "" || strings.TrimSpace(item.Snippet.Title) == "" {
+			continue
+		}
+		options = append(options, DestinationOption{Value: item.ID, Label: item.Snippet.Title})
+	}
+	return options, nil
+}
+
 func (y *YouTubeAdapter) UploadMedia(_ context.Context, _ string, _ string, _ string, _ io.Reader) (string, error) {
 	return "", fmt.Errorf("youtube video upload requires post metadata")
 }
