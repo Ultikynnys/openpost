@@ -1,34 +1,33 @@
 # Composing Posts
 
-OpenPost supports one post targeting multiple providers, with room for per-account variants.
+OpenPost uses one composer for posts, threads, stories, short videos, and videos. You choose the publishing intent and content; OpenPost resolves the output for each selected account.
 
 ## Typical workflow
 
-1. Write the base post content.
-2. Select target platforms.
-3. Attach media if needed.
-4. Add per-account variants where one copy does not fit all destinations.
-5. Schedule or publish.
+1. Choose Post, Thread, Story, Short video, or Video.
+2. Write the shared content and add media.
+3. Select connected accounts in **Publish to**.
+4. Open an account's cog to review its resolved output and destination options.
+5. Fix any compatibility issues, then save, validate, schedule, or publish.
+
+Multiple images stay part of the Post intent. OpenPost resolves them to the provider's image, carousel, multi-image, or photo-post output. If you attach a video to Post, the composer asks you to switch to Short video or Video.
 
 ## Drafts and renditions
 
-Drafts are the source of truth before publishing. Start with one base post,
-then use per-account renditions when a platform needs different copy, hashtags,
-or formatting. Unsynchronized renditions stay editable independently while the
-base draft remains available for future changes.
+Draft publications are the source of truth before publishing. Their ordered segments hold shared content and media. Each selected account has a rendition with its resolved output, destination settings, segment overrides, and media-item settings.
+
+Deselecting an account keeps its rendition and settings. Use **Delete destination** only when you want to remove that saved rendition.
 
 ## Platform previews
 
-The preview panel renders each selected account separately, so multiple pages,
-channels, or profiles on the same provider stay visible. Instagram, Facebook,
-YouTube, and TikTok use provider-shaped cards instead of the generic preview,
-and media warnings surface first-slice limits before publishing.
+The **Publish to** menu shows every selected account separately, including multiple accounts from the same provider. Each row shows the resolved output and a compact settings summary. The account cog opens destination content overrides and only the options that apply to the current intent, output, and media shape.
 
-Drafts can still be saved while incomplete. Web, API, and MCP scheduling
-validate destination media requirements server-side and return an error if a
-provider cannot publish the selected attachments.
+Drafts can be saved while incomplete. Scheduling and publishing re-resolve live account capabilities and block stale privacy choices, removed playlists, expired permissions, invalid media, and conflicting attachments.
+
+See [Destination Options](/usage/destination-options) for the provider matrix and setting scopes.
 
 ## Practical advice
 
-- Keep one canonical message first, then customize only where a provider needs it.
-- Validate media size and count before scheduling large batches.
+- Keep shared content canonical and customize only where a destination needs it.
+- Add alt text and media tags from the destination cog because providers use different media metadata.
+- Resolve all errors before scheduling. Warnings can describe provider approval, quota, or live-account limits that OpenPost cannot remove.

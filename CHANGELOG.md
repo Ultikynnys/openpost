@@ -10,6 +10,7 @@ All notable changes to this project are documented in this file.
 
 ### Added
 
+- Added normalized publication and rendition segments, provider-qualified output profiles, account capability resolution, scoped destination settings, and paginated account option searches.
 - Added authenticated, account-specific publishing options so composer fields can load live provider data such as YouTube playlists and regional video categories.
 - Added server-enforced `mcp:read` access for inspection-only agent connections, with mutation tools hidden and mutation attempts rejected at runtime.
 - Added a local five-destination sample campaign and reusable launch kit for reviewing agent-prepared renditions before connecting accounts or publishing.
@@ -21,6 +22,7 @@ All notable changes to this project are documented in this file.
 
 ### Changed
 
+- Replaced the split legacy and publication composers with one intent-based composer for posts, threads, stories, short videos, and videos, including semantic polls, remote choices, disclosures, follow-ups, and per-media accessibility controls.
 - Moved destination-specific composer settings into account cog dialogs in the Publish to menu, with structured tag, category, and playlist controls for YouTube.
 - Rewrote the landing, pricing, security, open-source, changelog, platform, comparison, and tools pages around current product behavior, and refreshed the canonical composer, accounts, media, and settings screenshots.
 - Restored the OpenPost composer screenshot as the product-demo preview while keeping the recorded video behind the play action.
@@ -58,6 +60,7 @@ All notable changes to this project are documented in this file.
 
 ### Fixed
 
+- Preserved segment and destination state through legacy draft migration and retries, and aligned X, Meta, LinkedIn, Mastodon, Bluesky, YouTube, and TikTok request payloads with their declared setting contracts.
 - Sent the YouTube synthetic-media disclosure selected in composer settings with the video upload metadata.
 - Prevented YouTube accounts from being selected for text, thread, link, image, carousel, or Story posts; YouTube remains available for Shorts and video uploads.
 - Displayed connected account handles with exactly one `@` prefix, including YouTube handles that already include it.

@@ -24,6 +24,7 @@ const userDocsSidebar = [
 			{ text: 'Settings', link: '/usage/settings' },
 			{ text: 'Accounts', link: '/usage/accounts' },
 			{ text: 'Composing Posts', link: '/usage/composing-posts' },
+			{ text: 'Destination Options', link: '/usage/destination-options' },
 			{ text: 'Threads', link: '/usage/threads' },
 			{ text: 'Scheduling', link: '/usage/scheduling' },
 			{ text: 'Media Library', link: '/usage/media-library' },
