@@ -28,6 +28,9 @@ func TestInstagramGenerateAuthURL(t *testing.T) {
 	if !strings.Contains(query.Get("scope"), "instagram_content_publish") {
 		t.Fatalf("expected instagram_content_publish scope, got %q", query.Get("scope"))
 	}
+	if strings.Contains(query.Get("scope"), "business_management") {
+		t.Fatalf("did not expect unrelated business_management scope, got %q", query.Get("scope"))
+	}
 }
 
 func TestInstagramExchangeAndSelectBusinessAccount(t *testing.T) {
@@ -82,6 +85,27 @@ func TestInstagramExchangeAndSelectBusinessAccount(t *testing.T) {
 	}
 	if accountsCalls != 2 {
 		t.Fatalf("expected two accounts calls, got %d", accountsCalls)
+	}
+}
+
+func TestInstagramListAccountSelectionsExplainsFacebookPageLinkRequirement(t *testing.T) {
+	t.Setenv("META_GRAPH_API_VERSION", "v25.0")
+	originalClient := httpClient
+	defer func() { httpClient = originalClient }()
+
+	httpClient = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		if req.URL.Path != "/v25.0/me/accounts" {
+			t.Fatalf("unexpected request %s %s", req.Method, req.URL.String())
+		}
+		return jsonResponse(req, `{"data":[]}`), nil
+	})}
+
+	_, err := NewInstagramAdapter("", "", "").ListAccountSelections(
+		context.Background(),
+		&TokenResult{AccessToken: "access-token"},
+	)
+	if err == nil || !strings.Contains(err.Error(), "Accounts Center profile links do not provide this access") {
+		t.Fatalf("expected Facebook Page link guidance, got %v", err)
 	}
 }
 

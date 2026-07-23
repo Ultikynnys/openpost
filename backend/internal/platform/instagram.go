@@ -158,7 +158,7 @@ func (i *InstagramAdapter) listInstagramPages(ctx context.Context, accessToken s
 		}
 	}
 	if len(pages) == 0 {
-		return nil, fmt.Errorf("facebook account has no connected instagram business accounts")
+		return nil, fmt.Errorf("OpenPost could not find a professional Instagram account linked to a Facebook Page this profile manages; Accounts Center profile links do not provide this access")
 	}
 	return pages, nil
 }
@@ -484,7 +484,6 @@ func instagramScopes() []string {
 		"instagram_content_publish",
 		"pages_show_list",
 		"pages_read_engagement",
-		"business_management",
 	}
 }
 

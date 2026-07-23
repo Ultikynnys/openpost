@@ -238,7 +238,7 @@ func (f *FacebookAdapter) listPages(ctx context.Context, accessToken string) ([]
 		return nil, fmt.Errorf("facebook pages: %s", pagesResp.Error.Message)
 	}
 	if len(pagesResp.Data) == 0 {
-		return nil, fmt.Errorf("facebook account has no manageable pages")
+		return nil, fmt.Errorf("OpenPost could not find any Facebook Pages this profile can manage; create a Page or give this profile full control of one, then try again")
 	}
 	return pagesResp.Data, nil
 }

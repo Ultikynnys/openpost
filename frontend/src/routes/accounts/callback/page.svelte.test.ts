@@ -72,6 +72,9 @@ describe('account OAuth callback selection flow', () => {
 		await expect.element(screen.getByText('OpenPost Page')).toBeVisible();
 		await expect.element(screen.getByText('@openpost · page')).toBeVisible();
 		await expect.element(screen.getByText('followers: 1,240')).toBeVisible();
+		await expect
+			.element(screen.getByText(/This deadline only applies to this selection step/))
+			.toBeVisible();
 		expect(screen.container.textContent).not.toContain('Account connected');
 		expect(mocks.goto).not.toHaveBeenCalled();
 		expect(mocks.get).toHaveBeenCalledWith('/accounts/selections/{connection_id}', {

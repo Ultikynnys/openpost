@@ -508,7 +508,7 @@
 	"accounts_callback_selection_save_failed": "OpenPost could not save that account selection.",
 	"accounts_callback_loading_choices": "Loading account choices",
 	"accounts_callback_finishing": "Finishing connection",
-	"accounts_callback_expires": "This pending connection expires {date}.",
+	"accounts_callback_expires": "Choose an account by {date}. This deadline only applies to this selection step, not the account connection.",
 	"accounts_callback_choose_one": "Choose one option to finish connecting {platform}.",
 	"accounts_callback_available": "Available {platform} accounts",
 	"accounts_callback_saving": "Saving selection...",

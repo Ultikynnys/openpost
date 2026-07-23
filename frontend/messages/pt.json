@@ -508,7 +508,7 @@
 	"accounts_callback_selection_save_failed": "O OpenPost não conseguiu guardar essa seleção de conta.",
 	"accounts_callback_loading_choices": "A carregar opções de conta",
 	"accounts_callback_finishing": "A concluir a ligação",
-	"accounts_callback_expires": "Esta ligação pendente expira em {date}.",
+	"accounts_callback_expires": "Escolhe uma conta até {date}. Este prazo aplica-se apenas a este passo de seleção, não à ligação da conta.",
 	"accounts_callback_choose_one": "Escolhe uma opção para concluir a ligação de {platform}.",
 	"accounts_callback_available": "Contas de {platform} disponíveis",
 	"accounts_callback_saving": "A guardar seleção...",

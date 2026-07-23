@@ -98,6 +98,27 @@ func TestFacebookExchangeAndSelectPage(t *testing.T) {
 	}
 }
 
+func TestFacebookListAccountSelectionsExplainsPageAccessRequirement(t *testing.T) {
+	t.Setenv("META_GRAPH_API_VERSION", "v25.0")
+	originalClient := httpClient
+	defer func() { httpClient = originalClient }()
+
+	httpClient = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		if req.URL.Path != "/v25.0/me/accounts" {
+			t.Fatalf("unexpected request %s %s", req.Method, req.URL.String())
+		}
+		return jsonResponse(req, `{"data":[]}`), nil
+	})}
+
+	_, err := NewFacebookAdapter("", "", "").ListAccountSelections(
+		context.Background(),
+		&TokenResult{AccessToken: "access-token"},
+	)
+	if err == nil || !strings.Contains(err.Error(), "give this profile full control") {
+		t.Fatalf("expected Facebook Page access guidance, got %v", err)
+	}
+}
+
 func TestFacebookListCommentsMapsGraphResponse(t *testing.T) {
 	t.Setenv("META_GRAPH_API_VERSION", "v25.0")
 	originalClient := httpClient
