@@ -55,15 +55,19 @@ type CreateWorkspaceOutput struct {
 	}
 }
 
+type WorkspaceResponse struct {
+	WorkspaceID        string `json:"id"`
+	OrganizationID     string `json:"organization_id"`
+	OrganizationName   string `json:"organization_name"`
+	WorkspaceName      string `json:"name"`
+	AvatarURL          string `json:"avatar_url"`
+	WorkspaceCreatedAt string `json:"created_at"`
+	Role               string `json:"role" enum:"admin,editor,viewer" doc:"Current user's workspace role"`
+	CanEdit            bool   `json:"can_edit" doc:"Whether the current user can change workspace content"`
+}
+
 type ListWorkspacesOutput struct {
-	Body []struct {
-		WorkspaceID        string `json:"id"`
-		OrganizationID     string `json:"organization_id"`
-		OrganizationName   string `json:"organization_name"`
-		WorkspaceName      string `json:"name"`
-		AvatarURL          string `json:"avatar_url"`
-		WorkspaceCreatedAt string `json:"created_at"`
-	}
+	Body []WorkspaceResponse
 }
 
 type OrganizationResponse struct {
@@ -738,11 +742,12 @@ func (h *WorkspaceHandler) ListWorkspaces(api huma.API) {
 			OrganizationName string    `bun:"organization_name"`
 			Name             string    `bun:"name"`
 			AvatarURL        string    `bun:"avatar_url"`
+			Role             string    `bun:"role"`
 			CreatedAt        time.Time `bun:"created_at"`
 		}
 		query := h.db.NewSelect().
 			TableExpr("workspaces AS w").
-			ColumnExpr("w.id, w.organization_id, w.name, w.avatar_url, w.created_at").
+			ColumnExpr("w.id, w.organization_id, w.name, w.avatar_url, w.created_at, wm.role").
 			ColumnExpr("COALESCE(o.name, '') AS organization_name").
 			Join("JOIN workspace_members AS wm ON wm.workspace_id = w.id").
 			Join("LEFT JOIN organizations AS o ON o.id = w.organization_id").
@@ -755,29 +760,17 @@ func (h *WorkspaceHandler) ListWorkspaces(api huma.API) {
 			return nil, huma.Error500InternalServerError("failed to fetch workspaces")
 		}
 
-		resp := &ListWorkspacesOutput{Body: []struct {
-			WorkspaceID        string `json:"id"`
-			OrganizationID     string `json:"organization_id"`
-			OrganizationName   string `json:"organization_name"`
-			WorkspaceName      string `json:"name"`
-			AvatarURL          string `json:"avatar_url"`
-			WorkspaceCreatedAt string `json:"created_at"`
-		}{}}
+		resp := &ListWorkspacesOutput{Body: []WorkspaceResponse{}}
 		for _, ws := range rows {
-			resp.Body = append(resp.Body, struct {
-				WorkspaceID        string `json:"id"`
-				OrganizationID     string `json:"organization_id"`
-				OrganizationName   string `json:"organization_name"`
-				WorkspaceName      string `json:"name"`
-				AvatarURL          string `json:"avatar_url"`
-				WorkspaceCreatedAt string `json:"created_at"`
-			}{
+			resp.Body = append(resp.Body, WorkspaceResponse{
 				WorkspaceID:        ws.ID,
 				OrganizationID:     ws.OrganizationID,
 				OrganizationName:   ws.OrganizationName,
 				WorkspaceName:      ws.Name,
 				AvatarURL:          ws.AvatarURL,
 				WorkspaceCreatedAt: ws.CreatedAt.Format(time.RFC3339),
+				Role:               ws.Role,
+				CanEdit:            ws.Role == models.WorkspaceRoleAdmin || ws.Role == models.WorkspaceRoleEditor,
 			})
 		}
 		return resp, nil

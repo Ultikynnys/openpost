@@ -39,6 +39,8 @@ type Config struct {
 	TermsVersion            string
 	PrivacyVersion          string
 	SupportEmail            string
+	StudioEnabled           bool
+	StudioModelBaseURL      string
 
 	SMTPHost       string
 	SMTPPort       int
@@ -141,6 +143,8 @@ func Load() *Config {
 		TermsVersion:            getEnvDefault("OPENPOST_TERMS_VERSION", defaultPolicyVersion),
 		PrivacyVersion:          getEnvDefault("OPENPOST_PRIVACY_VERSION", defaultPolicyVersion),
 		SupportEmail:            getEnvDefault("OPENPOST_SUPPORT_EMAIL", defaultSupportEmail),
+		StudioEnabled:           getEnvBoolWithAliases(true, "OPENPOST_STUDIO_ENABLED"),
+		StudioModelBaseURL:      strings.TrimRight(getEnvDefault("OPENPOST_STUDIO_MODEL_BASE_URL", "/studio-models"), "/"),
 
 		SMTPHost:       getEnvDefault("OPENPOST_SMTP_HOST", ""),
 		SMTPPort:       getEnvInt("OPENPOST_SMTP_PORT", 587),

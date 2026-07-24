@@ -4,7 +4,7 @@ import { getApiBase } from '$lib/stores/instance.svelte';
 
 // Re-export schema types for convenience
 export type User = components['schemas']['UserProfile'];
-export type Workspace = components['schemas']['Item'];
+export type Workspace = components['schemas']['WorkspaceResponse'];
 export type Post = components['schemas']['PostResponse'];
 export type SocialAccount = components['schemas']['AccountResponse'];
 export type ProviderInfo = components['schemas']['ProviderInfo'];

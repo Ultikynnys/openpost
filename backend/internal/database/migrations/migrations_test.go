@@ -179,3 +179,50 @@ CREATE UNIQUE INDEX social_accounts_active_idx ON social_accounts (workspace_id)
 	require.NotContains(t, got, "is_active = 0")
 	require.NotContains(t, got, "is_active = 1")
 }
+
+func TestRemoveGlobalMediaHashConstraintKeepsIndexesAndAllowsWorkspaceScopedHashes(t *testing.T) {
+	t.Parallel()
+
+	sqldb, err := sql.Open("sqlite3", fmt.Sprintf("file:%s?mode=memory&cache=shared", t.Name()))
+	require.NoError(t, err)
+	db := bun.NewDB(sqldb, sqlitedialect.New())
+	ctx := context.Background()
+
+	_, err = db.ExecContext(ctx, `CREATE TABLE media_attachments (
+		id TEXT PRIMARY KEY,
+		workspace_id TEXT NOT NULL,
+		"file_hash" VARCHAR,
+		source TEXT NOT NULL DEFAULT 'upload',
+		asset_kind TEXT NOT NULL DEFAULT 'library',
+		original_filename TEXT NOT NULL DEFAULT '',
+		UNIQUE ("file_hash")
+	)`)
+	require.NoError(t, err)
+	_, err = db.ExecContext(ctx, `CREATE INDEX media_workspace_created_idx ON media_attachments (workspace_id, original_filename)`)
+	require.NoError(t, err)
+
+	require.NoError(t, removeGlobalMediaHashConstraint(ctx, db))
+	_, err = db.ExecContext(ctx, `INSERT INTO media_attachments (id, workspace_id, file_hash) VALUES
+		('media-1', 'workspace-1', 'same-hash'),
+		('media-2', 'workspace-2', 'same-hash')`)
+	require.NoError(t, err)
+	_, err = db.ExecContext(ctx, `CREATE UNIQUE INDEX media_workspace_hash_idx
+		ON media_attachments (workspace_id, file_hash)
+		WHERE source = 'upload' AND asset_kind = 'library'`)
+	require.NoError(t, err)
+	_, err = db.ExecContext(ctx, `INSERT INTO media_attachments (id, workspace_id, file_hash)
+		VALUES ('media-3', 'workspace-1', 'same-hash')`)
+	require.Error(t, err)
+	_, err = db.ExecContext(ctx, `INSERT INTO media_attachments (id, workspace_id, file_hash, source, asset_kind)
+		VALUES ('media-4', 'workspace-1', 'same-hash', 'studio_export', 'library')`)
+	require.NoError(t, err)
+
+	var indexCount int
+	err = db.NewSelect().
+		TableExpr("sqlite_master").
+		ColumnExpr("COUNT(*)").
+		Where("type = 'index' AND name = ?", "media_workspace_created_idx").
+		Scan(ctx, &indexCount)
+	require.NoError(t, err)
+	require.Equal(t, 1, indexCount)
+}

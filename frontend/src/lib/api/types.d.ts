@@ -1027,6 +1027,129 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/media/collections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List media collections */
+        get: operations["list-media-collections"];
+        put?: never;
+        /** Create a media collection */
+        post: operations["create-media-collection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/media/collections/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete a media collection without deleting media */
+        delete: operations["delete-media-collection"];
+        options?: never;
+        head?: never;
+        /** Rename or recolor a media collection */
+        patch: operations["update-media-collection"];
+        trace?: never;
+    };
+    "/media/collections/{id}/items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Replace a media collection's items */
+        put: operations["replace-media-collection-items"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/media/storage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get workspace media storage usage */
+        get: operations["get-media-storage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/media/tags": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List media tags */
+        get: operations["list-media-tags"];
+        put?: never;
+        /** Create a media tag */
+        post: operations["create-media-tag"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/media/tags/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete a media tag without deleting media */
+        delete: operations["delete-media-tag"];
+        options?: never;
+        head?: never;
+        /** Rename a media tag */
+        patch: operations["update-media-tag"];
+        trace?: never;
+    };
+    "/media/tags/{id}/items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Replace a media tag's assignments */
+        put: operations["replace-media-tag-items"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/media/upload-session": {
         parameters: {
             query?: never;
@@ -1630,6 +1753,234 @@ export interface paths {
         put?: never;
         /** Queue an explicit provider reply */
         post: operations["reply-to-rendition"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/studio/brand-kit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get the workspace Studio brand kit */
+        get: operations["get-studio-brand-kit"];
+        /** Create or update the workspace Studio brand kit */
+        put: operations["update-studio-brand-kit"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/studio/designs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Studio designs */
+        get: operations["list-studio-designs"];
+        put?: never;
+        /** Create a Studio design */
+        post: operations["create-studio-design"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/studio/designs/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get a Studio design */
+        get: operations["get-studio-design"];
+        put?: never;
+        post?: never;
+        /** Move a Studio design to trash */
+        delete: operations["delete-studio-design"];
+        options?: never;
+        head?: never;
+        /** Save a Studio design with optimistic concurrency */
+        patch: operations["update-studio-design"];
+        trace?: never;
+    };
+    "/studio/designs/{id}/duplicate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Duplicate a Studio design */
+        post: operations["duplicate-studio-design"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/studio/designs/{id}/revisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Studio design recovery revisions and checkpoints */
+        get: operations["list-studio-design-revisions"];
+        put?: never;
+        /** Create a named Studio design checkpoint */
+        post: operations["create-studio-design-checkpoint"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/studio/designs/{id}/revisions/{revision_id}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Restore a Studio design revision as a new head */
+        post: operations["restore-studio-design-revision"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/studio/presets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List OpenPost Studio presets and runtime configuration */
+        get: operations["list-studio-presets"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/studio/return-tokens": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create a one-time Studio composer return token */
+        post: operations["create-studio-return-token"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/studio/return-tokens/{token}/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Store ordered Studio exports for a composer return */
+        post: operations["complete-studio-return-token"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/studio/return-tokens/{token}/consume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Consume a completed Studio composer return token */
+        post: operations["consume-studio-return-token"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/studio/templates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List built-in and workspace Studio templates */
+        get: operations["list-studio-templates"];
+        put?: never;
+        /** Save a Studio design as a workspace template */
+        post: operations["create-studio-template"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/studio/templates/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete a workspace Studio template */
+        delete: operations["delete-studio-template"];
+        options?: never;
+        head?: never;
+        /** Replace a workspace Studio template snapshot */
+        patch: operations["update-studio-template"];
+        trace?: never;
+    };
+    "/studio/templates/{id}/instantiate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create a Studio design from a template */
+        post: operations["instantiate-studio-template"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2298,6 +2649,25 @@ export interface components {
             /** @description Workspace ID */
             workspace_id: string;
         };
+        CompleteStudioReturnTokenInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/CompleteStudioReturnTokenInputBody.json
+             */
+            readonly $schema?: string;
+            design_id: string;
+            media_ids: string[] | null;
+        };
+        CompleteStudioReturnTokenOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/CompleteStudioReturnTokenOutputBody.json
+             */
+            readonly $schema?: string;
+            return_url: string;
+        };
         ConfirmTOTPSetupInputBody: {
             /**
              * Format: uri
@@ -2309,6 +2679,22 @@ export interface components {
             challenge_id: string;
             /** @description Six digit authenticator code */
             code: string;
+        };
+        ConsumeStudioReturnTokenOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ConsumeStudioReturnTokenOutputBody.json
+             */
+            readonly $schema?: string;
+            constraints: {
+                [key: string]: unknown;
+            };
+            design_id: string;
+            media_ids: string[] | null;
+            purpose: string;
+            return_url: string;
+            workspace_id: string;
         };
         CreateAPITokenInputBody: {
             /**
@@ -2404,6 +2790,27 @@ export interface components {
             /** @description URL the browser should redirect to after authorization */
             redirect_url: string;
         };
+        CreateMediaCollectionInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/CreateMediaCollectionInputBody.json
+             */
+            readonly $schema?: string;
+            color: string;
+            name: string;
+            workspace_id: string;
+        };
+        CreateMediaTagInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/CreateMediaTagInputBody.json
+             */
+            readonly $schema?: string;
+            name: string;
+            workspace_id: string;
+        };
         CreateMediaUploadSessionInputBody: {
             /**
              * Format: uri
@@ -2413,15 +2820,31 @@ export interface components {
             readonly $schema?: string;
             /** @description Alt text for accessibility */
             alt_text?: string;
+            /**
+             * @description Media library role
+             * @enum {string}
+             */
+            asset_kind?: "library" | "brand_asset" | "brand_font" | "design_preview" | "template_preview";
+            /** @description Producing Studio design ID */
+            design_document_id?: string;
+            /** @description Producing Studio page ID */
+            design_page_id?: string;
             /** @description Original filename */
             filename: string;
             /** @description Declared MIME type */
             mime_type?: string;
+            /** @description Source media ID for a derivative */
+            parent_media_id?: string;
             /**
              * Format: int64
              * @description Expected upload size in bytes
              */
             size: number;
+            /**
+             * @description Media provenance
+             * @enum {string}
+             */
+            source?: "upload" | "camera" | "studio_export" | "studio_edit" | "background_removal";
             /** @description Workspace ID */
             workspace_id: string;
         };
@@ -2577,6 +3000,70 @@ export interface components {
             /** @description Workspace ID */
             workspace_id: string;
         };
+        CreateStudioCheckpointInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/CreateStudioCheckpointInputBody.json
+             */
+            readonly $schema?: string;
+            name: string;
+        };
+        CreateStudioDesignInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/CreateStudioDesignInputBody.json
+             */
+            readonly $schema?: string;
+            /** Format: int64 */
+            height_px: number;
+            preset_key: string;
+            source_media_id?: string;
+            title: string;
+            /** Format: int64 */
+            width_px: number;
+            workspace_id: string;
+        };
+        CreateStudioReturnTokenInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/CreateStudioReturnTokenInputBody.json
+             */
+            readonly $schema?: string;
+            constraints: {
+                [key: string]: unknown;
+            };
+            /** Format: int64 */
+            max_selection: number;
+            purpose: string;
+            return_url: string;
+            workspace_id: string;
+        };
+        CreateStudioReturnTokenOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/CreateStudioReturnTokenOutputBody.json
+             */
+            readonly $schema?: string;
+            expires_at: string;
+            token: string;
+        };
+        CreateStudioTemplateInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/CreateStudioTemplateInputBody.json
+             */
+            readonly $schema?: string;
+            category: string;
+            document: components["schemas"]["StudioDocumentPayload"];
+            name: string;
+            preview_media_id?: string;
+            workspace_id: string;
+        };
         CreateThreadInputBody: {
             /**
              * Format: uri
@@ -2677,6 +3164,15 @@ export interface components {
             readonly $schema?: string;
             deleted: boolean;
         };
+        DeleteMediaCollectionOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/DeleteMediaCollectionOutputBody.json
+             */
+            readonly $schema?: string;
+            deleted: boolean;
+        };
         DeleteMediaOutputBody: {
             /**
              * Format: uri
@@ -2686,6 +3182,15 @@ export interface components {
             readonly $schema?: string;
             /** @description Success message */
             message: string;
+        };
+        DeleteMediaTagOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/DeleteMediaTagOutputBody.json
+             */
+            readonly $schema?: string;
+            deleted: boolean;
         };
         DeletePostOutputBody: {
             /**
@@ -2726,6 +3231,24 @@ export interface components {
             readonly $schema?: string;
             /** @description Whether the server must restart before adapter changes apply */
             requires_restart: boolean;
+        };
+        DeleteStudioDesignOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/DeleteStudioDesignOutputBody.json
+             */
+            readonly $schema?: string;
+            deleted: boolean;
+        };
+        DeleteStudioTemplateOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/DeleteStudioTemplateOutputBody.json
+             */
+            readonly $schema?: string;
+            deleted: boolean;
         };
         DeleteVariantsOutputBody: {
             /**
@@ -2912,6 +3435,34 @@ export interface components {
             expires_at: string;
             requested_scopes: string;
         };
+        GetMediaStorageOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/GetMediaStorageOutputBody.json
+             */
+            readonly $schema?: string;
+            /**
+             * Format: int64
+             * @description Quota-counted media assets
+             */
+            asset_count: number;
+            /**
+             * Format: int64
+             * @description Hidden preview bytes excluded from quota
+             */
+            internal_bytes: number;
+            /**
+             * Format: int64
+             * @description Storage limit, or zero when no fixed limit is exposed
+             */
+            limit_bytes: number;
+            /**
+             * Format: int64
+             * @description Quota-counted media bytes
+             */
+            used_bytes: number;
+        };
         GetMediaUsageOutputBody: {
             /**
              * Format: uri
@@ -2981,13 +3532,15 @@ export interface components {
             /** @description Health status */
             status: string;
         };
-        Item: {
-            avatar_url: string;
-            created_at: string;
-            id: string;
-            name: string;
-            organization_id: string;
-            organization_name: string;
+        InstantiateStudioTemplateInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/InstantiateStudioTemplateInputBody.json
+             */
+            readonly $schema?: string;
+            title: string;
+            workspace_id: string;
         };
         JobResponse: {
             /**
@@ -3017,6 +3570,16 @@ export interface components {
             /** @description Job type */
             type: string;
         };
+        ListMediaCollectionsOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ListMediaCollectionsOutputBody.json
+             */
+            readonly $schema?: string;
+            can_edit: boolean;
+            collections: components["schemas"]["MediaCollectionResponse"][] | null;
+        };
         ListMediaOutputBody: {
             /**
              * Format: uri
@@ -3031,6 +3594,47 @@ export interface components {
              * @description Total count matching filter
              */
             total: number;
+        };
+        ListMediaTagsOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ListMediaTagsOutputBody.json
+             */
+            readonly $schema?: string;
+            can_edit: boolean;
+            tags: components["schemas"]["MediaTagResponse"][] | null;
+        };
+        ListStudioDesignsOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ListStudioDesignsOutputBody.json
+             */
+            readonly $schema?: string;
+            can_edit: boolean;
+            designs: components["schemas"]["StudioDesignSummary"][] | null;
+            /** Format: int64 */
+            total: number;
+        };
+        ListStudioRevisionsOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ListStudioRevisionsOutputBody.json
+             */
+            readonly $schema?: string;
+            revisions: components["schemas"]["StudioRevisionSummary"][] | null;
+        };
+        ListStudioTemplatesOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ListStudioTemplatesOutputBody.json
+             */
+            readonly $schema?: string;
+            can_edit: boolean;
+            templates: components["schemas"]["StudioTemplateResponse"][] | null;
         };
         LoginInputBody: {
             /**
@@ -3089,6 +3693,22 @@ export interface components {
             /** @description Server configuration name */
             name: string;
         };
+        MediaCollectionResponse: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/MediaCollectionResponse.json
+             */
+            readonly $schema?: string;
+            color: string;
+            created_at: string;
+            id: string;
+            /** Format: int64 */
+            item_count: number;
+            name: string;
+            updated_at: string;
+            workspace_id: string;
+        };
         MediaConstraint: {
             allowed_mimes: string[] | null;
             aspect_ratios?: string[] | null;
@@ -3110,10 +3730,18 @@ export interface components {
             analysis_error?: string;
             /** @description Media analysis status */
             analysis_status: string;
+            /** @description Media library role */
+            asset_kind: string;
             /** @description Whether media can be deleted */
             can_delete: boolean;
+            /** @description Collection IDs containing this media */
+            collections: string[] | null;
             /** @description Creation time */
             created_at: string;
+            /** @description Producing Studio design */
+            design_document_id?: string;
+            /** @description Producing Studio page */
+            design_page_id?: string;
             /**
              * Format: int64
              * @description Video duration in milliseconds
@@ -3137,6 +3765,8 @@ export interface components {
             mime_type: string;
             /** @description Original filename */
             original_filename: string;
+            /** @description Source media for this derivative */
+            parent_media_id?: string;
             /** @description Poster thumbnail URL */
             poster_thumbnail_url?: string;
             /** @description Processing status */
@@ -3155,6 +3785,10 @@ export interface components {
              * @description File size in bytes
              */
             size: number;
+            /** @description Media provenance */
+            source: string;
+            /** @description Tag IDs assigned to this media */
+            tags: string[] | null;
             /** @description Thumbnail URL for grid view */
             thumbnail_url: string;
             /** @description URL to access the media */
@@ -3207,6 +3841,20 @@ export interface components {
             /** Format: int64 */
             width: number;
         };
+        MediaTagResponse: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/MediaTagResponse.json
+             */
+            readonly $schema?: string;
+            created_at: string;
+            id: string;
+            /** Format: int64 */
+            item_count: number;
+            name: string;
+            workspace_id: string;
+        };
         MediaUploadResult: {
             /**
              * Format: uri
@@ -3216,31 +3864,47 @@ export interface components {
             readonly $schema?: string;
             /** @description Persisted alt text */
             alt_text: string;
+            /** @description Media library role */
+            asset_kind: string;
             /** @description Whether an existing media attachment was reused */
             deduped: boolean;
+            /** @description Producing Studio design ID */
+            design_document_id?: string;
+            /** @description Producing Studio page ID */
+            design_page_id?: string;
             /** @description Media ID */
             id: string;
             /** @description MIME type */
             mime_type: string;
             /** @description Persisted original filename */
             original_filename: string;
+            /** @description Source media ID */
+            parent_media_id?: string;
             /**
              * Format: int64
              * @description File size in bytes
              */
             size: number;
+            /** @description Media provenance */
+            source: string;
             /** @description URL to access the media */
             url: string;
         };
         MediaUsageItem: {
             /** @description Post content (truncated) */
-            content: string;
-            /** @description Post ID */
-            post_id: string;
+            content?: string;
+            /** @description Referenced object ID */
+            id: string;
+            /** @description Usage kind: post, design, template, brand_asset, or brand_font */
+            kind: string;
+            /** @description User-visible usage label */
+            label: string;
+            /** @description Post ID for post usages */
+            post_id?: string;
             /** @description Scheduled time */
-            scheduled_at: string;
-            /** @description Post status */
-            status: string;
+            scheduled_at?: string;
+            /** @description Post or design status */
+            status?: string;
         };
         MessageOutputBody: {
             /**
@@ -3888,6 +4552,54 @@ export interface components {
             title: string;
             url?: string;
         };
+        ReplaceMediaCollectionItemsInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ReplaceMediaCollectionItemsInputBody.json
+             */
+            readonly $schema?: string;
+            media_ids: string[] | null;
+            /**
+             * @default replace
+             * @enum {string}
+             */
+            mode: "replace" | "add" | "remove";
+        };
+        ReplaceMediaCollectionItemsOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ReplaceMediaCollectionItemsOutputBody.json
+             */
+            readonly $schema?: string;
+            /** Format: int64 */
+            count: number;
+        };
+        ReplaceMediaTagItemsInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ReplaceMediaTagItemsInputBody.json
+             */
+            readonly $schema?: string;
+            media_ids: string[] | null;
+            /**
+             * @default replace
+             * @enum {string}
+             */
+            mode: "replace" | "add" | "remove";
+        };
+        ReplaceMediaTagItemsOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ReplaceMediaTagItemsOutputBody.json
+             */
+            readonly $schema?: string;
+            /** Format: int64 */
+            count: number;
+        };
         ReplyInputBody: {
             /**
              * Format: uri
@@ -4040,6 +4752,16 @@ export interface components {
         ResolvedSettingGroup: {
             key: string;
             settings: components["schemas"]["SettingDefinition"][] | null;
+        };
+        RestoreStudioRevisionInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/RestoreStudioRevisionInputBody.json
+             */
+            readonly $schema?: string;
+            /** Format: int64 */
+            expected_revision: number;
         };
         RevokeAPITokenOutputBody: {
             /**
@@ -4280,6 +5002,308 @@ export interface components {
             user_code: string;
             verification_url: string;
         };
+        StudioBrandAsset: {
+            id?: string;
+            media_id: string;
+            name: string;
+            /** @enum {string} */
+            role: "primary_logo" | "secondary_logo" | "mark" | "watermark";
+        };
+        StudioBrandColor: {
+            id: string;
+            name: string;
+            value: string;
+        };
+        StudioBrandFont: {
+            css_family?: string;
+            family: string;
+            id?: string;
+            license_acknowledged?: boolean;
+            license_acknowledged_at?: string;
+            license_acknowledged_by?: string;
+            media_id: string;
+            /** @enum {string} */
+            style: "normal" | "italic";
+            /** Format: int64 */
+            weight: number;
+        };
+        StudioBrandKitResponse: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/StudioBrandKitResponse.json
+             */
+            readonly $schema?: string;
+            assets: components["schemas"]["StudioBrandAsset"][] | null;
+            backgrounds: string[] | null;
+            can_edit: boolean;
+            colors: components["schemas"]["StudioBrandColor"][] | null;
+            exists: boolean;
+            fonts: components["schemas"]["StudioBrandFont"][] | null;
+            id?: string;
+            name: string;
+            /** Format: int64 */
+            revision: number;
+            text_styles: components["schemas"]["StudioBrandTextStyle"][] | null;
+            updated_at?: string;
+            workspace_id: string;
+        };
+        StudioBrandTextStyle: {
+            color: string;
+            font_asset_id?: string;
+            font_family: string;
+            /** Format: double */
+            font_size: number;
+            font_style: string;
+            /** Format: int64 */
+            font_weight: number;
+            id: string;
+            /** Format: double */
+            letter_spacing: number;
+            /** Format: double */
+            line_height: number;
+            name: string;
+        };
+        StudioCrop: {
+            /** Format: double */
+            height: number;
+            /** Format: double */
+            width: number;
+            /** Format: double */
+            x: number;
+            /** Format: double */
+            y: number;
+        };
+        StudioDesignSummary: {
+            cover_preview_media_id?: string;
+            created_at: string;
+            /** Format: int64 */
+            height_px: number;
+            id: string;
+            /** Format: int64 */
+            page_count: number;
+            preset_key: string;
+            /** Format: int64 */
+            revision: number;
+            title: string;
+            updated_at: string;
+            /** Format: int64 */
+            width_px: number;
+        };
+        StudioDocumentPayload: {
+            brand_kit_id?: string;
+            /** Format: int64 */
+            brand_kit_revision: number;
+            export_defaults: components["schemas"]["StudioExportDefaults"];
+            /** Format: int64 */
+            height_px: number;
+            pages: components["schemas"]["StudioPagePayload"][] | null;
+            preset_key: string;
+            /** Format: int64 */
+            schema_version: number;
+            title: string;
+            /** Format: int64 */
+            width_px: number;
+        };
+        StudioDocumentResponse: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/StudioDocumentResponse.json
+             */
+            readonly $schema?: string;
+            can_edit: boolean;
+            cover_preview_media_id?: string;
+            created_at: string;
+            created_by_id: string;
+            document: components["schemas"]["StudioDocumentPayload"];
+            id: string;
+            /** Format: int64 */
+            revision: number;
+            updated_at: string;
+            workspace_id: string;
+        };
+        StudioExportDefaults: {
+            /** @enum {string} */
+            format: "png" | "jpeg" | "webp";
+            /** Format: double */
+            quality: number;
+        };
+        StudioImageAdjustments: {
+            /** Format: double */
+            blur: number;
+            /** Format: double */
+            brightness: number;
+            /** Format: double */
+            contrast: number;
+            /** Format: double */
+            exposure: number;
+            /** Format: double */
+            highlights: number;
+            /** Format: double */
+            saturation: number;
+            /** Format: double */
+            shadows: number;
+            /** Format: double */
+            temperature: number;
+        };
+        StudioImageValue: {
+            adjustments: components["schemas"]["StudioImageAdjustments"];
+            crop: components["schemas"]["StudioCrop"];
+            /** @enum {string} */
+            fit: "cover" | "contain" | "stretch";
+            media_id: string;
+            /** Format: int64 */
+            source_height: number;
+            /** Format: int64 */
+            source_width: number;
+        };
+        StudioLayer: {
+            id: string;
+            image?: components["schemas"]["StudioImageValue"];
+            locked: boolean;
+            name: string;
+            /** Format: double */
+            opacity: number;
+            parent_id?: string;
+            shape?: components["schemas"]["StudioShapeValue"];
+            text?: components["schemas"]["StudioTextValue"];
+            transform: components["schemas"]["StudioTransform"];
+            /** @enum {string} */
+            type: "text" | "image" | "shape" | "group";
+            visible: boolean;
+        };
+        StudioPagePayload: {
+            background_color: string;
+            id: string;
+            latest_export_media_id?: string;
+            layers: components["schemas"]["StudioLayer"][] | null;
+            name: string;
+            preview_media_id?: string;
+        };
+        StudioPreset: {
+            /**
+             * @description Default export format
+             * @enum {string}
+             */
+            default_format: "png" | "jpeg" | "webp";
+            /**
+             * Format: int64
+             * @description Canvas height in pixels
+             */
+            height_px: number;
+            /** @description Stable preset key */
+            key: string;
+            /** @description User-visible preset name */
+            name: string;
+            /** @description Compatible provider content profiles */
+            profiles: string[] | null;
+            /**
+             * Format: int64
+             * @description Canvas width in pixels
+             */
+            width_px: number;
+        };
+        StudioPresetOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/StudioPresetOutputBody.json
+             */
+            readonly $schema?: string;
+            background_model_base_url: string;
+            enabled: boolean;
+            presets: components["schemas"]["StudioPreset"][] | null;
+            /** Format: int64 */
+            schema_version: number;
+        };
+        StudioRevisionSummary: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/StudioRevisionSummary.json
+             */
+            readonly $schema?: string;
+            created_at: string;
+            expires_at?: string;
+            id: string;
+            kind: string;
+            name?: string;
+            /** Format: int64 */
+            revision: number;
+        };
+        StudioShapeValue: {
+            fill: string;
+            /** @enum {string} */
+            kind: "rectangle" | "rounded_rectangle" | "ellipse" | "line";
+            /** Format: double */
+            radius: number;
+            stroke: string;
+            /** Format: double */
+            stroke_width: number;
+        };
+        StudioTemplateResponse: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/StudioTemplateResponse.json
+             */
+            readonly $schema?: string;
+            built_in: boolean;
+            category: string;
+            created_at?: string;
+            document: components["schemas"]["StudioDocumentPayload"];
+            id: string;
+            name: string;
+            preset_key: string;
+            preview_media_id?: string;
+            updated_at?: string;
+            workspace_id?: string;
+        };
+        StudioTextShadow: {
+            /** Format: double */
+            blur: number;
+            color: string;
+            /** Format: double */
+            offset_x: number;
+            /** Format: double */
+            offset_y: number;
+        };
+        StudioTextValue: {
+            align: string;
+            color: string;
+            font_asset_id?: string;
+            font_family: string;
+            /** Format: double */
+            font_size: number;
+            font_style: string;
+            /** Format: int64 */
+            font_weight: number;
+            highlight_color?: string;
+            /** Format: double */
+            letter_spacing: number;
+            /** Format: double */
+            line_height: number;
+            shadow: components["schemas"]["StudioTextShadow"];
+            stroke_color?: string;
+            /** Format: double */
+            stroke_width: number;
+            text: string;
+        };
+        StudioTransform: {
+            flip_x: boolean;
+            flip_y: boolean;
+            /** Format: double */
+            height: number;
+            /** Format: double */
+            rotation: number;
+            /** Format: double */
+            width: number;
+            /** Format: double */
+            x: number;
+            /** Format: double */
+            y: number;
+        };
         SuggestScheduleInputBody: {
             /**
              * Format: uri
@@ -4323,6 +5347,16 @@ export interface components {
             /** @description New account slug. Use lowercase letters, numbers, and hyphens. */
             slug: string;
         };
+        UpdateMediaCollectionInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/UpdateMediaCollectionInputBody.json
+             */
+            readonly $schema?: string;
+            color: string;
+            name: string;
+        };
         UpdateMediaFavoriteOutputBody: {
             /**
              * Format: uri
@@ -4352,6 +5386,15 @@ export interface components {
             readonly $schema?: string;
             /** @description Success message */
             message: string;
+        };
+        UpdateMediaTagInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/UpdateMediaTagInputBody.json
+             */
+            readonly $schema?: string;
+            name: string;
         };
         UpdatePostInputBody: {
             /**
@@ -4414,6 +5457,47 @@ export interface components {
             avatar_url?: string;
             /** @description User display name */
             display_name?: string;
+        };
+        UpdateStudioBrandKitInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/UpdateStudioBrandKitInputBody.json
+             */
+            readonly $schema?: string;
+            assets: components["schemas"]["StudioBrandAsset"][] | null;
+            backgrounds: string[] | null;
+            colors: components["schemas"]["StudioBrandColor"][] | null;
+            fonts: components["schemas"]["StudioBrandFont"][] | null;
+            name: string;
+            text_styles: components["schemas"]["StudioBrandTextStyle"][] | null;
+            workspace_id: string;
+        };
+        UpdateStudioDesignInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/UpdateStudioDesignInputBody.json
+             */
+            readonly $schema?: string;
+            cover_preview_media_id?: string;
+            document: components["schemas"]["StudioDocumentPayload"];
+            /** Format: int64 */
+            expected_revision: number;
+            /** @enum {string} */
+            recovery_reason?: "idle" | "export" | "close";
+        };
+        UpdateStudioTemplateInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/UpdateStudioTemplateInputBody.json
+             */
+            readonly $schema?: string;
+            category: string;
+            document: components["schemas"]["StudioDocumentPayload"];
+            name: string;
+            preview_media_id?: string;
         };
         UpdateWorkspaceSettingsInputBody: {
             /**
@@ -4658,6 +5742,21 @@ export interface components {
             id: string;
             /** @description Workspace name */
             name: string;
+        };
+        WorkspaceResponse: {
+            avatar_url: string;
+            /** @description Whether the current user can change workspace content */
+            can_edit: boolean;
+            created_at: string;
+            id: string;
+            name: string;
+            organization_id: string;
+            organization_name: string;
+            /**
+             * @description Current user's workspace role
+             * @enum {string}
+             */
+            role: "admin" | "editor" | "viewer";
         };
         WorkspaceTeamOutputBody: {
             /**
@@ -8100,8 +9199,30 @@ export interface operations {
                 workspace_id: string;
                 /** @description Filter: all, used, unused, favorites */
                 filter?: string;
-                /** @description Sort: newest, oldest, size */
+                /** @description Sort: newest, oldest, name, size, recently_used */
                 sort?: string;
+                /** @description Search filename, alt text, tag, and collection */
+                search?: string;
+                /** @description Filter by dominant media type */
+                type?: string;
+                /** @description Filter by media provenance */
+                source?: string;
+                /** @description Filter by asset role; defaults to library */
+                asset_kind?: string;
+                /** @description Filter: square, portrait, landscape */
+                aspect?: string;
+                /** @description Filter by collection ID */
+                collection_id?: string;
+                /** @description Filter by tag ID */
+                tag_id?: string;
+                min_width?: number;
+                min_height?: number;
+                max_width?: number;
+                max_height?: number;
+                /** @description Created on or after this YYYY-MM-DD date */
+                date_from?: string;
+                /** @description Created on or before this YYYY-MM-DD date */
+                date_to?: string;
                 /** @description Limit (default 50, max 200) */
                 limit?: number;
                 /** @description Offset for pagination */
@@ -8211,6 +9332,395 @@ export interface operations {
             };
             /** @description Internal Server Error */
             500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "list-media-collections": {
+        parameters: {
+            query: {
+                workspace_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListMediaCollectionsOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "create-media-collection": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateMediaCollectionInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MediaCollectionResponse"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "delete-media-collection": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeleteMediaCollectionOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "update-media-collection": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateMediaCollectionInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MediaCollectionResponse"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "replace-media-collection-items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReplaceMediaCollectionItemsInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReplaceMediaCollectionItemsOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "get-media-storage": {
+        parameters: {
+            query: {
+                /** @description Workspace ID */
+                workspace_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GetMediaStorageOutputBody"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "list-media-tags": {
+        parameters: {
+            query: {
+                workspace_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListMediaTagsOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "create-media-tag": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateMediaTagInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MediaTagResponse"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "delete-media-tag": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeleteMediaTagOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "update-media-tag": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateMediaTagInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MediaTagResponse"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "replace-media-tag-items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReplaceMediaTagItemsInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReplaceMediaTagItemsOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -10731,6 +12241,1281 @@ export interface operations {
             };
         };
     };
+    "get-studio-brand-kit": {
+        parameters: {
+            query: {
+                workspace_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudioBrandKitResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "update-studio-brand-kit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateStudioBrandKitInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudioBrandKitResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "list-studio-designs": {
+        parameters: {
+            query: {
+                workspace_id: string;
+                search?: string;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListStudioDesignsOutputBody"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "create-studio-design": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateStudioDesignInputBody"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudioDocumentResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "get-studio-design": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudioDocumentResponse"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "delete-studio-design": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeleteStudioDesignOutputBody"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "update-studio-design": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateStudioDesignInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudioDocumentResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "duplicate-studio-design": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudioDocumentResponse"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "list-studio-design-revisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListStudioRevisionsOutputBody"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "create-studio-design-checkpoint": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateStudioCheckpointInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudioRevisionSummary"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "restore-studio-design-revision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                revision_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RestoreStudioRevisionInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudioDocumentResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "list-studio-presets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudioPresetOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "create-studio-return-token": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateStudioReturnTokenInputBody"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreateStudioReturnTokenOutputBody"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "complete-studio-return-token": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CompleteStudioReturnTokenInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CompleteStudioReturnTokenOutputBody"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "consume-studio-return-token": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConsumeStudioReturnTokenOutputBody"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "list-studio-templates": {
+        parameters: {
+            query: {
+                workspace_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListStudioTemplatesOutputBody"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "create-studio-template": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateStudioTemplateInputBody"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudioTemplateResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "delete-studio-template": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeleteStudioTemplateOutputBody"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "update-studio-template": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateStudioTemplateInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudioTemplateResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "instantiate-studio-template": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InstantiateStudioTemplateInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudioDocumentResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     "accept-workspace-invitation": {
         parameters: {
             query?: never;
@@ -10824,7 +13609,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Item"][] | null;
+                    "application/json": components["schemas"]["WorkspaceResponse"][] | null;
                 };
             };
             /** @description Error */

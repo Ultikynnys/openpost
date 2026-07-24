@@ -265,6 +265,8 @@ func main() {
 		PublicURL:                    cfg.PublicURL,
 		DisableRegistrations:         cfg.DisableRegistrations,
 		DisableLinkedInThreadReplies: cfg.DisableLinkedInThreadReplies,
+		StudioEnabled:                cfg.StudioEnabled,
+		StudioModelBaseURL:           cfg.StudioModelBaseURL,
 		MediaHandler:                 mediaHandler,
 		ProfileHandler:               profileHandler,
 		BillingHandler:               billingHandler,

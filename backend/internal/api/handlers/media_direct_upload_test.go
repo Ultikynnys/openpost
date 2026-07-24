@@ -151,6 +151,24 @@ func TestCreateMediaUploadSessionRequiresDirectStorage(t *testing.T) {
 	require.Contains(t, resp.Body.String(), "direct media upload sessions require s3 storage")
 }
 
+func TestValidateBrandFontContent(t *testing.T) {
+	t.Parallel()
+
+	valid := append([]byte{'w', 'O', 'F', '2'}, make([]byte, 24)...)
+	require.NoError(t, validateMediaAssetContent("brand_font", "brand.woff2", "font/woff2", valid))
+	require.ErrorContains(
+		t,
+		validateMediaAssetContent("brand_font", "brand.woff2", "font/woff2", []byte("not-a-font")),
+		"valid WOFF2",
+	)
+	require.ErrorContains(
+		t,
+		validateMediaAssetContent("brand_font", "brand.ttf", "font/woff2", valid),
+		".woff2 extension",
+	)
+	require.NoError(t, validateMediaAssetContent("library", "notes.txt", "text/plain", []byte("notes")))
+}
+
 func TestCreateMediaUploadSessionReservesPendingMedia(t *testing.T) {
 	t.Parallel()
 

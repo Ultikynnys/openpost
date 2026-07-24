@@ -49,6 +49,8 @@ type RouteDeps struct {
 	PublicURL                    string
 	DisableRegistrations         bool
 	DisableLinkedInThreadReplies bool
+	StudioEnabled                bool
+	StudioModelBaseURL           string
 
 	MediaHandler    *handlers.MediaHandler
 	BillingHandler  *handlers.BillingHandler
@@ -69,6 +71,12 @@ func RegisterHumaRoutes(api huma.API, deps RouteDeps) {
 		mediaHandler.SetEntitlement(deps.Entitlement)
 	}
 	mediaHandler.RegisterRoutes(api)
+	handlers.NewStudioHandler(
+		deps.DB,
+		deps.Authenticator,
+		deps.StudioEnabled,
+		deps.StudioModelBaseURL,
+	).RegisterRoutes(api)
 
 	billingHandler := deps.BillingHandler
 	if billingHandler == nil {

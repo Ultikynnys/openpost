@@ -66,6 +66,11 @@ type mediaUploadBytesInput struct {
 	Size             int64
 	Content          []byte
 	AltText          string
+	Source           string
+	AssetKind        string
+	ParentMediaID    string
+	DesignDocumentID string
+	DesignPageID     string
 }
 
 func NewMediaHandler(
@@ -121,50 +126,86 @@ type Thumbnails struct {
 }
 
 type MediaUsageItem struct {
-	PostID    string `json:"post_id" doc:"Post ID"`
-	Content   string `json:"content" doc:"Post content (truncated)"`
-	Status    string `json:"status" doc:"Post status"`
-	Scheduled string `json:"scheduled_at" doc:"Scheduled time"`
+	Kind      string `json:"kind" doc:"Usage kind: post, design, template, brand_asset, or brand_font"`
+	ID        string `json:"id" doc:"Referenced object ID"`
+	Label     string `json:"label" doc:"User-visible usage label"`
+	PostID    string `json:"post_id,omitempty" doc:"Post ID for post usages"`
+	Content   string `json:"content,omitempty" doc:"Post content (truncated)"`
+	Status    string `json:"status,omitempty" doc:"Post or design status"`
+	Scheduled string `json:"scheduled_at,omitempty" doc:"Scheduled time"`
 }
 
 type MediaListItem struct {
-	ID                 string  `json:"id" doc:"Media ID"`
-	WorkspaceID        string  `json:"workspace_id" doc:"Workspace ID"`
-	MimeType           string  `json:"mime_type" doc:"MIME type"`
-	Size               int64   `json:"size" doc:"File size in bytes"`
-	OriginalFilename   string  `json:"original_filename" doc:"Original filename"`
-	Width              int     `json:"width" doc:"Image width"`
-	Height             int     `json:"height" doc:"Image height"`
-	AltText            string  `json:"alt_text" doc:"Alt text"`
-	IsFavorite         bool    `json:"is_favorite" doc:"Whether media is favorited"`
-	CreatedAt          string  `json:"created_at" doc:"Creation time"`
-	URL                string  `json:"url" doc:"URL to access the media"`
-	ThumbnailURL       string  `json:"thumbnail_url" doc:"Thumbnail URL for grid view"`
-	UsageCount         int     `json:"usage_count" doc:"Number of posts using this media"`
-	CanDelete          bool    `json:"can_delete" doc:"Whether media can be deleted"`
-	ProcessingStatus   string  `json:"processing_status" doc:"Processing status"`
-	DurationMS         int64   `json:"duration_ms" doc:"Video duration in milliseconds"`
-	FrameRate          float64 `json:"frame_rate" doc:"Video frame rate"`
-	AnalysisStatus     string  `json:"analysis_status" doc:"Media analysis status"`
-	AnalysisError      string  `json:"analysis_error,omitempty" doc:"Media analysis error"`
-	PosterThumbnailURL string  `json:"poster_thumbnail_url,omitempty" doc:"Poster thumbnail URL"`
-	PublicURLCheckedAt string  `json:"public_url_checked_at,omitempty" doc:"Public URL verification time"`
-	PublicURLStatus    int     `json:"public_url_status" doc:"Public URL verification HTTP status"`
-	PublicURLError     string  `json:"public_url_error,omitempty" doc:"Public URL verification error"`
+	ID                 string   `json:"id" doc:"Media ID"`
+	WorkspaceID        string   `json:"workspace_id" doc:"Workspace ID"`
+	MimeType           string   `json:"mime_type" doc:"MIME type"`
+	Size               int64    `json:"size" doc:"File size in bytes"`
+	OriginalFilename   string   `json:"original_filename" doc:"Original filename"`
+	Width              int      `json:"width" doc:"Image width"`
+	Height             int      `json:"height" doc:"Image height"`
+	AltText            string   `json:"alt_text" doc:"Alt text"`
+	IsFavorite         bool     `json:"is_favorite" doc:"Whether media is favorited"`
+	CreatedAt          string   `json:"created_at" doc:"Creation time"`
+	URL                string   `json:"url" doc:"URL to access the media"`
+	ThumbnailURL       string   `json:"thumbnail_url" doc:"Thumbnail URL for grid view"`
+	UsageCount         int      `json:"usage_count" doc:"Number of posts using this media"`
+	CanDelete          bool     `json:"can_delete" doc:"Whether media can be deleted"`
+	ProcessingStatus   string   `json:"processing_status" doc:"Processing status"`
+	DurationMS         int64    `json:"duration_ms" doc:"Video duration in milliseconds"`
+	FrameRate          float64  `json:"frame_rate" doc:"Video frame rate"`
+	AnalysisStatus     string   `json:"analysis_status" doc:"Media analysis status"`
+	AnalysisError      string   `json:"analysis_error,omitempty" doc:"Media analysis error"`
+	PosterThumbnailURL string   `json:"poster_thumbnail_url,omitempty" doc:"Poster thumbnail URL"`
+	PublicURLCheckedAt string   `json:"public_url_checked_at,omitempty" doc:"Public URL verification time"`
+	PublicURLStatus    int      `json:"public_url_status" doc:"Public URL verification HTTP status"`
+	PublicURLError     string   `json:"public_url_error,omitempty" doc:"Public URL verification error"`
+	Source             string   `json:"source" doc:"Media provenance"`
+	AssetKind          string   `json:"asset_kind" doc:"Media library role"`
+	ParentMediaID      string   `json:"parent_media_id,omitempty" doc:"Source media for this derivative"`
+	DesignDocumentID   string   `json:"design_document_id,omitempty" doc:"Producing Studio design"`
+	DesignPageID       string   `json:"design_page_id,omitempty" doc:"Producing Studio page"`
+	Collections        []string `json:"collections" doc:"Collection IDs containing this media"`
+	Tags               []string `json:"tags" doc:"Tag IDs assigned to this media"`
 }
 
 type ListMediaInput struct {
-	WorkspaceID string `query:"workspace_id" required:"true" doc:"Filter by workspace ID"`
-	Filter      string `query:"filter" doc:"Filter: all, used, unused, favorites"`
-	Sort        string `query:"sort" doc:"Sort: newest, oldest, size"`
-	Limit       int    `query:"limit" doc:"Limit (default 50, max 200)"`
-	Offset      int    `query:"offset" doc:"Offset for pagination"`
+	WorkspaceID  string `query:"workspace_id" required:"true" doc:"Filter by workspace ID"`
+	Filter       string `query:"filter" doc:"Filter: all, used, unused, favorites"`
+	Sort         string `query:"sort" doc:"Sort: newest, oldest, name, size, recently_used"`
+	Search       string `query:"search" doc:"Search filename, alt text, tag, and collection"`
+	Type         string `query:"type" doc:"Filter by dominant media type"`
+	Source       string `query:"source" doc:"Filter by media provenance"`
+	AssetKind    string `query:"asset_kind" doc:"Filter by asset role; defaults to library"`
+	Aspect       string `query:"aspect" doc:"Filter: square, portrait, landscape"`
+	CollectionID string `query:"collection_id" doc:"Filter by collection ID"`
+	TagID        string `query:"tag_id" doc:"Filter by tag ID"`
+	MinWidth     int    `query:"min_width" minimum:"0"`
+	MinHeight    int    `query:"min_height" minimum:"0"`
+	MaxWidth     int    `query:"max_width" minimum:"0"`
+	MaxHeight    int    `query:"max_height" minimum:"0"`
+	DateFrom     string `query:"date_from" doc:"Created on or after this YYYY-MM-DD date"`
+	DateTo       string `query:"date_to" doc:"Created on or before this YYYY-MM-DD date"`
+	Limit        int    `query:"limit" doc:"Limit (default 50, max 200)"`
+	Offset       int    `query:"offset" doc:"Offset for pagination"`
 }
 
 type ListMediaOutput struct {
 	Body struct {
 		Media []MediaListItem `json:"media" doc:"Media attachments"`
 		Total int             `json:"total" doc:"Total count matching filter"`
+	}
+}
+
+type GetMediaStorageInput struct {
+	WorkspaceID string `query:"workspace_id" required:"true" doc:"Workspace ID"`
+}
+
+type GetMediaStorageOutput struct {
+	Body struct {
+		UsedBytes     int64 `json:"used_bytes" doc:"Quota-counted media bytes"`
+		AssetCount    int   `json:"asset_count" doc:"Quota-counted media assets"`
+		InternalBytes int64 `json:"internal_bytes" doc:"Hidden preview bytes excluded from quota"`
+		LimitBytes    int64 `json:"limit_bytes" doc:"Storage limit, or zero when no fixed limit is exposed"`
 	}
 }
 
@@ -257,11 +298,16 @@ type UpdateMediaOutput struct {
 
 type CreateMediaUploadSessionInput struct {
 	Body struct {
-		WorkspaceID string `json:"workspace_id" doc:"Workspace ID"`
-		Filename    string `json:"filename" doc:"Original filename"`
-		MimeType    string `json:"mime_type,omitempty" doc:"Declared MIME type"`
-		Size        int64  `json:"size" doc:"Expected upload size in bytes"`
-		AltText     string `json:"alt_text,omitempty" doc:"Alt text for accessibility"`
+		WorkspaceID      string `json:"workspace_id" doc:"Workspace ID"`
+		Filename         string `json:"filename" doc:"Original filename"`
+		MimeType         string `json:"mime_type,omitempty" doc:"Declared MIME type"`
+		Size             int64  `json:"size" doc:"Expected upload size in bytes"`
+		AltText          string `json:"alt_text,omitempty" doc:"Alt text for accessibility"`
+		Source           string `json:"source,omitempty" enum:"upload,camera,studio_export,studio_edit,background_removal" doc:"Media provenance"`
+		AssetKind        string `json:"asset_kind,omitempty" enum:"library,brand_asset,brand_font,design_preview,template_preview" doc:"Media library role"`
+		ParentMediaID    string `json:"parent_media_id,omitempty" doc:"Source media ID for a derivative"`
+		DesignDocumentID string `json:"design_document_id,omitempty" doc:"Producing Studio design ID"`
+		DesignPageID     string `json:"design_page_id,omitempty" doc:"Producing Studio page ID"`
 	}
 }
 
@@ -296,6 +342,11 @@ type MediaUploadResult struct {
 	Deduped          bool   `json:"deduped" doc:"Whether an existing media attachment was reused"`
 	AltText          string `json:"alt_text" doc:"Persisted alt text"`
 	OriginalFilename string `json:"original_filename" doc:"Persisted original filename"`
+	Source           string `json:"source" doc:"Media provenance"`
+	AssetKind        string `json:"asset_kind" doc:"Media library role"`
+	ParentMediaID    string `json:"parent_media_id,omitempty" doc:"Source media ID"`
+	DesignDocumentID string `json:"design_document_id,omitempty" doc:"Producing Studio design ID"`
+	DesignPageID     string `json:"design_page_id,omitempty" doc:"Producing Studio page ID"`
 }
 
 type CompleteMediaUploadSessionOutput struct {
@@ -330,6 +381,83 @@ func (h *MediaHandler) RegisterRoutes(api huma.API) {
 
 		query := h.db.NewSelect().Model(&models.MediaAttachment{}).
 			Where("workspace_id = ?", input.WorkspaceID)
+		assetKind := strings.TrimSpace(input.AssetKind)
+		if assetKind == "" {
+			assetKind = "library"
+		}
+		if assetKind != "all" {
+			if assetKind == "library" {
+				query = query.Where("(asset_kind = ? OR asset_kind = '' OR asset_kind IS NULL)", assetKind)
+			} else {
+				query = query.Where("asset_kind = ?", assetKind)
+			}
+		}
+		if search := strings.TrimSpace(input.Search); search != "" {
+			pattern := "%" + strings.ToLower(search) + "%"
+			query = query.WhereGroup(" AND ", func(group *bun.SelectQuery) *bun.SelectQuery {
+				return group.
+					Where("LOWER(original_filename) LIKE ?", pattern).
+					WhereOr("LOWER(alt_text) LIKE ?", pattern).
+					WhereOr(`id IN (
+						SELECT assignment.media_id
+						FROM media_tag_assignments assignment
+						JOIN media_tags tag ON tag.id = assignment.tag_id
+						WHERE LOWER(tag.name) LIKE ?
+					)`, pattern).
+					WhereOr(`id IN (
+						SELECT item.media_id
+						FROM media_collection_items item
+						JOIN media_collections collection ON collection.id = item.collection_id
+						WHERE LOWER(collection.name) LIKE ?
+					)`, pattern)
+			})
+		}
+		if mediaType := strings.TrimSpace(input.Type); mediaType != "" && mediaType != "all" {
+			query = query.Where("dominant_type = ?", mediaType)
+		}
+		if source := strings.TrimSpace(input.Source); source != "" && source != "all" {
+			query = query.Where("source = ?", source)
+		}
+		switch input.Aspect {
+		case "square":
+			query = query.Where("width > 0 AND height > 0 AND ABS(width - height) <= (CASE WHEN width > height THEN width ELSE height END) * 0.02")
+		case "portrait":
+			query = query.Where("height > width")
+		case "landscape":
+			query = query.Where("width > height")
+		}
+		if input.MinWidth > 0 {
+			query = query.Where("width >= ?", input.MinWidth)
+		}
+		if input.MinHeight > 0 {
+			query = query.Where("height >= ?", input.MinHeight)
+		}
+		if input.MaxWidth > 0 {
+			query = query.Where("width <= ?", input.MaxWidth)
+		}
+		if input.MaxHeight > 0 {
+			query = query.Where("height <= ?", input.MaxHeight)
+		}
+		if value := strings.TrimSpace(input.DateFrom); value != "" {
+			date, parseErr := time.Parse("2006-01-02", value)
+			if parseErr != nil {
+				return nil, huma.Error400BadRequest("date_from must use YYYY-MM-DD")
+			}
+			query = query.Where("created_at >= ?", date.UTC())
+		}
+		if value := strings.TrimSpace(input.DateTo); value != "" {
+			date, parseErr := time.Parse("2006-01-02", value)
+			if parseErr != nil {
+				return nil, huma.Error400BadRequest("date_to must use YYYY-MM-DD")
+			}
+			query = query.Where("created_at < ?", date.UTC().AddDate(0, 0, 1))
+		}
+		if collectionID := strings.TrimSpace(input.CollectionID); collectionID != "" {
+			query = query.Where("id IN (SELECT media_id FROM media_collection_items WHERE collection_id = ?)", collectionID)
+		}
+		if tagID := strings.TrimSpace(input.TagID); tagID != "" {
+			query = query.Where("id IN (SELECT media_id FROM media_tag_assignments WHERE tag_id = ?)", tagID)
+		}
 		variantMediaIDs := []string{}
 		if input.Filter == "used" || input.Filter == "unused" {
 			ids, usageErr := h.variantMediaIDsForWorkspace(ctx, input.WorkspaceID)
@@ -344,14 +472,32 @@ func (h *MediaHandler) RegisterRoutes(api huma.API) {
 			query = query.Where("is_favorite = ?", true)
 		case "used":
 			query = query.WhereGroup(" AND ", func(group *bun.SelectQuery) *bun.SelectQuery {
-				group = group.Where("id IN (SELECT media_id FROM post_media) OR id IN (SELECT media_id FROM rendition_media)")
+				group = group.Where(`id IN (SELECT media_id FROM post_media)
+					OR id IN (SELECT media_id FROM rendition_media)
+					OR id IN (SELECT media_id FROM design_media_references)
+					OR id IN (SELECT media_id FROM design_template_media_references)
+					OR id IN (SELECT media_id FROM brand_assets)
+					OR id IN (SELECT media_id FROM brand_fonts)
+					OR id IN (SELECT cover_preview_media_id FROM design_documents WHERE cover_preview_media_id IS NOT NULL)
+					OR id IN (SELECT preview_media_id FROM design_pages WHERE preview_media_id IS NOT NULL)
+					OR id IN (SELECT latest_export_media_id FROM design_pages WHERE latest_export_media_id IS NOT NULL)
+					OR id IN (SELECT preview_media_id FROM design_templates WHERE preview_media_id IS NOT NULL)`)
 				if len(variantMediaIDs) > 0 {
 					group = group.WhereOr("id IN (?)", bun.List(variantMediaIDs))
 				}
 				return group
 			})
 		case "unused":
-			query = query.Where("id NOT IN (SELECT media_id FROM post_media) AND id NOT IN (SELECT media_id FROM rendition_media)")
+			query = query.Where(`id NOT IN (SELECT media_id FROM post_media)
+				AND id NOT IN (SELECT media_id FROM rendition_media)
+				AND id NOT IN (SELECT media_id FROM design_media_references)
+				AND id NOT IN (SELECT media_id FROM design_template_media_references)
+				AND id NOT IN (SELECT media_id FROM brand_assets)
+				AND id NOT IN (SELECT media_id FROM brand_fonts)
+				AND id NOT IN (SELECT cover_preview_media_id FROM design_documents WHERE cover_preview_media_id IS NOT NULL)
+				AND id NOT IN (SELECT preview_media_id FROM design_pages WHERE preview_media_id IS NOT NULL)
+				AND id NOT IN (SELECT latest_export_media_id FROM design_pages WHERE latest_export_media_id IS NOT NULL)
+				AND id NOT IN (SELECT preview_media_id FROM design_templates WHERE preview_media_id IS NOT NULL)`)
 			if len(variantMediaIDs) > 0 {
 				query = query.Where("id NOT IN (?)", bun.List(variantMediaIDs))
 			}
@@ -368,6 +514,20 @@ func (h *MediaHandler) RegisterRoutes(api huma.API) {
 			query = query.Order("created_at ASC")
 		case mediaSortSize:
 			query = query.Order("size DESC")
+		case "name":
+			query = query.OrderExpr("LOWER(original_filename) ASC")
+		case "recently_used":
+			query = query.OrderExpr(`COALESCE(
+				(SELECT MAX(post.created_at)
+				 FROM post_media post_media_item
+				 JOIN posts post ON post.id = post_media_item.post_id
+				 WHERE post_media_item.media_id = media_attachments.id),
+				(SELECT MAX(document.updated_at)
+				 FROM design_media_references design_reference
+				 JOIN design_documents document ON document.id = design_reference.design_document_id
+				 WHERE design_reference.media_id = media_attachments.id),
+				media_attachments.created_at
+			) DESC`)
 		default:
 			query = query.Order("created_at DESC")
 		}
@@ -385,6 +545,10 @@ func (h *MediaHandler) RegisterRoutes(api huma.API) {
 		usageByMedia, err := h.mediaUsageSummaries(ctx, input.WorkspaceID, mediaIDs)
 		if err != nil {
 			return nil, huma.Error500InternalServerError("failed to check media usage")
+		}
+		collectionsByMedia, tagsByMedia, err := h.mediaOrganizationByMedia(ctx, mediaIDs)
+		if err != nil {
+			return nil, huma.Error500InternalServerError("failed to load media organization")
 		}
 
 		result := make([]MediaListItem, len(media))
@@ -422,6 +586,19 @@ func (h *MediaHandler) RegisterRoutes(api huma.API) {
 				PublicURLCheckedAt: formatMediaTime(m.PublicURLCheckedAt),
 				PublicURLStatus:    m.PublicURLStatus,
 				PublicURLError:     m.PublicURLError,
+				Source:             m.Source,
+				AssetKind:          m.AssetKind,
+				ParentMediaID:      m.ParentMediaID,
+				DesignDocumentID:   m.DesignDocumentID,
+				DesignPageID:       m.DesignPageID,
+				Collections:        collectionsByMedia[m.ID],
+				Tags:               tagsByMedia[m.ID],
+			}
+			if result[i].Source == "" {
+				result[i].Source = "upload"
+			}
+			if result[i].AssetKind == "" {
+				result[i].AssetKind = "library"
 			}
 			if thumbs.SM != "" {
 				result[i].ThumbnailURL = "/media/" + m.ID + "/thumb/sm"
@@ -432,6 +609,42 @@ func (h *MediaHandler) RegisterRoutes(api huma.API) {
 			Media []MediaListItem `json:"media" doc:"Media attachments"`
 			Total int             `json:"total" doc:"Total count matching filter"`
 		}{Media: result, Total: total}}, nil
+	})
+
+	huma.Register(api, huma.Operation{
+		OperationID: "get-media-storage",
+		Method:      http.MethodGet,
+		Path:        "/media/storage",
+		Summary:     "Get workspace media storage usage",
+		Tags:        []string{tagMedia},
+		Middlewares: huma.Middlewares{middleware.AuthMiddleware(api, h.authn)},
+		Errors:      []int{400, 403},
+	}, func(ctx context.Context, input *GetMediaStorageInput) (*GetMediaStorageOutput, error) {
+		if input.WorkspaceID == "" {
+			return nil, huma.Error400BadRequest(errWorkspaceIDRequired)
+		}
+		if err := h.ensureMediaWorkspaceAccess(ctx, middleware.GetUserID(ctx), input.WorkspaceID); err != nil {
+			return nil, err
+		}
+		var storageUsage struct {
+			UsedBytes     int64 `bun:"used_bytes"`
+			AssetCount    int   `bun:"asset_count"`
+			InternalBytes int64 `bun:"internal_bytes"`
+		}
+		err := h.db.NewSelect().Model((*models.MediaAttachment)(nil)).
+			ColumnExpr(`COALESCE(SUM(CASE WHEN asset_kind NOT IN ('design_preview', 'template_preview') THEN size ELSE 0 END), 0) AS used_bytes`).
+			ColumnExpr(`COALESCE(SUM(CASE WHEN asset_kind NOT IN ('design_preview', 'template_preview') THEN 1 ELSE 0 END), 0) AS asset_count`).
+			ColumnExpr(`COALESCE(SUM(CASE WHEN asset_kind IN ('design_preview', 'template_preview') THEN size ELSE 0 END), 0) AS internal_bytes`).
+			Where("workspace_id = ?", input.WorkspaceID).
+			Scan(ctx, &storageUsage)
+		if err != nil {
+			return nil, huma.Error500InternalServerError("failed to load media storage usage")
+		}
+		out := &GetMediaStorageOutput{}
+		out.Body.UsedBytes = storageUsage.UsedBytes
+		out.Body.AssetCount = storageUsage.AssetCount
+		out.Body.InternalBytes = storageUsage.InternalBytes
+		return out, nil
 	})
 
 	huma.Register(api, huma.Operation{
@@ -474,12 +687,20 @@ func (h *MediaHandler) RegisterRoutes(api huma.API) {
 				scheduled = post.ScheduledAt.Format(time.RFC3339)
 			}
 			usage = append(usage, MediaUsageItem{
+				Kind:      "post",
+				ID:        post.ID,
+				Label:     content,
 				PostID:    post.ID,
 				Content:   content,
 				Status:    post.Status,
 				Scheduled: scheduled,
 			})
 		}
+		otherUsage, err := h.nonPostMediaUsage(ctx, media.WorkspaceID, input.PathID)
+		if err != nil {
+			return nil, huma.Error500InternalServerError("failed to fetch Studio media usage")
+		}
+		usage = append(usage, otherUsage...)
 
 		return &GetMediaUsageOutput{Body: struct {
 			Usage []MediaUsageItem `json:"usage" doc:"Posts using this media"`
@@ -516,7 +737,7 @@ func (h *MediaHandler) RegisterRoutes(api huma.API) {
 			return nil, huma.Error500InternalServerError("failed to check usage")
 		}
 		if usage.Blocking > 0 {
-			return nil, huma.Error400BadRequest("cannot delete media attached to posts that have not been published yet")
+			return nil, huma.Error400BadRequest("cannot delete media while it is used by a draft, design, template, or brand kit")
 		}
 
 		if err := h.deleteMedia(ctx, &media); err != nil {
@@ -682,8 +903,23 @@ func (h *MediaHandler) RegisterRoutes(api huma.API) {
 		if input.Body.Size > MaxMediaUploadBytes {
 			return nil, huma.Error400BadRequest("file size exceeds 50MB limit")
 		}
-		if err := h.checkUploadQuota(ctx, workspaceID, input.Body.Size); err != nil {
+		source, assetKind, err := normalizeMediaProvenance(input.Body.Source, input.Body.AssetKind)
+		if err != nil {
 			return nil, huma.Error400BadRequest(err.Error())
+		}
+		if !isInternalMediaAssetKind(assetKind) {
+			if err := h.checkUploadQuota(ctx, workspaceID, input.Body.Size); err != nil {
+				return nil, huma.Error400BadRequest(err.Error())
+			}
+		}
+		if err := h.validateMediaProvenanceReferences(
+			ctx,
+			workspaceID,
+			input.Body.ParentMediaID,
+			input.Body.DesignDocumentID,
+			input.Body.DesignPageID,
+		); err != nil {
+			return nil, err
 		}
 
 		directStorage, ok := h.storage.(mediastore.DirectUploadStorage)
@@ -718,6 +954,11 @@ func (h *MediaHandler) RegisterRoutes(api huma.API) {
 			Size:             input.Body.Size,
 			OriginalFilename: filename,
 			FileHash:         "pending:" + mediaID,
+			Source:           source,
+			AssetKind:        assetKind,
+			ParentMediaID:    strings.TrimSpace(input.Body.ParentMediaID),
+			DesignDocumentID: strings.TrimSpace(input.Body.DesignDocumentID),
+			DesignPageID:     strings.TrimSpace(input.Body.DesignPageID),
 			AltText:          input.Body.AltText,
 			CreatedAt:        now,
 		}
@@ -818,29 +1059,58 @@ func (h *MediaHandler) completeDirectMediaUpload(ctx context.Context, userID, wo
 	if err != nil {
 		return result, err
 	}
-	if err := h.checkUploadQuotaExcludingMedia(ctx, workspaceID, int64(len(content)), media.ID); err != nil {
-		return result, huma.Error400BadRequest(err.Error())
+	if !isInternalMediaAssetKind(media.AssetKind) {
+		if err := h.checkUploadQuotaExcludingMedia(ctx, workspaceID, int64(len(content)), media.ID); err != nil {
+			return result, huma.Error400BadRequest(err.Error())
+		}
 	}
 
 	hash := sha256.Sum256(content)
 	fileHash := hex.EncodeToString(hash[:])
-	if existing, found, err := h.findDuplicateMedia(ctx, workspaceID, fileHash, media.ID); err != nil {
-		return result, err
-	} else if found {
-		_ = h.storage.Delete(filepath.Base(media.FilePath))
-		_, _ = h.db.NewDelete().Model(&media).Where("id = ?", media.ID).Exec(ctx)
-		return mediaUploadResultFromAttachment(existing, true), nil
+	if media.Source == "upload" && media.AssetKind == "library" {
+		if existing, found, err := h.findDuplicateMedia(ctx, workspaceID, fileHash, media.ID); err != nil {
+			return result, err
+		} else if found {
+			_ = h.storage.Delete(filepath.Base(media.FilePath))
+			_, _ = h.db.NewDelete().Model(&media).Where("id = ?", media.ID).Exec(ctx)
+			return mediaUploadResultFromAttachment(existing, true), nil
+		}
 	}
 
 	media, err = h.finalizeDirectMediaUploadRecord(ctx, media, content, fileHash)
 	if err != nil {
+		if duplicate, deduped := h.resolveDirectUploadDeduplication(ctx, workspaceID, fileHash, media); deduped {
+			return duplicate, nil
+		}
 		return result, err
 	}
-	if _, err := h.usage.IncrementMonthly(ctx, workspaceID, entitlements.LimitMediaBytesUploadedMonthly, media.Size, time.Now().UTC()); err != nil {
-		return result, huma.Error500InternalServerError("failed to record media upload usage")
+	if !isInternalMediaAssetKind(media.AssetKind) {
+		if _, err := h.usage.IncrementMonthly(ctx, workspaceID, entitlements.LimitMediaBytesUploadedMonthly, media.Size, time.Now().UTC()); err != nil {
+			return result, huma.Error500InternalServerError("failed to record media upload usage")
+		}
 	}
 
 	return mediaUploadResultFromAttachment(media, false), nil
+}
+
+func (h *MediaHandler) resolveDirectUploadDeduplication(
+	ctx context.Context,
+	workspaceID string,
+	fileHash string,
+	media models.MediaAttachment,
+) (MediaUploadResult, bool) {
+	if media.Source != "upload" || media.AssetKind != "library" {
+		return MediaUploadResult{}, false
+	}
+	existing, found, err := h.findDuplicateMedia(ctx, workspaceID, fileHash, media.ID)
+	if err != nil || !found {
+		return MediaUploadResult{}, false
+	}
+	_, _ = h.db.NewDelete().Model(&media).Where("id = ?", media.ID).Exec(ctx)
+	if deleteErr := h.deleteMediaFiles(&media); deleteErr != nil {
+		log.Printf("failed to delete deduplicated direct upload files for %s: %v", media.ID, deleteErr)
+	}
+	return mediaUploadResultFromAttachment(existing, true), true
 }
 
 func (h *MediaHandler) loadDirectMediaUpload(ctx context.Context, userID, workspaceID, mediaID string) (models.MediaAttachment, error) {
@@ -901,6 +1171,8 @@ func (h *MediaHandler) findDuplicateMedia(ctx context.Context, workspaceID, file
 	var existing models.MediaAttachment
 	err := h.db.NewSelect().Model(&existing).
 		Where("workspace_id = ? AND file_hash = ? AND id != ?", workspaceID, fileHash, mediaID).
+		Where("(source = ? OR source = '' OR source IS NULL)", "upload").
+		Where("(asset_kind = ? OR asset_kind = '' OR asset_kind IS NULL)", "library").
 		Scan(ctx)
 	if err == nil {
 		return existing, true, nil
@@ -912,6 +1184,10 @@ func (h *MediaHandler) findDuplicateMedia(ctx context.Context, workspaceID, file
 }
 
 func (h *MediaHandler) finalizeDirectMediaUploadRecord(ctx context.Context, media models.MediaAttachment, content []byte, fileHash string) (models.MediaAttachment, error) {
+	if err := validateMediaAssetContent(media.AssetKind, media.OriginalFilename, media.MimeType, content); err != nil {
+		h.markMediaUploadFailed(ctx, media.ID)
+		return media, huma.Error400BadRequest(err.Error())
+	}
 	mimeType := detectedMediaMimeType(content, media.MimeType)
 	width, height := 0, 0
 	var thumbnails Thumbnails
@@ -1089,6 +1365,27 @@ func detectedMediaMimeType(content []byte, fallback string) string {
 	return defaultMediaMimeType
 }
 
+func validateMediaAssetContent(assetKind, filename, declaredMimeType string, content []byte) error {
+	if assetKind != "brand_font" {
+		return nil
+	}
+	if len(content) > 10*1024*1024 {
+		return errors.New("brand fonts must be 10MB or smaller")
+	}
+	if !strings.EqualFold(filepath.Ext(filename), ".woff2") {
+		return errors.New("brand fonts must use the .woff2 extension")
+	}
+	if len(content) < 4 || !bytes.Equal(content[:4], []byte{'w', 'O', 'F', '2'}) {
+		return errors.New("brand font content is not a valid WOFF2 file")
+	}
+	if declaredMimeType != "" &&
+		!strings.EqualFold(declaredMimeType, "font/woff2") &&
+		!strings.EqualFold(declaredMimeType, defaultMediaMimeType) {
+		return errors.New("brand fonts must use the font/woff2 MIME type")
+	}
+	return nil
+}
+
 func (h *MediaHandler) markMediaUploadFailed(ctx context.Context, mediaID string) {
 	_, _ = h.db.NewUpdate().
 		Model((*models.MediaAttachment)(nil)).
@@ -1106,7 +1403,115 @@ func mediaUploadResultFromAttachment(media models.MediaAttachment, deduped bool)
 		Deduped:          deduped,
 		AltText:          media.AltText,
 		OriginalFilename: media.OriginalFilename,
+		Source:           defaultMediaSource(media.Source),
+		AssetKind:        defaultMediaAssetKind(media.AssetKind),
+		ParentMediaID:    media.ParentMediaID,
+		DesignDocumentID: media.DesignDocumentID,
+		DesignPageID:     media.DesignPageID,
 	}
+}
+
+func mediaUploadMap(media models.MediaAttachment, deduped bool) map[string]interface{} {
+	result := mediaUploadResultFromAttachment(media, deduped)
+	return map[string]interface{}{
+		"id":                 result.ID,
+		"mime_type":          result.MimeType,
+		"url":                result.URL,
+		"size":               result.Size,
+		"deduped":            result.Deduped,
+		"alt_text":           result.AltText,
+		"original_filename":  result.OriginalFilename,
+		"source":             result.Source,
+		"asset_kind":         result.AssetKind,
+		"parent_media_id":    result.ParentMediaID,
+		"design_document_id": result.DesignDocumentID,
+		"design_page_id":     result.DesignPageID,
+	}
+}
+
+func isInternalMediaAssetKind(assetKind string) bool {
+	switch defaultMediaAssetKind(assetKind) {
+	case "design_preview", "template_preview":
+		return true
+	default:
+		return false
+	}
+}
+
+func normalizeMediaProvenance(source, assetKind string) (string, string, error) {
+	source = defaultMediaSource(source)
+	switch source {
+	case "upload", "camera", "studio_export", "studio_edit", "background_removal":
+	default:
+		return "", "", errors.New("invalid media source")
+	}
+	assetKind = defaultMediaAssetKind(assetKind)
+	switch assetKind {
+	case "library", "brand_asset", "brand_font", "design_preview", "template_preview":
+	default:
+		return "", "", errors.New("invalid media asset kind")
+	}
+	if assetKind == "design_preview" && source != "studio_export" && source != "studio_edit" {
+		return "", "", errors.New("design previews must be produced by Studio")
+	}
+	return source, assetKind, nil
+}
+
+func defaultMediaSource(value string) string {
+	if value = strings.TrimSpace(value); value != "" {
+		return value
+	}
+	return "upload"
+}
+
+func defaultMediaAssetKind(value string) string {
+	if value = strings.TrimSpace(value); value != "" {
+		return value
+	}
+	return "library"
+}
+
+func (h *MediaHandler) validateMediaProvenanceReferences(ctx context.Context, workspaceID, parentMediaID, designDocumentID, designPageID string) error {
+	parentMediaID = strings.TrimSpace(parentMediaID)
+	designDocumentID = strings.TrimSpace(designDocumentID)
+	designPageID = strings.TrimSpace(designPageID)
+	if parentMediaID != "" {
+		count, err := h.db.NewSelect().Model((*models.MediaAttachment)(nil)).
+			Where("id = ? AND workspace_id = ?", parentMediaID, workspaceID).
+			Count(ctx)
+		if err != nil {
+			return huma.Error500InternalServerError("failed to validate source media")
+		}
+		if count != 1 {
+			return huma.Error400BadRequest("source media must belong to the workspace")
+		}
+	}
+	if designDocumentID == "" && designPageID != "" {
+		return huma.Error400BadRequest("design_document_id is required with design_page_id")
+	}
+	if designDocumentID != "" {
+		count, err := h.db.NewSelect().Model((*models.DesignDocument)(nil)).
+			Where("id = ? AND workspace_id = ? AND deleted_at IS NULL", designDocumentID, workspaceID).
+			Count(ctx)
+		if err != nil {
+			return huma.Error500InternalServerError("failed to validate Studio design")
+		}
+		if count != 1 {
+			return huma.Error400BadRequest("Studio design must belong to the workspace")
+		}
+	}
+	if designPageID != "" {
+		count, err := h.db.NewSelect().Model((*models.DesignPage)(nil)).
+			Where("id = ? AND design_document_id = ?", designPageID, designDocumentID).
+			Count(ctx)
+		if err != nil {
+			return huma.Error500InternalServerError("failed to validate Studio page")
+		}
+		if count != 1 {
+			return huma.Error400BadRequest("Studio page must belong to the design")
+		}
+	}
+	return nil
 }
 
 func (h *MediaHandler) mediaUsageSummary(ctx context.Context, workspaceID, mediaID string) (mediaUsageSummary, error) {
@@ -1162,6 +1567,49 @@ type mediaRenditionUsageRow struct {
 	Status      string `bun:"status"`
 }
 
+type mediaOrganizationRow struct {
+	MediaID string `bun:"media_id"`
+	ID      string `bun:"id"`
+}
+
+func (h *MediaHandler) mediaOrganizationByMedia(ctx context.Context, mediaIDs []string) (map[string][]string, map[string][]string, error) {
+	collections := make(map[string][]string, len(mediaIDs))
+	tags := make(map[string][]string, len(mediaIDs))
+	for _, mediaID := range mediaIDs {
+		collections[mediaID] = []string{}
+		tags[mediaID] = []string{}
+	}
+	if len(mediaIDs) == 0 {
+		return collections, tags, nil
+	}
+	var collectionRows []mediaOrganizationRow
+	if err := h.db.NewSelect().
+		TableExpr("media_collection_items AS i").
+		ColumnExpr("i.media_id").
+		ColumnExpr("i.collection_id AS id").
+		Where("i.media_id IN (?)", bun.List(mediaIDs)).
+		Scan(ctx, &collectionRows); err != nil && !isMissingOptionalMediaTable(err) {
+		return nil, nil, err
+	}
+	for _, row := range collectionRows {
+		collections[row.MediaID] = append(collections[row.MediaID], row.ID)
+	}
+	var tagRows []mediaOrganizationRow
+	if err := h.db.NewSelect().
+		TableExpr("media_tag_assignments AS a").
+		ColumnExpr("a.media_id").
+		ColumnExpr("a.tag_id AS id").
+		Where("a.media_id IN (?)", bun.List(mediaIDs)).
+		Scan(ctx, &tagRows); err != nil && !isMissingOptionalMediaTable(err) {
+		return nil, nil, err
+	}
+	for _, row := range tagRows {
+		tags[row.MediaID] = append(tags[row.MediaID], row.ID)
+	}
+	return collections, tags, nil
+}
+
+//nolint:gocyclo // Usage aggregation intentionally checks every independent reference surface.
 func (h *MediaHandler) mediaUsageSummaries(ctx context.Context, workspaceID string, mediaIDs []string) (map[string]mediaUsageSummary, error) {
 	summaries := make(map[string]mediaUsageSummary, len(mediaIDs))
 	targets := make(map[string]struct{}, len(mediaIDs))
@@ -1200,6 +1648,64 @@ func (h *MediaHandler) mediaUsageSummaries(ctx context.Context, workspaceID stri
 			summary.Blocking++
 		}
 		summaries[row.MediaID] = summary
+	}
+
+	blockingTables := []string{
+		"design_media_references",
+		"design_template_media_references",
+		"brand_assets",
+		"brand_fonts",
+	}
+	for _, table := range blockingTables {
+		var rows []struct {
+			MediaID string `bun:"media_id"`
+			Count   int    `bun:"usage_count"`
+		}
+		if err := h.db.NewSelect().
+			TableExpr(table).
+			ColumnExpr("media_id").
+			ColumnExpr("COUNT(*) AS usage_count").
+			Where("media_id IN (?)", bun.List(mediaIDs)).
+			Group("media_id").
+			Scan(ctx, &rows); err != nil && !isMissingOptionalMediaTable(err) {
+			return nil, err
+		}
+		for _, row := range rows {
+			summary := summaries[row.MediaID]
+			summary.Total += row.Count
+			summary.Blocking += row.Count
+			summaries[row.MediaID] = summary
+		}
+	}
+	directReferences := []struct {
+		table  string
+		column string
+	}{
+		{table: "design_documents", column: "cover_preview_media_id"},
+		{table: "design_pages", column: "preview_media_id"},
+		{table: "design_pages", column: "latest_export_media_id"},
+		{table: "design_templates", column: "preview_media_id"},
+	}
+	for _, reference := range directReferences {
+		var rows []struct {
+			MediaID string `bun:"media_id"`
+			Count   int    `bun:"usage_count"`
+		}
+		if err := h.db.NewSelect().
+			TableExpr(reference.table).
+			ColumnExpr(reference.column+" AS media_id").
+			ColumnExpr("COUNT(*) AS usage_count").
+			Where(reference.column+" IN (?)", bun.List(mediaIDs)).
+			GroupExpr(reference.column).
+			Scan(ctx, &rows); err != nil && !isMissingOptionalMediaTable(err) {
+			return nil, err
+		}
+		for _, row := range rows {
+			summary := summaries[row.MediaID]
+			summary.Total += row.Count
+			summary.Blocking += row.Count
+			summaries[row.MediaID] = summary
+		}
 	}
 
 	return summaries, nil
@@ -1276,6 +1782,15 @@ func isMissingRenditionMediaTable(err error) bool {
 		strings.Contains(message, "relation \"rendition_media\" does not exist")
 }
 
+func isMissingOptionalMediaTable(err error) bool {
+	if err == nil {
+		return false
+	}
+	message := strings.ToLower(err.Error())
+	return strings.Contains(message, "no such table:") ||
+		strings.Contains(message, "does not exist")
+}
+
 func (h *MediaHandler) postsUsingMedia(ctx context.Context, workspaceID, mediaID string) ([]models.Post, error) {
 	postRows := []models.Post{}
 	if err := h.db.NewSelect().
@@ -1330,6 +1845,136 @@ func (h *MediaHandler) postsUsingMedia(ctx context.Context, workspaceID, mediaID
 		posts = append(posts, post)
 	}
 	return posts, nil
+}
+
+//nolint:gocyclo // Each usage type has distinct labels and destination metadata.
+func (h *MediaHandler) nonPostMediaUsage(ctx context.Context, workspaceID, mediaID string) ([]MediaUsageItem, error) {
+	usage := []MediaUsageItem{}
+	var designs []struct {
+		ID    string `bun:"id"`
+		Title string `bun:"title"`
+	}
+	if err := h.db.NewSelect().
+		TableExpr("design_media_references AS r").
+		ColumnExpr("DISTINCT d.id").
+		ColumnExpr("d.title").
+		Join("JOIN design_documents AS d ON d.id = r.design_document_id").
+		Where("r.media_id = ? AND d.workspace_id = ? AND d.deleted_at IS NULL", mediaID, workspaceID).
+		Scan(ctx, &designs); err != nil {
+		return nil, err
+	}
+	for _, design := range designs {
+		usage = append(usage, MediaUsageItem{Kind: "design", ID: design.ID, Label: design.Title, Status: "editable"})
+	}
+	var previewDesigns []struct {
+		ID    string `bun:"id"`
+		Title string `bun:"title"`
+	}
+	if err := h.db.NewSelect().
+		TableExpr("design_documents AS d").
+		ColumnExpr("d.id, d.title").
+		Where("d.cover_preview_media_id = ? AND d.workspace_id = ? AND d.deleted_at IS NULL", mediaID, workspaceID).
+		Scan(ctx, &previewDesigns); err != nil {
+		return nil, err
+	}
+	for _, design := range previewDesigns {
+		usage = append(usage, MediaUsageItem{Kind: "design_preview", ID: design.ID, Label: design.Title})
+	}
+	var designPages []struct {
+		ID       string `bun:"id"`
+		Name     string `bun:"name"`
+		DesignID string `bun:"design_id"`
+		Title    string `bun:"title"`
+	}
+	if err := h.db.NewSelect().
+		TableExpr("design_pages AS page").
+		ColumnExpr("page.id, page.name, document.id AS design_id, document.title").
+		Join("JOIN design_documents AS document ON document.id = page.design_document_id").
+		Where("document.workspace_id = ? AND document.deleted_at IS NULL", workspaceID).
+		Where("(page.preview_media_id = ? OR page.latest_export_media_id = ?)", mediaID, mediaID).
+		Scan(ctx, &designPages); err != nil {
+		return nil, err
+	}
+	for _, page := range designPages {
+		usage = append(usage, MediaUsageItem{
+			Kind:  "design_page_export",
+			ID:    page.ID,
+			Label: page.Title + " · " + page.Name,
+		})
+	}
+
+	var templates []struct {
+		ID   string `bun:"id"`
+		Name string `bun:"name"`
+	}
+	if err := h.db.NewSelect().
+		TableExpr("design_template_media_references AS r").
+		ColumnExpr("DISTINCT t.id").
+		ColumnExpr("t.name").
+		Join("JOIN design_templates AS t ON t.id = r.design_template_id").
+		Where("r.media_id = ? AND t.workspace_id = ?", mediaID, workspaceID).
+		Scan(ctx, &templates); err != nil {
+		return nil, err
+	}
+	for _, template := range templates {
+		usage = append(usage, MediaUsageItem{Kind: "template", ID: template.ID, Label: template.Name})
+	}
+	var templatePreviews []struct {
+		ID   string `bun:"id"`
+		Name string `bun:"name"`
+	}
+	if err := h.db.NewSelect().
+		TableExpr("design_templates AS template").
+		ColumnExpr("template.id, template.name").
+		Where("template.preview_media_id = ? AND template.workspace_id = ?", mediaID, workspaceID).
+		Scan(ctx, &templatePreviews); err != nil {
+		return nil, err
+	}
+	for _, template := range templatePreviews {
+		usage = append(usage, MediaUsageItem{
+			Kind:  "template_preview",
+			ID:    template.ID,
+			Label: template.Name,
+		})
+	}
+
+	var brandAssets []struct {
+		ID   string `bun:"id"`
+		Name string `bun:"name"`
+		Role string `bun:"role"`
+	}
+	if err := h.db.NewSelect().
+		TableExpr("brand_assets AS a").
+		ColumnExpr("a.id, a.name, a.role").
+		Join("JOIN brand_kits AS k ON k.id = a.brand_kit_id").
+		Where("a.media_id = ? AND k.workspace_id = ?", mediaID, workspaceID).
+		Scan(ctx, &brandAssets); err != nil {
+		return nil, err
+	}
+	for _, asset := range brandAssets {
+		label := strings.TrimSpace(asset.Name)
+		if label == "" {
+			label = strings.ReplaceAll(asset.Role, "_", " ")
+		}
+		usage = append(usage, MediaUsageItem{Kind: "brand_asset", ID: asset.ID, Label: label})
+	}
+
+	var brandFonts []struct {
+		ID     string `bun:"id"`
+		Family string `bun:"family"`
+	}
+	if err := h.db.NewSelect().
+		TableExpr("brand_fonts AS f").
+		ColumnExpr("f.id, f.family").
+		Join("JOIN brand_kits AS k ON k.id = f.brand_kit_id").
+		Where("f.media_id = ? AND k.workspace_id = ?", mediaID, workspaceID).
+		Scan(ctx, &brandFonts); err != nil {
+		return nil, err
+	}
+	for _, font := range brandFonts {
+		usage = append(usage, MediaUsageItem{Kind: "brand_font", ID: font.ID, Label: font.Family})
+	}
+	return usage, nil
 }
 
 func (h *MediaHandler) removeMediaReferences(ctx context.Context, db bun.IDB, workspaceID, mediaID string) error {
@@ -1568,7 +2213,14 @@ func (h *MediaHandler) uploadMedia(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, map[string]string{fieldError: "file is required"})
 	}
 
-	result, err := h.processUpload(workspaceID, fileHeader, c.FormValue("alt_text"))
+	result, err := h.processUpload(workspaceID, fileHeader, mediaUploadBytesInput{
+		AltText:          c.FormValue("alt_text"),
+		Source:           c.FormValue("source"),
+		AssetKind:        c.FormValue("asset_kind"),
+		ParentMediaID:    c.FormValue("parent_media_id"),
+		DesignDocumentID: c.FormValue("design_document_id"),
+		DesignPageID:     c.FormValue("design_page_id"),
+	})
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{fieldError: err.Error()})
 	}
@@ -1608,7 +2260,7 @@ func (h *MediaHandler) batchUploadMedia(c echo.Context) error {
 	uploadErrors := []string{}
 
 	for _, fileHeader := range files {
-		result, err := h.processUpload(workspaceID, fileHeader, "")
+		result, err := h.processUpload(workspaceID, fileHeader, mediaUploadBytesInput{})
 		if err != nil {
 			uploadErrors = append(uploadErrors, fileHeader.Filename+": "+err.Error())
 			continue
@@ -1622,7 +2274,7 @@ func (h *MediaHandler) batchUploadMedia(c echo.Context) error {
 	})
 }
 
-func (h *MediaHandler) processUpload(workspaceID string, fileHeader *multipart.FileHeader, altText string) (map[string]interface{}, error) {
+func (h *MediaHandler) processUpload(workspaceID string, fileHeader *multipart.FileHeader, metadata mediaUploadBytesInput) (map[string]interface{}, error) {
 	file, err := fileHeader.Open()
 	if err != nil {
 		return nil, errors.New("failed to open file")
@@ -1634,16 +2286,15 @@ func (h *MediaHandler) processUpload(workspaceID string, fileHeader *multipart.F
 		return nil, errors.New("failed to read file")
 	}
 
-	return h.processUploadBytes(context.Background(), mediaUploadBytesInput{
-		WorkspaceID:      workspaceID,
-		Filename:         fileHeader.Filename,
-		DeclaredMimeType: fileHeader.Header.Get("Content-Type"),
-		Size:             fileHeader.Size,
-		Content:          content,
-		AltText:          altText,
-	})
+	metadata.WorkspaceID = workspaceID
+	metadata.Filename = fileHeader.Filename
+	metadata.DeclaredMimeType = fileHeader.Header.Get("Content-Type")
+	metadata.Size = fileHeader.Size
+	metadata.Content = content
+	return h.processUploadBytes(context.Background(), metadata)
 }
 
+//nolint:gocyclo // Upload validation, analysis, storage, and deduplication form one ordered pipeline.
 func (h *MediaHandler) processUploadBytes(ctx context.Context, input mediaUploadBytesInput) (map[string]interface{}, error) {
 	if input.Size > MaxMediaUploadBytes {
 		return nil, errors.New("file size exceeds 50MB limit")
@@ -1655,7 +2306,16 @@ func (h *MediaHandler) processUploadBytes(ctx context.Context, input mediaUpload
 		input.Size = int64(len(input.Content))
 	}
 
-	var err error
+	source, assetKind, err := normalizeMediaProvenance(input.Source, input.AssetKind)
+	if err != nil {
+		return nil, err
+	}
+	if err := validateMediaAssetContent(assetKind, input.Filename, input.DeclaredMimeType, input.Content); err != nil {
+		return nil, err
+	}
+	if err := h.validateMediaProvenanceReferences(ctx, input.WorkspaceID, input.ParentMediaID, input.DesignDocumentID, input.DesignPageID); err != nil {
+		return nil, errors.New(err.Error())
+	}
 	hash := sha256.Sum256(input.Content)
 	fileHash := hex.EncodeToString(hash[:])
 
@@ -1668,18 +2328,18 @@ func (h *MediaHandler) processUploadBytes(ctx context.Context, input mediaUpload
 	}
 
 	var existing models.MediaAttachment
-	err = h.db.NewSelect().Model(&existing).
-		Where("workspace_id = ? AND file_hash = ?", input.WorkspaceID, fileHash).
-		Scan(ctx)
-	if err == nil {
-		return map[string]interface{}{
-			"id": existing.ID, "mime_type": existing.MimeType, "url": "/media/" + existing.ID,
-			"size": existing.Size, "deduped": true, "alt_text": existing.AltText,
-			"original_filename": existing.OriginalFilename,
-		}, nil
+	if source == "upload" && assetKind == "library" {
+		err = h.db.NewSelect().Model(&existing).
+			Where("workspace_id = ? AND file_hash = ? AND (asset_kind = ? OR asset_kind = '' OR asset_kind IS NULL)", input.WorkspaceID, fileHash, "library").
+			Scan(ctx)
+		if err == nil {
+			return mediaUploadMap(existing, true), nil
+		}
 	}
-	if err := h.checkUploadQuota(ctx, input.WorkspaceID, input.Size); err != nil {
-		return nil, err
+	if !isInternalMediaAssetKind(assetKind) {
+		if err := h.checkUploadQuota(ctx, input.WorkspaceID, input.Size); err != nil {
+			return nil, err
+		}
 	}
 
 	mediaID := uuid.New().String()
@@ -1702,6 +2362,11 @@ func (h *MediaHandler) processUploadBytes(ctx context.Context, input mediaUpload
 		OriginalFilename: input.Filename,
 		FileHash:         fileHash,
 		AltText:          input.AltText,
+		Source:           source,
+		AssetKind:        assetKind,
+		ParentMediaID:    strings.TrimSpace(input.ParentMediaID),
+		DesignDocumentID: strings.TrimSpace(input.DesignDocumentID),
+		DesignPageID:     strings.TrimSpace(input.DesignPageID),
 	}
 
 	width, height := 0, 0
@@ -1727,17 +2392,23 @@ func (h *MediaHandler) processUploadBytes(ctx context.Context, input mediaUpload
 	h.applyPublicURLVerification(ctx, media)
 
 	if _, err := h.db.NewInsert().Model(media).Exec(ctx); err != nil {
+		if source == "upload" && assetKind == "library" {
+			if existing, found, duplicateErr := h.findDuplicateMedia(ctx, input.WorkspaceID, fileHash, media.ID); duplicateErr == nil && found {
+				if deleteErr := h.deleteMediaFiles(media); deleteErr != nil {
+					log.Printf("failed to delete deduplicated upload files for %s: %v", media.ID, deleteErr)
+				}
+				return mediaUploadMap(existing, true), nil
+			}
+		}
 		return nil, errors.New("failed to save media record")
 	}
-	if _, err := h.usage.IncrementMonthly(ctx, input.WorkspaceID, entitlements.LimitMediaBytesUploadedMonthly, input.Size, time.Now().UTC()); err != nil {
-		return nil, errors.New("failed to record media upload usage")
+	if !isInternalMediaAssetKind(assetKind) {
+		if _, err := h.usage.IncrementMonthly(ctx, input.WorkspaceID, entitlements.LimitMediaBytesUploadedMonthly, input.Size, time.Now().UTC()); err != nil {
+			return nil, errors.New("failed to record media upload usage")
+		}
 	}
 
-	return map[string]interface{}{
-		"id": mediaID, "mime_type": mimeType, "url": "/media/" + mediaID,
-		"size": input.Size, "deduped": false, "alt_text": media.AltText,
-		"original_filename": media.OriginalFilename,
-	}, nil
+	return mediaUploadMap(*media, false), nil
 }
 
 func (h *MediaHandler) checkUploadQuota(ctx context.Context, workspaceID string, size int64) error {
@@ -1757,7 +2428,8 @@ func (h *MediaHandler) checkUploadQuotaExcludingMedia(ctx context.Context, works
 	storedQuery := h.db.NewSelect().
 		Model((*models.MediaAttachment)(nil)).
 		ColumnExpr("COALESCE(SUM(size), 0)").
-		Where("workspace_id = ?", workspaceID)
+		Where("workspace_id = ?", workspaceID).
+		Where("(asset_kind NOT IN (?, ?) OR asset_kind = '' OR asset_kind IS NULL)", "design_preview", "template_preview")
 	if excludeMediaID != "" {
 		storedQuery = storedQuery.Where("id != ?", excludeMediaID)
 	}

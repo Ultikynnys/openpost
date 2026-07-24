@@ -37,6 +37,8 @@ var configTestEnvKeys = []string{
 	"OPENPOST_TERMS_VERSION",
 	"OPENPOST_PRIVACY_VERSION",
 	"OPENPOST_SUPPORT_EMAIL",
+	"OPENPOST_STUDIO_ENABLED",
+	"OPENPOST_STUDIO_MODEL_BASE_URL",
 	"OPENPOST_SMTP_HOST",
 	"OPENPOST_SMTP_PORT",
 	"OPENPOST_SMTP_USERNAME",
@@ -100,6 +102,18 @@ func TestLoadProductionPrimitiveDefaults(t *testing.T) {
 	require.Empty(t, cfg.PolarAccessToken)
 	require.Equal(t, "https://api.polar.sh/v1", cfg.PolarAPIBaseURL)
 	require.Empty(t, cfg.PolarWebhookSecret)
+	require.True(t, cfg.StudioEnabled)
+	require.Equal(t, "/studio-models", cfg.StudioModelBaseURL)
+}
+
+func TestLoadStudioConfiguration(t *testing.T) {
+	t.Setenv("OPENPOST_STUDIO_ENABLED", "false")
+	t.Setenv("OPENPOST_STUDIO_MODEL_BASE_URL", "https://assets.example.com/openpost/studio/")
+
+	cfg := Load()
+
+	require.False(t, cfg.StudioEnabled)
+	require.Equal(t, "https://assets.example.com/openpost/studio", cfg.StudioModelBaseURL)
 }
 
 func TestLoadCloudPostgresAndS3Primitives(t *testing.T) {

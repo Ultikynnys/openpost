@@ -1351,6 +1351,47 @@
 				"required": ["workspace_id"],
 				"type": "object"
 			},
+			"CompleteStudioReturnTokenInputBody": {
+				"additionalProperties": false,
+				"properties": {
+					"$schema": {
+						"description": "A URL to the JSON Schema for this object.",
+						"examples": ["https://example.com/schemas/CompleteStudioReturnTokenInputBody.json"],
+						"format": "uri",
+						"readOnly": true,
+						"type": "string"
+					},
+					"design_id": {
+						"type": "string"
+					},
+					"media_ids": {
+						"items": {
+							"type": "string"
+						},
+						"maxItems": 35,
+						"type": ["array", "null"]
+					}
+				},
+				"required": ["design_id", "media_ids"],
+				"type": "object"
+			},
+			"CompleteStudioReturnTokenOutputBody": {
+				"additionalProperties": false,
+				"properties": {
+					"$schema": {
+						"description": "A URL to the JSON Schema for this object.",
+						"examples": ["https://example.com/schemas/CompleteStudioReturnTokenOutputBody.json"],
+						"format": "uri",
+						"readOnly": true,
+						"type": "string"
+					},
+					"return_url": {
+						"type": "string"
+					}
+				},
+				"required": ["return_url"],
+				"type": "object"
+			},
 			"ConfirmTOTPSetupInputBody": {
 				"additionalProperties": false,
 				"properties": {
@@ -1373,6 +1414,49 @@
 					}
 				},
 				"required": ["challenge_id", "code"],
+				"type": "object"
+			},
+			"ConsumeStudioReturnTokenOutputBody": {
+				"additionalProperties": false,
+				"properties": {
+					"$schema": {
+						"description": "A URL to the JSON Schema for this object.",
+						"examples": ["https://example.com/schemas/ConsumeStudioReturnTokenOutputBody.json"],
+						"format": "uri",
+						"readOnly": true,
+						"type": "string"
+					},
+					"constraints": {
+						"additionalProperties": {},
+						"type": "object"
+					},
+					"design_id": {
+						"type": "string"
+					},
+					"media_ids": {
+						"items": {
+							"type": "string"
+						},
+						"type": ["array", "null"]
+					},
+					"purpose": {
+						"type": "string"
+					},
+					"return_url": {
+						"type": "string"
+					},
+					"workspace_id": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"workspace_id",
+					"return_url",
+					"purpose",
+					"design_id",
+					"media_ids",
+					"constraints"
+				],
 				"type": "object"
 			},
 			"CreateAPITokenInputBody": {
@@ -1546,6 +1630,54 @@
 				"required": ["redirect_url"],
 				"type": "object"
 			},
+			"CreateMediaCollectionInputBody": {
+				"additionalProperties": false,
+				"properties": {
+					"$schema": {
+						"description": "A URL to the JSON Schema for this object.",
+						"examples": ["https://example.com/schemas/CreateMediaCollectionInputBody.json"],
+						"format": "uri",
+						"readOnly": true,
+						"type": "string"
+					},
+					"color": {
+						"maxLength": 32,
+						"type": "string"
+					},
+					"name": {
+						"maxLength": 100,
+						"minLength": 1,
+						"type": "string"
+					},
+					"workspace_id": {
+						"type": "string"
+					}
+				},
+				"required": ["workspace_id", "name", "color"],
+				"type": "object"
+			},
+			"CreateMediaTagInputBody": {
+				"additionalProperties": false,
+				"properties": {
+					"$schema": {
+						"description": "A URL to the JSON Schema for this object.",
+						"examples": ["https://example.com/schemas/CreateMediaTagInputBody.json"],
+						"format": "uri",
+						"readOnly": true,
+						"type": "string"
+					},
+					"name": {
+						"maxLength": 64,
+						"minLength": 1,
+						"type": "string"
+					},
+					"workspace_id": {
+						"type": "string"
+					}
+				},
+				"required": ["workspace_id", "name"],
+				"type": "object"
+			},
 			"CreateMediaUploadSessionInputBody": {
 				"additionalProperties": false,
 				"properties": {
@@ -1560,6 +1692,19 @@
 						"description": "Alt text for accessibility",
 						"type": "string"
 					},
+					"asset_kind": {
+						"description": "Media library role",
+						"enum": ["library", "brand_asset", "brand_font", "design_preview", "template_preview"],
+						"type": "string"
+					},
+					"design_document_id": {
+						"description": "Producing Studio design ID",
+						"type": "string"
+					},
+					"design_page_id": {
+						"description": "Producing Studio page ID",
+						"type": "string"
+					},
 					"filename": {
 						"description": "Original filename",
 						"type": "string"
@@ -1568,10 +1713,19 @@
 						"description": "Declared MIME type",
 						"type": "string"
 					},
+					"parent_media_id": {
+						"description": "Source media ID for a derivative",
+						"type": "string"
+					},
 					"size": {
 						"description": "Expected upload size in bytes",
 						"format": "int64",
 						"type": "integer"
+					},
+					"source": {
+						"description": "Media provenance",
+						"enum": ["upload", "camera", "studio_export", "studio_edit", "background_removal"],
+						"type": "string"
 					},
 					"workspace_id": {
 						"description": "Workspace ID",
@@ -1844,6 +1998,146 @@
 				"required": ["workspace_id", "title", "content_profile", "source_text"],
 				"type": "object"
 			},
+			"CreateStudioCheckpointInputBody": {
+				"additionalProperties": false,
+				"properties": {
+					"$schema": {
+						"description": "A URL to the JSON Schema for this object.",
+						"examples": ["https://example.com/schemas/CreateStudioCheckpointInputBody.json"],
+						"format": "uri",
+						"readOnly": true,
+						"type": "string"
+					},
+					"name": {
+						"maxLength": 100,
+						"minLength": 1,
+						"type": "string"
+					}
+				},
+				"required": ["name"],
+				"type": "object"
+			},
+			"CreateStudioDesignInputBody": {
+				"additionalProperties": false,
+				"properties": {
+					"$schema": {
+						"description": "A URL to the JSON Schema for this object.",
+						"examples": ["https://example.com/schemas/CreateStudioDesignInputBody.json"],
+						"format": "uri",
+						"readOnly": true,
+						"type": "string"
+					},
+					"height_px": {
+						"format": "int64",
+						"type": "integer"
+					},
+					"preset_key": {
+						"type": "string"
+					},
+					"source_media_id": {
+						"type": "string"
+					},
+					"title": {
+						"maxLength": 160,
+						"type": "string"
+					},
+					"width_px": {
+						"format": "int64",
+						"type": "integer"
+					},
+					"workspace_id": {
+						"type": "string"
+					}
+				},
+				"required": ["workspace_id", "title", "preset_key", "width_px", "height_px"],
+				"type": "object"
+			},
+			"CreateStudioReturnTokenInputBody": {
+				"additionalProperties": false,
+				"properties": {
+					"$schema": {
+						"description": "A URL to the JSON Schema for this object.",
+						"examples": ["https://example.com/schemas/CreateStudioReturnTokenInputBody.json"],
+						"format": "uri",
+						"readOnly": true,
+						"type": "string"
+					},
+					"constraints": {
+						"additionalProperties": {},
+						"type": "object"
+					},
+					"max_selection": {
+						"format": "int64",
+						"maximum": 35,
+						"minimum": 1,
+						"type": "integer"
+					},
+					"purpose": {
+						"maxLength": 64,
+						"type": "string"
+					},
+					"return_url": {
+						"type": "string"
+					},
+					"workspace_id": {
+						"type": "string"
+					}
+				},
+				"required": ["workspace_id", "return_url", "purpose", "max_selection", "constraints"],
+				"type": "object"
+			},
+			"CreateStudioReturnTokenOutputBody": {
+				"additionalProperties": false,
+				"properties": {
+					"$schema": {
+						"description": "A URL to the JSON Schema for this object.",
+						"examples": ["https://example.com/schemas/CreateStudioReturnTokenOutputBody.json"],
+						"format": "uri",
+						"readOnly": true,
+						"type": "string"
+					},
+					"expires_at": {
+						"type": "string"
+					},
+					"token": {
+						"type": "string"
+					}
+				},
+				"required": ["token", "expires_at"],
+				"type": "object"
+			},
+			"CreateStudioTemplateInputBody": {
+				"additionalProperties": false,
+				"properties": {
+					"$schema": {
+						"description": "A URL to the JSON Schema for this object.",
+						"examples": ["https://example.com/schemas/CreateStudioTemplateInputBody.json"],
+						"format": "uri",
+						"readOnly": true,
+						"type": "string"
+					},
+					"category": {
+						"maxLength": 80,
+						"type": "string"
+					},
+					"document": {
+						"$ref": "#/components/schemas/StudioDocumentPayload"
+					},
+					"name": {
+						"maxLength": 120,
+						"minLength": 1,
+						"type": "string"
+					},
+					"preview_media_id": {
+						"type": "string"
+					},
+					"workspace_id": {
+						"type": "string"
+					}
+				},
+				"required": ["workspace_id", "name", "category", "document"],
+				"type": "object"
+			},
 			"CreateThreadInputBody": {
 				"additionalProperties": false,
 				"properties": {
@@ -2022,6 +2316,23 @@
 				"required": ["deleted"],
 				"type": "object"
 			},
+			"DeleteMediaCollectionOutputBody": {
+				"additionalProperties": false,
+				"properties": {
+					"$schema": {
+						"description": "A URL to the JSON Schema for this object.",
+						"examples": ["https://example.com/schemas/DeleteMediaCollectionOutputBody.json"],
+						"format": "uri",
+						"readOnly": true,
+						"type": "string"
+					},
+					"deleted": {
+						"type": "boolean"
+					}
+				},
+				"required": ["deleted"],
+				"type": "object"
+			},
 			"DeleteMediaOutputBody": {
 				"additionalProperties": false,
 				"properties": {
@@ -2038,6 +2349,23 @@
 					}
 				},
 				"required": ["message"],
+				"type": "object"
+			},
+			"DeleteMediaTagOutputBody": {
+				"additionalProperties": false,
+				"properties": {
+					"$schema": {
+						"description": "A URL to the JSON Schema for this object.",
+						"examples": ["https://example.com/schemas/DeleteMediaTagOutputBody.json"],
+						"format": "uri",
+						"readOnly": true,
+						"type": "string"
+					},
+					"deleted": {
+						"type": "boolean"
+					}
+				},
+				"required": ["deleted"],
 				"type": "object"
 			},
 			"DeletePostOutputBody": {
@@ -2110,6 +2438,40 @@
 					}
 				},
 				"required": ["requires_restart"],
+				"type": "object"
+			},
+			"DeleteStudioDesignOutputBody": {
+				"additionalProperties": false,
+				"properties": {
+					"$schema": {
+						"description": "A URL to the JSON Schema for this object.",
+						"examples": ["https://example.com/schemas/DeleteStudioDesignOutputBody.json"],
+						"format": "uri",
+						"readOnly": true,
+						"type": "string"
+					},
+					"deleted": {
+						"type": "boolean"
+					}
+				},
+				"required": ["deleted"],
+				"type": "object"
+			},
+			"DeleteStudioTemplateOutputBody": {
+				"additionalProperties": false,
+				"properties": {
+					"$schema": {
+						"description": "A URL to the JSON Schema for this object.",
+						"examples": ["https://example.com/schemas/DeleteStudioTemplateOutputBody.json"],
+						"format": "uri",
+						"readOnly": true,
+						"type": "string"
+					},
+					"deleted": {
+						"type": "boolean"
+					}
+				},
+				"required": ["deleted"],
 				"type": "object"
 			},
 			"DeleteVariantsOutputBody": {
@@ -2473,6 +2835,40 @@
 				],
 				"type": "object"
 			},
+			"GetMediaStorageOutputBody": {
+				"additionalProperties": false,
+				"properties": {
+					"$schema": {
+						"description": "A URL to the JSON Schema for this object.",
+						"examples": ["https://example.com/schemas/GetMediaStorageOutputBody.json"],
+						"format": "uri",
+						"readOnly": true,
+						"type": "string"
+					},
+					"asset_count": {
+						"description": "Quota-counted media assets",
+						"format": "int64",
+						"type": "integer"
+					},
+					"internal_bytes": {
+						"description": "Hidden preview bytes excluded from quota",
+						"format": "int64",
+						"type": "integer"
+					},
+					"limit_bytes": {
+						"description": "Storage limit, or zero when no fixed limit is exposed",
+						"format": "int64",
+						"type": "integer"
+					},
+					"used_bytes": {
+						"description": "Quota-counted media bytes",
+						"format": "int64",
+						"type": "integer"
+					}
+				},
+				"required": ["used_bytes", "asset_count", "internal_bytes", "limit_bytes"],
+				"type": "object"
+			},
 			"GetMediaUsageOutputBody": {
 				"additionalProperties": false,
 				"properties": {
@@ -2617,36 +3013,25 @@
 				"required": ["status"],
 				"type": "object"
 			},
-			"Item": {
+			"InstantiateStudioTemplateInputBody": {
 				"additionalProperties": false,
 				"properties": {
-					"avatar_url": {
+					"$schema": {
+						"description": "A URL to the JSON Schema for this object.",
+						"examples": ["https://example.com/schemas/InstantiateStudioTemplateInputBody.json"],
+						"format": "uri",
+						"readOnly": true,
 						"type": "string"
 					},
-					"created_at": {
+					"title": {
+						"maxLength": 160,
 						"type": "string"
 					},
-					"id": {
-						"type": "string"
-					},
-					"name": {
-						"type": "string"
-					},
-					"organization_id": {
-						"type": "string"
-					},
-					"organization_name": {
+					"workspace_id": {
 						"type": "string"
 					}
 				},
-				"required": [
-					"id",
-					"organization_id",
-					"organization_name",
-					"name",
-					"avatar_url",
-					"created_at"
-				],
+				"required": ["workspace_id", "title"],
 				"type": "object"
 			},
 			"JobResponse": {
@@ -2698,6 +3083,29 @@
 				"required": ["id", "type", "status", "run_at", "attempts", "max_attempts", "created_at"],
 				"type": "object"
 			},
+			"ListMediaCollectionsOutputBody": {
+				"additionalProperties": false,
+				"properties": {
+					"$schema": {
+						"description": "A URL to the JSON Schema for this object.",
+						"examples": ["https://example.com/schemas/ListMediaCollectionsOutputBody.json"],
+						"format": "uri",
+						"readOnly": true,
+						"type": "string"
+					},
+					"can_edit": {
+						"type": "boolean"
+					},
+					"collections": {
+						"items": {
+							"$ref": "#/components/schemas/MediaCollectionResponse"
+						},
+						"type": ["array", "null"]
+					}
+				},
+				"required": ["collections", "can_edit"],
+				"type": "object"
+			},
 			"ListMediaOutputBody": {
 				"additionalProperties": false,
 				"properties": {
@@ -2722,6 +3130,99 @@
 					}
 				},
 				"required": ["media", "total"],
+				"type": "object"
+			},
+			"ListMediaTagsOutputBody": {
+				"additionalProperties": false,
+				"properties": {
+					"$schema": {
+						"description": "A URL to the JSON Schema for this object.",
+						"examples": ["https://example.com/schemas/ListMediaTagsOutputBody.json"],
+						"format": "uri",
+						"readOnly": true,
+						"type": "string"
+					},
+					"can_edit": {
+						"type": "boolean"
+					},
+					"tags": {
+						"items": {
+							"$ref": "#/components/schemas/MediaTagResponse"
+						},
+						"type": ["array", "null"]
+					}
+				},
+				"required": ["tags", "can_edit"],
+				"type": "object"
+			},
+			"ListStudioDesignsOutputBody": {
+				"additionalProperties": false,
+				"properties": {
+					"$schema": {
+						"description": "A URL to the JSON Schema for this object.",
+						"examples": ["https://example.com/schemas/ListStudioDesignsOutputBody.json"],
+						"format": "uri",
+						"readOnly": true,
+						"type": "string"
+					},
+					"can_edit": {
+						"type": "boolean"
+					},
+					"designs": {
+						"items": {
+							"$ref": "#/components/schemas/StudioDesignSummary"
+						},
+						"type": ["array", "null"]
+					},
+					"total": {
+						"format": "int64",
+						"type": "integer"
+					}
+				},
+				"required": ["designs", "total", "can_edit"],
+				"type": "object"
+			},
+			"ListStudioRevisionsOutputBody": {
+				"additionalProperties": false,
+				"properties": {
+					"$schema": {
+						"description": "A URL to the JSON Schema for this object.",
+						"examples": ["https://example.com/schemas/ListStudioRevisionsOutputBody.json"],
+						"format": "uri",
+						"readOnly": true,
+						"type": "string"
+					},
+					"revisions": {
+						"items": {
+							"$ref": "#/components/schemas/StudioRevisionSummary"
+						},
+						"type": ["array", "null"]
+					}
+				},
+				"required": ["revisions"],
+				"type": "object"
+			},
+			"ListStudioTemplatesOutputBody": {
+				"additionalProperties": false,
+				"properties": {
+					"$schema": {
+						"description": "A URL to the JSON Schema for this object.",
+						"examples": ["https://example.com/schemas/ListStudioTemplatesOutputBody.json"],
+						"format": "uri",
+						"readOnly": true,
+						"type": "string"
+					},
+					"can_edit": {
+						"type": "boolean"
+					},
+					"templates": {
+						"items": {
+							"$ref": "#/components/schemas/StudioTemplateResponse"
+						},
+						"type": ["array", "null"]
+					}
+				},
+				"required": ["templates", "can_edit"],
 				"type": "object"
 			},
 			"LoginInputBody": {
@@ -2831,6 +3332,50 @@
 				"required": ["name", "instance_url"],
 				"type": "object"
 			},
+			"MediaCollectionResponse": {
+				"additionalProperties": false,
+				"properties": {
+					"$schema": {
+						"description": "A URL to the JSON Schema for this object.",
+						"examples": ["https://example.com/schemas/MediaCollectionResponse.json"],
+						"format": "uri",
+						"readOnly": true,
+						"type": "string"
+					},
+					"color": {
+						"type": "string"
+					},
+					"created_at": {
+						"type": "string"
+					},
+					"id": {
+						"type": "string"
+					},
+					"item_count": {
+						"format": "int64",
+						"type": "integer"
+					},
+					"name": {
+						"type": "string"
+					},
+					"updated_at": {
+						"type": "string"
+					},
+					"workspace_id": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"id",
+					"workspace_id",
+					"name",
+					"color",
+					"item_count",
+					"created_at",
+					"updated_at"
+				],
+				"type": "object"
+			},
 			"MediaConstraint": {
 				"additionalProperties": false,
 				"properties": {
@@ -2893,12 +3438,31 @@
 						"description": "Media analysis status",
 						"type": "string"
 					},
+					"asset_kind": {
+						"description": "Media library role",
+						"type": "string"
+					},
 					"can_delete": {
 						"description": "Whether media can be deleted",
 						"type": "boolean"
 					},
+					"collections": {
+						"description": "Collection IDs containing this media",
+						"items": {
+							"type": "string"
+						},
+						"type": ["array", "null"]
+					},
 					"created_at": {
 						"description": "Creation time",
+						"type": "string"
+					},
+					"design_document_id": {
+						"description": "Producing Studio design",
+						"type": "string"
+					},
+					"design_page_id": {
+						"description": "Producing Studio page",
 						"type": "string"
 					},
 					"duration_ms": {
@@ -2932,6 +3496,10 @@
 						"description": "Original filename",
 						"type": "string"
 					},
+					"parent_media_id": {
+						"description": "Source media for this derivative",
+						"type": "string"
+					},
 					"poster_thumbnail_url": {
 						"description": "Poster thumbnail URL",
 						"type": "string"
@@ -2957,6 +3525,17 @@
 						"description": "File size in bytes",
 						"format": "int64",
 						"type": "integer"
+					},
+					"source": {
+						"description": "Media provenance",
+						"type": "string"
+					},
+					"tags": {
+						"description": "Tag IDs assigned to this media",
+						"items": {
+							"type": "string"
+						},
+						"type": ["array", "null"]
 					},
 					"thumbnail_url": {
 						"description": "Thumbnail URL for grid view",
@@ -3000,7 +3579,11 @@
 					"duration_ms",
 					"frame_rate",
 					"analysis_status",
-					"public_url_status"
+					"public_url_status",
+					"source",
+					"asset_kind",
+					"collections",
+					"tags"
 				],
 				"type": "object"
 			},
@@ -3104,6 +3687,36 @@
 				],
 				"type": "object"
 			},
+			"MediaTagResponse": {
+				"additionalProperties": false,
+				"properties": {
+					"$schema": {
+						"description": "A URL to the JSON Schema for this object.",
+						"examples": ["https://example.com/schemas/MediaTagResponse.json"],
+						"format": "uri",
+						"readOnly": true,
+						"type": "string"
+					},
+					"created_at": {
+						"type": "string"
+					},
+					"id": {
+						"type": "string"
+					},
+					"item_count": {
+						"format": "int64",
+						"type": "integer"
+					},
+					"name": {
+						"type": "string"
+					},
+					"workspace_id": {
+						"type": "string"
+					}
+				},
+				"required": ["id", "workspace_id", "name", "item_count", "created_at"],
+				"type": "object"
+			},
 			"MediaUploadResult": {
 				"additionalProperties": false,
 				"properties": {
@@ -3118,9 +3731,21 @@
 						"description": "Persisted alt text",
 						"type": "string"
 					},
+					"asset_kind": {
+						"description": "Media library role",
+						"type": "string"
+					},
 					"deduped": {
 						"description": "Whether an existing media attachment was reused",
 						"type": "boolean"
+					},
+					"design_document_id": {
+						"description": "Producing Studio design ID",
+						"type": "string"
+					},
+					"design_page_id": {
+						"description": "Producing Studio page ID",
+						"type": "string"
 					},
 					"id": {
 						"description": "Media ID",
@@ -3134,17 +3759,35 @@
 						"description": "Persisted original filename",
 						"type": "string"
 					},
+					"parent_media_id": {
+						"description": "Source media ID",
+						"type": "string"
+					},
 					"size": {
 						"description": "File size in bytes",
 						"format": "int64",
 						"type": "integer"
+					},
+					"source": {
+						"description": "Media provenance",
+						"type": "string"
 					},
 					"url": {
 						"description": "URL to access the media",
 						"type": "string"
 					}
 				},
-				"required": ["id", "mime_type", "url", "size", "deduped", "alt_text", "original_filename"],
+				"required": [
+					"id",
+					"mime_type",
+					"url",
+					"size",
+					"deduped",
+					"alt_text",
+					"original_filename",
+					"source",
+					"asset_kind"
+				],
 				"type": "object"
 			},
 			"MediaUsageItem": {
@@ -3154,8 +3797,20 @@
 						"description": "Post content (truncated)",
 						"type": "string"
 					},
+					"id": {
+						"description": "Referenced object ID",
+						"type": "string"
+					},
+					"kind": {
+						"description": "Usage kind: post, design, template, brand_asset, or brand_font",
+						"type": "string"
+					},
+					"label": {
+						"description": "User-visible usage label",
+						"type": "string"
+					},
 					"post_id": {
-						"description": "Post ID",
+						"description": "Post ID for post usages",
 						"type": "string"
 					},
 					"scheduled_at": {
@@ -3163,11 +3818,11 @@
 						"type": "string"
 					},
 					"status": {
-						"description": "Post status",
+						"description": "Post or design status",
 						"type": "string"
 					}
 				},
-				"required": ["post_id", "content", "status", "scheduled_at"],
+				"required": ["kind", "id", "label"],
 				"type": "object"
 			},
 			"MessageOutputBody": {
@@ -4646,6 +5301,94 @@
 				],
 				"type": "object"
 			},
+			"ReplaceMediaCollectionItemsInputBody": {
+				"additionalProperties": false,
+				"properties": {
+					"$schema": {
+						"description": "A URL to the JSON Schema for this object.",
+						"examples": ["https://example.com/schemas/ReplaceMediaCollectionItemsInputBody.json"],
+						"format": "uri",
+						"readOnly": true,
+						"type": "string"
+					},
+					"media_ids": {
+						"items": {
+							"type": "string"
+						},
+						"maxItems": 500,
+						"type": ["array", "null"]
+					},
+					"mode": {
+						"default": "replace",
+						"enum": ["replace", "add", "remove"],
+						"type": "string"
+					}
+				},
+				"required": ["media_ids"],
+				"type": "object"
+			},
+			"ReplaceMediaCollectionItemsOutputBody": {
+				"additionalProperties": false,
+				"properties": {
+					"$schema": {
+						"description": "A URL to the JSON Schema for this object.",
+						"examples": ["https://example.com/schemas/ReplaceMediaCollectionItemsOutputBody.json"],
+						"format": "uri",
+						"readOnly": true,
+						"type": "string"
+					},
+					"count": {
+						"format": "int64",
+						"type": "integer"
+					}
+				},
+				"required": ["count"],
+				"type": "object"
+			},
+			"ReplaceMediaTagItemsInputBody": {
+				"additionalProperties": false,
+				"properties": {
+					"$schema": {
+						"description": "A URL to the JSON Schema for this object.",
+						"examples": ["https://example.com/schemas/ReplaceMediaTagItemsInputBody.json"],
+						"format": "uri",
+						"readOnly": true,
+						"type": "string"
+					},
+					"media_ids": {
+						"items": {
+							"type": "string"
+						},
+						"maxItems": 500,
+						"type": ["array", "null"]
+					},
+					"mode": {
+						"default": "replace",
+						"enum": ["replace", "add", "remove"],
+						"type": "string"
+					}
+				},
+				"required": ["media_ids"],
+				"type": "object"
+			},
+			"ReplaceMediaTagItemsOutputBody": {
+				"additionalProperties": false,
+				"properties": {
+					"$schema": {
+						"description": "A URL to the JSON Schema for this object.",
+						"examples": ["https://example.com/schemas/ReplaceMediaTagItemsOutputBody.json"],
+						"format": "uri",
+						"readOnly": true,
+						"type": "string"
+					},
+					"count": {
+						"format": "int64",
+						"type": "integer"
+					}
+				},
+				"required": ["count"],
+				"type": "object"
+			},
 			"ReplyInputBody": {
 				"additionalProperties": false,
 				"properties": {
@@ -5019,6 +5762,25 @@
 					}
 				},
 				"required": ["key", "settings"],
+				"type": "object"
+			},
+			"RestoreStudioRevisionInputBody": {
+				"additionalProperties": false,
+				"properties": {
+					"$schema": {
+						"description": "A URL to the JSON Schema for this object.",
+						"examples": ["https://example.com/schemas/RestoreStudioRevisionInputBody.json"],
+						"format": "uri",
+						"readOnly": true,
+						"type": "string"
+					},
+					"expected_revision": {
+						"format": "int64",
+						"minimum": 1,
+						"type": "integer"
+					}
+				},
+				"required": ["expected_revision"],
 				"type": "object"
 			},
 			"RevokeAPITokenOutputBody": {
@@ -5571,6 +6333,836 @@
 				"required": ["device_code", "user_code", "verification_url", "expires_in", "interval"],
 				"type": "object"
 			},
+			"StudioBrandAsset": {
+				"additionalProperties": false,
+				"properties": {
+					"id": {
+						"type": "string"
+					},
+					"media_id": {
+						"type": "string"
+					},
+					"name": {
+						"type": "string"
+					},
+					"role": {
+						"enum": ["primary_logo", "secondary_logo", "mark", "watermark"],
+						"type": "string"
+					}
+				},
+				"required": ["media_id", "role", "name"],
+				"type": "object"
+			},
+			"StudioBrandColor": {
+				"additionalProperties": false,
+				"properties": {
+					"id": {
+						"type": "string"
+					},
+					"name": {
+						"type": "string"
+					},
+					"value": {
+						"type": "string"
+					}
+				},
+				"required": ["id", "name", "value"],
+				"type": "object"
+			},
+			"StudioBrandFont": {
+				"additionalProperties": false,
+				"properties": {
+					"css_family": {
+						"type": "string"
+					},
+					"family": {
+						"type": "string"
+					},
+					"id": {
+						"type": "string"
+					},
+					"license_acknowledged": {
+						"type": "boolean"
+					},
+					"license_acknowledged_at": {
+						"type": "string"
+					},
+					"license_acknowledged_by": {
+						"type": "string"
+					},
+					"media_id": {
+						"type": "string"
+					},
+					"style": {
+						"enum": ["normal", "italic"],
+						"type": "string"
+					},
+					"weight": {
+						"format": "int64",
+						"maximum": 900,
+						"minimum": 100,
+						"type": "integer"
+					}
+				},
+				"required": ["media_id", "family", "weight", "style"],
+				"type": "object"
+			},
+			"StudioBrandKitResponse": {
+				"additionalProperties": false,
+				"properties": {
+					"$schema": {
+						"description": "A URL to the JSON Schema for this object.",
+						"examples": ["https://example.com/schemas/StudioBrandKitResponse.json"],
+						"format": "uri",
+						"readOnly": true,
+						"type": "string"
+					},
+					"assets": {
+						"items": {
+							"$ref": "#/components/schemas/StudioBrandAsset"
+						},
+						"type": ["array", "null"]
+					},
+					"backgrounds": {
+						"items": {
+							"type": "string"
+						},
+						"type": ["array", "null"]
+					},
+					"can_edit": {
+						"type": "boolean"
+					},
+					"colors": {
+						"items": {
+							"$ref": "#/components/schemas/StudioBrandColor"
+						},
+						"type": ["array", "null"]
+					},
+					"exists": {
+						"type": "boolean"
+					},
+					"fonts": {
+						"items": {
+							"$ref": "#/components/schemas/StudioBrandFont"
+						},
+						"type": ["array", "null"]
+					},
+					"id": {
+						"type": "string"
+					},
+					"name": {
+						"type": "string"
+					},
+					"revision": {
+						"format": "int64",
+						"type": "integer"
+					},
+					"text_styles": {
+						"items": {
+							"$ref": "#/components/schemas/StudioBrandTextStyle"
+						},
+						"type": ["array", "null"]
+					},
+					"updated_at": {
+						"type": "string"
+					},
+					"workspace_id": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"workspace_id",
+					"name",
+					"revision",
+					"exists",
+					"can_edit",
+					"colors",
+					"text_styles",
+					"backgrounds",
+					"assets",
+					"fonts"
+				],
+				"type": "object"
+			},
+			"StudioBrandTextStyle": {
+				"additionalProperties": false,
+				"properties": {
+					"color": {
+						"type": "string"
+					},
+					"font_asset_id": {
+						"type": "string"
+					},
+					"font_family": {
+						"type": "string"
+					},
+					"font_size": {
+						"format": "double",
+						"type": "number"
+					},
+					"font_style": {
+						"type": "string"
+					},
+					"font_weight": {
+						"format": "int64",
+						"type": "integer"
+					},
+					"id": {
+						"type": "string"
+					},
+					"letter_spacing": {
+						"format": "double",
+						"type": "number"
+					},
+					"line_height": {
+						"format": "double",
+						"type": "number"
+					},
+					"name": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"id",
+					"name",
+					"font_family",
+					"font_weight",
+					"font_style",
+					"font_size",
+					"color",
+					"line_height",
+					"letter_spacing"
+				],
+				"type": "object"
+			},
+			"StudioCrop": {
+				"additionalProperties": false,
+				"properties": {
+					"height": {
+						"format": "double",
+						"type": "number"
+					},
+					"width": {
+						"format": "double",
+						"type": "number"
+					},
+					"x": {
+						"format": "double",
+						"type": "number"
+					},
+					"y": {
+						"format": "double",
+						"type": "number"
+					}
+				},
+				"required": ["x", "y", "width", "height"],
+				"type": "object"
+			},
+			"StudioDesignSummary": {
+				"additionalProperties": false,
+				"properties": {
+					"cover_preview_media_id": {
+						"type": "string"
+					},
+					"created_at": {
+						"type": "string"
+					},
+					"height_px": {
+						"format": "int64",
+						"type": "integer"
+					},
+					"id": {
+						"type": "string"
+					},
+					"page_count": {
+						"format": "int64",
+						"type": "integer"
+					},
+					"preset_key": {
+						"type": "string"
+					},
+					"revision": {
+						"format": "int64",
+						"type": "integer"
+					},
+					"title": {
+						"type": "string"
+					},
+					"updated_at": {
+						"type": "string"
+					},
+					"width_px": {
+						"format": "int64",
+						"type": "integer"
+					}
+				},
+				"required": [
+					"id",
+					"title",
+					"preset_key",
+					"width_px",
+					"height_px",
+					"page_count",
+					"revision",
+					"created_at",
+					"updated_at"
+				],
+				"type": "object"
+			},
+			"StudioDocumentPayload": {
+				"additionalProperties": false,
+				"properties": {
+					"brand_kit_id": {
+						"type": "string"
+					},
+					"brand_kit_revision": {
+						"format": "int64",
+						"type": "integer"
+					},
+					"export_defaults": {
+						"$ref": "#/components/schemas/StudioExportDefaults"
+					},
+					"height_px": {
+						"format": "int64",
+						"type": "integer"
+					},
+					"pages": {
+						"items": {
+							"$ref": "#/components/schemas/StudioPagePayload"
+						},
+						"type": ["array", "null"]
+					},
+					"preset_key": {
+						"type": "string"
+					},
+					"schema_version": {
+						"format": "int64",
+						"type": "integer"
+					},
+					"title": {
+						"type": "string"
+					},
+					"width_px": {
+						"format": "int64",
+						"type": "integer"
+					}
+				},
+				"required": [
+					"schema_version",
+					"title",
+					"preset_key",
+					"width_px",
+					"height_px",
+					"brand_kit_revision",
+					"export_defaults",
+					"pages"
+				],
+				"type": "object"
+			},
+			"StudioDocumentResponse": {
+				"additionalProperties": false,
+				"properties": {
+					"$schema": {
+						"description": "A URL to the JSON Schema for this object.",
+						"examples": ["https://example.com/schemas/StudioDocumentResponse.json"],
+						"format": "uri",
+						"readOnly": true,
+						"type": "string"
+					},
+					"can_edit": {
+						"type": "boolean"
+					},
+					"cover_preview_media_id": {
+						"type": "string"
+					},
+					"created_at": {
+						"type": "string"
+					},
+					"created_by_id": {
+						"type": "string"
+					},
+					"document": {
+						"$ref": "#/components/schemas/StudioDocumentPayload"
+					},
+					"id": {
+						"type": "string"
+					},
+					"revision": {
+						"format": "int64",
+						"type": "integer"
+					},
+					"updated_at": {
+						"type": "string"
+					},
+					"workspace_id": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"id",
+					"workspace_id",
+					"created_by_id",
+					"revision",
+					"can_edit",
+					"created_at",
+					"updated_at",
+					"document"
+				],
+				"type": "object"
+			},
+			"StudioExportDefaults": {
+				"additionalProperties": false,
+				"properties": {
+					"format": {
+						"enum": ["png", "jpeg", "webp"],
+						"type": "string"
+					},
+					"quality": {
+						"format": "double",
+						"maximum": 1,
+						"minimum": 0.1,
+						"type": "number"
+					}
+				},
+				"required": ["format", "quality"],
+				"type": "object"
+			},
+			"StudioImageAdjustments": {
+				"additionalProperties": false,
+				"properties": {
+					"blur": {
+						"format": "double",
+						"type": "number"
+					},
+					"brightness": {
+						"format": "double",
+						"type": "number"
+					},
+					"contrast": {
+						"format": "double",
+						"type": "number"
+					},
+					"exposure": {
+						"format": "double",
+						"type": "number"
+					},
+					"highlights": {
+						"format": "double",
+						"type": "number"
+					},
+					"saturation": {
+						"format": "double",
+						"type": "number"
+					},
+					"shadows": {
+						"format": "double",
+						"type": "number"
+					},
+					"temperature": {
+						"format": "double",
+						"type": "number"
+					}
+				},
+				"required": [
+					"brightness",
+					"contrast",
+					"saturation",
+					"temperature",
+					"exposure",
+					"highlights",
+					"shadows",
+					"blur"
+				],
+				"type": "object"
+			},
+			"StudioImageValue": {
+				"additionalProperties": false,
+				"properties": {
+					"adjustments": {
+						"$ref": "#/components/schemas/StudioImageAdjustments"
+					},
+					"crop": {
+						"$ref": "#/components/schemas/StudioCrop"
+					},
+					"fit": {
+						"enum": ["cover", "contain", "stretch"],
+						"type": "string"
+					},
+					"media_id": {
+						"type": "string"
+					},
+					"source_height": {
+						"format": "int64",
+						"type": "integer"
+					},
+					"source_width": {
+						"format": "int64",
+						"type": "integer"
+					}
+				},
+				"required": ["media_id", "source_width", "source_height", "fit", "crop", "adjustments"],
+				"type": "object"
+			},
+			"StudioLayer": {
+				"additionalProperties": false,
+				"properties": {
+					"id": {
+						"type": "string"
+					},
+					"image": {
+						"$ref": "#/components/schemas/StudioImageValue"
+					},
+					"locked": {
+						"type": "boolean"
+					},
+					"name": {
+						"type": "string"
+					},
+					"opacity": {
+						"format": "double",
+						"type": "number"
+					},
+					"parent_id": {
+						"type": "string"
+					},
+					"shape": {
+						"$ref": "#/components/schemas/StudioShapeValue"
+					},
+					"text": {
+						"$ref": "#/components/schemas/StudioTextValue"
+					},
+					"transform": {
+						"$ref": "#/components/schemas/StudioTransform"
+					},
+					"type": {
+						"enum": ["text", "image", "shape", "group"],
+						"type": "string"
+					},
+					"visible": {
+						"type": "boolean"
+					}
+				},
+				"required": ["id", "type", "name", "visible", "locked", "opacity", "transform"],
+				"type": "object"
+			},
+			"StudioPagePayload": {
+				"additionalProperties": false,
+				"properties": {
+					"background_color": {
+						"type": "string"
+					},
+					"id": {
+						"type": "string"
+					},
+					"latest_export_media_id": {
+						"type": "string"
+					},
+					"layers": {
+						"items": {
+							"$ref": "#/components/schemas/StudioLayer"
+						},
+						"type": ["array", "null"]
+					},
+					"name": {
+						"type": "string"
+					},
+					"preview_media_id": {
+						"type": "string"
+					}
+				},
+				"required": ["id", "name", "background_color", "layers"],
+				"type": "object"
+			},
+			"StudioPreset": {
+				"additionalProperties": false,
+				"properties": {
+					"default_format": {
+						"description": "Default export format",
+						"enum": ["png", "jpeg", "webp"],
+						"type": "string"
+					},
+					"height_px": {
+						"description": "Canvas height in pixels",
+						"format": "int64",
+						"type": "integer"
+					},
+					"key": {
+						"description": "Stable preset key",
+						"type": "string"
+					},
+					"name": {
+						"description": "User-visible preset name",
+						"type": "string"
+					},
+					"profiles": {
+						"description": "Compatible provider content profiles",
+						"items": {
+							"type": "string"
+						},
+						"type": ["array", "null"]
+					},
+					"width_px": {
+						"description": "Canvas width in pixels",
+						"format": "int64",
+						"type": "integer"
+					}
+				},
+				"required": ["key", "name", "width_px", "height_px", "default_format", "profiles"],
+				"type": "object"
+			},
+			"StudioPresetOutputBody": {
+				"additionalProperties": false,
+				"properties": {
+					"$schema": {
+						"description": "A URL to the JSON Schema for this object.",
+						"examples": ["https://example.com/schemas/StudioPresetOutputBody.json"],
+						"format": "uri",
+						"readOnly": true,
+						"type": "string"
+					},
+					"background_model_base_url": {
+						"type": "string"
+					},
+					"enabled": {
+						"type": "boolean"
+					},
+					"presets": {
+						"items": {
+							"$ref": "#/components/schemas/StudioPreset"
+						},
+						"type": ["array", "null"]
+					},
+					"schema_version": {
+						"format": "int64",
+						"type": "integer"
+					}
+				},
+				"required": ["enabled", "schema_version", "background_model_base_url", "presets"],
+				"type": "object"
+			},
+			"StudioRevisionSummary": {
+				"additionalProperties": false,
+				"properties": {
+					"$schema": {
+						"description": "A URL to the JSON Schema for this object.",
+						"examples": ["https://example.com/schemas/StudioRevisionSummary.json"],
+						"format": "uri",
+						"readOnly": true,
+						"type": "string"
+					},
+					"created_at": {
+						"type": "string"
+					},
+					"expires_at": {
+						"type": "string"
+					},
+					"id": {
+						"type": "string"
+					},
+					"kind": {
+						"type": "string"
+					},
+					"name": {
+						"type": "string"
+					},
+					"revision": {
+						"format": "int64",
+						"type": "integer"
+					}
+				},
+				"required": ["id", "revision", "kind", "created_at"],
+				"type": "object"
+			},
+			"StudioShapeValue": {
+				"additionalProperties": false,
+				"properties": {
+					"fill": {
+						"type": "string"
+					},
+					"kind": {
+						"enum": ["rectangle", "rounded_rectangle", "ellipse", "line"],
+						"type": "string"
+					},
+					"radius": {
+						"format": "double",
+						"type": "number"
+					},
+					"stroke": {
+						"type": "string"
+					},
+					"stroke_width": {
+						"format": "double",
+						"type": "number"
+					}
+				},
+				"required": ["kind", "fill", "stroke", "stroke_width", "radius"],
+				"type": "object"
+			},
+			"StudioTemplateResponse": {
+				"additionalProperties": false,
+				"properties": {
+					"$schema": {
+						"description": "A URL to the JSON Schema for this object.",
+						"examples": ["https://example.com/schemas/StudioTemplateResponse.json"],
+						"format": "uri",
+						"readOnly": true,
+						"type": "string"
+					},
+					"built_in": {
+						"type": "boolean"
+					},
+					"category": {
+						"type": "string"
+					},
+					"created_at": {
+						"type": "string"
+					},
+					"document": {
+						"$ref": "#/components/schemas/StudioDocumentPayload"
+					},
+					"id": {
+						"type": "string"
+					},
+					"name": {
+						"type": "string"
+					},
+					"preset_key": {
+						"type": "string"
+					},
+					"preview_media_id": {
+						"type": "string"
+					},
+					"updated_at": {
+						"type": "string"
+					},
+					"workspace_id": {
+						"type": "string"
+					}
+				},
+				"required": ["id", "name", "category", "preset_key", "built_in", "document"],
+				"type": "object"
+			},
+			"StudioTextShadow": {
+				"additionalProperties": false,
+				"properties": {
+					"blur": {
+						"format": "double",
+						"type": "number"
+					},
+					"color": {
+						"type": "string"
+					},
+					"offset_x": {
+						"format": "double",
+						"type": "number"
+					},
+					"offset_y": {
+						"format": "double",
+						"type": "number"
+					}
+				},
+				"required": ["color", "blur", "offset_x", "offset_y"],
+				"type": "object"
+			},
+			"StudioTextValue": {
+				"additionalProperties": false,
+				"properties": {
+					"align": {
+						"type": "string"
+					},
+					"color": {
+						"type": "string"
+					},
+					"font_asset_id": {
+						"type": "string"
+					},
+					"font_family": {
+						"type": "string"
+					},
+					"font_size": {
+						"format": "double",
+						"type": "number"
+					},
+					"font_style": {
+						"type": "string"
+					},
+					"font_weight": {
+						"format": "int64",
+						"type": "integer"
+					},
+					"highlight_color": {
+						"type": "string"
+					},
+					"letter_spacing": {
+						"format": "double",
+						"type": "number"
+					},
+					"line_height": {
+						"format": "double",
+						"type": "number"
+					},
+					"shadow": {
+						"$ref": "#/components/schemas/StudioTextShadow"
+					},
+					"stroke_color": {
+						"type": "string"
+					},
+					"stroke_width": {
+						"format": "double",
+						"type": "number"
+					},
+					"text": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"text",
+					"font_family",
+					"font_weight",
+					"font_style",
+					"font_size",
+					"color",
+					"align",
+					"line_height",
+					"letter_spacing",
+					"stroke_width",
+					"shadow"
+				],
+				"type": "object"
+			},
+			"StudioTransform": {
+				"additionalProperties": false,
+				"properties": {
+					"flip_x": {
+						"type": "boolean"
+					},
+					"flip_y": {
+						"type": "boolean"
+					},
+					"height": {
+						"format": "double",
+						"type": "number"
+					},
+					"rotation": {
+						"format": "double",
+						"type": "number"
+					},
+					"width": {
+						"format": "double",
+						"type": "number"
+					},
+					"x": {
+						"format": "double",
+						"type": "number"
+					},
+					"y": {
+						"format": "double",
+						"type": "number"
+					}
+				},
+				"required": ["x", "y", "width", "height", "rotation", "flip_x", "flip_y"],
+				"type": "object"
+			},
 			"SuggestScheduleInputBody": {
 				"additionalProperties": false,
 				"properties": {
@@ -5655,6 +7247,29 @@
 				"required": ["slug"],
 				"type": "object"
 			},
+			"UpdateMediaCollectionInputBody": {
+				"additionalProperties": false,
+				"properties": {
+					"$schema": {
+						"description": "A URL to the JSON Schema for this object.",
+						"examples": ["https://example.com/schemas/UpdateMediaCollectionInputBody.json"],
+						"format": "uri",
+						"readOnly": true,
+						"type": "string"
+					},
+					"color": {
+						"maxLength": 32,
+						"type": "string"
+					},
+					"name": {
+						"maxLength": 100,
+						"minLength": 1,
+						"type": "string"
+					}
+				},
+				"required": ["name", "color"],
+				"type": "object"
+			},
 			"UpdateMediaFavoriteOutputBody": {
 				"additionalProperties": false,
 				"properties": {
@@ -5707,6 +7322,25 @@
 					}
 				},
 				"required": ["message"],
+				"type": "object"
+			},
+			"UpdateMediaTagInputBody": {
+				"additionalProperties": false,
+				"properties": {
+					"$schema": {
+						"description": "A URL to the JSON Schema for this object.",
+						"examples": ["https://example.com/schemas/UpdateMediaTagInputBody.json"],
+						"format": "uri",
+						"readOnly": true,
+						"type": "string"
+					},
+					"name": {
+						"maxLength": 64,
+						"minLength": 1,
+						"type": "string"
+					}
+				},
+				"required": ["name"],
 				"type": "object"
 			},
 			"UpdatePostInputBody": {
@@ -5810,6 +7444,123 @@
 						"type": "string"
 					}
 				},
+				"type": "object"
+			},
+			"UpdateStudioBrandKitInputBody": {
+				"additionalProperties": false,
+				"properties": {
+					"$schema": {
+						"description": "A URL to the JSON Schema for this object.",
+						"examples": ["https://example.com/schemas/UpdateStudioBrandKitInputBody.json"],
+						"format": "uri",
+						"readOnly": true,
+						"type": "string"
+					},
+					"assets": {
+						"items": {
+							"$ref": "#/components/schemas/StudioBrandAsset"
+						},
+						"type": ["array", "null"]
+					},
+					"backgrounds": {
+						"items": {
+							"type": "string"
+						},
+						"type": ["array", "null"]
+					},
+					"colors": {
+						"items": {
+							"$ref": "#/components/schemas/StudioBrandColor"
+						},
+						"type": ["array", "null"]
+					},
+					"fonts": {
+						"items": {
+							"$ref": "#/components/schemas/StudioBrandFont"
+						},
+						"type": ["array", "null"]
+					},
+					"name": {
+						"maxLength": 120,
+						"type": "string"
+					},
+					"text_styles": {
+						"items": {
+							"$ref": "#/components/schemas/StudioBrandTextStyle"
+						},
+						"type": ["array", "null"]
+					},
+					"workspace_id": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"workspace_id",
+					"name",
+					"colors",
+					"text_styles",
+					"backgrounds",
+					"assets",
+					"fonts"
+				],
+				"type": "object"
+			},
+			"UpdateStudioDesignInputBody": {
+				"additionalProperties": false,
+				"properties": {
+					"$schema": {
+						"description": "A URL to the JSON Schema for this object.",
+						"examples": ["https://example.com/schemas/UpdateStudioDesignInputBody.json"],
+						"format": "uri",
+						"readOnly": true,
+						"type": "string"
+					},
+					"cover_preview_media_id": {
+						"type": "string"
+					},
+					"document": {
+						"$ref": "#/components/schemas/StudioDocumentPayload"
+					},
+					"expected_revision": {
+						"format": "int64",
+						"minimum": 1,
+						"type": "integer"
+					},
+					"recovery_reason": {
+						"enum": ["idle", "export", "close"],
+						"type": "string"
+					}
+				},
+				"required": ["expected_revision", "document"],
+				"type": "object"
+			},
+			"UpdateStudioTemplateInputBody": {
+				"additionalProperties": false,
+				"properties": {
+					"$schema": {
+						"description": "A URL to the JSON Schema for this object.",
+						"examples": ["https://example.com/schemas/UpdateStudioTemplateInputBody.json"],
+						"format": "uri",
+						"readOnly": true,
+						"type": "string"
+					},
+					"category": {
+						"maxLength": 80,
+						"type": "string"
+					},
+					"document": {
+						"$ref": "#/components/schemas/StudioDocumentPayload"
+					},
+					"name": {
+						"maxLength": 120,
+						"minLength": 1,
+						"type": "string"
+					},
+					"preview_media_id": {
+						"type": "string"
+					}
+				},
+				"required": ["name", "category", "document"],
 				"type": "object"
 			},
 			"UpdateWorkspaceSettingsInputBody": {
@@ -6343,6 +8094,49 @@
 					}
 				},
 				"required": ["id", "name", "created_at"],
+				"type": "object"
+			},
+			"WorkspaceResponse": {
+				"additionalProperties": false,
+				"properties": {
+					"avatar_url": {
+						"type": "string"
+					},
+					"can_edit": {
+						"description": "Whether the current user can change workspace content",
+						"type": "boolean"
+					},
+					"created_at": {
+						"type": "string"
+					},
+					"id": {
+						"type": "string"
+					},
+					"name": {
+						"type": "string"
+					},
+					"organization_id": {
+						"type": "string"
+					},
+					"organization_name": {
+						"type": "string"
+					},
+					"role": {
+						"description": "Current user's workspace role",
+						"enum": ["admin", "editor", "viewer"],
+						"type": "string"
+					}
+				},
+				"required": [
+					"id",
+					"organization_id",
+					"organization_name",
+					"name",
+					"avatar_url",
+					"created_at",
+					"role",
+					"can_edit"
+				],
 				"type": "object"
 			},
 			"WorkspaceTeamOutputBody": {
@@ -10580,12 +12374,142 @@
 						}
 					},
 					{
-						"description": "Sort: newest, oldest, size",
+						"description": "Sort: newest, oldest, name, size, recently_used",
 						"explode": false,
 						"in": "query",
 						"name": "sort",
 						"schema": {
-							"description": "Sort: newest, oldest, size",
+							"description": "Sort: newest, oldest, name, size, recently_used",
+							"type": "string"
+						}
+					},
+					{
+						"description": "Search filename, alt text, tag, and collection",
+						"explode": false,
+						"in": "query",
+						"name": "search",
+						"schema": {
+							"description": "Search filename, alt text, tag, and collection",
+							"type": "string"
+						}
+					},
+					{
+						"description": "Filter by dominant media type",
+						"explode": false,
+						"in": "query",
+						"name": "type",
+						"schema": {
+							"description": "Filter by dominant media type",
+							"type": "string"
+						}
+					},
+					{
+						"description": "Filter by media provenance",
+						"explode": false,
+						"in": "query",
+						"name": "source",
+						"schema": {
+							"description": "Filter by media provenance",
+							"type": "string"
+						}
+					},
+					{
+						"description": "Filter by asset role; defaults to library",
+						"explode": false,
+						"in": "query",
+						"name": "asset_kind",
+						"schema": {
+							"description": "Filter by asset role; defaults to library",
+							"type": "string"
+						}
+					},
+					{
+						"description": "Filter: square, portrait, landscape",
+						"explode": false,
+						"in": "query",
+						"name": "aspect",
+						"schema": {
+							"description": "Filter: square, portrait, landscape",
+							"type": "string"
+						}
+					},
+					{
+						"description": "Filter by collection ID",
+						"explode": false,
+						"in": "query",
+						"name": "collection_id",
+						"schema": {
+							"description": "Filter by collection ID",
+							"type": "string"
+						}
+					},
+					{
+						"description": "Filter by tag ID",
+						"explode": false,
+						"in": "query",
+						"name": "tag_id",
+						"schema": {
+							"description": "Filter by tag ID",
+							"type": "string"
+						}
+					},
+					{
+						"explode": false,
+						"in": "query",
+						"name": "min_width",
+						"schema": {
+							"format": "int64",
+							"minimum": 0,
+							"type": "integer"
+						}
+					},
+					{
+						"explode": false,
+						"in": "query",
+						"name": "min_height",
+						"schema": {
+							"format": "int64",
+							"minimum": 0,
+							"type": "integer"
+						}
+					},
+					{
+						"explode": false,
+						"in": "query",
+						"name": "max_width",
+						"schema": {
+							"format": "int64",
+							"minimum": 0,
+							"type": "integer"
+						}
+					},
+					{
+						"explode": false,
+						"in": "query",
+						"name": "max_height",
+						"schema": {
+							"format": "int64",
+							"minimum": 0,
+							"type": "integer"
+						}
+					},
+					{
+						"description": "Created on or after this YYYY-MM-DD date",
+						"explode": false,
+						"in": "query",
+						"name": "date_from",
+						"schema": {
+							"description": "Created on or after this YYYY-MM-DD date",
+							"type": "string"
+						}
+					},
+					{
+						"description": "Created on or before this YYYY-MM-DD date",
+						"explode": false,
+						"in": "query",
+						"name": "date_to",
+						"schema": {
+							"description": "Created on or before this YYYY-MM-DD date",
 							"type": "string"
 						}
 					},
@@ -10734,6 +12658,502 @@
 					}
 				},
 				"summary": "Delete multiple media attachments at once",
+				"tags": ["Media"]
+			}
+		},
+		"/media/collections": {
+			"get": {
+				"operationId": "list-media-collections",
+				"parameters": [
+					{
+						"explode": false,
+						"in": "query",
+						"name": "workspace_id",
+						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/ListMediaCollectionsOutputBody"
+								}
+							}
+						},
+						"description": "OK"
+					},
+					"default": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Error"
+					}
+				},
+				"summary": "List media collections",
+				"tags": ["Media"]
+			},
+			"post": {
+				"operationId": "create-media-collection",
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/CreateMediaCollectionInputBody"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"200": {
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/MediaCollectionResponse"
+								}
+							}
+						},
+						"description": "OK"
+					},
+					"default": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Error"
+					}
+				},
+				"summary": "Create a media collection",
+				"tags": ["Media"]
+			}
+		},
+		"/media/collections/{id}": {
+			"delete": {
+				"operationId": "delete-media-collection",
+				"parameters": [
+					{
+						"in": "path",
+						"name": "id",
+						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/DeleteMediaCollectionOutputBody"
+								}
+							}
+						},
+						"description": "OK"
+					},
+					"default": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Error"
+					}
+				},
+				"summary": "Delete a media collection without deleting media",
+				"tags": ["Media"]
+			},
+			"patch": {
+				"operationId": "update-media-collection",
+				"parameters": [
+					{
+						"in": "path",
+						"name": "id",
+						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					}
+				],
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/UpdateMediaCollectionInputBody"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"200": {
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/MediaCollectionResponse"
+								}
+							}
+						},
+						"description": "OK"
+					},
+					"default": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Error"
+					}
+				},
+				"summary": "Rename or recolor a media collection",
+				"tags": ["Media"]
+			}
+		},
+		"/media/collections/{id}/items": {
+			"put": {
+				"operationId": "replace-media-collection-items",
+				"parameters": [
+					{
+						"in": "path",
+						"name": "id",
+						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					}
+				],
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/ReplaceMediaCollectionItemsInputBody"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"200": {
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/ReplaceMediaCollectionItemsOutputBody"
+								}
+							}
+						},
+						"description": "OK"
+					},
+					"default": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Error"
+					}
+				},
+				"summary": "Replace a media collection's items",
+				"tags": ["Media"]
+			}
+		},
+		"/media/storage": {
+			"get": {
+				"operationId": "get-media-storage",
+				"parameters": [
+					{
+						"description": "Workspace ID",
+						"explode": false,
+						"in": "query",
+						"name": "workspace_id",
+						"required": true,
+						"schema": {
+							"description": "Workspace ID",
+							"type": "string"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GetMediaStorageOutputBody"
+								}
+							}
+						},
+						"description": "OK"
+					},
+					"400": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Bad Request"
+					},
+					"403": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Forbidden"
+					},
+					"422": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Unprocessable Entity"
+					},
+					"500": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Internal Server Error"
+					}
+				},
+				"summary": "Get workspace media storage usage",
+				"tags": ["Media"]
+			}
+		},
+		"/media/tags": {
+			"get": {
+				"operationId": "list-media-tags",
+				"parameters": [
+					{
+						"explode": false,
+						"in": "query",
+						"name": "workspace_id",
+						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/ListMediaTagsOutputBody"
+								}
+							}
+						},
+						"description": "OK"
+					},
+					"default": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Error"
+					}
+				},
+				"summary": "List media tags",
+				"tags": ["Media"]
+			},
+			"post": {
+				"operationId": "create-media-tag",
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/CreateMediaTagInputBody"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"200": {
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/MediaTagResponse"
+								}
+							}
+						},
+						"description": "OK"
+					},
+					"default": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Error"
+					}
+				},
+				"summary": "Create a media tag",
+				"tags": ["Media"]
+			}
+		},
+		"/media/tags/{id}": {
+			"delete": {
+				"operationId": "delete-media-tag",
+				"parameters": [
+					{
+						"in": "path",
+						"name": "id",
+						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/DeleteMediaTagOutputBody"
+								}
+							}
+						},
+						"description": "OK"
+					},
+					"default": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Error"
+					}
+				},
+				"summary": "Delete a media tag without deleting media",
+				"tags": ["Media"]
+			},
+			"patch": {
+				"operationId": "update-media-tag",
+				"parameters": [
+					{
+						"in": "path",
+						"name": "id",
+						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					}
+				],
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/UpdateMediaTagInputBody"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"200": {
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/MediaTagResponse"
+								}
+							}
+						},
+						"description": "OK"
+					},
+					"default": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Error"
+					}
+				},
+				"summary": "Rename a media tag",
+				"tags": ["Media"]
+			}
+		},
+		"/media/tags/{id}/items": {
+			"put": {
+				"operationId": "replace-media-tag-items",
+				"parameters": [
+					{
+						"in": "path",
+						"name": "id",
+						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					}
+				],
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/ReplaceMediaTagItemsInputBody"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"200": {
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/ReplaceMediaTagItemsOutputBody"
+								}
+							}
+						},
+						"description": "OK"
+					},
+					"default": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Error"
+					}
+				},
+				"summary": "Replace a media tag's assignments",
 				"tags": ["Media"]
 			}
 		},
@@ -13954,6 +16374,1552 @@
 				"tags": ["Publications"]
 			}
 		},
+		"/studio/brand-kit": {
+			"get": {
+				"operationId": "get-studio-brand-kit",
+				"parameters": [
+					{
+						"explode": false,
+						"in": "query",
+						"name": "workspace_id",
+						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/StudioBrandKitResponse"
+								}
+							}
+						},
+						"description": "OK"
+					},
+					"400": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Bad Request"
+					},
+					"403": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Forbidden"
+					},
+					"422": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Unprocessable Entity"
+					},
+					"500": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Internal Server Error"
+					}
+				},
+				"summary": "Get the workspace Studio brand kit",
+				"tags": ["Studio"]
+			},
+			"put": {
+				"operationId": "update-studio-brand-kit",
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/UpdateStudioBrandKitInputBody"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"200": {
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/StudioBrandKitResponse"
+								}
+							}
+						},
+						"description": "OK"
+					},
+					"400": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Bad Request"
+					},
+					"403": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Forbidden"
+					},
+					"422": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Unprocessable Entity"
+					},
+					"500": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Internal Server Error"
+					}
+				},
+				"summary": "Create or update the workspace Studio brand kit",
+				"tags": ["Studio"]
+			}
+		},
+		"/studio/designs": {
+			"get": {
+				"operationId": "list-studio-designs",
+				"parameters": [
+					{
+						"explode": false,
+						"in": "query",
+						"name": "workspace_id",
+						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					},
+					{
+						"explode": false,
+						"in": "query",
+						"name": "search",
+						"schema": {
+							"type": "string"
+						}
+					},
+					{
+						"explode": false,
+						"in": "query",
+						"name": "limit",
+						"schema": {
+							"format": "int64",
+							"maximum": 100,
+							"minimum": 1,
+							"type": "integer"
+						}
+					},
+					{
+						"explode": false,
+						"in": "query",
+						"name": "offset",
+						"schema": {
+							"format": "int64",
+							"minimum": 0,
+							"type": "integer"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/ListStudioDesignsOutputBody"
+								}
+							}
+						},
+						"description": "OK"
+					},
+					"400": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Bad Request"
+					},
+					"403": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Forbidden"
+					},
+					"422": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Unprocessable Entity"
+					},
+					"500": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Internal Server Error"
+					}
+				},
+				"summary": "List Studio designs",
+				"tags": ["Studio"]
+			},
+			"post": {
+				"operationId": "create-studio-design",
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/CreateStudioDesignInputBody"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"201": {
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/StudioDocumentResponse"
+								}
+							}
+						},
+						"description": "Created"
+					},
+					"400": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Bad Request"
+					},
+					"403": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Forbidden"
+					},
+					"404": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Not Found"
+					},
+					"422": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Unprocessable Entity"
+					},
+					"500": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Internal Server Error"
+					}
+				},
+				"summary": "Create a Studio design",
+				"tags": ["Studio"]
+			}
+		},
+		"/studio/designs/{id}": {
+			"delete": {
+				"operationId": "delete-studio-design",
+				"parameters": [
+					{
+						"in": "path",
+						"name": "id",
+						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/DeleteStudioDesignOutputBody"
+								}
+							}
+						},
+						"description": "OK"
+					},
+					"403": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Forbidden"
+					},
+					"404": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Not Found"
+					},
+					"422": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Unprocessable Entity"
+					},
+					"500": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Internal Server Error"
+					}
+				},
+				"summary": "Move a Studio design to trash",
+				"tags": ["Studio"]
+			},
+			"get": {
+				"operationId": "get-studio-design",
+				"parameters": [
+					{
+						"in": "path",
+						"name": "id",
+						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/StudioDocumentResponse"
+								}
+							}
+						},
+						"description": "OK"
+					},
+					"403": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Forbidden"
+					},
+					"404": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Not Found"
+					},
+					"422": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Unprocessable Entity"
+					},
+					"500": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Internal Server Error"
+					}
+				},
+				"summary": "Get a Studio design",
+				"tags": ["Studio"]
+			},
+			"patch": {
+				"operationId": "update-studio-design",
+				"parameters": [
+					{
+						"in": "path",
+						"name": "id",
+						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					}
+				],
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/UpdateStudioDesignInputBody"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"200": {
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/StudioDocumentResponse"
+								}
+							}
+						},
+						"description": "OK"
+					},
+					"400": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Bad Request"
+					},
+					"403": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Forbidden"
+					},
+					"404": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Not Found"
+					},
+					"409": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Conflict"
+					},
+					"422": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Unprocessable Entity"
+					},
+					"500": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Internal Server Error"
+					}
+				},
+				"summary": "Save a Studio design with optimistic concurrency",
+				"tags": ["Studio"]
+			}
+		},
+		"/studio/designs/{id}/duplicate": {
+			"post": {
+				"operationId": "duplicate-studio-design",
+				"parameters": [
+					{
+						"in": "path",
+						"name": "id",
+						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/StudioDocumentResponse"
+								}
+							}
+						},
+						"description": "OK"
+					},
+					"403": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Forbidden"
+					},
+					"404": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Not Found"
+					},
+					"422": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Unprocessable Entity"
+					},
+					"500": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Internal Server Error"
+					}
+				},
+				"summary": "Duplicate a Studio design",
+				"tags": ["Studio"]
+			}
+		},
+		"/studio/designs/{id}/revisions": {
+			"get": {
+				"operationId": "list-studio-design-revisions",
+				"parameters": [
+					{
+						"in": "path",
+						"name": "id",
+						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/ListStudioRevisionsOutputBody"
+								}
+							}
+						},
+						"description": "OK"
+					},
+					"403": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Forbidden"
+					},
+					"404": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Not Found"
+					},
+					"422": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Unprocessable Entity"
+					},
+					"500": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Internal Server Error"
+					}
+				},
+				"summary": "List Studio design recovery revisions and checkpoints",
+				"tags": ["Studio"]
+			},
+			"post": {
+				"operationId": "create-studio-design-checkpoint",
+				"parameters": [
+					{
+						"in": "path",
+						"name": "id",
+						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					}
+				],
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/CreateStudioCheckpointInputBody"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"200": {
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/StudioRevisionSummary"
+								}
+							}
+						},
+						"description": "OK"
+					},
+					"400": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Bad Request"
+					},
+					"403": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Forbidden"
+					},
+					"404": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Not Found"
+					},
+					"422": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Unprocessable Entity"
+					},
+					"500": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Internal Server Error"
+					}
+				},
+				"summary": "Create a named Studio design checkpoint",
+				"tags": ["Studio"]
+			}
+		},
+		"/studio/designs/{id}/revisions/{revision_id}/restore": {
+			"post": {
+				"operationId": "restore-studio-design-revision",
+				"parameters": [
+					{
+						"in": "path",
+						"name": "id",
+						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					},
+					{
+						"in": "path",
+						"name": "revision_id",
+						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					}
+				],
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/RestoreStudioRevisionInputBody"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"200": {
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/StudioDocumentResponse"
+								}
+							}
+						},
+						"description": "OK"
+					},
+					"400": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Bad Request"
+					},
+					"403": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Forbidden"
+					},
+					"404": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Not Found"
+					},
+					"409": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Conflict"
+					},
+					"422": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Unprocessable Entity"
+					},
+					"500": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Internal Server Error"
+					}
+				},
+				"summary": "Restore a Studio design revision as a new head",
+				"tags": ["Studio"]
+			}
+		},
+		"/studio/presets": {
+			"get": {
+				"operationId": "list-studio-presets",
+				"responses": {
+					"200": {
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/StudioPresetOutputBody"
+								}
+							}
+						},
+						"description": "OK"
+					},
+					"default": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Error"
+					}
+				},
+				"summary": "List OpenPost Studio presets and runtime configuration",
+				"tags": ["Studio"]
+			}
+		},
+		"/studio/return-tokens": {
+			"post": {
+				"operationId": "create-studio-return-token",
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/CreateStudioReturnTokenInputBody"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"201": {
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/CreateStudioReturnTokenOutputBody"
+								}
+							}
+						},
+						"description": "Created"
+					},
+					"400": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Bad Request"
+					},
+					"403": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Forbidden"
+					},
+					"422": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Unprocessable Entity"
+					},
+					"500": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Internal Server Error"
+					}
+				},
+				"summary": "Create a one-time Studio composer return token",
+				"tags": ["Studio"]
+			}
+		},
+		"/studio/return-tokens/{token}/complete": {
+			"post": {
+				"operationId": "complete-studio-return-token",
+				"parameters": [
+					{
+						"in": "path",
+						"name": "token",
+						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					}
+				],
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/CompleteStudioReturnTokenInputBody"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"200": {
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/CompleteStudioReturnTokenOutputBody"
+								}
+							}
+						},
+						"description": "OK"
+					},
+					"400": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Bad Request"
+					},
+					"403": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Forbidden"
+					},
+					"404": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Not Found"
+					},
+					"409": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Conflict"
+					},
+					"422": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Unprocessable Entity"
+					},
+					"500": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Internal Server Error"
+					}
+				},
+				"summary": "Store ordered Studio exports for a composer return",
+				"tags": ["Studio"]
+			}
+		},
+		"/studio/return-tokens/{token}/consume": {
+			"post": {
+				"operationId": "consume-studio-return-token",
+				"parameters": [
+					{
+						"in": "path",
+						"name": "token",
+						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/ConsumeStudioReturnTokenOutputBody"
+								}
+							}
+						},
+						"description": "OK"
+					},
+					"400": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Bad Request"
+					},
+					"403": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Forbidden"
+					},
+					"404": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Not Found"
+					},
+					"409": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Conflict"
+					},
+					"422": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Unprocessable Entity"
+					},
+					"500": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Internal Server Error"
+					}
+				},
+				"summary": "Consume a completed Studio composer return token",
+				"tags": ["Studio"]
+			}
+		},
+		"/studio/templates": {
+			"get": {
+				"operationId": "list-studio-templates",
+				"parameters": [
+					{
+						"explode": false,
+						"in": "query",
+						"name": "workspace_id",
+						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/ListStudioTemplatesOutputBody"
+								}
+							}
+						},
+						"description": "OK"
+					},
+					"400": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Bad Request"
+					},
+					"403": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Forbidden"
+					},
+					"422": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Unprocessable Entity"
+					},
+					"500": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Internal Server Error"
+					}
+				},
+				"summary": "List built-in and workspace Studio templates",
+				"tags": ["Studio"]
+			},
+			"post": {
+				"operationId": "create-studio-template",
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/CreateStudioTemplateInputBody"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"201": {
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/StudioTemplateResponse"
+								}
+							}
+						},
+						"description": "Created"
+					},
+					"400": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Bad Request"
+					},
+					"403": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Forbidden"
+					},
+					"422": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Unprocessable Entity"
+					},
+					"500": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Internal Server Error"
+					}
+				},
+				"summary": "Save a Studio design as a workspace template",
+				"tags": ["Studio"]
+			}
+		},
+		"/studio/templates/{id}": {
+			"delete": {
+				"operationId": "delete-studio-template",
+				"parameters": [
+					{
+						"in": "path",
+						"name": "id",
+						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/DeleteStudioTemplateOutputBody"
+								}
+							}
+						},
+						"description": "OK"
+					},
+					"403": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Forbidden"
+					},
+					"404": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Not Found"
+					},
+					"422": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Unprocessable Entity"
+					},
+					"500": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Internal Server Error"
+					}
+				},
+				"summary": "Delete a workspace Studio template",
+				"tags": ["Studio"]
+			},
+			"patch": {
+				"operationId": "update-studio-template",
+				"parameters": [
+					{
+						"in": "path",
+						"name": "id",
+						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					}
+				],
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/UpdateStudioTemplateInputBody"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"200": {
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/StudioTemplateResponse"
+								}
+							}
+						},
+						"description": "OK"
+					},
+					"400": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Bad Request"
+					},
+					"403": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Forbidden"
+					},
+					"404": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Not Found"
+					},
+					"422": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Unprocessable Entity"
+					},
+					"500": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Internal Server Error"
+					}
+				},
+				"summary": "Replace a workspace Studio template snapshot",
+				"tags": ["Studio"]
+			}
+		},
+		"/studio/templates/{id}/instantiate": {
+			"post": {
+				"operationId": "instantiate-studio-template",
+				"parameters": [
+					{
+						"in": "path",
+						"name": "id",
+						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					}
+				],
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/InstantiateStudioTemplateInputBody"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"200": {
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/StudioDocumentResponse"
+								}
+							}
+						},
+						"description": "OK"
+					},
+					"400": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Bad Request"
+					},
+					"403": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Forbidden"
+					},
+					"404": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Not Found"
+					},
+					"422": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Unprocessable Entity"
+					},
+					"500": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Internal Server Error"
+					}
+				},
+				"summary": "Create a Studio design from a template",
+				"tags": ["Studio"]
+			}
+		},
 		"/workspace-invitations/accept": {
 			"post": {
 				"operationId": "accept-workspace-invitation",
@@ -14052,7 +18018,7 @@
 							"application/json": {
 								"schema": {
 									"items": {
-										"$ref": "#/components/schemas/Item"
+										"$ref": "#/components/schemas/WorkspaceResponse"
 									},
 									"type": ["array", "null"]
 								}

@@ -599,10 +599,195 @@ type MediaAttachment struct {
 	PublicURLStatus    int       `bun:"public_url_status,notnull,default:0" json:"public_url_status"`
 	PublicURLError     string    `bun:"public_url_error,notnull,default:''" json:"public_url_error"`
 	ThumbnailsJSON     string    `bun:"thumbnails" json:"thumbnails"` // JSON: {"sm": "sm_xxx.jpg", "md": "md_xxx.jpg"}
-	FileHash           string    `bun:",unique" json:"-"`             // SHA-256 for deduplication
+	FileHash           string    `json:"-"`                           // SHA-256, unique within a workspace
+	Source             string    `bun:",notnull,default:'upload'" json:"source"`
+	AssetKind          string    `bun:"asset_kind,notnull,default:'library'" json:"asset_kind"`
+	ParentMediaID      string    `bun:"parent_media_id,nullzero" json:"parent_media_id,omitempty"`
+	DesignDocumentID   string    `bun:"design_document_id,nullzero" json:"design_document_id,omitempty"`
+	DesignPageID       string    `bun:"design_page_id,nullzero" json:"design_page_id,omitempty"`
 	AltText            string    `json:"alt_text"`
 	IsFavorite         bool      `bun:",default:false" json:"is_favorite"`
 	CreatedAt          time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"created_at"`
+}
+
+// DesignDocument is the persisted Studio document head. Its pages are stored
+// separately so saving or loading a large multi-page design remains bounded.
+type DesignDocument struct {
+	bun.BaseModel `bun:"table:design_documents"`
+
+	ID                  string    `bun:",pk" json:"id"`
+	WorkspaceID         string    `bun:",notnull" json:"workspace_id"`
+	CreatedByID         string    `bun:"created_by_id,notnull" json:"created_by_id"`
+	Title               string    `bun:",notnull" json:"title"`
+	SchemaVersion       int       `bun:"schema_version,notnull,default:1" json:"schema_version"`
+	Revision            int       `bun:",notnull,default:1" json:"revision"`
+	PresetKey           string    `bun:"preset_key,notnull,default:''" json:"preset_key"`
+	WidthPX             int       `bun:"width_px,notnull" json:"width_px"`
+	HeightPX            int       `bun:"height_px,notnull" json:"height_px"`
+	BrandKitID          string    `bun:"brand_kit_id,nullzero" json:"brand_kit_id,omitempty"`
+	BrandKitRevision    int       `bun:"brand_kit_revision,notnull,default:0" json:"brand_kit_revision"`
+	CoverPreviewMediaID string    `bun:"cover_preview_media_id,nullzero" json:"cover_preview_media_id,omitempty"`
+	CreatedAt           time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"created_at"`
+	UpdatedAt           time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"updated_at"`
+	DeletedAt           time.Time `bun:",nullzero" json:"deleted_at,omitempty"`
+}
+
+type DesignPage struct {
+	bun.BaseModel `bun:"table:design_pages"`
+
+	ID                  string    `bun:",pk" json:"id"`
+	DesignDocumentID    string    `bun:"design_document_id,notnull" json:"design_document_id"`
+	Name                string    `bun:",notnull" json:"name"`
+	DisplayOrder        int       `bun:"display_order,notnull" json:"display_order"`
+	BackgroundColor     string    `bun:"background_color,notnull,default:'#ffffff'" json:"background_color"`
+	SceneJSON           string    `bun:"scene_json,notnull,default:'[]'" json:"scene_json"`
+	PreviewMediaID      string    `bun:"preview_media_id,nullzero" json:"preview_media_id,omitempty"`
+	LatestExportMediaID string    `bun:"latest_export_media_id,nullzero" json:"latest_export_media_id,omitempty"`
+	CreatedAt           time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"created_at"`
+	UpdatedAt           time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"updated_at"`
+}
+
+type DesignRevision struct {
+	bun.BaseModel `bun:"table:design_revisions"`
+
+	ID               string    `bun:",pk" json:"id"`
+	DesignDocumentID string    `bun:"design_document_id,notnull" json:"design_document_id"`
+	Revision         int       `bun:",notnull" json:"revision"`
+	Kind             string    `bun:",notnull" json:"kind"`
+	Name             string    `bun:",notnull,default:''" json:"name"`
+	Snapshot         []byte    `bun:",notnull" json:"-"`
+	CreatedByID      string    `bun:"created_by_id,notnull" json:"created_by_id"`
+	CreatedAt        time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"created_at"`
+	ExpiresAt        time.Time `bun:",nullzero" json:"expires_at,omitempty"`
+}
+
+type DesignMediaReference struct {
+	bun.BaseModel `bun:"table:design_media_references"`
+
+	DesignDocumentID string    `bun:"design_document_id,pk" json:"design_document_id"`
+	DesignPageID     string    `bun:"design_page_id,pk" json:"design_page_id"`
+	MediaID          string    `bun:"media_id,pk" json:"media_id"`
+	Usage            string    `bun:",notnull,default:'layer'" json:"usage"`
+	CreatedAt        time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"created_at"`
+}
+
+type DesignReturnToken struct {
+	bun.BaseModel `bun:"table:design_return_tokens"`
+
+	ID              string    `bun:",pk" json:"id"`
+	TokenHash       string    `bun:",notnull,unique" json:"-"`
+	WorkspaceID     string    `bun:",notnull" json:"workspace_id"`
+	UserID          string    `bun:",notnull" json:"user_id"`
+	ReturnURL       string    `bun:",notnull" json:"return_url"`
+	Purpose         string    `bun:",notnull" json:"purpose"`
+	MaxSelection    int       `bun:",notnull" json:"max_selection"`
+	ConstraintsJSON string    `bun:"constraints_json,notnull" json:"constraints_json"`
+	ResultMediaIDs  string    `bun:"result_media_ids,notnull" json:"result_media_ids"`
+	DesignID        string    `bun:"design_id" json:"design_id"`
+	CreatedAt       time.Time `bun:",notnull,default:current_timestamp" json:"created_at"`
+	ExpiresAt       time.Time `bun:",notnull" json:"expires_at"`
+	CompletedAt     time.Time `bun:"completed_at,nullzero" json:"completed_at,omitempty"`
+	ConsumedAt      time.Time `bun:"consumed_at,nullzero" json:"consumed_at,omitempty"`
+}
+
+type DesignTemplate struct {
+	bun.BaseModel `bun:"table:design_templates"`
+
+	ID             string    `bun:",pk" json:"id"`
+	WorkspaceID    string    `bun:",notnull" json:"workspace_id"`
+	CreatedByID    string    `bun:"created_by_id,notnull" json:"created_by_id"`
+	Name           string    `bun:",notnull" json:"name"`
+	Category       string    `bun:",notnull,default:''" json:"category"`
+	PresetKey      string    `bun:"preset_key,notnull,default:''" json:"preset_key"`
+	SchemaVersion  int       `bun:"schema_version,notnull,default:1" json:"schema_version"`
+	SnapshotJSON   string    `bun:"snapshot_json,notnull" json:"snapshot_json"`
+	PreviewMediaID string    `bun:"preview_media_id,nullzero" json:"preview_media_id,omitempty"`
+	CreatedAt      time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"created_at"`
+	UpdatedAt      time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"updated_at"`
+}
+
+type DesignTemplateMediaReference struct {
+	bun.BaseModel `bun:"table:design_template_media_references"`
+
+	DesignTemplateID string    `bun:"design_template_id,pk" json:"design_template_id"`
+	MediaID          string    `bun:"media_id,pk" json:"media_id"`
+	CreatedAt        time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"created_at"`
+}
+
+type BrandKit struct {
+	bun.BaseModel `bun:"table:brand_kits"`
+
+	ID              string    `bun:",pk" json:"id"`
+	WorkspaceID     string    `bun:",unique,notnull" json:"workspace_id"`
+	Name            string    `bun:",notnull,default:'Workspace brand'" json:"name"`
+	Revision        int       `bun:",notnull,default:1" json:"revision"`
+	ColorsJSON      string    `bun:"colors_json,notnull,default:'[]'" json:"colors_json"`
+	TextStylesJSON  string    `bun:"text_styles_json,notnull,default:'{}'" json:"text_styles_json"`
+	BackgroundsJSON string    `bun:"backgrounds_json,notnull,default:'[]'" json:"backgrounds_json"`
+	CreatedAt       time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"created_at"`
+	UpdatedAt       time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"updated_at"`
+}
+
+type BrandAsset struct {
+	bun.BaseModel `bun:"table:brand_assets"`
+
+	ID         string    `bun:",pk" json:"id"`
+	BrandKitID string    `bun:"brand_kit_id,notnull" json:"brand_kit_id"`
+	MediaID    string    `bun:"media_id,notnull" json:"media_id"`
+	Role       string    `bun:",notnull" json:"role"`
+	Name       string    `bun:",notnull,default:''" json:"name"`
+	CreatedAt  time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"created_at"`
+}
+
+type BrandFont struct {
+	bun.BaseModel `bun:"table:brand_fonts"`
+
+	ID                    string    `bun:",pk" json:"id"`
+	BrandKitID            string    `bun:"brand_kit_id,notnull" json:"brand_kit_id"`
+	MediaID               string    `bun:"media_id,notnull" json:"media_id"`
+	Family                string    `bun:",notnull" json:"family"`
+	Weight                int       `bun:",notnull,default:400" json:"weight"`
+	Style                 string    `bun:",notnull,default:'normal'" json:"style"`
+	LicenseAcknowledgedBy string    `bun:"license_acknowledged_by,notnull" json:"license_acknowledged_by"`
+	LicenseAcknowledgedAt time.Time `bun:"license_acknowledged_at,notnull" json:"license_acknowledged_at"`
+	CreatedAt             time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"created_at"`
+}
+
+type MediaCollection struct {
+	bun.BaseModel `bun:"table:media_collections"`
+
+	ID          string    `bun:",pk" json:"id"`
+	WorkspaceID string    `bun:",notnull" json:"workspace_id"`
+	Name        string    `bun:",notnull" json:"name"`
+	Color       string    `bun:",notnull,default:''" json:"color"`
+	CreatedAt   time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"created_at"`
+	UpdatedAt   time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"updated_at"`
+}
+
+type MediaCollectionItem struct {
+	bun.BaseModel `bun:"table:media_collection_items"`
+
+	CollectionID string    `bun:"collection_id,pk" json:"collection_id"`
+	MediaID      string    `bun:"media_id,pk" json:"media_id"`
+	CreatedAt    time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"created_at"`
+}
+
+type MediaTag struct {
+	bun.BaseModel `bun:"table:media_tags"`
+
+	ID             string    `bun:",pk" json:"id"`
+	WorkspaceID    string    `bun:",notnull" json:"workspace_id"`
+	Name           string    `bun:",notnull" json:"name"`
+	NormalizedName string    `bun:"normalized_name,notnull" json:"normalized_name"`
+	CreatedAt      time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"created_at"`
+}
+
+type MediaTagAssignment struct {
+	bun.BaseModel `bun:"table:media_tag_assignments"`
+
+	TagID     string    `bun:"tag_id,pk" json:"tag_id"`
+	MediaID   string    `bun:"media_id,pk" json:"media_id"`
+	CreatedAt time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"created_at"`
 }
 
 type PostMedia struct {

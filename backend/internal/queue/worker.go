@@ -282,7 +282,16 @@ func (w *BackgroundWorker) handleMediaCleanup(ctx context.Context, payload strin
 		Where("is_favorite = ?", false).
 		Where("created_at < ?", cutoff).
 		Where("id NOT IN (SELECT media_id FROM post_media)").
+		Where("id NOT IN (SELECT media_id FROM publication_segment_media)").
 		Where("id NOT IN (SELECT media_id FROM rendition_media)").
+		Where("id NOT IN (SELECT media_id FROM rendition_segment_media)").
+		Where("id NOT IN (SELECT media_id FROM design_media_references)").
+		Where("id NOT IN (SELECT media_id FROM design_template_media_references)").
+		Where("id NOT IN (SELECT media_id FROM brand_assets)").
+		Where("id NOT IN (SELECT media_id FROM brand_fonts)").
+		Where("id NOT IN (SELECT cover_preview_media_id FROM design_documents WHERE cover_preview_media_id IS NOT NULL AND cover_preview_media_id != '')").
+		Where("id NOT IN (SELECT preview_media_id FROM design_pages WHERE preview_media_id IS NOT NULL AND preview_media_id != '')").
+		Where("id NOT IN (SELECT latest_export_media_id FROM design_pages WHERE latest_export_media_id IS NOT NULL AND latest_export_media_id != '')").
 		Scan(ctx)
 	if err != nil {
 		return err

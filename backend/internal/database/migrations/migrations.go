@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"embed"
+	"errors"
 	"fmt"
 	"path"
 	"regexp"
@@ -81,15 +82,132 @@ func RunMigrations(db *bun.DB) error {
 			continue
 		}
 
+		if err := prepareMigration(ctx, db, m); err != nil {
+			return err
+		}
 		if err := runMigration(ctx, db, m); err != nil {
 			return fmt.Errorf("migration %s failed: %w", m.name, err)
 		}
+		appliedSet[m.version] = true
 	}
 
+	return finalizeMigrations(ctx, db, appliedSet)
+}
+
+func finalizeMigrations(ctx context.Context, db *bun.DB, appliedSet map[int64]bool) error {
+	if err := repairAppliedSchema(ctx, db, appliedSet); err != nil {
+		return err
+	}
 	if err := MigrateLegacyPublicationAuthoring(ctx, db); err != nil {
 		return fmt.Errorf("legacy publication authoring migration failed: %w", err)
 	}
 	return nil
+}
+
+func repairAppliedSchema(ctx context.Context, db *bun.DB, appliedSet map[int64]bool) error {
+	// Early development builds of migration 036 only recognized an unquoted
+	// `file_hash TEXT UNIQUE` declaration. Bun's SQLite bootstrap schema uses a
+	// table-level constraint, so repair already-recorded 036 databases as well.
+	if !appliedSet[36] || db.Dialect().Name() != dialect.SQLite {
+		return nil
+	}
+	if err := rebuildSQLiteMediaAttachmentsWithoutGlobalHashUnique(ctx, db); err != nil {
+		return fmt.Errorf("media hash schema repair failed: %w", err)
+	}
+	return nil
+}
+
+func prepareMigration(ctx context.Context, db *bun.DB, migration migration) error {
+	if migration.version != 36 {
+		return nil
+	}
+	if err := removeGlobalMediaHashConstraint(ctx, db); err != nil {
+		return fmt.Errorf("migration %s media hash preparation failed: %w", migration.name, err)
+	}
+	return nil
+}
+
+func removeGlobalMediaHashConstraint(ctx context.Context, db *bun.DB) error {
+	switch db.Dialect().Name() {
+	case dialect.PG:
+		_, err := db.ExecContext(ctx, "ALTER TABLE media_attachments DROP CONSTRAINT IF EXISTS media_attachments_file_hash_key")
+		return err
+	case dialect.SQLite:
+		return rebuildSQLiteMediaAttachmentsWithoutGlobalHashUnique(ctx, db)
+	default:
+		return nil
+	}
+}
+
+func rebuildSQLiteMediaAttachmentsWithoutGlobalHashUnique(ctx context.Context, db *bun.DB) error {
+	var createSQL string
+	err := db.NewSelect().
+		TableExpr("sqlite_master").
+		Column("sql").
+		Where("type = 'table' AND name = 'media_attachments'").
+		Scan(ctx, &createSQL)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	inlineUniqueExpr := regexp.MustCompile(`(?i)("?file_hash"?\s+(?:TEXT|VARCHAR(?:\(\d+\))?))\s+UNIQUE`)
+	tableUniqueExpr := regexp.MustCompile(`(?i),\s*(?:CONSTRAINT\s+"?[^"]+"?\s+)?UNIQUE\s*\(\s*"?file_hash"?\s*\)`)
+	if !inlineUniqueExpr.MatchString(createSQL) && !tableUniqueExpr.MatchString(createSQL) {
+		return nil
+	}
+
+	type sqliteIndex struct {
+		Name string `bun:"name"`
+		SQL  string `bun:"sql"`
+	}
+	var indexes []sqliteIndex
+	if err := db.NewSelect().
+		TableExpr("sqlite_master").
+		Column("name", "sql").
+		Where("type = 'index' AND tbl_name = 'media_attachments' AND sql IS NOT NULL").
+		Scan(ctx, &indexes); err != nil {
+		return err
+	}
+
+	rebuildSQL := strings.Replace(createSQL, `"media_attachments"`, `"media_attachments_rebuild_036"`, 1)
+	if rebuildSQL == createSQL {
+		rebuildSQL = strings.Replace(createSQL, "media_attachments", "media_attachments_rebuild_036", 1)
+	}
+	rebuildSQL = inlineUniqueExpr.ReplaceAllString(rebuildSQL, "$1")
+	rebuildSQL = tableUniqueExpr.ReplaceAllString(rebuildSQL, "")
+
+	if _, err := db.ExecContext(ctx, "PRAGMA foreign_keys=OFF"); err != nil {
+		return err
+	}
+	defer func() {
+		_, _ = db.ExecContext(context.Background(), "PRAGMA foreign_keys=ON")
+	}()
+
+	return db.RunInTx(ctx, &sql.TxOptions{}, func(txCtx context.Context, tx bun.Tx) error {
+		if _, err := tx.ExecContext(txCtx, rebuildSQL); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(txCtx, "INSERT INTO media_attachments_rebuild_036 SELECT * FROM media_attachments"); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(txCtx, "DROP TABLE media_attachments"); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(txCtx, "ALTER TABLE media_attachments_rebuild_036 RENAME TO media_attachments"); err != nil {
+			return err
+		}
+		for _, index := range indexes {
+			if strings.TrimSpace(index.SQL) == "" {
+				continue
+			}
+			if _, err := tx.ExecContext(txCtx, index.SQL); err != nil {
+				return fmt.Errorf("recreate index %s: %w", index.Name, err)
+			}
+		}
+		return nil
+	})
 }
 
 var (
