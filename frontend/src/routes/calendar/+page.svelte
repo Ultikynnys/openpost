@@ -113,11 +113,15 @@
 	const visibleDayKeys = $derived(new SvelteSet(days.map((day) => day.key)));
 	const allItems = $derived.by((): CalendarItem[] => {
 		const items: CalendarItem[] = [];
+		const linkedPublicationIDs = new SvelteSet(
+			posts.map((post) => post.publication_id).filter((id): id is string => Boolean(id))
+		);
 		for (const post of posts) {
 			const item = postToCalendarItem(post);
 			if (item) items.push(item);
 		}
 		for (const publication of publications) {
+			if (linkedPublicationIDs.has(publication.id)) continue;
 			const item = publicationToCalendarItem(publication);
 			if (item) items.push(item);
 		}

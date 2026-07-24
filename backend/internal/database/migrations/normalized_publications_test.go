@@ -201,6 +201,78 @@ func TestLegacyAuthoringMigrationPreservesThreadVariantsScheduleAndJobs(t *testi
 		require.Empty(t, post.PublicationID)
 	}
 
+	_, err = db.NewDelete().Model((*models.Rendition)(nil)).Where("id = ?", rendition.ID).Exec(ctx)
+	require.NoError(t, err)
+	rendition = models.Rendition{
+		ID:              "canonical-rendition-random",
+		PublicationID:   publicationID,
+		SocialAccountID: "account-legacy",
+		Platform:        "x",
+		Profile:         models.ContentProfileThread,
+		OutputProfile:   "x.thread",
+		Body:            "Custom root",
+		SettingsJSON:    `{"reply_audience":"followers"}`,
+		Status:          models.RenditionStatusScheduled,
+		CreatedAt:       createdAt,
+		UpdatedAt:       createdAt,
+	}
+	_, err = db.NewInsert().Model(&rendition).Exec(ctx)
+	require.NoError(t, err)
+	renditionSegments = []models.RenditionSegment{
+		{
+			ID:                   "canonical-rendition-segment-random-1",
+			RenditionID:          rendition.ID,
+			PublicationSegmentID: segments[0].ID,
+			Position:             0,
+			Body:                 "Custom root",
+			SettingsJSON:         `{"poll_options":"Yes\nNo"}`,
+			Status:               models.RenditionStatusScheduled,
+			CreatedAt:            createdAt,
+			UpdatedAt:            createdAt,
+		},
+		{
+			ID:                   "canonical-rendition-segment-random-2",
+			RenditionID:          rendition.ID,
+			PublicationSegmentID: segments[1].ID,
+			Position:             1,
+			Body:                 "Custom reply",
+			SettingsJSON:         "{}",
+			Status:               models.RenditionStatusScheduled,
+			CreatedAt:            createdAt,
+			UpdatedAt:            createdAt,
+		},
+	}
+	for index := range renditionSegments {
+		_, err = db.NewInsert().Model(&renditionSegments[index]).Exec(ctx)
+		require.NoError(t, err)
+	}
+	_, err = db.NewInsert().Model(&models.RenditionSegmentMedia{
+		RenditionSegmentID: renditionSegments[0].ID,
+		MediaID:            "media-root",
+		Role:               "attachment",
+		AltText:            "Launch artwork",
+		SettingsJSON:       `{"tagged_users":"openpost"}`,
+	}).Exec(ctx)
+	require.NoError(t, err)
+
+	require.NoError(t, RefreshLegacyPublicationAuthoring(ctx, db, "legacy-root"))
+
+	require.NoError(t, db.NewSelect().Model(&rendition).Where("publication_id = ?", publicationID).Scan(ctx))
+	require.NotEqual(t, "canonical-rendition-random", rendition.ID)
+	require.JSONEq(t, `{"reply_audience":"followers"}`, rendition.SettingsJSON)
+	require.Equal(t, "x.thread", rendition.OutputProfile)
+	require.NoError(t, db.NewSelect().Model(&renditionSegments).
+		Where("rendition_id = ?", rendition.ID).
+		Order("position ASC").
+		Scan(ctx))
+	require.JSONEq(t, `{"poll_options":"Yes\nNo"}`, renditionSegments[0].SettingsJSON)
+	var preservedMedia models.RenditionSegmentMedia
+	require.NoError(t, db.NewSelect().Model(&preservedMedia).
+		Where("rendition_segment_id = ?", renditionSegments[0].ID).
+		Scan(ctx))
+	require.Equal(t, "Launch artwork", preservedMedia.AltText)
+	require.JSONEq(t, `{"tagged_users":"openpost"}`, preservedMedia.SettingsJSON)
+
 	var publicationCount int
 	require.NoError(t, db.QueryRowContext(ctx, "SELECT COUNT(*) FROM publications WHERE id = ?", publicationID).Scan(&publicationCount))
 	require.Equal(t, 1, publicationCount)

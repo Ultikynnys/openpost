@@ -1,7 +1,8 @@
 <script lang="ts">
-	import { onMount, tick, type Snippet } from 'svelte';
+	import { onDestroy, onMount, tick, type Snippet } from 'svelte';
 	import { MediaQuery, SvelteMap, SvelteSet } from 'svelte/reactivity';
 	import { client, type SocialAccount, type Workspace, getToken } from '$lib/api/client';
+	import type { components } from '$lib/api/types';
 	import { getApiBase } from '$lib/stores/instance.svelte';
 	import { getAuthenticatedMediaByID } from '$lib/media-url';
 	import { isSupportedMediaFile, uploadMediaFile } from '$lib/media-upload-client';
@@ -18,6 +19,7 @@
 	import * as Select from '$lib/components/ui/select';
 	import * as Tooltip from '$lib/components/ui/tooltip';
 	import ComposerAccountMenu from './composer-account-menu.svelte';
+	import DestinationSettingsDialog from './destination-settings-dialog.svelte';
 	import PlatformIcon from './platform-icon.svelte';
 	import { Badge } from '$lib/components/ui/badge';
 	import { getPlatformKey, getPlatformName } from '$lib/utils';
@@ -35,6 +37,7 @@
 	import TypeIcon from 'lucide-svelte/icons/type';
 	import MoreHorizontalIcon from 'lucide-svelte/icons/ellipsis';
 	import CalendarClockIcon from 'lucide-svelte/icons/calendar-clock';
+	import LinkIcon from 'lucide-svelte/icons/link';
 	import { ui } from '$lib/stores/ui.svelte';
 	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
 	import { ReorderableList } from 'svelte-reorderable-list';
@@ -58,7 +61,15 @@
 		workspaceScheduleFromISO,
 		workspaceScheduleToISO
 	} from './compose/schedule-timezone';
-	import { composerMode, isAccountCompatibleWithMode, type ComposerModeKey } from './compose/modes';
+	import {
+		buildFocusedPublicationPayload,
+		composerMode,
+		isAccountCompatibleWithMode,
+		type ComposerModeKey,
+		type FocusedMediaInput,
+		type FocusedPublicationPayload,
+		type ResolvedComposerTarget
+	} from './compose/modes';
 	import { soundPreferences } from '$lib/stores/sound-preferences.svelte';
 	import InlineNotice from './inline-notice.svelte';
 	import DestructiveConfirmDialog from './destructive-confirm-dialog.svelte';
@@ -69,6 +80,7 @@
 	// --------------------------------------------------------------------------
 	interface InitialPost {
 		id: string;
+		publication_id?: string;
 		workspace_id: string;
 		content: string;
 		thread_draft?: string | null;
@@ -78,6 +90,12 @@
 		media: Array<{ media_id: string; mime_type?: string; alt_text?: string }>;
 		destinations: Array<{ social_account_id: string; platform: string }>;
 	}
+
+	type Publication = components['schemas']['PublicationResponse'];
+	type SettingDefinition = components['schemas']['SettingDefinition'];
+	type ResolvedAccountCapability = components['schemas']['ResolvedAccountCapability'];
+	type DestinationOption = components['schemas']['DestinationOption'];
+	type ValidationIssue = components['schemas']['ValidationIssue'];
 
 	type PersistedVariant = {
 		social_account_id: string;
@@ -115,6 +133,7 @@
 	let posts = $state<PostItem[]>([makeEmptyPost()]);
 	let activePostIndex = $state(0);
 	let draftId = $state<string | null>(null);
+	let publicationId = $state('');
 	let lastInitializedPostId = $state<string | null>(null);
 	let isSaving = $state(false);
 	let isSubmitting = $state(false);
@@ -122,6 +141,8 @@
 	let showDeleteConfirm = $state(false);
 	let error = $state('');
 	let success = $state('');
+	let linkUrl = $state('');
+	let showLinkInput = $state(false);
 
 	let workspaces = $state<Workspace[]>([]);
 	let selectedWorkspaceId = $state<string>('');
@@ -163,6 +184,21 @@
 	let mediaMimeTypes = $state<Map<string, string>>(new Map());
 	let mediaSizes = $state<Map<string, number>>(new Map());
 	let editingAltMediaId = $state<string | null>(null);
+	let settingsByAccount = $state<Record<string, Record<string, unknown>>>({});
+	let segmentSettingsByPost = $state<Record<string, Record<string, Record<string, unknown>>>>({});
+	let mediaSettingsByAccount = $state<Record<string, Record<string, Record<string, unknown>>>>({});
+	let resolvedCapabilities = $state<Record<string, ResolvedAccountCapability>>({});
+	let capabilityResolveLoading = $state(false);
+	let capabilityResolveError = $state('');
+	let validationIssues = $state<ValidationIssue[]>([]);
+	let settingsDialogOpen = $state(false);
+	let settingsAccountId = $state('');
+	let destinationOptionsByAccount = $state<Record<string, Record<string, DestinationOption[]>>>({});
+	let destinationOptionsErrors = $state<Record<string, string>>({});
+	let destinationOptionsLoadingAccountId = $state('');
+	let capabilityResolveTimer: ReturnType<typeof setTimeout> | null = null;
+	let destinationOptionsRequestSequence = 0;
+	let capabilityResolveRequestSequence = 0;
 
 	let autoSaveTimer: ReturnType<typeof setTimeout> | null = null;
 	let lastSavedSnapshot = $state('');
@@ -218,16 +254,59 @@
 	const legacyMode = $derived<ComposerModeKey>(isThread ? 'thread' : 'post');
 	const legacyModeMeta = $derived(composerMode(legacyMode));
 	const compatibleAccounts = $derived(
-		accounts.filter((account) => isAccountCompatibleWithMode(legacyMode, account))
+		accounts.filter(
+			(account) =>
+				isAccountCompatibleWithMode(legacyMode, account) &&
+				resolvedCapabilities[account.id]?.compatible !== false
+		)
 	);
 	const autoSavesDraft = $derived(!isEditMode || initialPost?.status === 'draft');
 	const selectedAccounts = $derived(accounts.filter((a) => selectedAccountIds.includes(a.id)));
-	const syncedLinkedInThreadAccounts = $derived.by(() => {
-		if (!isThread) return [];
-		return selectedAccounts.filter(
-			(account) => getPlatformKey(account.platform) === 'linkedin' && !variants.has(account.id)
-		);
-	});
+	const settingsAccount = $derived(
+		accounts.find((account) => account.id === settingsAccountId) ?? null
+	);
+	const settingsDialogFields = $derived(settingsAccount ? visibleSettings(settingsAccount) : []);
+	const settingsDialogValues = $derived(
+		settingsAccount ? dialogSettingsForAccount(settingsAccount) : {}
+	);
+	const settingsDialogMedia = $derived(mediaForSettingsDialog());
+	const settingsDialogMediaValues = $derived(
+		settingsAccount ? mediaSettingsForDialog(settingsAccount) : {}
+	);
+	const settingsAccountIds = $derived(
+		selectedAccounts
+			.filter((account) => visibleSettings(account).length > 0)
+			.map((account) => account.id)
+	);
+	const accountSummaries = $derived(
+		Object.fromEntries(
+			accounts.map((account) => [
+				account.id,
+				resolvedCapabilities[account.id]?.label ?? getPlatformName(account.platform)
+			])
+		)
+	);
+	const warningAccountIds = $derived(
+		Object.values(resolvedCapabilities)
+			.filter((capability) => !capability.compatible || (capability.issues ?? []).length > 0)
+			.map((capability) => capability.account_id)
+	);
+	const capabilityInputSnapshot = $derived(
+		JSON.stringify({
+			workspace: selectedWorkspaceId,
+			accounts: selectedAccountIds,
+			mode: legacyMode,
+			linkUrl,
+			posts: posts.map((post) => ({
+				key: post.key,
+				content: post.content,
+				mediaIds: post.mediaIds
+			})),
+			settingsByAccount,
+			segmentSettingsByPost,
+			mediaSettingsByAccount
+		})
+	);
 	const mediaCapabilityWarnings = $derived.by(() => {
 		const warnings: string[] = [];
 		const sourcePosts = isThread ? posts : activePost ? [activePost] : [];
@@ -492,11 +571,502 @@
 			draft: getDraftSnapshot(posts),
 			selectedAccounts: selectedAccountsSnapshot,
 			variants: variantEntries,
+			linkUrl,
+			settingsByAccount,
+			segmentSettingsByPost,
+			mediaSettingsByAccount,
 			scheduledDate: selectedDate?.toString() ?? null,
 			selectedTime,
 			randomDelayOverride,
 			selectedWorkspaceId
 		});
+	}
+
+	function segmentID(publicationID: string, index: number): string {
+		return `legacy-segment:${publicationID}:${index}`;
+	}
+
+	function settingsForAccount(account: SocialAccount): Record<string, unknown> {
+		return normalizeSettings(account, settingsByAccount[account.id] ?? {}, 'destination');
+	}
+
+	function segmentSettingsForAccount(account: SocialAccount): Record<string, unknown> {
+		const post = activePost;
+		if (!post) return {};
+		return normalizeSettings(
+			account,
+			segmentSettingsByPost[post.key]?.[account.id] ?? {},
+			'segment'
+		);
+	}
+
+	function normalizeSettings(
+		account: SocialAccount,
+		current: Record<string, unknown>,
+		scope: 'destination' | 'segment'
+	): Record<string, unknown> {
+		const next = { ...current };
+		for (const field of visibleSettings(account)) {
+			if (field.scope !== scope || next[field.key] !== undefined) continue;
+			if (field.default !== undefined) next[field.key] = field.default;
+			else if (field.type === 'boolean') next[field.key] = false;
+			else next[field.key] = '';
+		}
+		return next;
+	}
+
+	function dialogSettingsForAccount(account: SocialAccount): Record<string, unknown> {
+		return {
+			...settingsForAccount(account),
+			...segmentSettingsForAccount(account)
+		};
+	}
+
+	function visibleSettings(account: SocialAccount): SettingDefinition[] {
+		return (resolvedCapabilities[account.id]?.settings ?? []).filter((field) => {
+			if (
+				['url', 'link_url', 'link_title', 'link_description'].includes(field.key) &&
+				!linkUrl.trim() &&
+				!field.required
+			) {
+				return false;
+			}
+			return true;
+		});
+	}
+
+	function mediaForSettingsDialog(): Array<{ id: string; label: string; mimeType: string }> {
+		const mediaIDs = activePost ? getEditorMediaIdsForPost(activePost) : [];
+		return mediaIDs.map((id, index) => ({
+			id,
+			label: `${m.compose_uploaded_media()} ${index + 1}`,
+			mimeType: mediaMimeTypes.get(id) ?? 'application/octet-stream'
+		}));
+	}
+
+	function mediaSettingsForDialog(account: SocialAccount): Record<string, Record<string, unknown>> {
+		return Object.fromEntries(
+			settingsDialogMedia.map((item) => [
+				item.id,
+				{ ...(mediaSettingsByAccount[item.id]?.[account.id] ?? {}) }
+			])
+		);
+	}
+
+	function updateAccountSetting(account: SocialAccount, key: string, value: unknown) {
+		const definition = visibleSettings(account).find((field) => field.key === key);
+		if (definition?.scope === 'segment') {
+			const post = activePost;
+			if (!post) return;
+			segmentSettingsByPost = {
+				...segmentSettingsByPost,
+				[post.key]: {
+					...(segmentSettingsByPost[post.key] ?? {}),
+					[account.id]: {
+						...(segmentSettingsByPost[post.key]?.[account.id] ?? {}),
+						[key]: value
+					}
+				}
+			};
+		} else {
+			settingsByAccount = {
+				...settingsByAccount,
+				[account.id]: {
+					...settingsForAccount(account),
+					[key]: value
+				}
+			};
+		}
+		validationIssues = [];
+		scheduleAutoSave();
+		scheduleCapabilityResolve();
+	}
+
+	function updateMediaAccountSetting(
+		account: SocialAccount,
+		mediaID: string,
+		key: string,
+		value: unknown
+	) {
+		mediaSettingsByAccount = {
+			...mediaSettingsByAccount,
+			[mediaID]: {
+				...(mediaSettingsByAccount[mediaID] ?? {}),
+				[account.id]: {
+					...(mediaSettingsByAccount[mediaID]?.[account.id] ?? {}),
+					[key]: value
+				}
+			}
+		};
+		validationIssues = [];
+		scheduleAutoSave();
+		scheduleCapabilityResolve();
+	}
+
+	function configuredPollError(): string {
+		for (const post of posts) {
+			for (const account of selectedAccounts) {
+				const definition = visibleSettings(account).find(
+					(setting) => setting.key === 'poll_options' && setting.scope === 'segment'
+				);
+				if (!definition) continue;
+				const raw = segmentSettingsByPost[post.key]?.[account.id]?.poll_options;
+				if (typeof raw !== 'string' || raw === '') continue;
+				const options = raw.split('\n');
+				const minimum = Math.max(2, definition.constraints?.min_items ?? 2);
+				if (options.length < minimum) {
+					return m.compose_poll_minimum({ count: minimum });
+				}
+				const emptyIndex = options.findIndex((option) => option.trim() === '');
+				if (emptyIndex >= 0) {
+					return m.compose_poll_option_required({ number: emptyIndex + 1 });
+				}
+				const maximum = Math.max(minimum, definition.constraints?.max_items ?? 4);
+				if (options.length > maximum) {
+					return m.compose_poll_maximum({ count: maximum });
+				}
+			}
+		}
+		return '';
+	}
+
+	function focusedMedia(mediaIDs: string[]): FocusedMediaInput[] {
+		return mediaIDs.map((id) => ({
+			id,
+			mimeType: mediaMimeTypes.get(id) ?? 'application/octet-stream',
+			altText: mediaAltTexts.get(id),
+			settingsByAccount: Object.fromEntries(
+				selectedAccounts.map((account) => [
+					account.id,
+					{ ...(mediaSettingsByAccount[id]?.[account.id] ?? {}) }
+				])
+			)
+		}));
+	}
+
+	function publicationPayload(targetPublicationID: string): FocusedPublicationPayload {
+		const payload = buildFocusedPublicationPayload({
+			mode: legacyMode,
+			workspaceId: selectedWorkspaceId,
+			accounts: selectedAccounts.map((account) => ({
+				id: account.id,
+				platform: account.platform,
+				account_username: account.account_username
+			})),
+			fields: {
+				postText: posts[0]?.content ?? '',
+				linkUrl
+			},
+			media: focusedMedia(posts[0]?.mediaIds ?? []),
+			segments: posts.map((post, index) => ({
+				id: segmentID(targetPublicationID, index),
+				content: post.content,
+				url: index === 0 ? linkUrl : '',
+				media: focusedMedia(post.mediaIds),
+				settingsByAccount: segmentSettingsByPost[post.key] ?? {}
+			})),
+			scheduledAt: getScheduledAt(),
+			settingsByAccount: Object.fromEntries(
+				selectedAccounts.map((account) => [account.id, settingsForAccount(account)])
+			),
+			resolvedByAccount: Object.fromEntries(
+				Object.entries(resolvedCapabilities).map(([accountID, capability]) => [
+					accountID,
+					{
+						profile: capability.profile,
+						outputProfile: capability.output_profile,
+						revision: capability.capability_revision,
+						compatible: capability.compatible
+					} satisfies ResolvedComposerTarget
+				])
+			)
+		});
+
+		for (const rendition of payload.renditions) {
+			const source = variants.get(rendition.social_account_id);
+			if (!source) continue;
+			rendition.segments = rendition.segments.map((segment, index) => {
+				const post = posts[index];
+				if (!post) return segment;
+				const variant = source[post.key];
+				if (!variant) return segment;
+				const media = focusedMedia(variant.mediaIds).map((item) => {
+					const accountSettings = item.settingsByAccount?.[rendition.social_account_id] ?? {};
+					const altText =
+						typeof accountSettings.alt_text === 'string'
+							? accountSettings.alt_text.trim()
+							: item.altText;
+					const settings = { ...accountSettings };
+					delete settings.alt_text;
+					return {
+						media_id: item.id,
+						role: item.role || 'attachment',
+						...(altText ? { alt_text: altText } : {}),
+						...(Object.keys(settings).length > 0 ? { settings } : {})
+					};
+				});
+				return { ...segment, body: variant.content, media };
+			});
+			const first = rendition.segments[0];
+			if (first) {
+				rendition.body = first.body;
+				rendition.media = first.media.map(({ media_id, role }) => ({ media_id, role }));
+			}
+		}
+		return payload;
+	}
+
+	async function persistCanonicalPublication(
+		targetPublicationID: string,
+		scheduledAt: string | null = getScheduledAt() ?? null
+	) {
+		const payload = publicationPayload(targetPublicationID);
+		const { error: publicationError } = await client.PUT('/publications/{id}', {
+			params: { path: { id: targetPublicationID } },
+			body: {
+				title: payload.title,
+				intent: payload.intent,
+				content_profile: payload.content_profile,
+				source_text: payload.source_text,
+				source_url: payload.source_url ?? '',
+				...(scheduledAt ? { scheduled_at: scheduledAt } : { clear_schedule: true }),
+				metadata: payload.metadata,
+				segments: payload.segments
+			}
+		});
+		if (publicationError) {
+			throw new Error(publicationError.detail || m.compose_save_publication_failed());
+		}
+		const { error: renditionError } = await client.PUT('/publications/{id}/renditions', {
+			params: { path: { id: targetPublicationID } },
+			body: { renditions: payload.renditions }
+		});
+		if (renditionError) {
+			throw new Error(renditionError.detail || m.compose_save_outputs_failed());
+		}
+	}
+
+	async function loadCanonicalPublication(targetPublicationID: string) {
+		if (!targetPublicationID) return;
+		const { data, error: publicationError } = await client.GET('/publications/{id}', {
+			params: { path: { id: targetPublicationID } }
+		});
+		if (publicationError || !data) return;
+		hydrateCanonicalSettings(data);
+	}
+
+	function hydrateCanonicalSettings(publication: Publication) {
+		publicationId = publication.id;
+		linkUrl = publication.source_url ?? '';
+		showLinkInput = Boolean(linkUrl);
+		settingsByAccount = Object.fromEntries(
+			(publication.renditions ?? []).map((rendition) => [
+				rendition.social_account_id,
+				{ ...(rendition.settings ?? {}) }
+			])
+		);
+		const canonicalSegments = [...(publication.segments ?? [])].sort(
+			(left, right) => left.position - right.position
+		);
+		const nextSegmentSettings: Record<string, Record<string, Record<string, unknown>>> = {};
+		const nextMediaSettings: Record<string, Record<string, Record<string, unknown>>> = {};
+		for (const rendition of publication.renditions ?? []) {
+			const hydratedSegmentIDs = new SvelteSet<string>();
+			const renditionSegments = [...(rendition.segments ?? [])].sort(
+				(left, right) => left.position - right.position
+			);
+			for (const [index, segment] of renditionSegments.entries()) {
+				const canonicalIndex = canonicalSegments.findIndex(
+					(candidate) => candidate.id === segment.publication_segment_id
+				);
+				const post = posts[canonicalIndex >= 0 ? canonicalIndex : index];
+				if (!post) continue;
+				if (hydratedSegmentIDs.has(segment.publication_segment_id)) {
+					if (segment.body.trim()) {
+						nextSegmentSettings[post.key] = {
+							...(nextSegmentSettings[post.key] ?? {}),
+							[rendition.social_account_id]: {
+								...(nextSegmentSettings[post.key]?.[rendition.social_account_id] ?? {}),
+								first_comment: segment.body
+							}
+						};
+					}
+					continue;
+				}
+				hydratedSegmentIDs.add(segment.publication_segment_id);
+				nextSegmentSettings[post.key] = {
+					...(nextSegmentSettings[post.key] ?? {}),
+					[rendition.social_account_id]: { ...(segment.settings ?? {}) }
+				};
+				for (const media of segment.media ?? []) {
+					nextMediaSettings[media.id] = {
+						...(nextMediaSettings[media.id] ?? {}),
+						[rendition.social_account_id]: {
+							...(media.settings ?? {}),
+							...(media.alt_text ? { alt_text: media.alt_text } : {}),
+							...(media.thumbnail_timestamp_ms
+								? { thumbnail_timestamp_ms: media.thumbnail_timestamp_ms }
+								: {})
+						}
+					};
+				}
+			}
+		}
+		segmentSettingsByPost = nextSegmentSettings;
+		mediaSettingsByAccount = nextMediaSettings;
+	}
+
+	function scheduleCapabilityResolve() {
+		if (capabilityResolveTimer) clearTimeout(capabilityResolveTimer);
+		capabilityResolveTimer = setTimeout(() => {
+			capabilityResolveTimer = null;
+			void resolveCapabilities();
+		}, 300);
+	}
+
+	async function resolveCapabilities() {
+		if (!selectedWorkspaceId || selectedAccountIds.length === 0) {
+			resolvedCapabilities = {};
+			capabilityResolveError = '';
+			return;
+		}
+		const requestSequence = ++capabilityResolveRequestSequence;
+		capabilityResolveLoading = true;
+		capabilityResolveError = '';
+		const [, region = 'US'] = getLocaleTag().split('-');
+		try {
+			const { data, error: resolveError } = await client.POST('/capabilities/resolve', {
+				body: {
+					account_ids: selectedAccountIds,
+					intent: legacyMode,
+					source_url: linkUrl,
+					locale: getLocaleTag(),
+					region,
+					account_settings: Object.fromEntries(
+						selectedAccounts.map((account) => [account.id, settingsForAccount(account)])
+					),
+					segments: posts.map((post) => ({
+						id: post.key,
+						content: post.content,
+						url: post === posts[0] ? linkUrl : '',
+						media: post.mediaIds.map((mediaID) => ({ media_id: mediaID }))
+					}))
+				}
+			});
+			if (resolveError) {
+				throw new Error(resolveError.detail || m.compose_load_capabilities_failed());
+			}
+			if (requestSequence !== capabilityResolveRequestSequence) return;
+			resolvedCapabilities = Object.fromEntries(
+				(data?.accounts ?? []).map((capability) => [capability.account_id, capability])
+			);
+			for (const capability of data?.accounts ?? []) {
+				const dynamic = capability.dynamic_options ?? {};
+				if (Object.keys(dynamic).length === 0) continue;
+				destinationOptionsByAccount = {
+					...destinationOptionsByAccount,
+					[capability.account_id]: {
+						...(destinationOptionsByAccount[capability.account_id] ?? {}),
+						...Object.fromEntries(
+							Object.entries(dynamic).map(([source, options]) => [
+								source,
+								(options ?? []).map((option) => ({
+									value: option.value,
+									label: option.label
+								}))
+							])
+						)
+					}
+				};
+			}
+			validationIssues = (data?.accounts ?? []).flatMap((capability) => capability.issues ?? []);
+		} catch (resolveError) {
+			if (requestSequence !== capabilityResolveRequestSequence) return;
+			capabilityResolveError =
+				resolveError instanceof Error ? resolveError.message : m.compose_load_capabilities_failed();
+		} finally {
+			if (requestSequence === capabilityResolveRequestSequence) {
+				capabilityResolveLoading = false;
+			}
+		}
+	}
+
+	function openDestinationSettings(account: SocialAccount) {
+		settingsByAccount = {
+			...settingsByAccount,
+			[account.id]: settingsForAccount(account)
+		};
+		settingsAccountId = account.id;
+		settingsDialogOpen = true;
+		void loadDestinationOptions(account);
+	}
+
+	async function loadDestinationOptions(
+		account: SocialAccount,
+		force = false,
+		onlySource = '',
+		search = ''
+	) {
+		let sources = onlySource
+			? [onlySource]
+			: visibleSettings(account)
+					.map((setting) => setting.options_source)
+					.filter((source): source is string => Boolean(source));
+		if (!force && !search) {
+			sources = sources.filter(
+				(source) => destinationOptionsByAccount[account.id]?.[source] === undefined
+			);
+		}
+		if (sources.length === 0) return;
+		const requestSequence = ++destinationOptionsRequestSequence;
+		destinationOptionsLoadingAccountId = account.id;
+		destinationOptionsErrors = { ...destinationOptionsErrors, [account.id]: '' };
+		const [, region = 'US'] = getLocaleTag().split('-');
+		try {
+			const results = await Promise.all(
+				sources.map(async (source) => {
+					const { data, error: optionsError } = await client.GET(
+						'/accounts/{account_id}/publishing-options/{source}',
+						{
+							params: {
+								path: { account_id: account.id, source },
+								query: {
+									region,
+									locale: getLocaleTag(),
+									limit: 100,
+									search
+								}
+							}
+						}
+					);
+					if (optionsError) {
+						throw new Error(optionsError.detail || m.compose_load_provider_options_failed());
+					}
+					return [source, data?.options ?? []] as const;
+				})
+			);
+			if (requestSequence !== destinationOptionsRequestSequence) return;
+			destinationOptionsByAccount = {
+				...destinationOptionsByAccount,
+				[account.id]: {
+					...(destinationOptionsByAccount[account.id] ?? {}),
+					...Object.fromEntries(results)
+				}
+			};
+		} catch (optionsError) {
+			if (requestSequence !== destinationOptionsRequestSequence) return;
+			destinationOptionsErrors = {
+				...destinationOptionsErrors,
+				[account.id]:
+					optionsError instanceof Error
+						? optionsError.message
+						: m.compose_load_provider_options_failed()
+			};
+		} finally {
+			if (requestSequence === destinationOptionsRequestSequence) {
+				destinationOptionsLoadingAccountId = '';
+			}
+		}
 	}
 
 	function getVariantPost(accountId: string, postKey: string): VariantPost | null {
@@ -638,6 +1208,7 @@
 		clearAutoSaveTimer();
 		if (!post) {
 			draftId = null;
+			publicationId = '';
 			lastInitializedPostId = null;
 			posts = [makeEmptyPost()];
 			activePostIndex = 0;
@@ -648,6 +1219,13 @@
 			mediaAltTexts = new Map();
 			mediaMimeTypes = new Map();
 			mediaSizes = new Map();
+			linkUrl = '';
+			showLinkInput = false;
+			settingsByAccount = {};
+			segmentSettingsByPost = {};
+			mediaSettingsByAccount = {};
+			resolvedCapabilities = {};
+			validationIssues = [];
 			selectedDate = undefined;
 			selectedTime = null;
 			randomDelayOverride = 'default';
@@ -655,12 +1233,14 @@
 				selectedWorkspaceId = workspaceCtx.currentWorkspace?.id ?? workspaces[0].id;
 				await ensureComposerWorkspace(selectedWorkspaceId);
 				await loadAccounts(selectedWorkspaceId);
+				await resolveCapabilities();
 			}
 			return;
 		}
 
 		await ensureComposerWorkspace(post.workspace_id);
 		draftId = post.id;
+		publicationId = post.publication_id ?? '';
 		lastInitializedPostId = post.id;
 		selectedWorkspaceId = post.workspace_id;
 		selectedAccountIds = post.destinations?.map((d) => d.social_account_id) ?? [];
@@ -731,6 +1311,10 @@
 		if (!source) {
 			await loadVariants(post.id);
 		}
+		if (publicationId) {
+			await loadCanonicalPublication(publicationId);
+		}
+		await resolveCapabilities();
 		lastSavedSnapshot = getSaveSnapshot();
 	}
 
@@ -761,6 +1345,11 @@
 	onMount(() => {
 		showSampleCampaignEntry = localStorage.getItem(SAMPLE_CAMPAIGN_DISMISSED_KEY) !== 'true';
 		void initializeComposer();
+	});
+
+	onDestroy(() => {
+		clearAutoSaveTimer();
+		if (capabilityResolveTimer) clearTimeout(capabilityResolveTimer);
 	});
 
 	function dismissSampleCampaignEntry() {
@@ -821,6 +1410,13 @@
 			posts = [{ ...makeEmptyPost(), content: text }];
 			activePostIndex = 0;
 			ui.clearPrompt();
+		}
+	});
+
+	$effect(() => {
+		void capabilityInputSnapshot;
+		if (!loadingWorkspaces && !loadingAccounts) {
+			scheduleCapabilityResolve();
 		}
 	});
 
@@ -972,6 +1568,7 @@
 		nextSlotRequestSequence += 1;
 		suggestingSlot = false;
 		draftId = null;
+		publicationId = '';
 		lastSavedSnapshot = '';
 		isSaving = false;
 		showDeleteConfirm = false;
@@ -985,6 +1582,17 @@
 		mediaAltTexts = new Map();
 		mediaMimeTypes = new Map();
 		mediaSizes = new Map();
+		linkUrl = '';
+		showLinkInput = false;
+		settingsByAccount = {};
+		segmentSettingsByPost = {};
+		mediaSettingsByAccount = {};
+		resolvedCapabilities = {};
+		validationIssues = [];
+		settingsDialogOpen = false;
+		settingsAccountId = '';
+		destinationOptionsByAccount = {};
+		destinationOptionsErrors = {};
 		selectedWorkspaceId = value;
 		accounts = [];
 		selectedAccountIds = [];
@@ -1012,16 +1620,19 @@
 			selectedAccountIds = [...selectedAccountIds, id];
 		}
 		scheduleAutoSave();
+		scheduleCapabilityResolve();
 	}
 
 	function selectAllAccounts() {
 		selectedAccountIds = compatibleAccounts.map((account) => account.id);
 		scheduleAutoSave();
+		scheduleCapabilityResolve();
 	}
 
 	function clearAllAccounts() {
 		selectedAccountIds = [];
 		scheduleAutoSave();
+		scheduleCapabilityResolve();
 	}
 
 	// --------------------------------------------------------------------------
@@ -1039,11 +1650,12 @@
 		}, 2000);
 	}
 
-	async function saveDraft() {
-		if (!selectedWorkspaceId || !hasContent) return;
+	async function saveDraft(): Promise<string | null> {
+		if (!selectedWorkspaceId || !hasContent) return null;
 		const generation = saveGeneration;
 		const workspaceId = selectedWorkspaceId;
 		const startingDraftId = draftId;
+		const startingPublicationId = publicationId;
 		const snapshot = getSaveSnapshot();
 		isSaving = true;
 		error = '';
@@ -1077,6 +1689,7 @@
 				...(threadDraft ? { thread_draft: threadDraft } : {})
 			};
 			let savedDraftId = startingDraftId;
+			let savedPublicationId = startingPublicationId;
 			if (startingDraftId) {
 				const { error: patchErr } = await client.PATCH('/posts/{id}', {
 					params: { path: { id: startingDraftId } },
@@ -1094,10 +1707,23 @@
 				const { data, error: postErr } = await client.POST('/posts', { body });
 				if (postErr) throw new Error((postErr as any).detail || m.compose_save_draft_failed());
 				savedDraftId = data?.id ?? null;
+				savedPublicationId = data?.publication_id ?? '';
 			}
 
 			if (savedDraftId && !isThreadDraft_) {
 				await persistVariants(savedDraftId, variantPayload);
+			}
+			if (savedDraftId && !savedPublicationId) {
+				const { data, error: postError } = await client.GET('/posts/{id}', {
+					params: { path: { id: savedDraftId } }
+				});
+				if (postError) {
+					throw new Error(postError.detail || m.compose_save_publication_failed());
+				}
+				savedPublicationId = data?.publication_id ?? '';
+			}
+			if (savedPublicationId) {
+				await persistCanonicalPublication(savedPublicationId, null);
 			}
 
 			if (
@@ -1105,18 +1731,21 @@
 				selectedWorkspaceId !== workspaceId ||
 				draftId !== startingDraftId
 			) {
-				return;
+				return null;
 			}
 			const createdDraftId = startingDraftId ? null : savedDraftId;
 			if (createdDraftId) draftId = createdDraftId;
+			publicationId = savedPublicationId;
 			lastSavedSnapshot = snapshot;
 			ui.triggerRefresh();
 			if (createdDraftId) onDraftCreated?.(createdDraftId);
+			return savedPublicationId || null;
 		} catch (e) {
 			console.error('Failed to auto-save draft:', e);
 			if (generation === saveGeneration && selectedWorkspaceId === workspaceId) {
 				error = (e as Error).message || m.compose_save_draft_failed();
 			}
+			return null;
 		} finally {
 			if (generation === saveGeneration && selectedWorkspaceId === workspaceId) {
 				isSaving = false;
@@ -1176,6 +1805,11 @@
 			error = m.compose_select_date_time();
 			return;
 		}
+		const pollError = configuredPollError();
+		if (pollError) {
+			error = pollError;
+			return;
+		}
 		if (selectedDate && selectedTime && !selectedWorkspaceSettingsReady) {
 			error = m.compose_load_workspace_settings_failed();
 			workspaceSettingsError = error;
@@ -1196,18 +1830,6 @@
 
 		isSaving = true;
 		try {
-			if (isThreadDraft_ && scheduledAt) {
-				await scheduleEditedThread(scheduledAt, randomDelay);
-				lastSavedSnapshot = getSaveSnapshot();
-				success = m.compose_changes_saved();
-				soundPreferences.play('success');
-				ui.triggerRefresh();
-				if (onSuccess) {
-					setTimeout(() => onSuccess(), 500);
-				}
-				return;
-			}
-
 			const { error: patchErr } = await client.PATCH('/posts/{id}', {
 				params: { path: { id: draftId } },
 				body: {
@@ -1224,6 +1846,19 @@
 			if (!isThreadDraft_) {
 				await persistVariants(draftId);
 			}
+			const targetPublicationID = publicationId || initialPost.publication_id || '';
+			if (!targetPublicationID) {
+				throw new Error(m.compose_save_publication_failed());
+			}
+			await persistCanonicalPublication(targetPublicationID, scheduledAt ?? null);
+			if (scheduledAt) {
+				const { error: scheduleError } = await client.POST('/publications/{id}/schedule', {
+					params: { path: { id: targetPublicationID } }
+				});
+				if (scheduleError) {
+					throw new Error(scheduleError.detail || m.compose_schedule_failed());
+				}
+			}
 
 			lastSavedSnapshot = getSaveSnapshot();
 			success = m.compose_changes_saved();
@@ -1238,44 +1873,6 @@
 			soundPreferences.play('error');
 		} finally {
 			isSaving = false;
-		}
-	}
-
-	async function scheduleEditedThread(scheduledAt: string, randomDelay: number) {
-		if (!draftId) return;
-		const validPosts = posts.filter(
-			(post) => post.content.trim().length > 0 || post.mediaIds.length > 0
-		);
-		if (validPosts.length < 2) {
-			throw new Error(m.compose_thread_minimum());
-		}
-		if (syncedLinkedInThreadAccounts.length > 0) {
-			activeVariantAccountId = syncedLinkedInThreadAccounts[0].id;
-			throw new Error(m.compose_linkedin_thread_replies_unsupported());
-		}
-
-		const { data, error: createErr } = await client.POST('/posts/thread' as any, {
-			body: {
-				workspace_id: selectedWorkspaceId,
-				social_account_ids: selectedAccountIds,
-				scheduled_at: scheduledAt,
-				random_delay_minutes: randomDelay,
-				posts: validPosts.map((post) => ({
-					content: post.content,
-					media_ids: post.mediaIds
-				}))
-			}
-		});
-		if (createErr) throw new Error((createErr as any).detail || m.compose_schedule_thread_failed());
-		if (data?.post_ids && variants.size > 0) {
-			await persistThreadVariants(data.post_ids, validPosts);
-		}
-
-		const { error: deleteErr } = await client.DELETE('/posts/{id}', {
-			params: { path: { id: draftId } }
-		});
-		if (deleteErr) {
-			console.error('Scheduled thread but failed to delete original draft:', deleteErr);
 		}
 	}
 
@@ -1297,6 +1894,11 @@
 		}
 		if (selectedAccountIds.length === 0) {
 			error = m.compose_select_account();
+			return;
+		}
+		const pollError = configuredPollError();
+		if (pollError) {
+			error = pollError;
 			return;
 		}
 
@@ -1323,81 +1925,50 @@
 			}
 		}
 
-		const randomDelay = publishNow ? 0 : effectiveRandomDelayMinutes;
 		isSubmitting = true;
 
 		try {
 			if (isThread) {
 				const validPosts = posts.filter(
-					(p) => p.content.trim().length > 0 || p.mediaIds.length > 0
+					(post) => post.content.trim().length > 0 || post.mediaIds.length > 0
 				);
 				if (validPosts.length < 2) {
-					error = m.compose_thread_minimum();
-					isSubmitting = false;
-					return;
+					throw new Error(m.compose_thread_minimum());
 				}
-				if (syncedLinkedInThreadAccounts.length > 0) {
-					error = m.compose_linkedin_thread_replies_unsupported();
-					activeVariantAccountId = syncedLinkedInThreadAccounts[0].id;
-					isSubmitting = false;
-					return;
-				}
+			}
+			await resolveCapabilities();
+			if (capabilityResolveError) throw new Error(capabilityResolveError);
+			const targetPublicationID = await saveDraft();
+			if (!targetPublicationID) {
+				throw new Error(error || m.compose_save_publication_failed());
+			}
+			await persistCanonicalPublication(
+				targetPublicationID,
+				publishNow ? null : (scheduledAt ?? null)
+			);
+			const { data: validation, error: validationError } = await client.POST(
+				'/publications/{id}/validate',
+				{ params: { path: { id: targetPublicationID } } }
+			);
+			if (validationError) {
+				throw new Error(validationError.detail || m.compose_validation_failed());
+			}
+			validationIssues = validation?.issues ?? [];
+			const blocker = validationIssues.find((issue) => issue.severity === 'error');
+			if (blocker) throw new Error(blocker.message);
 
-				const { data, error: err } = await client.POST('/posts/thread' as any, {
-					body: {
-						workspace_id: selectedWorkspaceId,
-						social_account_ids: selectedAccountIds,
-						scheduled_at: scheduledAt,
-						random_delay_minutes: randomDelay,
-						posts: validPosts.map((p) => ({
-							content: p.content,
-							media_ids: p.mediaIds
-						}))
-					}
-				});
-				if (err) throw new Error((err as any).detail || m.compose_create_thread_failed());
-				if (data?.post_ids && variants.size > 0) {
-					await persistThreadVariants(data.post_ids, validPosts);
-				}
-			} else {
-				const postId = draftId;
-				// Always explicitly clear any leftover thread_draft on the
-				// server side. We send an empty string so the backend
-				// upsert removes the row. This covers the case where a
-				// user had a multi-post thread draft, removed posts until
-				// only one was left, and is now publishing a single post.
-				const clearThreadDraft = isThread ? undefined : '';
-				if (postId) {
-					const { error: patchErr } = await client.PATCH('/posts/{id}', {
-						params: { path: { id: postId } },
-						body: {
-							content: posts[0].content,
-							scheduled_at: scheduledAt,
-							social_account_ids: selectedAccountIds,
-							media_ids: posts[0].mediaIds,
-							random_delay_minutes: randomDelay,
-							...(clearThreadDraft !== undefined ? { thread_draft: clearThreadDraft } : {})
-						}
+			const { error: actionError } = publishNow
+				? await client.POST('/publications/{id}/publish-now', {
+						params: { path: { id: targetPublicationID } }
+					})
+				: await client.POST('/publications/{id}/schedule', {
+						params: { path: { id: targetPublicationID } }
 					});
-					if (patchErr) throw new Error((patchErr as any).detail || m.compose_update_post_failed());
-				} else {
-					const { data, error: postErr } = await client.POST('/posts', {
-						body: {
-							workspace_id: selectedWorkspaceId,
-							content: posts[0].content,
-							social_account_ids: selectedAccountIds,
-							scheduled_at: scheduledAt,
-							media_ids: posts[0].mediaIds,
-							random_delay_minutes: randomDelay
-						}
-					});
-					if (postErr) throw new Error((postErr as any).detail || m.compose_create_post_failed());
-					if (data?.id) draftId = data.id;
-				}
-
-				if (draftId) {
-					await persistVariants(draftId);
-				}
+			if (actionError) {
+				throw new Error(
+					actionError.detail ||
+						(publishNow ? m.compose_publish_failed() : m.compose_schedule_failed())
+				);
 			}
 
 			success = publishNow ? m.compose_publishing_now() : m.compose_scheduled_success();
@@ -1410,9 +1981,17 @@
 				posts = [makeEmptyPost()];
 				activePostIndex = 0;
 				draftId = null;
+				publicationId = '';
 				lastSavedSnapshot = '';
 				variants = new Map();
 				activeVariantAccountId = null;
+				linkUrl = '';
+				showLinkInput = false;
+				settingsByAccount = {};
+				segmentSettingsByPost = {};
+				mediaSettingsByAccount = {};
+				resolvedCapabilities = {};
+				validationIssues = [];
 				selectedDate = undefined;
 				selectedTime = null;
 				randomDelayOverride = 'default';
@@ -1767,27 +2346,6 @@
 		scheduleAutoSave();
 	}
 
-	async function persistThreadVariants(postIds: string[], sourcePosts: PostItem[]) {
-		for (let index = 0; index < postIds.length; index++) {
-			const postKey = sourcePosts[index]?.key;
-			if (!postKey) continue;
-			const payload = Array.from(variants.entries()).map(([accountId, values]) => ({
-				social_account_id: accountId,
-				content: values[postKey]?.content ?? sourcePosts[index]?.content ?? '',
-				media_ids: JSON.stringify(values[postKey]?.mediaIds ?? sourcePosts[index]?.mediaIds ?? []),
-				is_unsynced: true
-			}));
-			if (payload.length === 0) continue;
-			const { error: upsertErr } = await client.PUT('/posts/{id}/variants', {
-				params: { path: { id: postIds[index] } },
-				body: { variants: payload }
-			});
-			if (upsertErr) {
-				throw new Error((upsertErr as any).detail || m.compose_save_thread_variants_failed());
-			}
-		}
-	}
-
 	// --------------------------------------------------------------------------
 	// Scheduling
 	// --------------------------------------------------------------------------
@@ -2018,6 +2576,9 @@
 						{selectedAccountIds}
 						compatibleAccountIds={compatibleAccounts.map((account) => account.id)}
 						customAccountIds={[...variants.keys()]}
+						{settingsAccountIds}
+						{accountSummaries}
+						{warningAccountIds}
 						activeAccountId={activeVariantAccountId}
 						triggerLabel={m.compose_publish_to()}
 						triggerVariant="outline"
@@ -2029,6 +2590,7 @@
 						onEditShared={() => activateVariantTab(null)}
 						onCustomize={(account) => editAccountVersion(account.id)}
 						onReset={(account) => resyncAccount(account.id)}
+						onSettings={openDestinationSettings}
 					/>
 				{/if}
 				<DropdownMenu.Root>
@@ -2142,6 +2704,9 @@
 						{selectedAccountIds}
 						compatibleAccountIds={compatibleAccounts.map((account) => account.id)}
 						customAccountIds={[...variants.keys()]}
+						{settingsAccountIds}
+						{accountSummaries}
+						{warningAccountIds}
 						activeAccountId={activeVariantAccountId}
 						triggerLabel={m.compose_publish_to()}
 						description={m.compose_accounts_compatible({ format: legacyModeMeta.label })}
@@ -2151,6 +2716,7 @@
 						onEditShared={() => activateVariantTab(null)}
 						onCustomize={(account) => editAccountVersion(account.id)}
 						onReset={(account) => resyncAccount(account.id)}
+						onSettings={openDestinationSettings}
 					/>
 				{/if}
 			</div>
@@ -2538,6 +3104,21 @@
 				{/snippet}
 			</InlineNotice>
 		</div>
+	{:else if capabilityResolveError}
+		<div class="contents" data-testid="composer-capabilities-load-error">
+			<InlineNotice tone="error" message={capabilityResolveError} class="mx-3 mt-2 md:mx-4 md:mt-3">
+				{#snippet actions()}
+					<Button
+						variant="outline"
+						size="sm"
+						onclick={resolveCapabilities}
+						disabled={capabilityResolveLoading}
+					>
+						{m.common_retry()}
+					</Button>
+				{/snippet}
+			</InlineNotice>
+		</div>
 	{/if}
 	{#if workspaceChangeNotice}
 		<InlineNotice
@@ -2742,6 +3323,40 @@
 											{/if}
 										</div>
 
+										{#if i === 0 && showLinkInput}
+											<div
+												class="mb-3 flex items-center gap-2 rounded-md border bg-muted/15 p-2"
+												data-testid="composer-link-field"
+											>
+												<LinkIcon class="ml-1 size-4 shrink-0 text-muted-foreground" />
+												<Input
+													type="url"
+													class="h-11 min-w-0 border-0 bg-transparent shadow-none focus-visible:ring-0 md:h-9"
+													value={linkUrl}
+													placeholder={m.compose_shared_link()}
+													aria-label={m.compose_link_url()}
+													oninput={(event) => {
+														linkUrl = event.currentTarget.value;
+														scheduleAutoSave();
+													}}
+												/>
+												<Button
+													type="button"
+													variant="ghost"
+													size="icon"
+													class="size-11 shrink-0 text-muted-foreground md:size-9"
+													aria-label={m.compose_remove_link()}
+													onclick={() => {
+														linkUrl = '';
+														showLinkInput = false;
+														scheduleAutoSave();
+													}}
+												>
+													<XIcon class="size-4" />
+												</Button>
+											</div>
+										{/if}
+
 										<!-- Media grid -->
 										{#if getEditorMediaIdsForPost(post).length > 0}
 											<div
@@ -2880,6 +3495,32 @@
 												</div>
 											</label>
 
+											{#if i === 0}
+												<Tooltip.Root>
+													<Tooltip.Trigger>
+														{#snippet child({ props })}
+															<button
+																{...props}
+																type="button"
+																class="flex size-11 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground md:size-7"
+																aria-label={m.compose_link_url()}
+																aria-pressed={showLinkInput}
+																onclick={() => {
+																	showLinkInput = !showLinkInput;
+																	if (!showLinkInput) linkUrl = '';
+																	scheduleAutoSave();
+																}}
+															>
+																<LinkIcon class="size-3.5" />
+															</button>
+														{/snippet}
+													</Tooltip.Trigger>
+													<Tooltip.Content
+														><p class="text-sm">{m.compose_link_url()}</p></Tooltip.Content
+													>
+												</Tooltip.Root>
+											{/if}
+
 											<Tooltip.Root>
 												<Tooltip.Trigger>
 													{#snippet child({ props })}
@@ -2981,6 +3622,33 @@
 		</div>
 	</div>
 </div>
+
+<DestinationSettingsDialog
+	bind:open={settingsDialogOpen}
+	account={settingsAccount}
+	settings={settingsDialogFields}
+	values={settingsDialogValues}
+	mediaItems={settingsDialogMedia}
+	mediaValues={settingsDialogMediaValues}
+	optionGroups={settingsAccount ? (destinationOptionsByAccount[settingsAccount.id] ?? {}) : {}}
+	optionsLoading={settingsAccount?.id === destinationOptionsLoadingAccountId}
+	optionsError={settingsAccount ? (destinationOptionsErrors[settingsAccount.id] ?? '') : ''}
+	scopeLabel={isThread ? m.compose_thread_post({ number: activePostIndex + 1 }) : ''}
+	onChange={(key, value) => {
+		if (settingsAccount) updateAccountSetting(settingsAccount, key, value);
+	}}
+	onMediaChange={(mediaID, key, value) => {
+		if (settingsAccount) updateMediaAccountSetting(settingsAccount, mediaID, key, value);
+	}}
+	onOptionSearch={(setting, search) => {
+		if (settingsAccount && setting.options_source) {
+			void loadDestinationOptions(settingsAccount, true, setting.options_source, search);
+		}
+	}}
+	onRetry={() => {
+		if (settingsAccount) void loadDestinationOptions(settingsAccount, true);
+	}}
+/>
 
 <DestructiveConfirmDialog
 	bind:open={showDeleteConfirm}

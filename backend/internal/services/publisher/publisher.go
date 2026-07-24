@@ -196,6 +196,22 @@ func (s *Service) HandlePublishPublicationJob(ctx context.Context, jobPayload st
 		Exec(ctx); err != nil {
 		log.Printf("[Publisher] Failed to mark publication %s as publishing: %v", publication.ID, err)
 	}
+	if _, err := s.db.NewUpdate().
+		Model((*models.Post)(nil)).
+		Set("status = ?", models.PostStatusPublishing).
+		Set("actual_run_at = ?", time.Now().UTC()).
+		Where("publication_id = ?", publication.ID).
+		Where("status NOT IN (?)", bun.List([]string{
+			models.PostStatusPublished,
+			models.PostStatusPublishing,
+		})).
+		Exec(ctx); err != nil {
+		log.Printf(
+			"[Publisher] Failed to mark compatibility posts for %s as publishing: %v",
+			publication.ID,
+			err,
+		)
+	}
 
 	var renditions []models.Rendition
 	query := s.db.NewSelect().Model(&renditions).
@@ -1436,6 +1452,27 @@ func (s *Service) finalizePublication(ctx context.Context, publication *models.P
 		Where("id = ?", publication.ID).
 		Exec(ctx); err != nil {
 		log.Printf("[Publisher] Failed to finalize publication %s: %v", publication.ID, err)
+	}
+	postStatus := models.PostStatusScheduled
+	switch status {
+	case models.PublicationStatusPublished:
+		postStatus = models.PostStatusPublished
+	case models.PublicationStatusFailed:
+		postStatus = models.PostStatusFailed
+	}
+	query := s.db.NewUpdate().
+		Model((*models.Post)(nil)).
+		Set("status = ?", postStatus).
+		Where("publication_id = ?", publication.ID)
+	if postStatus == models.PostStatusPublished {
+		query = query.Set("published_at = ?", time.Now().UTC())
+	}
+	if _, err := query.Exec(ctx); err != nil {
+		log.Printf(
+			"[Publisher] Failed to finalize compatibility posts for %s: %v",
+			publication.ID,
+			err,
+		)
 	}
 }
 

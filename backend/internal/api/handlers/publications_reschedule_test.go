@@ -1203,6 +1203,72 @@ func TestPrimaryPublicationQueueUsesPostgresRowLockOnly(t *testing.T) {
 	require.Contains(t, primaryPublicationQueueLockQuery(db, "publication-1").String(), "FOR UPDATE")
 }
 
+func TestScheduledPublicationKeepsCompatibilityPostAndRandomDelay(t *testing.T) {
+	db := createHandlerTestDB(t,
+		(*models.Publication)(nil),
+		(*models.Rendition)(nil),
+		(*models.Job)(nil),
+		(*models.Post)(nil),
+	)
+	ctx := context.Background()
+	now := time.Now().UTC().Truncate(time.Second)
+	scheduledAt := now.Add(2 * time.Hour)
+	publication := &models.Publication{
+		ID:              "publication-classic",
+		WorkspaceID:     "workspace-1",
+		CreatedByID:     "user-1",
+		Title:           "Classic post",
+		ContentProfile:  models.ContentProfileShortText,
+		SourceText:      "Keep the old scheduling behavior",
+		SourceContent:   "Keep the old scheduling behavior",
+		Status:          models.PublicationStatusDraft,
+		ScheduledAt:     scheduledAt,
+		MetadataJSON:    "{}",
+		ReleasePlanJSON: "{}",
+		CreatedAt:       now,
+		UpdatedAt:       now,
+	}
+	_, err := db.NewInsert().Model(publication).Exec(ctx)
+	require.NoError(t, err)
+	_, err = db.NewInsert().Model(&models.Rendition{
+		ID:            "rendition-classic",
+		PublicationID: publication.ID,
+		Platform:      "x",
+		Profile:       models.ContentProfileShortText,
+		Body:          publication.SourceText,
+		SettingsJSON:  "{}",
+		Status:        models.RenditionStatusDraft,
+		CreatedAt:     now,
+		UpdatedAt:     now,
+	}).Exec(ctx)
+	require.NoError(t, err)
+	_, err = db.NewInsert().Model(&models.Post{
+		ID:                 "post-classic",
+		WorkspaceID:        publication.WorkspaceID,
+		CreatedByID:        publication.CreatedByID,
+		PublicationID:      publication.ID,
+		Content:            publication.SourceText,
+		Status:             models.PostStatusDraft,
+		RandomDelayMinutes: 15,
+		CreatedAt:          now,
+	}).Exec(ctx)
+	require.NoError(t, err)
+
+	jobID, err := (&PublicationHandler{db: db}).queueScheduledPublication(ctx, publication.ID)
+	require.NoError(t, err)
+
+	var job models.Job
+	require.NoError(t, db.NewSelect().Model(&job).Where("id = ?", jobID).Scan(ctx))
+	require.False(t, job.RunAt.Before(scheduledAt.Add(-15*time.Minute)))
+	require.False(t, job.RunAt.After(scheduledAt.Add(15*time.Minute)))
+
+	var post models.Post
+	require.NoError(t, db.NewSelect().Model(&post).Where("id = ?", "post-classic").Scan(ctx))
+	require.Equal(t, models.PostStatusScheduled, post.Status)
+	require.True(t, post.ScheduledAt.Equal(scheduledAt))
+	require.True(t, post.ActualRunAt.Equal(job.RunAt))
+}
+
 func jobIDs(jobs []models.Job) []string {
 	ids := make([]string, 0, len(jobs))
 	for _, job := range jobs {

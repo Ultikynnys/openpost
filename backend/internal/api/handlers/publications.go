@@ -2301,11 +2301,33 @@ func (h *PublicationHandler) queuePublicationWithRunAt(
 		if err != nil {
 			return err
 		}
+		if !publication.ScheduledAt.IsZero() && runAt.Equal(publication.ScheduledAt) {
+			var linkedPost models.Post
+			err := tx.NewSelect().
+				Model(&linkedPost).
+				Where("publication_id = ?", publicationID).
+				Order("thread_sequence ASC", "created_at ASC").
+				Limit(1).
+				Scan(txCtx)
+			if err != nil && !errors.Is(err, sql.ErrNoRows) && !isMissingLegacyPostsTable(err) {
+				return err
+			}
+			if err == nil && linkedPost.RandomDelayMinutes > 0 {
+				runAt, err = resolveFuturePostRunAt(
+					publication.ScheduledAt,
+					linkedPost.RandomDelayMinutes,
+					now,
+				)
+				if err != nil {
+					return err
+				}
+			}
+		}
 		jobID, err = h.replacePublicationJobTx(txCtx, tx, publicationID, runAt)
 		if err != nil {
 			return err
 		}
-		return h.markPublicationQueuedTx(txCtx, tx, publicationID, now)
+		return h.markPublicationQueuedTx(txCtx, tx, publication, runAt, now)
 	})
 	if err != nil {
 		return "", err
@@ -2405,17 +2427,37 @@ func (h *PublicationHandler) clearPublicationScheduleTx(ctx context.Context, tx 
 	if err := h.deletePendingPrimaryPublicationJobsTx(ctx, tx, publicationID); err != nil {
 		return err
 	}
-	_, err := tx.NewUpdate().
+	if _, err := tx.NewUpdate().
 		Model((*models.Rendition)(nil)).
 		Set("status = ?", models.RenditionStatusDraft).
 		Set("updated_at = ?", updatedAt).
 		Where("publication_id = ?", publicationID).
 		Where("status = ?", models.RenditionStatusScheduled).
+		Exec(ctx); err != nil {
+		return err
+	}
+	_, err := tx.NewUpdate().
+		Model((*models.Post)(nil)).
+		Set("status = ?", models.PostStatusDraft).
+		Set("scheduled_at = ?", time.Time{}).
+		Set("actual_run_at = ?", time.Time{}).
+		Where("publication_id = ?", publicationID).
+		Where("status = ?", models.PostStatusScheduled).
 		Exec(ctx)
+	if isMissingLegacyPostsTable(err) {
+		return nil
+	}
 	return err
 }
 
-func (h *PublicationHandler) markPublicationQueuedTx(ctx context.Context, tx bun.Tx, publicationID string, updatedAt time.Time) error {
+func (h *PublicationHandler) markPublicationQueuedTx(
+	ctx context.Context,
+	tx bun.Tx,
+	publication *models.Publication,
+	runAt time.Time,
+	updatedAt time.Time,
+) error {
+	publicationID := publication.ID
 	if _, err := tx.NewUpdate().Model((*models.Publication)(nil)).
 		Set("status = ?", models.PublicationStatusScheduled).
 		Set("updated_at = ?", updatedAt).
@@ -2431,7 +2473,25 @@ func (h *PublicationHandler) markPublicationQueuedTx(ctx context.Context, tx bun
 		Exec(ctx); err != nil {
 		return err
 	}
-	return nil
+	scheduledAt := publication.ScheduledAt
+	if scheduledAt.IsZero() {
+		scheduledAt = runAt
+	}
+	_, err := tx.NewUpdate().
+		Model((*models.Post)(nil)).
+		Set("status = ?", models.PostStatusScheduled).
+		Set("scheduled_at = ?", scheduledAt).
+		Set("actual_run_at = ?", runAt).
+		Where("publication_id = ?", publicationID).
+		Where("status NOT IN (?)", bun.List([]string{
+			models.PostStatusPublished,
+			models.PostStatusPublishing,
+		})).
+		Exec(ctx)
+	if isMissingLegacyPostsTable(err) {
+		return nil
+	}
+	return err
 }
 
 func publicationResponse(publication *models.Publication, media []MediaSummary) PublicationResponse {
@@ -2639,6 +2699,15 @@ func isMissingPublicationSegmentTable(err error) bool {
 	message := strings.ToLower(err.Error())
 	return strings.Contains(message, "no such table") ||
 		(strings.Contains(message, "relation") && strings.Contains(message, "does not exist"))
+}
+
+func isMissingLegacyPostsTable(err error) bool {
+	if err == nil {
+		return false
+	}
+	message := strings.ToLower(err.Error())
+	return strings.Contains(message, "no such table: posts") ||
+		(strings.Contains(message, `relation "posts"`) && strings.Contains(message, "does not exist"))
 }
 
 func mustJSON(value interface{}) string {

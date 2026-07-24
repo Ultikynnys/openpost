@@ -116,13 +116,12 @@
 			]);
 			if (request !== draftsRequest) return;
 			const publications = publicationResult.error ? [] : (publicationResult.data ?? []);
-			const publicationIDs = new Set(publications.map((publication) => publication.id));
 			const legacyPosts = legacyResult.error ? [] : (legacyResult.data ?? []);
 			drafts = [
-				...publications.map(publicationDraft),
-				...legacyPosts
-					.filter((post) => !post.publication_id || !publicationIDs.has(post.publication_id))
-					.map(legacyDraft)
+				...publications
+					.filter((publication) => !publication.id.startsWith('legacy-publication:'))
+					.map(publicationDraft),
+				...legacyPosts.map(legacyDraft)
 			]
 				.sort((left, right) => right.createdAt.localeCompare(left.createdAt))
 				.slice(0, 8);

@@ -226,7 +226,7 @@
 					<label
 						class={cn(
 							'flex min-w-0 flex-1 cursor-pointer items-center gap-2.5 rounded-md px-2 py-1.5 text-sm focus-within:ring-2 focus-within:ring-ring',
-							!compatible && 'cursor-not-allowed opacity-45'
+							!compatible && !selected && 'cursor-not-allowed opacity-45'
 						)}
 						data-testid="composer-account-toggle"
 					>
@@ -234,7 +234,7 @@
 							type="checkbox"
 							class="sr-only"
 							checked={selected}
-							disabled={!compatible}
+							disabled={!compatible && !selected}
 							onclick={(event) => protectCustomDeselect(event, account)}
 							onchange={() => onToggle(account)}
 						/>
@@ -287,7 +287,7 @@
 						</span>
 					</label>
 
-					{#if compatible && selected && onSettings && settingsIds.has(account.id)}
+					{#if selected && onSettings && settingsIds.has(account.id)}
 						<Button
 							type="button"
 							variant="ghost"

@@ -2,6 +2,7 @@
 	import { page } from '$app/state';
 	import { goto, replaceState } from '$app/navigation';
 	import { resolve } from '$app/paths';
+	import ComposeSimple from './compose-simple.svelte';
 	import ComposeFocusedPublication from './compose-focused-publication.svelte';
 	import ComposeModeSelect from './compose-mode-select.svelte';
 	import SampleCampaign from './sample-campaign.svelte';
@@ -12,6 +13,7 @@
 	import { m } from '$lib/paraglide/messages';
 
 	let selectedMode = $state<ComposerModeKey>('post');
+	let lastComposerThreadState = false;
 	const initialScheduleDate = $derived(page.url.searchParams.get('date'));
 	const initialWorkspaceId = $derived(page.url.searchParams.get('workspace_id'));
 	const composerResetCounter = $derived(ui.composerResetCounter);
@@ -28,9 +30,23 @@
 		replaceState(resolve('/'), {});
 	}
 
-	function handleDraftCreated(id: string) {
+	function handlePublicationDraftCreated(id: string) {
 		ui.setActiveComposerDraft(id);
 		replaceState(`/publications/${encodeURIComponent(id)}`, {});
+	}
+
+	function handlePostDraftCreated(id: string) {
+		ui.setActiveComposerDraft(id);
+		replaceState(resolve(`/posts/${id}` as '/'), {});
+	}
+
+	function handleThreadStateChange(isThread: boolean) {
+		if (isThread) {
+			selectedMode = 'thread';
+		} else if (lastComposerThreadState && selectedMode === 'thread') {
+			selectedMode = 'post';
+		}
+		lastComposerThreadState = isThread;
 	}
 
 	function rememberSampleCampaignChoice() {
@@ -62,23 +78,44 @@
 		/>
 	{:else}
 		{#key composerResetCounter}
-			{#key selectedMode}
-				<ComposeFocusedPublication
-					mode={selectedMode}
-					{initialScheduleDate}
-					{initialWorkspaceId}
-					onSuccess={handleComposerReset}
-					onDraftCreated={handleDraftCreated}
-				>
-					{#snippet modeControl()}
-						<ComposeModeSelect
-							{selectedMode}
-							compactOnNarrow
-							onModeChange={(mode) => (selectedMode = mode)}
-						/>
-					{/snippet}
-				</ComposeFocusedPublication>
-			{/key}
+			{#if selectedMode === 'post' || selectedMode === 'thread'}
+				<div data-testid="classic-composer-shell" class="flex min-h-0 flex-1 flex-col">
+					<ComposeSimple
+						{initialScheduleDate}
+						{initialWorkspaceId}
+						onSuccess={handleComposerReset}
+						onDeleted={handleComposerReset}
+						onDraftCreated={handlePostDraftCreated}
+						onThreadStateChange={handleThreadStateChange}
+					>
+						{#snippet modeControl()}
+							<ComposeModeSelect
+								{selectedMode}
+								compactOnNarrow
+								onModeChange={(mode) => (selectedMode = mode)}
+							/>
+						{/snippet}
+					</ComposeSimple>
+				</div>
+			{:else}
+				{#key selectedMode}
+					<ComposeFocusedPublication
+						mode={selectedMode}
+						{initialScheduleDate}
+						{initialWorkspaceId}
+						onSuccess={handleComposerReset}
+						onDraftCreated={handlePublicationDraftCreated}
+					>
+						{#snippet modeControl()}
+							<ComposeModeSelect
+								{selectedMode}
+								compactOnNarrow
+								onModeChange={(mode) => (selectedMode = mode)}
+							/>
+						{/snippet}
+					</ComposeFocusedPublication>
+				{/key}
+			{/if}
 		{/key}
 	{/if}
 </div>

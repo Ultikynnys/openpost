@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -127,6 +128,10 @@ func RefreshLegacyPublicationAuthoring(ctx context.Context, db *bun.DB, postID s
 			return err
 		}
 
+		preservedSettings, err := loadLegacyAuthoringSettings(txCtx, tx, publication.ID)
+		if err != nil {
+			return err
+		}
 		var renditionIDs []string
 		if err := tx.NewSelect().
 			Model((*models.Rendition)(nil)).
@@ -162,11 +167,342 @@ func RefreshLegacyPublicationAuthoring(ctx context.Context, db *bun.DB, postID s
 		if err := insertLegacyRenditions(txCtx, tx, publication, root, segmentModels, segments, threadDraft); err != nil {
 			return err
 		}
+		if err := restoreLegacyAuthoringSettings(txCtx, tx, preservedSettings); err != nil {
+			return err
+		}
 		if err := rewriteLegacyPublicationJobs(txCtx, tx, root.ID, publication.ID); err != nil {
 			return err
 		}
 		return syncLegacyPublicationJobs(txCtx, tx, root, publication.ID)
 	})
+}
+
+type legacyRenditionSettings struct {
+	SettingsJSON  string
+	Profile       string
+	OutputProfile string
+}
+
+type legacyAuthoringSettings struct {
+	publicationID           string
+	publicationSegments     map[int]string
+	publicationSegmentMedia map[string]string
+	renditions              map[string]legacyRenditionSettings
+	renditionSegments       map[string]string
+	renditionSegmentMedia   map[string]models.RenditionSegmentMedia
+}
+
+func loadLegacyAuthoringSettings(
+	ctx context.Context,
+	db bun.IDB,
+	publicationID string,
+) (legacyAuthoringSettings, error) {
+	snapshot := legacyAuthoringSettings{
+		publicationID:           publicationID,
+		publicationSegments:     map[int]string{},
+		publicationSegmentMedia: map[string]string{},
+		renditions:              map[string]legacyRenditionSettings{},
+		renditionSegments:       map[string]string{},
+		renditionSegmentMedia:   map[string]models.RenditionSegmentMedia{},
+	}
+	var publicationSegments []models.PublicationSegment
+	if err := db.NewSelect().
+		Model(&publicationSegments).
+		Where("publication_id = ?", publicationID).
+		Scan(ctx); err != nil {
+		return snapshot, err
+	}
+	segmentIDs := make([]string, 0, len(publicationSegments))
+	segmentPositions := make(map[string]int, len(publicationSegments))
+	for _, segment := range publicationSegments {
+		segmentIDs = append(segmentIDs, segment.ID)
+		segmentPositions[segment.ID] = segment.Position
+		snapshot.publicationSegments[segment.Position] = segment.SettingsJSON
+	}
+	if len(segmentIDs) > 0 {
+		var media []models.PublicationSegmentMedia
+		if err := db.NewSelect().
+			Model(&media).
+			Where("segment_id IN (?)", bun.List(segmentIDs)).
+			Scan(ctx); err != nil {
+			return snapshot, err
+		}
+		for _, item := range media {
+			snapshot.publicationSegmentMedia[legacySettingsKey(
+				strconv.Itoa(segmentPositions[item.SegmentID]),
+				item.MediaID,
+			)] =
+				item.SettingsJSON
+		}
+	}
+
+	var renditions []models.Rendition
+	if err := db.NewSelect().
+		Model(&renditions).
+		Where("publication_id = ?", publicationID).
+		Scan(ctx); err != nil {
+		return snapshot, err
+	}
+	renditionIDs := make([]string, 0, len(renditions))
+	renditionAccounts := make(map[string]string, len(renditions))
+	for _, rendition := range renditions {
+		renditionIDs = append(renditionIDs, rendition.ID)
+		renditionAccounts[rendition.ID] = rendition.SocialAccountID
+		snapshot.renditions[rendition.SocialAccountID] = legacyRenditionSettings{
+			SettingsJSON:  rendition.SettingsJSON,
+			Profile:       rendition.Profile,
+			OutputProfile: rendition.OutputProfile,
+		}
+	}
+	if len(renditionIDs) == 0 {
+		return snapshot, nil
+	}
+	var renditionSegments []models.RenditionSegment
+	if err := db.NewSelect().
+		Model(&renditionSegments).
+		Where("rendition_id IN (?)", bun.List(renditionIDs)).
+		Scan(ctx); err != nil {
+		return snapshot, err
+	}
+	renditionSegmentIDs := make([]string, 0, len(renditionSegments))
+	renditionSegmentScopes := make(map[string]string, len(renditionSegments))
+	for _, segment := range renditionSegments {
+		renditionSegmentIDs = append(renditionSegmentIDs, segment.ID)
+		scope := legacySettingsKey(
+			renditionAccounts[segment.RenditionID],
+			strconv.Itoa(segment.Position),
+		)
+		renditionSegmentScopes[segment.ID] = scope
+		snapshot.renditionSegments[scope] = segment.SettingsJSON
+	}
+	if len(renditionSegmentIDs) > 0 {
+		var media []models.RenditionSegmentMedia
+		if err := db.NewSelect().
+			Model(&media).
+			Where("rendition_segment_id IN (?)", bun.List(renditionSegmentIDs)).
+			Scan(ctx); err != nil {
+			return snapshot, err
+		}
+		for _, item := range media {
+			scope := renditionSegmentScopes[item.RenditionSegmentID]
+			snapshot.renditionSegmentMedia[legacySettingsKey(scope, item.MediaID)] = item
+		}
+	}
+	return snapshot, nil
+}
+
+func restoreLegacyAuthoringSettings(
+	ctx context.Context,
+	db bun.IDB,
+	snapshot legacyAuthoringSettings,
+) error {
+	segmentIDsByPosition, err := restoreLegacyPublicationSegmentSettings(ctx, db, snapshot)
+	if err != nil {
+		return err
+	}
+	if err := restoreLegacyPublicationMediaSettings(ctx, db, snapshot, segmentIDsByPosition); err != nil {
+		return err
+	}
+	renditionIDsByAccount, renditionSegmentIDsByScope, err := loadRestoredLegacyRenditionScopes(
+		ctx,
+		db,
+		snapshot.publicationID,
+	)
+	if err != nil {
+		return err
+	}
+	if err := restoreLegacyRenditionSettings(ctx, db, snapshot, renditionIDsByAccount); err != nil {
+		return err
+	}
+	if err := restoreLegacyRenditionSegmentSettings(ctx, db, snapshot, renditionSegmentIDsByScope); err != nil {
+		return err
+	}
+	return restoreLegacyRenditionMediaSettings(ctx, db, snapshot, renditionSegmentIDsByScope)
+}
+
+func restoreLegacyPublicationSegmentSettings(
+	ctx context.Context,
+	db bun.IDB,
+	snapshot legacyAuthoringSettings,
+) (map[int]string, error) {
+	var publicationSegments []models.PublicationSegment
+	if err := db.NewSelect().
+		Model(&publicationSegments).
+		Where("publication_id = ?", snapshot.publicationID).
+		Scan(ctx); err != nil {
+		return nil, err
+	}
+	segmentIDsByPosition := make(map[int]string, len(publicationSegments))
+	for _, segment := range publicationSegments {
+		segmentIDsByPosition[segment.Position] = segment.ID
+	}
+	for position, settingsJSON := range snapshot.publicationSegments {
+		segmentID := segmentIDsByPosition[position]
+		if segmentID == "" {
+			continue
+		}
+		if _, err := db.NewUpdate().
+			Model((*models.PublicationSegment)(nil)).
+			Set("settings_json = ?", settingsJSON).
+			Where("id = ?", segmentID).
+			Exec(ctx); err != nil {
+			return nil, err
+		}
+	}
+	return segmentIDsByPosition, nil
+}
+
+func restoreLegacyPublicationMediaSettings(
+	ctx context.Context,
+	db bun.IDB,
+	snapshot legacyAuthoringSettings,
+	segmentIDsByPosition map[int]string,
+) error {
+	for key, settingsJSON := range snapshot.publicationSegmentMedia {
+		parts := strings.SplitN(key, "\x00", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		position, err := strconv.Atoi(parts[0])
+		if err != nil {
+			continue
+		}
+		segmentID := segmentIDsByPosition[position]
+		mediaID := parts[1]
+		if segmentID == "" {
+			continue
+		}
+		if _, err := db.NewUpdate().
+			Model((*models.PublicationSegmentMedia)(nil)).
+			Set("settings_json = ?", settingsJSON).
+			Where("segment_id = ? AND media_id = ?", segmentID, mediaID).
+			Exec(ctx); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func loadRestoredLegacyRenditionScopes(
+	ctx context.Context,
+	db bun.IDB,
+	publicationID string,
+) (map[string]string, map[string]string, error) {
+	var renditions []models.Rendition
+	if err := db.NewSelect().
+		Model(&renditions).
+		Where("publication_id = ?", publicationID).
+		Scan(ctx); err != nil {
+		return nil, nil, err
+	}
+	renditionIDsByAccount := make(map[string]string, len(renditions))
+	for _, rendition := range renditions {
+		renditionIDsByAccount[rendition.SocialAccountID] = rendition.ID
+	}
+	renditionIDs := make([]string, 0, len(renditions))
+	renditionAccounts := make(map[string]string, len(renditions))
+	for _, rendition := range renditions {
+		renditionIDs = append(renditionIDs, rendition.ID)
+		renditionAccounts[rendition.ID] = rendition.SocialAccountID
+	}
+	var renditionSegments []models.RenditionSegment
+	if len(renditionIDs) > 0 {
+		if err := db.NewSelect().
+			Model(&renditionSegments).
+			Where("rendition_id IN (?)", bun.List(renditionIDs)).
+			Scan(ctx); err != nil {
+			return nil, nil, err
+		}
+	}
+	renditionSegmentIDsByScope := make(map[string]string, len(renditionSegments))
+	for _, segment := range renditionSegments {
+		scope := legacySettingsKey(
+			renditionAccounts[segment.RenditionID],
+			strconv.Itoa(segment.Position),
+		)
+		renditionSegmentIDsByScope[scope] = segment.ID
+	}
+	return renditionIDsByAccount, renditionSegmentIDsByScope, nil
+}
+
+func restoreLegacyRenditionSettings(
+	ctx context.Context,
+	db bun.IDB,
+	snapshot legacyAuthoringSettings,
+	renditionIDsByAccount map[string]string,
+) error {
+	for accountID, settings := range snapshot.renditions {
+		renditionID := renditionIDsByAccount[accountID]
+		if renditionID == "" {
+			continue
+		}
+		if _, err := db.NewUpdate().
+			Model((*models.Rendition)(nil)).
+			Set("settings_json = ?", settings.SettingsJSON).
+			Set("profile = ?", settings.Profile).
+			Set("output_profile = ?", settings.OutputProfile).
+			Where("id = ?", renditionID).
+			Exec(ctx); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func restoreLegacyRenditionSegmentSettings(
+	ctx context.Context,
+	db bun.IDB,
+	snapshot legacyAuthoringSettings,
+	renditionSegmentIDsByScope map[string]string,
+) error {
+	for scope, settingsJSON := range snapshot.renditionSegments {
+		segmentID := renditionSegmentIDsByScope[scope]
+		if segmentID == "" {
+			continue
+		}
+		if _, err := db.NewUpdate().
+			Model((*models.RenditionSegment)(nil)).
+			Set("settings_json = ?", settingsJSON).
+			Where("id = ?", segmentID).
+			Exec(ctx); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func restoreLegacyRenditionMediaSettings(
+	ctx context.Context,
+	db bun.IDB,
+	snapshot legacyAuthoringSettings,
+	renditionSegmentIDsByScope map[string]string,
+) error {
+	for key, media := range snapshot.renditionSegmentMedia {
+		parts := strings.SplitN(key, "\x00", 3)
+		if len(parts) != 3 {
+			continue
+		}
+		scope := legacySettingsKey(parts[0], parts[1])
+		segmentID := renditionSegmentIDsByScope[scope]
+		mediaID := parts[2]
+		if segmentID == "" {
+			continue
+		}
+		if _, err := db.NewUpdate().
+			Model((*models.RenditionSegmentMedia)(nil)).
+			Set("alt_text = ?", media.AltText).
+			Set("thumbnail_timestamp_ms = ?", media.ThumbnailTimestampMS).
+			Set("settings_json = ?", media.SettingsJSON).
+			Where("rendition_segment_id = ? AND media_id = ?", segmentID, mediaID).
+			Exec(ctx); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func legacySettingsKey(parts ...string) string {
+	return strings.Join(parts, "\x00")
 }
 
 func legacyPostHasOwners(ctx context.Context, db bun.IDB, post models.Post) (bool, error) {

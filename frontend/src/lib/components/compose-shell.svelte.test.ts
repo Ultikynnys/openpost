@@ -13,13 +13,15 @@ vi.mock('$lib/api/client', () => ({
 }));
 
 describe('ComposeShell', () => {
-	it('uses the unified publication composer for the default post intent', async () => {
+	it('uses the classic composer for the default post intent', async () => {
 		const screen = await render(ComposeShell);
 		const modeSelect = screen.getByTestId('composer-mode-select');
 
 		await expect.element(modeSelect).toBeVisible();
-		await expect.element(screen.getByTestId('focused-composer')).toBeVisible();
+		await expect.element(screen.getByTestId('classic-composer-shell')).toBeVisible();
 		await expect.element(modeSelect).toHaveTextContent('Post');
+		await expect.element(screen.getByRole('button', { name: 'Add post' })).toBeVisible();
+		expect(screen.container.textContent).not.toContain('Save draft');
 		expect(screen.container.textContent).not.toContain('Format-first composer');
 		expect(screen.container.textContent).not.toContain('Renditions');
 		expect(screen.container.textContent).not.toContain('Source text');

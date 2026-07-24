@@ -22,7 +22,7 @@ All notable changes to this project are documented in this file.
 
 ### Changed
 
-- Replaced the split legacy and publication composers with one intent-based composer for posts, threads, stories, short videos, and videos, including semantic polls, remote choices, disclosures, follow-ups, and per-media accessibility controls.
+- Kept one intent and capability model across composer flows while restoring the classic Post and Thread authoring surface.
 - Moved destination-specific composer settings into account cog dialogs in the Publish to menu, with structured tag, category, and playlist controls for YouTube.
 - Rewrote the landing, pricing, security, open-source, changelog, platform, comparison, and tools pages around current product behavior, and refreshed the canonical composer, accounts, media, and settings screenshots.
 - Restored the OpenPost composer screenshot as the product-demo preview while keeping the recorded video behind the play action.
@@ -60,6 +60,7 @@ All notable changes to this project are documented in this file.
 
 ### Fixed
 
+- Restored the compact Post and Thread controls, drag-and-drop editing, automatic drafts, full schedule picker, and next-queue action; made polls optional and removable; added an optional link field; and preserved scoped destination settings through classic post saves.
 - Restored publication autosave, safe workspace switching, next-slot scheduling, legacy draft redirects, and canonical publication drafts in the planner after the composer update.
 - Preserved segment and destination state through legacy draft migration and retries, and aligned X, Meta, LinkedIn, Mastodon, Bluesky, YouTube, and TikTok request payloads with their declared setting contracts.
 - Sent the YouTube synthetic-media disclosure selected in composer settings with the video upload metadata.
