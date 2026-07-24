@@ -113,7 +113,11 @@ test("Threads destination options stay scoped and touch accessible on mobile", a
     request,
     `composer-options-${unique}@example.com`,
   );
-  await createWorkspace(request, auth.token, "Destination options E2E");
+  const workspace = (await createWorkspace(
+    request,
+    auth.token,
+    "Destination options E2E",
+  )) as { id: string };
   await authenticatePage(page, auth.token);
 
   let publicationPayload: Record<string, unknown> | undefined;
@@ -151,25 +155,26 @@ test("Threads destination options stay scoped and touch accessible on mobile", a
       json: { accounts: [threadsResolvedCapability()] },
     });
   });
-  await page.route("**/api/v1/publications", async (route) => {
+  await page.route("**/api/v1/posts", async (route) => {
     if (route.request().method() !== "POST") {
       await route.continue();
       return;
     }
-    publicationPayload = JSON.parse(route.request().postData() ?? "{}");
     await route.fulfill({
       contentType: "application/json",
       json: {
-        id: "publication-1",
-        workspace_id: publicationPayload?.workspace_id,
-        intent: "post",
-        content_profile: "short_text",
-        source_text: "A scoped Threads poll",
+        id: "post-1",
+        publication_id: "publication-1",
+        workspace_id: workspace.id,
+        content: "A scoped Threads poll",
         status: "draft",
-        segments: [],
-        renditions: [],
+        social_account_ids: [threadsAccount.id],
+        media_ids: [],
       },
     });
+  });
+  await page.route("**/api/v1/posts/*/variants", async (route) => {
+    await route.fulfill({ contentType: "application/json", json: {} });
   });
   await page.route("**/api/v1/publications/publication-1", async (route) => {
     if (route.request().method() === "PUT") {
@@ -214,15 +219,19 @@ test("Threads destination options stay scoped and touch accessible on mobile", a
   ).toBeVisible();
   const dialogBox = await dialog.boundingBox();
   expect(dialogBox?.height).toBeGreaterThanOrEqual(800);
+  await dialog.getByRole("button", { name: "Poll", exact: true }).click();
   await dialog.getByPlaceholder("Option 1").fill("Ship now");
   await dialog.getByPlaceholder("Option 2").fill("Review first");
   await dialog.getByLabel("Who can reply").selectOption("followers_only");
   await dialog.getByLabel("Text attachment").fill("Long-form context");
   await dialog.getByRole("button", { name: "Done" }).click();
 
-  await page.getByRole("button", { name: "Save draft" }).click();
-  await expect(page.getByText("Draft saved")).toBeVisible();
-  await expect.poll(() => publicationPayload).toBeTruthy();
+  await expect(page.getByRole("button", { name: "Save draft" })).toHaveCount(0);
+  await expect
+    .poll(() => JSON.stringify(publicationPayload ?? {}), {
+      timeout: 10_000,
+    })
+    .toContain("followers_only");
   const renditions = publicationPayload?.renditions as Array<{
     social_account_id: string;
     settings: Record<string, unknown>;

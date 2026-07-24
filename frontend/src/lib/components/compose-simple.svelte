@@ -3398,7 +3398,7 @@
 															<button
 																type="button"
 																class={[
-																	'flex size-10 items-center justify-center rounded-md bg-black/75 text-white shadow-sm backdrop-blur-sm transition-colors hover:bg-black/90 md:size-7',
+																	'flex size-11 items-center justify-center rounded-md bg-black/75 text-white shadow-sm backdrop-blur-sm transition-colors hover:bg-black/90 md:size-7',
 																	mediaAltTexts.get(mediaId)
 																		? 'ring-2 ring-primary/80 ring-offset-1 ring-offset-transparent'
 																		: ''
@@ -3419,7 +3419,7 @@
 															</button>
 															<button
 																type="button"
-																class="flex size-10 items-center justify-center rounded-md bg-black/75 text-white shadow-sm backdrop-blur-sm transition-colors hover:bg-red-600 md:size-7"
+																class="flex size-11 items-center justify-center rounded-md bg-black/75 text-white shadow-sm backdrop-blur-sm transition-colors hover:bg-red-600 md:size-7"
 																aria-label={m.compose_remove_media()}
 																title={m.compose_remove_media()}
 																onclick={(e) => {

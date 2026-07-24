@@ -151,7 +151,7 @@ test("mobile shell and composer expose touch-first controls without overflow", a
   ).toContainText(nextWorkspace);
   await page.keyboard.press("Escape");
 
-  const controls = page.getByTestId("composer-action-controls");
+  const controls = page.getByTestId("mobile-composer-controls");
   await expect(controls).toBeVisible();
   const overflow = await controls.evaluate((element) => ({
     clientWidth: element.clientWidth,
@@ -165,10 +165,10 @@ test("mobile shell and composer expose touch-first controls without overflow", a
 
   await expect(page.getByTestId("composer-account-control")).toHaveCount(1);
   await expect(
-    controls.getByRole("button", { name: "Publish Now", exact: true }),
+    controls.getByRole("button", { name: "Publish", exact: true }),
   ).toHaveCount(1);
   await expect(
-    controls.getByRole("button", { name: "Schedule", exact: true }),
+    controls.getByRole("button", { name: /Schedule post:/ }),
   ).toHaveCount(1);
 
   await expectMinimumTouchTarget(
@@ -179,12 +179,11 @@ test("mobile shell and composer expose touch-first controls without overflow", a
     page.locator('label:has(input[type="file"])').first(),
     "media upload label",
   );
-  await expectMinimumTouchTarget(
+  await expect(
     controls.getByRole("button", { name: "Save draft", exact: true }),
-    "save draft button",
-  );
+  ).toHaveCount(0);
   await expectMinimumTouchTarget(
-    controls.getByRole("button", { name: "Schedule", exact: true }),
+    controls.getByRole("button", { name: /Schedule post:/ }),
     "schedule button",
   );
 
@@ -223,13 +222,20 @@ test("mobile shell and composer expose touch-first controls without overflow", a
   await settingsDialog.getByRole("button", { name: "Done" }).click();
 
   await page.setViewportSize({ width: 1280, height: 800 });
-  await expect(controls).toBeVisible();
+  const desktopControls = page.getByTestId("desktop-composer-controls");
+  await expect(desktopControls).toBeVisible();
   await expect(page.getByTestId("composer-account-control")).toHaveCount(1);
   await expect(
-    controls.getByRole("button", { name: "Publish Now", exact: true }),
+    desktopControls.getByRole("button", { name: "Publish", exact: true }),
   ).toHaveCount(1);
   await expect(
-    page.getByRole("button", { name: "Schedule", exact: true }),
+    desktopControls.getByRole("button", { name: "Schedule", exact: true }),
+  ).toHaveCount(1);
+  await expect(
+    desktopControls.getByRole("button", {
+      name: "Schedule to next free slot",
+      exact: true,
+    }),
   ).toHaveCount(1);
 });
 
@@ -289,15 +295,12 @@ test("attached media controls stay touch accessible on mobile and desktop", asyn
 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(`/posts/${draft.id}`);
-  await expect(page).toHaveURL(
-    new RegExp(
-      `/publications/${draft.publication_id.replace(":", "(?::|%3A)")}$`,
-    ),
-  );
+  await expect(page).toHaveURL(new RegExp(`/posts/${draft.id}$`));
   const actions = page.getByTestId("composer-media-actions");
   await expect(actions).toBeVisible();
   const removeMedia = page.getByRole("button", { name: "Remove media" });
   await expectMinimumTouchTarget(removeMedia, "remove media button");
+  await page.getByRole("button", { name: "Add alt text" }).click();
   const altText = page.getByRole("textbox", { name: "Alt text" });
   await expect(altText).toBeVisible();
   await altText.fill("A single-pixel accessibility fixture.");

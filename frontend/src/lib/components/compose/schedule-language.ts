@@ -250,6 +250,32 @@ export function parseNaturalScheduleInput(
 		}
 	}
 
+	const isoDateTimeMatch = normalized.match(
+		/\b(\d{4})-(\d{2})-(\d{2})(?:t|\s+)(\d{1,2}):(\d{2})\b/
+	);
+	if (isoDateTimeMatch) {
+		const year = Number.parseInt(isoDateTimeMatch[1], 10);
+		const month = Number.parseInt(isoDateTimeMatch[2], 10) - 1;
+		const day = Number.parseInt(isoDateTimeMatch[3], 10);
+		const hour = Number.parseInt(isoDateTimeMatch[4], 10);
+		const minute = Number.parseInt(isoDateTimeMatch[5], 10);
+		if (
+			month < 0 ||
+			month > 11 ||
+			day < 1 ||
+			day > 31 ||
+			hour < 0 ||
+			hour > 23 ||
+			minute < 0 ||
+			minute > 59
+		) {
+			return null;
+		}
+		const candidateDate = createDate(year, month, day, useUTC);
+		if (!isExactDate(candidateDate, year, month, day, useUTC)) return null;
+		return parsed(applyTime(candidateDate, { hour, minute }, 9, useUTC), useUTC);
+	}
+
 	const monthMatch = normalized.match(
 		/\b(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t|tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+(\d{1,2})(?:\s+(\d{4}))?\b/
 	);

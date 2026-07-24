@@ -57,6 +57,13 @@ describe('parseNaturalScheduleInput', () => {
 		expect(parsed?.time).toBe('16:45');
 	});
 
+	it('parses an ISO-style local date and time', () => {
+		const parsed = parseNaturalScheduleInput('2099-07-21T09:00', base, 'America/New_York');
+
+		expect(parsed?.date.toString()).toBe('2099-07-21');
+		expect(parsed?.time).toBe('09:00');
+	});
+
 	it('keeps workspace calendar-day arithmetic independent of device DST', () => {
 		const parsed = parseNaturalScheduleInput(
 			'in 1 day',

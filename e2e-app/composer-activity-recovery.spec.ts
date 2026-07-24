@@ -319,28 +319,26 @@ test("unified composer sends workspace-local wall time as the exact scheduled in
   });
 
   let scheduledAt = "";
-  await page.route("**/api/v1/publications", async (route) => {
+  await page.route("**/api/v1/posts", async (route) => {
     if (route.request().method() === "POST") {
-      const payload = route.request().postDataJSON() as {
-        scheduled_at?: string;
-      };
-      if (payload.scheduled_at) scheduledAt = payload.scheduled_at;
       await route.fulfill({
         contentType: "application/json",
         json: {
-          id: "scheduled-timezone-publication",
+          id: "scheduled-timezone-post",
+          publication_id: "scheduled-timezone-publication",
           workspace_id: workspace.id,
-          intent: "post",
-          content_profile: "short_text",
-          source_text: "Schedule in the workspace timezone.",
+          content: "Schedule in the workspace timezone.",
           status: "draft",
-          segments: [],
-          renditions: [],
+          social_account_ids: ["timezone-account"],
+          media_ids: [],
         },
       });
       return;
     }
     await route.continue();
+  });
+  await page.route("**/api/v1/posts/*/variants", async (route) => {
+    await route.fulfill({ contentType: "application/json", json: {} });
   });
   await page.route(
     "**/api/v1/publications/scheduled-timezone-publication",
@@ -460,7 +458,7 @@ test("an in-flight autosave cannot attach an old-workspace draft after switching
     (resolveFinished) => (markFirstSaveFinished = resolveFinished),
   );
   const savedWorkspaceIDs: string[] = [];
-  await page.route("**/api/v1/publications", async (route) => {
+  await page.route("**/api/v1/posts", async (route) => {
     if (route.request().method() !== "POST") {
       await route.continue();
       return;
@@ -473,14 +471,13 @@ test("an in-flight autosave cannot attach an old-workspace draft after switching
       await route.fulfill({
         contentType: "application/json",
         json: {
-          id: "draft-workspace-a",
+          id: "post-workspace-a",
+          publication_id: "draft-workspace-a",
           workspace_id: first.id,
-          intent: "post",
-          content_profile: "short_text",
-          source_text: "Move this unsaved content safely.",
+          content: "Move this unsaved content safely.",
           status: "draft",
-          segments: [],
-          renditions: [],
+          social_account_ids: ["account-a"],
+          media_ids: [],
         },
       });
       markFirstSaveFinished();
@@ -489,16 +486,25 @@ test("an in-flight autosave cannot attach an old-workspace draft after switching
     await route.fulfill({
       contentType: "application/json",
       json: {
-        id: "draft-workspace-b",
+        id: "post-workspace-b",
+        publication_id: "draft-workspace-b",
         workspace_id: second.id,
-        intent: "post",
-        content_profile: "short_text",
-        source_text: "Move this unsaved content safely to workspace B.",
+        content: "Move this unsaved content safely to workspace B.",
         status: "draft",
-        segments: [],
-        renditions: [],
+        social_account_ids: ["account-b"],
+        media_ids: [],
       },
     });
+  });
+  await page.route("**/api/v1/posts/*/variants", async (route) => {
+    await route.fulfill({ contentType: "application/json", json: {} });
+  });
+  await page.route("**/api/v1/publications/**", async (route) => {
+    if (route.request().method() === "PUT") {
+      await route.fulfill({ contentType: "application/json", json: {} });
+      return;
+    }
+    await route.continue();
   });
 
   await page.goto("/");
@@ -519,7 +525,7 @@ test("an in-flight autosave cannot attach an old-workspace draft after switching
   await page
     .getByLabel("Post text")
     .fill("Move this unsaved content safely to workspace B.");
-  await expect(page).toHaveURL(/\/publications\/draft-workspace-b$/, {
+  await expect(page).toHaveURL(/\/posts\/post-workspace-b$/, {
     timeout: 10_000,
   });
   expect(savedWorkspaceIDs).toEqual([first.id, second.id]);
