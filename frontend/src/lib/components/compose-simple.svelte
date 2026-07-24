@@ -58,6 +58,7 @@
 	} from './compose/draft-utils';
 	import { minimumAccountCharacterLimit, uniquePlatformLimits } from './compose/platform-limits';
 	import { editorAccountIdAfterVariantLoad } from './compose/editor-target';
+	import { accountCapabilityNeedsAttention } from './compose/account-attention';
 	import { loadableDestinationOptionSources } from './compose/destination-options';
 	import { parseNaturalScheduleInput } from './compose/schedule-language';
 	import {
@@ -329,7 +330,7 @@
 	);
 	const warningAccountIds = $derived(
 		Object.values(resolvedCapabilities)
-			.filter((capability) => !capability.compatible || (capability.issues ?? []).length > 0)
+			.filter(accountCapabilityNeedsAttention)
 			.map((capability) => capability.account_id)
 	);
 	const capabilityInputSnapshot = $derived(

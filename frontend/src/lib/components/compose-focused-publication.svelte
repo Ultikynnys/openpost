@@ -48,6 +48,7 @@
 		snapshotFocusedSchedulingSettings,
 		type FocusedSchedulingSettings
 	} from './compose/focused-workspace';
+	import { accountCapabilityNeedsAttention } from './compose/account-attention';
 	import { loadableDestinationOptionSources } from './compose/destination-options';
 	import AlertCircleIcon from 'lucide-svelte/icons/alert-circle';
 	import CalendarClockIcon from 'lucide-svelte/icons/calendar-clock';
@@ -252,7 +253,7 @@
 	);
 	const warningAccountIds = $derived(
 		Object.values(resolvedCapabilities)
-			.filter((capability) => !capability.compatible || (capability.issues ?? []).length > 0)
+			.filter(accountCapabilityNeedsAttention)
 			.map((capability) => capability.account_id)
 	);
 	const isEditMode = $derived(Boolean(initialPublication?.id));
