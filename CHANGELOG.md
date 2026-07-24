@@ -10,6 +10,8 @@ All notable changes to this project are documented in this file.
 
 ### Added
 
+- Added OpenPost Studio with versioned multi-page designs, original starter templates, brand kits and WOFF2 fonts, mobile editing, autosave recovery, client-side background removal, camera capture, export, and composer return.
+- Rebuilt Media around reusable assets, designs, templates, brand resources, collections, tags, provenance, richer filtering, and one shared Library/Upload/Camera/Create picker.
 - Added normalized publication and rendition segments, provider-qualified output profiles, account capability resolution, scoped destination settings, and paginated account option searches.
 - Added authenticated, account-specific publishing options so composer fields can load live provider data such as YouTube playlists and regional video categories.
 - Added server-enforced `mcp:read` access for inspection-only agent connections, with mutation tools hidden and mutation attempts rejected at runtime.

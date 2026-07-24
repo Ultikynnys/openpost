@@ -28,6 +28,7 @@ const userDocsSidebar = [
 			{ text: 'Threads', link: '/usage/threads' },
 			{ text: 'Scheduling', link: '/usage/scheduling' },
 			{ text: 'Media Library', link: '/usage/media-library' },
+			{ text: 'OpenPost Studio', link: '/usage/studio' },
 		],
 	},
 	{
@@ -152,6 +153,7 @@ const developmentSidebar = [
 			{ text: 'MCP And ChatGPT App', link: '/development/mcp' },
 			{ text: 'Billing And Usage', link: '/development/billing-and-usage' },
 			{ text: 'Production Readiness', link: '/development/production-readiness' },
+			{ text: 'Third-Party Notices', link: '/development/third-party-notices' },
 			{ text: 'Contributing', link: '/development/contributing' },
 		],
 	},

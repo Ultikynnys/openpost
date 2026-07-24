@@ -151,6 +151,14 @@ Public pages use a wider 80rem frame and larger responsive section spacing. Docu
 
 Use the established 4px spacing family, but vary it by hierarchy: tight within controls and metadata groups, moderate within sections, generous between major public-page ideas. Prefer `gap` for sibling relationships.
 
+### Studio
+
+Studio is an immersive, task-specific workspace inside OpenPost rather than a general design product. It keeps the OpenPost type, semantic colors, compact controls, and restrained orange selection signal. The central pasteboard stays dark and neutral in both themes so the page remains the visual focus.
+
+Desktop uses a compact menu bar, tool rail, asset pane, one active canvas, Layers and Properties panes, and an ordered page strip. Phones use the same document model with a short top bar, a horizontal bottom tool rail, one contextual sheet at a time, a full-height Layers sheet, and a collapsible page strip. Coarse-pointer actions remain at least 44px. Two-finger input pans or zooms the canvas; one-finger input transforms the selected layer.
+
+The DOM-based Layers tree and Properties controls are the accessible equivalents of direct canvas editing. Every persistent change runs through the command system, exposes undo and redo, and announces saves, conflicts, exports, uploads, camera state, and background-removal state. Studio uses a scoped `.studio-theme`; it does not copy another editor's CSS, generated utilities, or trade dress.
+
 ## Elevation & Depth
 
 OpenPost is flat by default. Surfaces separate through warm tonal changes, hairline borders, and restrained rings. Shadows are reserved for short-lived or focal layers such as menus, dialogs, the mobile compose action, and the documentation brand CTA; they should never become ambient decoration across every card.

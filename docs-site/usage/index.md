@@ -15,7 +15,8 @@ The web app is the main editorial surface.
 - [Composing Posts](/usage/composing-posts) covers destination selection, media, variants, and the composer.
 - [Threads](/usage/threads) covers multi-post sequences.
 - [Scheduling](/usage/scheduling) covers queued publishing and failure visibility.
-- [Media Library](/usage/media-library) covers uploaded workspace assets, usage checks, favorites, and cleanup.
+- [Media](/usage/media-library) covers reusable assets, designs, templates, brand resources, collections, provenance, usage checks, and safe cleanup.
+- [OpenPost Studio](/usage/studio) covers multi-page design editing, recovery versions, background removal, export, and composer return.
 
 ## CLI
 

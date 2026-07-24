@@ -63,6 +63,7 @@ OpenPost keeps the publishing workflow in one place without hiding provider diff
 - **Eight publication profiles:** short text, threads, links, images, carousels, Stories, short video, and long video.
 - **Reliable scheduling:** calendar planning, workspace timezones, reusable posting slots, next-slot scheduling, and a durable database-backed job queue.
 - **Visible outcomes:** inspect drafts, scheduled work, destination renditions, published posts, failures, and retry state.
+- **Studio and reusable media:** build editable multi-page social images with original templates and workspace brand assets, then export ordered pages directly to Media or a composer.
 - **Shared operations:** workspaces, role-based team access, connected accounts, reusable media, prompts, billing, and usage limits.
 - **Controlled automation:** the web app, HTTP API, CLI, and MCP server use the same authorization, workspace, account, validation, quota, and queue boundaries.
 - **Portable deployment:** one Go binary or container with the SvelteKit app embedded; SQLite and local media are the defaults, with PostgreSQL and S3-compatible storage available.
@@ -74,17 +75,17 @@ OAuth tokens are encrypted at rest. OpenPost also supports revocable sessions, p
 
 This table describes OpenPost publishing code paths, not every feature offered by each provider. The queue and account-specific variant flows cover every listed provider, but provider approval, app configuration, quotas, and live-account verification still determine whether a destination can publish in production.
 
-| Platform           | Implemented publishing profiles                              | Threads / replies           | Maturity and main caveat                                                         |
-| ------------------ | ------------------------------------------------------------ | --------------------------- | -------------------------------------------------------------------------------- |
-| X                  | Text, links, up to 4 images, short video                     | Reply chains                | Implemented; video, API quota, and account tier need live verification           |
+| Platform           | Implemented publishing profiles                              | Threads / replies           | Maturity and main caveat                                                          |
+| ------------------ | ------------------------------------------------------------ | --------------------------- | --------------------------------------------------------------------------------- |
+| X                  | Text, links, up to 4 images, short video                     | Reply chains                | Implemented; video, API quota, and account tier need live verification            |
 | Mastodon           | Text, links, up to 4 image/video attachments                 | Reply chains                | Implemented; limits and OAuth vary by instance, and video needs live verification |
-| Bluesky            | Text, links, up to 4 images, one MP4 video                   | AT Protocol reply chains    | Implemented; video still needs live-account verification                         |
-| LinkedIn           | Text, links, image, document, short and long video           | Child posts become comments | Implemented; permissions, app review, and video need live verification           |
+| Bluesky            | Text, links, up to 4 images, one MP4 video                   | AT Protocol reply chains    | Implemented; video still needs live-account verification                          |
+| LinkedIn           | Text, links, image, document, short and long video           | Child posts become comments | Implemented; permissions, app review, and video need live verification            |
 | Threads            | Text, image, video, and 2-10 item mixed carousels            | Reply chains                | Implemented; public media and approved Meta app access are required               |
-| Facebook Pages     | Text, links, image, multi-photo, Story, short and long video | Comment operations          | Preview; Page permissions, app review, and public media URLs apply               |
-| Instagram Business | Feed image, carousel, Story, and Reel                        | Comment operations          | Preview; requires a Page-backed professional account and public media URLs       |
-| TikTok             | Video and 1-35 image photo posts                             | No                          | Preview; Content Posting API review or audit is required                         |
-| YouTube            | Shorts and long-form video                                   | No                          | Preview; title required, with Google audit and quota constraints                 |
+| Facebook Pages     | Text, links, image, multi-photo, Story, short and long video | Comment operations          | Preview; Page permissions, app review, and public media URLs apply                |
+| Instagram Business | Feed image, carousel, Story, and Reel                        | Comment operations          | Preview; requires a Page-backed professional account and public media URLs        |
+| TikTok             | Video and 1-35 image photo posts                             | No                          | Preview; Content Posting API review or audit is required                          |
+| YouTube            | Shorts and long-form video                                   | No                          | Preview; title required, with Google audit and quota constraints                  |
 
 “Implemented” means the code path and validation exist. Provider approval, deployment configuration, quotas, and live-account verification can still affect production access. See the [provider matrix](https://docs.openpost.social/providers/platform-limits) for current limits.
 

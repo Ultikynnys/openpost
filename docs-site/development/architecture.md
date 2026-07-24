@@ -26,7 +26,9 @@ Publishing and other durable work flows through a database-backed jobs table.
 
 ## Media
 
-Media uses the `BlobStorage` abstraction with local filesystem storage by default and S3-compatible storage for cloud deployments.
+Media uses the `BlobStorage` abstraction with local filesystem storage by default and S3-compatible storage for cloud deployments. The Media service owns physical assets, quota accounting, thumbnails, signing, and safe deletion.
+
+Studio is a separate backend handler/service and a dedicated `frontend/src/lib/studio/` module. It persists a strict OpenPost document schema, normalized pages, optimistic revisions, extracted media references, recovery history, templates, brand metadata, and one-time composer return tokens. Fabric.js stays behind an adapter and is never the persisted data model. The background-removal runtime and model load only after a user requests removal.
 
 ## Deployment
 

@@ -2,7 +2,7 @@
 	import PageHero from '../_components/PageHero.svelte';
 	import { siteUrl } from '../_marketing';
 
-	const effectiveDate = '22 July 2026';
+	const effectiveDate = '24 July 2026';
 </script>
 
 <svelte:head>
@@ -47,7 +47,12 @@
 			</li>
 			<li>
 				<strong>Publishing data:</strong> drafts, scheduled and published content, media,
-				provider-specific variants, prompts, schedules, publication status, and job history.
+				provider-specific variants, Studio designs and recovery revisions, templates, brand-kit
+				values, prompts, schedules, publication status, and job history.
+			</li>
+			<li>
+				<strong>Brand font records:</strong> custom WOFF2 files, family and style metadata, and
+				the account and time associated with the required font-license acknowledgement.
 			</li>
 			<li>
 				<strong>Connected-account data:</strong> social provider, account identifier, username,
@@ -76,6 +81,10 @@
 			a provider, buy a plan, or contact support. We also receive account and publication data
 			from providers you connect, billing status from Polar, and limited technical data when your
 			browser or client uses the service.
+		</p>
+		<p>
+			Camera access is requested only after you choose a camera action. A captured photo is uploaded
+			to the selected workspace only after you choose to use it. Camera video is not recorded.
 		</p>
 
 		<h2>4. Why we use data</h2>
@@ -156,9 +165,16 @@
 		<h2>8. Cookies and local storage</h2>
 		<p>
 			The application uses essential session and security cookies. It may use local browser storage
-			for the selected workspace, server address, language, and sound preference. The marketing site
-			does not use advertising trackers. The privacy-enhanced YouTube player is loaded only when you
-			open the product demo; YouTube may then process device and playback data.
+			for the selected workspace, server address, language, sound preference, composer return state,
+			and unsynced Studio recovery copies. One-time Studio return state expires after two hours;
+			unsynced Studio recovery copies expire seven days after the last edit.
+		</p>
+		<p>
+			Studio background removal runs in your browser with model and runtime files served by the
+			OpenPost operator. Source pixels are not sent to a background-removal service. A result is
+			uploaded to the selected workspace only when processing succeeds. The marketing site does not
+			use advertising trackers. The privacy-enhanced YouTube player is loaded only when you open the
+			product demo; YouTube may then process device and playback data.
 		</p>
 
 		<h2>9. International transfers</h2>
