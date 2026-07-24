@@ -58,6 +58,7 @@
 	} from './compose/draft-utils';
 	import { minimumAccountCharacterLimit, uniquePlatformLimits } from './compose/platform-limits';
 	import { editorAccountIdAfterVariantLoad } from './compose/editor-target';
+	import { loadableDestinationOptionSources } from './compose/destination-options';
 	import { parseNaturalScheduleInput } from './compose/schedule-language';
 	import {
 		workspaceClock,
@@ -1047,11 +1048,7 @@
 		onlySource = '',
 		search = ''
 	) {
-		let sources = onlySource
-			? [onlySource]
-			: visibleSettings(account)
-					.map((setting) => setting.options_source)
-					.filter((source): source is string => Boolean(source));
+		let sources = loadableDestinationOptionSources(visibleSettings(account), onlySource);
 		if (!force && !search) {
 			sources = sources.filter(
 				(source) => destinationOptionsByAccount[account.id]?.[source] === undefined

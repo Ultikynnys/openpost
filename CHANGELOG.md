@@ -62,6 +62,7 @@ All notable changes to this project are documented in this file.
 
 ### Fixed
 
+- Stopped unavailable X settings from requesting unsupported account-option endpoints and replaced their empty controls with concise availability details.
 - Restored the compact Post and Thread controls, drag-and-drop editing, automatic drafts, full schedule picker, and next-queue action; made polls optional and removable; added an optional link field; preserved scoped destination settings through classic post saves; accepted exact local ISO schedule input; and kept mobile media actions at 44px.
 - Restored publication autosave, safe workspace switching, next-slot scheduling, legacy draft redirects, and canonical publication drafts in the planner after the composer update.
 - Preserved segment and destination state through legacy draft migration and retries, and aligned X, Meta, LinkedIn, Mastodon, Bluesky, YouTube, and TikTok request payloads with their declared setting contracts.

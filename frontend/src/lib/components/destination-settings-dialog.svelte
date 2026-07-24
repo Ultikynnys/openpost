@@ -239,7 +239,12 @@
 									? 'sm:col-span-2'
 									: ''}
 							>
-								{#if setting.type === 'boolean'}
+								{#if setting.unavailable_reason}
+									<p class="text-sm font-medium text-foreground">{settingLabel(setting)}</p>
+									<p class="mt-1 text-xs text-muted-foreground">
+										{setting.unavailable_reason}
+									</p>
+								{:else if setting.type === 'boolean'}
 									<label class="flex min-h-11 items-center gap-3 text-sm">
 										<input
 											type="checkbox"
@@ -359,11 +364,7 @@
 									{/if}
 								{/if}
 
-								{#if setting.unavailable_reason}
-									<p class="mt-1 text-xs text-amber-700 dark:text-amber-300">
-										{setting.unavailable_reason}
-									</p>
-								{:else if setting.help}
+								{#if !setting.unavailable_reason && setting.help}
 									<p class="mt-1 text-xs text-muted-foreground">{setting.help}</p>
 								{/if}
 							</div>
@@ -403,7 +404,12 @@
 													? 'sm:col-span-2'
 													: ''}
 											>
-												{#if setting.type === 'boolean'}
+												{#if setting.unavailable_reason}
+													<p class="text-sm font-medium text-foreground">{settingLabel(setting)}</p>
+													<p class="mt-1 text-xs text-muted-foreground">
+														{setting.unavailable_reason}
+													</p>
+												{:else if setting.type === 'boolean'}
 													<label class="flex min-h-11 items-center gap-3 text-sm">
 														<input
 															type="checkbox"
@@ -503,11 +509,7 @@
 													{/if}
 												{/if}
 
-												{#if setting.unavailable_reason}
-													<p class="mt-1 text-xs text-amber-700 dark:text-amber-300">
-														{setting.unavailable_reason}
-													</p>
-												{:else if setting.help}
+												{#if !setting.unavailable_reason && setting.help}
 													<p class="mt-1 text-xs text-muted-foreground">{setting.help}</p>
 												{/if}
 											</div>

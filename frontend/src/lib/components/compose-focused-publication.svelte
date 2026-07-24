@@ -48,6 +48,7 @@
 		snapshotFocusedSchedulingSettings,
 		type FocusedSchedulingSettings
 	} from './compose/focused-workspace';
+	import { loadableDestinationOptionSources } from './compose/destination-options';
 	import AlertCircleIcon from 'lucide-svelte/icons/alert-circle';
 	import CalendarClockIcon from 'lucide-svelte/icons/calendar-clock';
 	import ImagePlusIcon from 'lucide-svelte/icons/image-plus';
@@ -1588,11 +1589,7 @@
 		onlySource = '',
 		search = ''
 	) {
-		let optionSources = onlySource
-			? [onlySource]
-			: visibleSettings(account)
-					.map((setting) => setting.options_source)
-					.filter((source): source is string => Boolean(source));
+		let optionSources = loadableDestinationOptionSources(visibleSettings(account), onlySource);
 		if (optionSources.length === 0) return;
 		if (!force && !search) {
 			optionSources = optionSources.filter(
