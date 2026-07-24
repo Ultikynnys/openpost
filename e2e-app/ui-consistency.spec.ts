@@ -324,18 +324,22 @@ test("media card controls are available on a portrait screen without hover", asy
   const actionsControl = page.getByRole("button", {
     name: `Actions for ${filename}`,
   });
-  await expect(selectControl).toBeVisible();
-  await expect(selectControl).toHaveAttribute("aria-pressed", "false");
   await expect(actionsControl).toBeVisible();
-
-  await selectControl.click();
-  await expect(selectControl).toHaveAttribute("aria-pressed", "true");
 
   await actionsControl.click();
   await expect(
     page.getByRole("menuitem", { name: "Media details" }),
   ).toBeVisible();
   await expect(page.getByRole("menuitem", { name: "Download" })).toBeVisible();
+  await page.keyboard.press("Escape");
+
+  await page
+    .getByRole("button", { name: "Select", exact: true })
+    .click();
+  await expect(selectControl).toBeVisible();
+  await expect(selectControl).toHaveAttribute("aria-pressed", "false");
+  await selectControl.click();
+  await expect(selectControl).toHaveAttribute("aria-pressed", "true");
   await expectNoDocumentOverflow(page);
 });
 

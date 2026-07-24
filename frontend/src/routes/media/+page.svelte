@@ -1096,7 +1096,7 @@
 			<Button
 				type="button"
 				variant={activeFilterCount > 0 ? 'secondary' : 'outline'}
-				class="h-11 shrink-0"
+				class="h-11 min-w-11 shrink-0 sm:w-auto"
 				aria-label={m.media_filters()}
 				onclick={() => (filterDialogOpen = true)}
 			>
@@ -1118,7 +1118,7 @@
 					<Button
 						variant={filter === quickFilter.value ? 'secondary' : 'ghost'}
 						size="sm"
-						class="shrink-0"
+						class="min-w-11 shrink-0"
 						onclick={() => changeFilter(quickFilter.value)}
 					>
 						{quickFilter.label}

@@ -50,7 +50,9 @@ test("media library uploads and lists a local media file", async ({
   ).toBeVisible();
   await expect(page.getByText("Studio edits")).toHaveCount(0);
 
-  await page.getByRole("button", { name: "Select" }).click();
+  await page
+    .getByRole("button", { name: "Select", exact: true })
+    .click();
   await page
     .getByRole("button", { name: "Select launch-card.png" })
     .click();

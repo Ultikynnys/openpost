@@ -4,6 +4,8 @@ packages:
   - "marketing-site"
 overrides:
   cookie: 0.7.2
+  postcss: 8.5.18
+  "tar@^7.0.0": 7.5.21
 onlyBuiltDependencies:
   - esbuild
   - sharp
@@ -14,3 +16,5 @@ allowBuilds:
   protobufjs: false
   sharp: true
   vue-demi: true
+minimumReleaseAgeExclude:
+  - tar@7.5.21
