@@ -176,8 +176,8 @@ test("mobile shell and composer expose touch-first controls without overflow", a
     "post type selector",
   );
   await expectMinimumTouchTarget(
-    page.locator('label:has(input[type="file"])').first(),
-    "media upload label",
+    page.getByRole("button", { name: "Add media" }).first(),
+    "media picker button",
   );
   await expect(
     controls.getByRole("button", { name: "Save draft", exact: true }),

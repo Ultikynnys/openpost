@@ -23,12 +23,11 @@ test("media library uploads and lists a local media file", async ({
   await authenticatePage(page, auth.token);
   await page.goto("/media");
 
-  await expect(
-    page.getByRole("heading", { name: "Media Library" }),
-  ).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Media" })).toBeVisible();
   await expect(page.getByText("No media found")).toBeVisible();
 
-  await page.getByRole("button", { name: "Upload" }).first().click();
+  await page.getByRole("button", { name: "Create" }).click();
+  await page.getByRole("menuitem", { name: "Upload media" }).click();
   await expect(
     page.getByRole("dialog", { name: "Upload Media" }),
   ).toBeVisible();

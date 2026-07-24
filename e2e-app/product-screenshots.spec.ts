@@ -387,7 +387,7 @@ test.describe("product screenshot capture", () => {
 
     await page.goto("/media");
     await expect(
-      page.getByRole("heading", { name: "Media Library", level: 1 }),
+      page.getByRole("heading", { name: "Media", level: 1 }),
     ).toBeVisible();
     await expect(page.getByText("launch-card.png")).toBeVisible();
     await page.waitForFunction(() =>

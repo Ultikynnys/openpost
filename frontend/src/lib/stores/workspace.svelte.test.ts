@@ -20,7 +20,9 @@ const workspaceA = {
 	avatar_url: '',
 	created_at: '2026-01-01T00:00:00Z',
 	organization_id: '',
-	organization_name: ''
+	organization_name: '',
+	role: 'admin',
+	can_edit: true
 } satisfies Workspace;
 
 const workspaceB = {

@@ -54,6 +54,9 @@
 		'/accounts/mastodon/callback',
 		'/accounts/callback'
 	];
+	let isStandaloneRoute = $derived(
+		standaloneRoutes.includes(currentPath) || currentPath.startsWith('/studio/')
+	);
 
 	let needsOnboarding = $state(false);
 	let onboardingChecked = $state(false);
@@ -194,10 +197,12 @@
 	{:else}
 		{@render children()}
 	{/if}
-{:else if standaloneRoutes.includes(currentPath)}
-	<div class="fixed top-4 right-4 z-20">
-		<LanguageSwitcher compact />
-	</div>
+{:else if isStandaloneRoute}
+	{#if !currentPath.startsWith('/studio/')}
+		<div class="fixed top-4 right-4 z-20">
+			<LanguageSwitcher compact />
+		</div>
+	{/if}
 	{@render children()}
 {:else}
 	<a

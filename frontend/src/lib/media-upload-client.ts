@@ -8,6 +8,11 @@ interface UploadMediaFileOptions {
 	workspaceId: string;
 	file: File;
 	altText?: string;
+	source?: 'upload' | 'camera' | 'studio_export' | 'studio_edit' | 'background_removal';
+	assetKind?: 'library' | 'brand_asset' | 'brand_font' | 'design_preview' | 'template_preview';
+	parentMediaId?: string;
+	designDocumentId?: string;
+	designPageId?: string;
 }
 
 interface UploadProblem {
@@ -29,15 +34,27 @@ export class UploadRequestError extends Error {
 export async function uploadMediaFile({
 	workspaceId,
 	file,
-	altText = ''
+	altText = '',
+	source = 'upload',
+	assetKind = 'library',
+	parentMediaId = '',
+	designDocumentId = '',
+	designPageId = ''
 }: UploadMediaFileOptions): Promise<MediaUploadResult> {
+	const metadata = {
+		source,
+		assetKind,
+		parentMediaId,
+		designDocumentId,
+		designPageId
+	};
 	try {
-		return await uploadViaDirectSession(workspaceId, file, altText);
+		return await uploadViaDirectSession(workspaceId, file, altText, metadata);
 	} catch (error) {
 		if (!shouldUseMultipartFallback(error)) {
 			throw error;
 		}
-		return uploadViaMultipart(workspaceId, file, altText);
+		return uploadViaMultipart(workspaceId, file, altText, metadata);
 	}
 }
 
@@ -93,7 +110,14 @@ export function directUploadHeadersForBrowser(headers: Record<string, string>): 
 async function uploadViaDirectSession(
 	workspaceId: string,
 	file: File,
-	altText: string
+	altText: string,
+	metadata: {
+		source: NonNullable<UploadMediaFileOptions['source']>;
+		assetKind: NonNullable<UploadMediaFileOptions['assetKind']>;
+		parentMediaId: string;
+		designDocumentId: string;
+		designPageId: string;
+	}
 ): Promise<MediaUploadResult> {
 	const sessionResp = await fetch(apiURL('/media/upload-session'), {
 		method: 'POST',
@@ -104,7 +128,12 @@ async function uploadViaDirectSession(
 			filename: file.name,
 			mime_type: file.type || 'application/octet-stream',
 			size: file.size,
-			...(altText ? { alt_text: altText } : {})
+			...(altText ? { alt_text: altText } : {}),
+			source: metadata.source,
+			asset_kind: metadata.assetKind,
+			...(metadata.parentMediaId ? { parent_media_id: metadata.parentMediaId } : {}),
+			...(metadata.designDocumentId ? { design_document_id: metadata.designDocumentId } : {}),
+			...(metadata.designPageId ? { design_page_id: metadata.designPageId } : {})
 		})
 	});
 	if (!sessionResp.ok) {
@@ -141,7 +170,14 @@ async function uploadViaDirectSession(
 async function uploadViaMultipart(
 	workspaceId: string,
 	file: File,
-	altText: string
+	altText: string,
+	metadata: {
+		source: NonNullable<UploadMediaFileOptions['source']>;
+		assetKind: NonNullable<UploadMediaFileOptions['assetKind']>;
+		parentMediaId: string;
+		designDocumentId: string;
+		designPageId: string;
+	}
 ): Promise<MediaUploadResult> {
 	const formData = new FormData();
 	formData.append('file', file);
@@ -149,6 +185,11 @@ async function uploadViaMultipart(
 	if (altText) {
 		formData.append('alt_text', altText);
 	}
+	formData.append('source', metadata.source);
+	formData.append('asset_kind', metadata.assetKind);
+	if (metadata.parentMediaId) formData.append('parent_media_id', metadata.parentMediaId);
+	if (metadata.designDocumentId) formData.append('design_document_id', metadata.designDocumentId);
+	if (metadata.designPageId) formData.append('design_page_id', metadata.designPageId);
 
 	const response = await fetch(apiURL('/media/upload'), {
 		method: 'POST',

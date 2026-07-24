@@ -23,6 +23,23 @@ export default defineConfig({
 		VitePWA({
 			registerType: 'autoUpdate',
 			injectRegister: 'auto',
+			workbox: {
+				globPatterns: ['**/*.{js,css,html,ico,png,jpg,jpeg,svg,webp,avif,woff,woff2}'],
+				runtimeCaching: [
+					{
+						urlPattern: ({ url }) => url.pathname.startsWith('/studio-models/'),
+						handler: 'CacheFirst',
+						options: {
+							cacheName: 'openpost-studio-models-1.7.0',
+							expiration: {
+								maxEntries: 32,
+								maxAgeSeconds: 365 * 24 * 60 * 60
+							},
+							cacheableResponse: { statuses: [0, 200] }
+						}
+					}
+				]
+			},
 			manifest: {
 				name: 'OpenPost',
 				short_name: 'OpenPost',
@@ -71,6 +88,9 @@ export default defineConfig({
 				target: 'http://localhost:8080'
 			}
 		}
+	},
+	worker: {
+		format: 'es'
 	},
 	test: {
 		expect: { requireAssertions: true },

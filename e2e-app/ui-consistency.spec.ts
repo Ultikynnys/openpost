@@ -44,7 +44,7 @@ const portuguesePortraitRoutes = [
       },
       {
         path: "/media",
-        heading: "Biblioteca de media",
+        heading: "Multimédia",
         action: "Enviar",
         actionRole: "button",
       },
@@ -333,7 +333,7 @@ test("media card controls are available on a portrait screen without hover", asy
 
   await actionsControl.click();
   await expect(
-    page.getByRole("menuitem", { name: "View usage" }),
+    page.getByRole("menuitem", { name: "Media details" }),
   ).toBeVisible();
   await expect(page.getByRole("menuitem", { name: "Download" })).toBeVisible();
   await expectNoDocumentOverflow(page);

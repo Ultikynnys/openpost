@@ -1,5 +1,8 @@
 <script lang="ts">
 	import { onDestroy, onMount, tick, type Snippet } from 'svelte';
+	import { page } from '$app/stores';
+	import { goto, replaceState } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import { MediaQuery, SvelteMap, SvelteSet } from 'svelte/reactivity';
 	import { client, type SocialAccount, type Workspace, getToken } from '$lib/api/client';
 	import type { components } from '$lib/api/types';
@@ -73,6 +76,14 @@
 	import { soundPreferences } from '$lib/stores/sound-preferences.svelte';
 	import InlineNotice from './inline-notice.svelte';
 	import DestructiveConfirmDialog from './destructive-confirm-dialog.svelte';
+	import MediaPicker from './media-picker.svelte';
+	import { consumeStudioReturnToken, createStudioReturnToken } from '$lib/studio/api';
+	import {
+		clearComposerRecovery,
+		loadComposerRecovery,
+		storeComposerRecovery
+	} from '$lib/studio/recovery';
+	import type { ComposerRecoverySnapshot } from '$lib/studio/types';
 	import { sampleCampaignPathForPlan, SAMPLE_CAMPAIGN_DISMISSED_KEY } from '$lib/sample-campaign';
 
 	// --------------------------------------------------------------------------
@@ -103,6 +114,27 @@
 		media_ids: string;
 		is_unsynced: boolean;
 	};
+
+	interface StudioComposerSnapshotPayload {
+		posts: PostItem[];
+		variants: Array<[string, Record<string, VariantPost>]>;
+		active_post_index: number;
+		selected_account_ids: string[];
+		active_variant_account_id: string | null;
+		draft_id: string | null;
+		publication_id: string;
+		link_url: string;
+		show_link_input: boolean;
+		settings_by_account: Record<string, Record<string, unknown>>;
+		segment_settings_by_post: Record<string, Record<string, Record<string, unknown>>>;
+		media_settings_by_account: Record<string, Record<string, Record<string, unknown>>>;
+		media_alt_texts: Array<[string, string]>;
+		media_mime_types: Array<[string, string]>;
+		media_sizes: Array<[string, number]>;
+		selected_date?: string;
+		selected_time: string | null;
+		random_delay_override: string;
+	}
 
 	interface Props {
 		initialPost?: InitialPost;
@@ -187,6 +219,8 @@
 	let settingsByAccount = $state<Record<string, Record<string, unknown>>>({});
 	let segmentSettingsByPost = $state<Record<string, Record<string, Record<string, unknown>>>>({});
 	let mediaSettingsByAccount = $state<Record<string, Record<string, Record<string, unknown>>>>({});
+	let mediaPickerOpen = $state(false);
+	let mediaPickerPostIndex = $state(0);
 	let resolvedCapabilities = $state<Record<string, ResolvedAccountCapability>>({});
 	let capabilityResolveLoading = $state(false);
 	let capabilityResolveError = $state('');
@@ -262,6 +296,12 @@
 	);
 	const autoSavesDraft = $derived(!isEditMode || initialPost?.status === 'draft');
 	const selectedAccounts = $derived(accounts.filter((a) => selectedAccountIds.includes(a.id)));
+	const composerMediaLimit = $derived.by(() => {
+		const limits = selectedAccounts
+			.map((account) => resolvedCapabilities[account.id]?.media.max_count)
+			.filter((limit): limit is number => typeof limit === 'number' && limit > 0);
+		return limits.length > 0 ? Math.min(...limits) : 4;
+	});
 	const settingsAccount = $derived(
 		accounts.find((account) => account.id === settingsAccountId) ?? null
 	);
@@ -1182,9 +1222,153 @@
 			if (!clean || seen.has(clean)) continue;
 			seen.add(clean);
 			merged.push(clean);
-			if (merged.length >= 4) break;
+			if (merged.length >= composerMediaLimit) break;
 		}
 		return merged;
+	}
+
+	function setEditorMediaIds(postIndex: number, mediaIds: string[]) {
+		const post = posts[postIndex];
+		if (!post) return;
+		const next = mergeMediaIds([], mediaIds);
+		if (activeVariantAccountId && activeVariantIsUnsynced) {
+			setVariantMediaIds(activeVariantAccountId, postIndex, next);
+		} else {
+			posts = posts.map((item, index) =>
+				index === postIndex ? { ...item, mediaIds: next } : item
+			);
+		}
+		scheduleAutoSave();
+		scheduleCapabilityResolve();
+	}
+
+	function openMediaPicker(postIndex: number) {
+		mediaPickerPostIndex = postIndex;
+		mediaPickerOpen = true;
+	}
+
+	async function openStudioFromComposer() {
+		if (!selectedWorkspaceId) return;
+		mediaPickerOpen = false;
+		if (hasContent) await saveDraft();
+		const returnURL = new URL(
+			draftId ? resolve(`/posts/${encodeURIComponent(draftId)}` as '/') : $page.url,
+			$page.url
+		);
+		returnURL.searchParams.delete('studio_return');
+		const token = await createStudioReturnToken({
+			workspace_id: selectedWorkspaceId,
+			return_url: `${returnURL.pathname}${returnURL.search}`,
+			purpose: isThread ? 'thread_segment' : 'post_media',
+			max_selection: composerMediaLimit,
+			constraints: {
+				max_count: composerMediaLimit,
+				allowed_mimes: ['image/png', 'image/jpeg', 'image/webp'],
+				thread_segment: mediaPickerPostIndex
+			}
+		});
+		const snapshot: ComposerRecoverySnapshot = {
+			version: 1,
+			workspace_id: selectedWorkspaceId,
+			return_url: `${returnURL.pathname}${returnURL.search}`,
+			purpose: isThread ? 'thread_segment' : 'post_media',
+			created_at: new Date().toISOString(),
+			expires_at: token.expires_at,
+			payload: {
+				posts: $state.snapshot(posts),
+				variants: Array.from(variants.entries()),
+				active_post_index: mediaPickerPostIndex,
+				selected_account_ids: [...selectedAccountIds],
+				active_variant_account_id: activeVariantAccountId,
+				draft_id: draftId,
+				publication_id: publicationId,
+				link_url: linkUrl,
+				show_link_input: showLinkInput,
+				settings_by_account: $state.snapshot(settingsByAccount),
+				segment_settings_by_post: $state.snapshot(segmentSettingsByPost),
+				media_settings_by_account: $state.snapshot(mediaSettingsByAccount),
+				media_alt_texts: Array.from(mediaAltTexts.entries()),
+				media_mime_types: Array.from(mediaMimeTypes.entries()),
+				media_sizes: Array.from(mediaSizes.entries()),
+				selected_date: selectedDate?.toString(),
+				selected_time: selectedTime,
+				random_delay_override: randomDelayOverride
+			} satisfies StudioComposerSnapshotPayload
+		};
+		storeComposerRecovery(token.token, snapshot);
+		await goto(
+			resolve(
+				`/studio/new?workspace=${encodeURIComponent(selectedWorkspaceId)}&return_token=${encodeURIComponent(token.token)}` as '/'
+			)
+		);
+	}
+
+	async function restoreStudioReturn() {
+		if (!$page?.url) return;
+		const token = $page.url.searchParams.get('studio_return');
+		if (!token) return;
+		const clean = new URL($page.url);
+		clean.searchParams.delete('studio_return');
+		replaceState(resolve(`${clean.pathname}${clean.search}` as '/'), {});
+		try {
+			const snapshot = loadComposerRecovery(token);
+			const result = await consumeStudioReturnToken(token);
+			if (snapshot?.workspace_id === result.workspace_id) {
+				const payload = snapshot.payload as StudioComposerSnapshotPayload;
+				posts = structuredClone(payload.posts);
+				variants = new SvelteMap(payload.variants);
+				activePostIndex = Math.max(
+					0,
+					Math.min(payload.active_post_index, Math.max(0, posts.length - 1))
+				);
+				mediaPickerPostIndex = activePostIndex;
+				selectedAccountIds = [...payload.selected_account_ids];
+				activeVariantAccountId = payload.active_variant_account_id;
+				draftId = payload.draft_id;
+				publicationId = payload.publication_id;
+				linkUrl = payload.link_url;
+				showLinkInput = payload.show_link_input;
+				settingsByAccount = structuredClone(payload.settings_by_account);
+				segmentSettingsByPost = structuredClone(payload.segment_settings_by_post);
+				mediaSettingsByAccount = structuredClone(payload.media_settings_by_account);
+				mediaAltTexts = new SvelteMap(payload.media_alt_texts);
+				mediaMimeTypes = new SvelteMap(payload.media_mime_types);
+				mediaSizes = new SvelteMap(payload.media_sizes);
+				if (payload.selected_date) {
+					const [year, month, day] = payload.selected_date.split('-').map(Number);
+					selectedDate = new CalendarDate(year, month, day);
+				}
+				selectedTime = payload.selected_time;
+				randomDelayOverride = payload.random_delay_override;
+				await loadAccounts(selectedWorkspaceId, selectedAccountIds);
+				await resolveCapabilities();
+			}
+			const targetIndex = Math.max(
+				0,
+				Math.min(
+					Number(result.constraints.thread_segment ?? activePostIndex),
+					Math.max(0, posts.length - 1)
+				)
+			);
+			setEditorMediaIds(targetIndex, [
+				...getEditorMediaIdsForPost(posts[targetIndex]),
+				...result.media_ids
+			]);
+			await hydrateMediaMetadata(result.workspace_id, result.media_ids);
+			scheduleAutoSave();
+			clearComposerRecovery(token);
+			notifyStudioReturn(result.media_ids.length);
+		} catch (cause) {
+			error =
+				cause instanceof Error
+					? `${cause.message} Your Studio exports are still available in Media.`
+					: 'Studio exports are still available in Media.';
+		}
+	}
+
+	function notifyStudioReturn(count: number) {
+		error = '';
+		if (count > 0) soundPreferences.play('success');
 	}
 
 	function normalizeVariantsMap(
@@ -1344,7 +1528,10 @@
 
 	onMount(() => {
 		showSampleCampaignEntry = localStorage.getItem(SAMPLE_CAMPAIGN_DISMISSED_KEY) !== 'true';
-		void initializeComposer();
+		void (async () => {
+			await initializeComposer();
+			await restoreStudioReturn();
+		})();
 	});
 
 	onDestroy(() => {
@@ -2055,7 +2242,7 @@
 				if (!isSupportedMediaFile(file)) continue;
 				const targetPost = posts[targetPostIndex];
 				if (!targetPost) break;
-				if (getEditorMediaIdsForPost(targetPost).length >= 4) break;
+				if (getEditorMediaIdsForPost(targetPost).length >= composerMediaLimit) break;
 
 				const data = await uploadMediaFile({ workspaceId: selectedWorkspaceId, file });
 				if (data.mime_type) {
@@ -3472,28 +3659,15 @@
 													>#{i + 1}</span
 												>{/if}
 
-											<label
-												class={activeVariantAccountId && !activeVariantIsUnsynced
-													? 'cursor-not-allowed opacity-50'
-													: 'cursor-pointer'}
+											<button
+												type="button"
+												class="flex size-11 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50 md:size-7"
+												disabled={!!activeVariantAccountId && !activeVariantIsUnsynced}
+												onclick={() => openMediaPicker(i)}
+												aria-label={m.media_picker_add_media()}
 											>
-												<input
-													type="file"
-													accept="image/*,video/*"
-													multiple
-													disabled={!!activeVariantAccountId && !activeVariantIsUnsynced}
-													class="hidden"
-													onchange={(e) => {
-														const target = e.target as HTMLInputElement;
-														if (target.files) handleFileUpload(target.files, i);
-													}}
-												/>
-												<div
-													class="flex size-11 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground md:size-7"
-												>
-													<ImageIcon class="h-3.5 w-3.5" />
-												</div>
-											</label>
+												<ImageIcon class="h-3.5 w-3.5" />
+											</button>
 
 											{#if i === 0}
 												<Tooltip.Root>
@@ -3622,6 +3796,22 @@
 		</div>
 	</div>
 </div>
+
+<MediaPicker
+	bind:open={mediaPickerOpen}
+	workspaceId={selectedWorkspaceId}
+	currentSelection={posts[mediaPickerPostIndex]
+		? getEditorMediaIdsForPost(posts[mediaPickerPostIndex])
+		: []}
+	maxSelection={composerMediaLimit}
+	multiple={composerMediaLimit > 1}
+	purpose={isThread ? 'thread_segment' : 'post_media'}
+	onConfirm={async (ids) => {
+		setEditorMediaIds(mediaPickerPostIndex, ids);
+		await hydrateMediaMetadata(selectedWorkspaceId, ids);
+	}}
+	onCreate={openStudioFromComposer}
+/>
 
 <DestinationSettingsDialog
 	bind:open={settingsDialogOpen}

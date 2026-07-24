@@ -1,9 +1,13 @@
 <script lang="ts">
 	import { onDestroy, onMount, type Snippet } from 'svelte';
+	import { SvelteSet } from 'svelte/reactivity';
+	import { page } from '$app/stores';
+	import { goto, replaceState } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import { client, type SocialAccount } from '$lib/api/client';
 	import type { components } from '$lib/api/types';
 	import { getAuthenticatedMediaByID } from '$lib/media-url';
-	import { isSupportedMediaFile, uploadMediaFile } from '$lib/media-upload-client';
+	import { uploadMediaFile } from '$lib/media-upload-client';
 	import { workspaceCtx } from '$lib/stores/workspace.svelte';
 	import { ui } from '$lib/stores/ui.svelte';
 	import { Button } from '$lib/components/ui/button';
@@ -15,6 +19,7 @@
 	import DestinationSettingsDialog from './destination-settings-dialog.svelte';
 	import DestructiveConfirmDialog from './destructive-confirm-dialog.svelte';
 	import InlineNotice from './inline-notice.svelte';
+	import MediaPicker from './media-picker.svelte';
 	import PageLoading from './page-loading.svelte';
 	import { getLocaleTag } from '$lib/i18n';
 	import { getPlatformKey, getPlatformName } from '$lib/utils';
@@ -51,9 +56,15 @@
 	import SendIcon from 'lucide-svelte/icons/send';
 	import PlusIcon from 'lucide-svelte/icons/plus';
 	import Trash2Icon from 'lucide-svelte/icons/trash-2';
-	import UploadIcon from 'lucide-svelte/icons/upload';
 	import XIcon from 'lucide-svelte/icons/x';
 	import { m } from '$lib/paraglide/messages';
+	import { consumeStudioReturnToken, createStudioReturnToken } from '$lib/studio/api';
+	import {
+		clearComposerRecovery,
+		loadComposerRecovery,
+		storeComposerRecovery
+	} from '$lib/studio/recovery';
+	import type { ComposerRecoverySnapshot, StudioMediaItem } from '$lib/studio/types';
 
 	type Capability = components['schemas']['Capability'];
 	type Publication = components['schemas']['PublicationResponse'];
@@ -75,6 +86,24 @@
 		altText?: string;
 		settings?: Record<string, unknown>;
 		settingsByAccount?: Record<string, Record<string, unknown>>;
+	}
+
+	interface FocusedStudioSnapshotPayload {
+		mode: ComposerModeKey;
+		publication_id: string;
+		selected_workspace_id: string;
+		selected_account_ids: string[];
+		fields: FocusedComposerFields;
+		media: FocusedMedia[];
+		segments: FocusedSegmentInput[];
+		active_settings_segment_id: string;
+		thumbnail_media: FocusedMedia | null;
+		thumbnail_media_id: string;
+		settings_by_account: Record<string, Record<string, unknown>>;
+		segment_settings_by_account: Record<string, Record<string, unknown>>;
+		selected_date?: string;
+		selected_time: string | null;
+		picker_purpose: 'media' | 'thumbnail';
 	}
 
 	interface Props {
@@ -132,7 +161,8 @@
 	let accountsLoading = $state(false);
 	let accountsError = $state('');
 	let uploading = $state(false);
-	let uploadingThumbnail = $state(false);
+	let mediaPickerOpen = $state(false);
+	let mediaPickerPurpose = $state<'media' | 'thumbnail'>('media');
 	let saving = $state(false);
 	let autoSaving = $state(false);
 	let error = $state('');
@@ -144,8 +174,6 @@
 	let workspaceChangeSequence = 0;
 	let accountsRequestSequence = 0;
 	let readinessRequestSequence = 0;
-	let mediaUploadRequestSequence = 0;
-	let thumbnailUploadRequestSequence = 0;
 	let destinationOptionsRequestSequence = 0;
 	let capabilityResolveRequestSequence = 0;
 	let nextSlotRequestSequence = 0;
@@ -169,6 +197,12 @@
 			.map((account) => capabilityForAccount(account))
 			.filter((capability): capability is Capability => capability !== null)
 	);
+	const composerMediaLimit = $derived.by(() => {
+		const limits = selectedCapabilities
+			.map((capability) => capability.media.max_count)
+			.filter((limit) => Number.isFinite(limit) && limit > 0);
+		return limits.length > 0 ? Math.max(1, Math.min(...limits)) : 20;
+	});
 	const settingsAccount = $derived(
 		accounts.find((account) => account.id === settingsAccountId) ?? null
 	);
@@ -264,6 +298,7 @@
 			workspaceCtx.currentWorkspace?.id ||
 			'';
 		await loadInitialData();
+		await restoreStudioReturn();
 	});
 
 	onDestroy(clearAutoSaveTimer);
@@ -480,7 +515,7 @@
 			])
 		);
 		for (const rendition of publication.renditions ?? []) {
-			const hydratedSegments = new Set<string>();
+			const hydratedSegments = new SvelteSet<string>();
 			for (const segment of rendition.segments ?? []) {
 				const canonical = segments.find((item) => item.id === segment.publication_segment_id);
 				if (!canonical) continue;
@@ -599,8 +634,6 @@
 		lastSavedSnapshot = '';
 		accountsRequestSequence += 1;
 		readinessRequestSequence += 1;
-		mediaUploadRequestSequence += 1;
-		thumbnailUploadRequestSequence += 1;
 		destinationOptionsRequestSequence += 1;
 		nextSlotRequestSequence += 1;
 		publicationId = '';
@@ -635,7 +668,6 @@
 		accountsLoading = false;
 		accountsError = '';
 		uploading = false;
-		uploadingThumbnail = false;
 		autoSaving = false;
 		suggestingSlot = false;
 		scheduleError = '';
@@ -873,87 +905,175 @@
 		return fields[key] ?? '';
 	}
 
-	async function handleFiles(files: FileList | null) {
-		if (!files || !selectedWorkspaceId) return;
-		const selected = Array.from(files).filter(isSupportedMediaFile);
-		if (selected.length === 0) return;
-		const workspaceId = selectedWorkspaceId;
-		const requestSequence = ++mediaUploadRequestSequence;
-		uploading = true;
-		error = '';
-		try {
-			for (const file of selected) {
-				const uploaded = await uploadMediaFile({ workspaceId, file });
-				if (requestSequence !== mediaUploadRequestSequence || selectedWorkspaceId !== workspaceId) {
-					return;
-				}
-				media = [
-					...media,
-					{
-						id: uploaded.id,
-						mime_type: uploaded.mime_type,
-						url: uploaded.url,
-						size: uploaded.size,
-						filename: file.name
-					}
-				];
-			}
-			validationIssues = [];
-			await resolveSelectedCapabilities();
-		} catch (err) {
-			if (requestSequence === mediaUploadRequestSequence && selectedWorkspaceId === workspaceId) {
-				error = err instanceof Error ? err.message : m.compose_upload_failed();
-			}
-		} finally {
-			if (requestSequence === mediaUploadRequestSequence && selectedWorkspaceId === workspaceId) {
-				uploading = false;
-			}
-		}
+	function focusedMediaFromLibrary(item: StudioMediaItem): FocusedMedia {
+		return {
+			id: item.id,
+			mime_type: item.mime_type,
+			url: item.url,
+			size: item.size,
+			filename: item.original_filename || item.id,
+			altText: item.alt_text
+		};
 	}
 
-	async function handleThumbnail(files: FileList | null) {
-		if (!files?.[0] || !selectedWorkspaceId) return;
-		const file = files[0];
-		if (!file.type.startsWith('image/')) {
-			error = m.compose_choose_thumbnail();
+	function setFocusedMediaSelection(ids: string[], items: StudioMediaItem[]) {
+		const libraryByID = new Map(items.map((item) => [item.id, item]));
+		const existingByID = new Map(media.map((item) => [item.id, item]));
+		media = ids.slice(0, composerMediaLimit).map((id) => {
+			const libraryItem = libraryByID.get(id);
+			return (
+				existingByID.get(id) ??
+				(libraryItem
+					? focusedMediaFromLibrary(libraryItem)
+					: {
+							id,
+							mime_type: 'image/png',
+							url: getAuthenticatedMediaByID(id),
+							filename: id
+						})
+			);
+		});
+		validationIssues = [];
+		void resolveSelectedCapabilities();
+		queueAutoSave();
+	}
+
+	function openFocusedMediaPicker(purpose: 'media' | 'thumbnail') {
+		mediaPickerPurpose = purpose;
+		mediaPickerOpen = true;
+	}
+
+	async function applyFocusedMediaPicker(ids: string[], items: StudioMediaItem[]) {
+		if (mediaPickerPurpose === 'thumbnail') {
+			const id = ids[0] ?? '';
+			const item = items.find((candidate) => candidate.id === id);
+			thumbnailMediaId = id;
+			thumbnailMedia = item ? { ...focusedMediaFromLibrary(item), role: 'thumbnail' } : null;
+			validationIssues = [];
+			queueAutoSave();
 			return;
 		}
-		const workspaceId = selectedWorkspaceId;
-		const requestSequence = ++thumbnailUploadRequestSequence;
-		uploadingThumbnail = true;
-		error = '';
+		setFocusedMediaSelection(ids, items);
+	}
+
+	async function openStudioFromFocusedComposer() {
+		if (!selectedWorkspaceId) return;
+		mediaPickerOpen = false;
+		clearAutoSaveTimer();
+		if (hasDraftContent()) {
+			await persistPublication();
+			lastSavedSnapshot = saveSnapshot();
+		}
+
+		const returnURL = new URL(
+			publicationId
+				? resolve(`/publications/${encodeURIComponent(publicationId)}` as '/')
+				: $page.url,
+			$page.url
+		);
+		returnURL.searchParams.delete('studio_return');
+		const maxSelection = mediaPickerPurpose === 'thumbnail' ? 1 : composerMediaLimit;
+		const purpose = mediaPickerPurpose === 'thumbnail' ? 'thumbnail' : 'post_media';
+		const token = await createStudioReturnToken({
+			workspace_id: selectedWorkspaceId,
+			return_url: `${returnURL.pathname}${returnURL.search}`,
+			purpose,
+			max_selection: maxSelection,
+			constraints: {
+				max_count: maxSelection,
+				allowed_mimes: ['image/png', 'image/jpeg', 'image/webp'],
+				composer_mode: mode
+			}
+		});
+		const snapshot: ComposerRecoverySnapshot = {
+			version: 1,
+			workspace_id: selectedWorkspaceId,
+			return_url: `${returnURL.pathname}${returnURL.search}`,
+			purpose,
+			created_at: new Date().toISOString(),
+			expires_at: token.expires_at,
+			payload: {
+				mode,
+				publication_id: publicationId,
+				selected_workspace_id: selectedWorkspaceId,
+				selected_account_ids: [...selectedAccountIds],
+				fields: $state.snapshot(fields),
+				media: $state.snapshot(media),
+				segments: $state.snapshot(segments),
+				active_settings_segment_id: activeSettingsSegmentId,
+				thumbnail_media: $state.snapshot(thumbnailMedia),
+				thumbnail_media_id: thumbnailMediaId,
+				settings_by_account: $state.snapshot(settingsByAccount),
+				segment_settings_by_account: $state.snapshot(segmentSettingsByAccount),
+				selected_date: selectedDate?.toString(),
+				selected_time: selectedTime,
+				picker_purpose: mediaPickerPurpose
+			} satisfies FocusedStudioSnapshotPayload
+		};
+		storeComposerRecovery(token.token, snapshot);
+		await goto(
+			resolve(
+				`/studio/new?workspace=${encodeURIComponent(selectedWorkspaceId)}&return_token=${encodeURIComponent(token.token)}` as '/'
+			)
+		);
+	}
+
+	async function restoreStudioReturn() {
+		if (!$page?.url) return;
+		const token = $page.url.searchParams.get('studio_return');
+		if (!token) return;
+		const cleanURL = new URL($page.url);
+		cleanURL.searchParams.delete('studio_return');
+		replaceState(resolve(`${cleanURL.pathname}${cleanURL.search}` as '/'), {});
 		try {
-			const uploaded = await uploadMediaFile({ workspaceId, file });
-			if (
-				requestSequence !== thumbnailUploadRequestSequence ||
-				selectedWorkspaceId !== workspaceId
-			) {
-				return;
+			const snapshot = loadComposerRecovery(token);
+			const result = await consumeStudioReturnToken(token);
+			let purpose: 'media' | 'thumbnail' = result.purpose === 'thumbnail' ? 'thumbnail' : 'media';
+			if (snapshot?.workspace_id === result.workspace_id) {
+				const payload = snapshot.payload as FocusedStudioSnapshotPayload;
+				publicationId = payload.publication_id;
+				selectedWorkspaceId = payload.selected_workspace_id;
+				selectedAccountIds = [...payload.selected_account_ids];
+				fields = structuredClone(payload.fields);
+				media = structuredClone(payload.media);
+				segments = structuredClone(payload.segments);
+				activeSettingsSegmentId = payload.active_settings_segment_id;
+				thumbnailMedia = structuredClone(payload.thumbnail_media);
+				thumbnailMediaId = payload.thumbnail_media_id;
+				settingsByAccount = structuredClone(payload.settings_by_account);
+				segmentSettingsByAccount = structuredClone(payload.segment_settings_by_account);
+				purpose = payload.picker_purpose;
+				if (payload.selected_date) {
+					const [year, month, day] = payload.selected_date.split('-').map(Number);
+					selectedDate = new CalendarDate(year, month, day);
+				}
+				selectedTime = payload.selected_time;
 			}
-			thumbnailMedia = {
-				id: uploaded.id,
-				mime_type: uploaded.mime_type,
-				url: uploaded.url,
-				size: uploaded.size,
-				filename: file.name,
-				role: 'thumbnail'
-			};
-			thumbnailMediaId = uploaded.id;
-			validationIssues = [];
-		} catch (err) {
-			if (
-				requestSequence === thumbnailUploadRequestSequence &&
-				selectedWorkspaceId === workspaceId
-			) {
-				error = err instanceof Error ? err.message : m.compose_thumbnail_upload_failed();
+
+			if (purpose === 'thumbnail') {
+				thumbnailMediaId = result.media_ids[0] ?? thumbnailMediaId;
+				if (result.media_ids[0]) {
+					thumbnailMedia = {
+						id: result.media_ids[0],
+						mime_type: 'image/png',
+						url: getAuthenticatedMediaByID(result.media_ids[0]),
+						filename: result.media_ids[0],
+						role: 'thumbnail'
+					};
+				}
+			} else {
+				setFocusedMediaSelection([...media.map((item) => item.id), ...result.media_ids], []);
 			}
-		} finally {
-			if (
-				requestSequence === thumbnailUploadRequestSequence &&
-				selectedWorkspaceId === workspaceId
-			) {
-				uploadingThumbnail = false;
-			}
+			await resolveSelectedCapabilities();
+			const autosaveSnapshot = saveSnapshot();
+			await saveDraftAutomatically(autosaveSnapshot);
+			clearComposerRecovery(token);
+			success = `${result.media_ids.length} Studio ${result.media_ids.length === 1 ? 'export' : 'exports'} added.`;
+		} catch (cause) {
+			error =
+				cause instanceof Error
+					? `${cause.message} Your Studio exports are still available in Media.`
+					: 'Studio exports are still available in Media.';
 		}
 	}
 
@@ -2092,26 +2212,20 @@
 					<div class="{modeMeta.mediaFirst ? 'order-1' : 'order-2'} space-y-3">
 						<div class="rounded-md border border-dashed bg-muted/20 p-4">
 							<div class="flex flex-wrap items-center gap-3">
-								<label
-									class="inline-flex h-11 cursor-pointer items-center gap-2 rounded-md border bg-background px-3 text-sm font-medium"
+								<Button
+									type="button"
+									variant="outline"
+									class="h-11 gap-2"
+									disabled={uploading || !selectedWorkspaceId}
+									onclick={() => openFocusedMediaPicker('media')}
 								>
 									{#if uploading}
 										<LoaderIcon class="h-4 w-4 animate-spin" />
 									{:else}
-										<UploadIcon class="h-4 w-4" />
+										<ImagePlusIcon class="h-4 w-4" />
 									{/if}
-									{m.compose_upload_media()}
-									<input
-										class="sr-only"
-										type="file"
-										multiple
-										accept={mode === 'post'
-											? 'image/*,video/*,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation'
-											: 'image/*,video/*'}
-										disabled={uploading || !selectedWorkspaceId}
-										onchange={(event) => handleFiles(event.currentTarget.files)}
-									/>
-								</label>
+									{m.media_picker_add_media()}
+								</Button>
 								<p class="text-sm text-muted-foreground">
 									{mode === 'video' ? m.compose_add_long_video() : m.compose_add_media()}
 								</p>
@@ -2179,23 +2293,16 @@
 						{#if hasYouTubeTarget && (mode === 'short_video' || mode === 'video')}
 							<div class="rounded-md border bg-background p-4">
 								<div class="flex flex-wrap items-center gap-3">
-									<label
-										class="inline-flex h-11 cursor-pointer items-center gap-2 rounded-md border bg-background px-3 text-sm font-medium"
+									<Button
+										type="button"
+										variant="outline"
+										class="h-11 gap-2"
+										disabled={!selectedWorkspaceId}
+										onclick={() => openFocusedMediaPicker('thumbnail')}
 									>
-										{#if uploadingThumbnail}
-											<LoaderIcon class="h-4 w-4 animate-spin" />
-										{:else}
-											<ImagePlusIcon class="h-4 w-4" />
-										{/if}
+										<ImagePlusIcon class="h-4 w-4" />
 										{m.compose_thumbnail()}
-										<input
-											class="sr-only"
-											type="file"
-											accept="image/*"
-											disabled={uploadingThumbnail || !selectedWorkspaceId}
-											onchange={(event) => handleThumbnail(event.currentTarget.files)}
-										/>
-									</label>
+									</Button>
 									<p class="text-sm text-muted-foreground">{m.compose_thumbnail_youtube()}</p>
 									{#if thumbnailMediaId}
 										<Button variant="ghost" size="sm" class="h-8 text-xs" onclick={clearThumbnail}>
@@ -2341,6 +2448,35 @@
 		</div>
 	{/if}
 </div>
+
+<MediaPicker
+	bind:open={mediaPickerOpen}
+	workspaceId={selectedWorkspaceId}
+	currentSelection={mediaPickerPurpose === 'thumbnail'
+		? thumbnailMediaId
+			? [thumbnailMediaId]
+			: []
+		: media.map((item) => item.id)}
+	accept={mediaPickerPurpose === 'thumbnail'
+		? ['image/*']
+		: mode === 'post'
+			? [
+					'image/*',
+					'video/*',
+					'application/pdf',
+					'application/msword',
+					'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+					'application/vnd.ms-powerpoint',
+					'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+				]
+			: ['image/*', 'video/*']}
+	maxSelection={mediaPickerPurpose === 'thumbnail' ? 1 : composerMediaLimit}
+	multiple={mediaPickerPurpose !== 'thumbnail' && composerMediaLimit > 1}
+	title={mediaPickerPurpose === 'thumbnail' ? m.compose_thumbnail() : m.compose_add_media()}
+	purpose={mediaPickerPurpose === 'thumbnail' ? 'thumbnail' : 'post_media'}
+	onConfirm={applyFocusedMediaPicker}
+	onCreate={openStudioFromFocusedComposer}
+/>
 
 <DestinationSettingsDialog
 	bind:open={settingsDialogOpen}

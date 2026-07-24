@@ -9,6 +9,8 @@ onlyBuiltDependencies:
   - sharp
   - vue-demi
 allowBuilds:
+  canvas: false
   esbuild: true
+  protobufjs: false
   sharp: true
   vue-demi: true
