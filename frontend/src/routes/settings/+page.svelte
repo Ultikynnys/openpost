@@ -7,6 +7,7 @@
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
 	import PageContainer from '$lib/components/page-container.svelte';
+	import SettingsNavigation from '$lib/components/settings-navigation.svelte';
 	import PageLoading from '$lib/components/page-loading.svelte';
 	import SectionHeader from '$lib/components/section-header.svelte';
 	import AppToast from '$lib/components/app-toast.svelte';
@@ -478,18 +479,6 @@
 			return value === 'tokens' ? 'developer' : 'profile';
 		if (value === 'workspace' || value === 'social-accounts') return 'general';
 		return value && isSettingsTab(value) ? value : 'general';
-	}
-
-	function openSettingsTab(tab: (typeof settingsTabs)[number]['id']) {
-		goto(resolve(`/settings?tab=${tab}` as '/settings'));
-	}
-
-	function handleSettingsNavigation(value: string) {
-		if (value === 'accounts') {
-			void goto(resolve('/accounts'));
-			return;
-		}
-		openSettingsTab(normalizeSettingsTab(value));
 	}
 
 	async function saveProfile(event: SubmitEvent) {
@@ -1446,99 +1435,7 @@
 		</InlineNotice>
 	{:else}
 		<div class="grid min-w-0 items-start gap-8 lg:grid-cols-[13rem_minmax(0,1fr)]">
-			<aside class="min-w-0 lg:sticky lg:top-6">
-				<Select.Root
-					type="single"
-					value={activeSettingsTab}
-					onValueChange={(value) => value && handleSettingsNavigation(value)}
-				>
-					<Select.Trigger class="w-full lg:hidden" aria-label={m.settings_nav_label()}>
-						{activeSettingsTitle}
-					</Select.Trigger>
-					<Select.Content>
-						{#each settingsTabs as tab (tab.id)}
-							<Select.Item value={tab.id}>{tab.label}</Select.Item>
-						{/each}
-						<Select.Separator />
-						<Select.Item value="accounts">{m.accounts_heading()}</Select.Item>
-					</Select.Content>
-				</Select.Root>
-				<nav
-					class="hidden max-w-full gap-2 lg:flex lg:flex-col"
-					aria-label={m.settings_nav_label()}
-				>
-					<p
-						class="hidden px-2 text-[11px] font-medium tracking-[0.12em] text-muted-foreground uppercase lg:block"
-					>
-						{m.settings_personal()}
-					</p>
-					{#each settingsTabs.slice(0, 3) as tab (tab.id)}
-						<button
-							type="button"
-							data-settings-tab={tab.id}
-							class={[
-								'min-h-10 shrink-0 rounded-md px-3 py-2 text-left text-sm font-medium transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none lg:w-full',
-								activeSettingsTab === tab.id
-									? 'bg-accent text-foreground'
-									: 'text-muted-foreground hover:bg-accent/60 hover:text-foreground'
-							]}
-							onclick={() => openSettingsTab(tab.id)}
-							aria-current={activeSettingsTab === tab.id ? 'page' : undefined}
-						>
-							{tab.label}
-						</button>
-					{/each}
-					<p
-						class="hidden px-2 pt-4 text-[11px] font-medium tracking-[0.12em] text-muted-foreground uppercase lg:block"
-					>
-						{m.settings_workspace()}
-					</p>
-					{#each settingsTabs.slice(3, 6) as tab (tab.id)}
-						<button
-							type="button"
-							data-settings-tab={tab.id}
-							class={[
-								'min-h-10 shrink-0 rounded-md px-3 py-2 text-left text-sm font-medium transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none lg:w-full',
-								activeSettingsTab === tab.id
-									? 'bg-accent text-foreground'
-									: 'text-muted-foreground hover:bg-accent/60 hover:text-foreground'
-							]}
-							onclick={() => openSettingsTab(tab.id)}
-							aria-current={activeSettingsTab === tab.id ? 'page' : undefined}
-						>
-							{tab.label}
-						</button>
-					{/each}
-					<button
-						type="button"
-						class="min-h-10 shrink-0 rounded-md px-3 py-2 text-left text-sm font-medium text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none lg:w-full"
-						onclick={() => goto(resolve('/accounts'))}
-					>
-						{m.accounts_heading()}
-					</button>
-					<p
-						class="hidden px-2 pt-4 text-[11px] font-medium tracking-[0.12em] text-muted-foreground uppercase lg:block"
-					>
-						{m.settings_team_billing()}
-					</p>
-					{#each settingsTabs.slice(6) as tab (tab.id)}
-						<button
-							type="button"
-							data-settings-tab={tab.id}
-							class={[
-								'min-h-10 shrink-0 rounded-md px-3 py-2 text-left text-sm font-medium transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none lg:w-full',
-								activeSettingsTab === tab.id
-									? 'bg-accent text-foreground'
-									: 'text-muted-foreground hover:bg-accent/60 hover:text-foreground'
-							]}
-							onclick={() => openSettingsTab(tab.id)}
-							aria-current={activeSettingsTab === tab.id ? 'page' : undefined}
-						>
-							{tab.label}
-						</button>
-					{/each}
-				</nav>
-			</aside>
+			<SettingsNavigation active={activeSettingsTab} />
 
 			<div class="min-w-0 space-y-10">
 				<section id="profile" class:hidden={activeSettingsTab !== 'profile'} class="scroll-mt-24">

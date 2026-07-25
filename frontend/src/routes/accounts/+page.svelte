@@ -11,6 +11,7 @@
 	import { goto, replaceState } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import PageContainer from '$lib/components/page-container.svelte';
+	import SettingsNavigation from '$lib/components/settings-navigation.svelte';
 	import PageLoading from '$lib/components/page-loading.svelte';
 	import EmptyState from '$lib/components/empty-state.svelte';
 	import SectionHeader from '$lib/components/section-header.svelte';
@@ -611,230 +612,235 @@
 	loadingLayout="sections"
 	loadingMessage={m.common_loading()}
 >
-	{#if !workspaces || workspaces.length === 0}
-		<EmptyState
-			icon={UsersIcon}
-			title={m.accounts_no_workspaces_title()}
-			description={m.accounts_no_workspaces_body()}
-			actionLabel={m.accounts_create_workspace()}
-			actionHref="/"
-			variant="muted"
-		/>
-	{:else}
-		{#if error}
-			<InlineNotice
-				tone="error"
-				message={error}
-				dismissLabel={m.common_dismiss()}
-				onDismiss={() => (error = '')}
-				class="mb-6"
-			/>
-		{/if}
-
-		<!-- Connected Accounts -->
-		<div class="mb-10">
-			<SectionHeader
-				title={m.accounts_connected_channels()}
-				description={accountsLoadError
-					? undefined
-					: m.accounts_connection_summary({
-							count: accounts.length,
-							workspace: selectedWorkspaceName
-						})}
-				class="mb-4"
-			>
-				{#snippet actions()}
-					<Button href="/" size="sm">{m.accounts_create_post()}</Button>
-				{/snippet}
-			</SectionHeader>
-
-			{#if accountsLoadError}
-				<div data-testid="accounts-load-error">
-					<InlineNotice tone="error" message={accountsLoadError}>
-						{#snippet actions()}
-							<Button
-								variant="outline"
-								size="sm"
-								onclick={() => void loadAccounts()}
-								disabled={accountsLoading}
-							>
-								{m.common_retry()}
-							</Button>
-						{/snippet}
-					</InlineNotice>
-				</div>
-			{:else if accountsLoading}
-				<PageLoading layout="grid" label={m.common_loading()} items={3} />
-			{:else if !accounts || accounts.length === 0}
+	<div class="grid min-w-0 items-start gap-8 lg:grid-cols-[13rem_minmax(0,1fr)]">
+		<SettingsNavigation active="accounts" />
+		<div class="min-w-0">
+			{#if !workspaces || workspaces.length === 0}
 				<EmptyState
 					icon={UsersIcon}
-					title={m.accounts_empty_title()}
-					description={m.accounts_empty_body()}
-					actionLabel={m.accounts_sample_campaign_action()}
-					actionHref={sampleCampaignPathForPlan()}
+					title={m.accounts_no_workspaces_title()}
+					description={m.accounts_no_workspaces_body()}
+					actionLabel={m.accounts_create_workspace()}
+					actionHref="/"
 					variant="muted"
-					size="md"
-					headingLevel={3}
 				/>
 			{:else}
-				<div
-					class="grid gap-px overflow-hidden rounded-lg border bg-border sm:grid-cols-2 xl:grid-cols-3"
-				>
-					{#each accounts as account (account.id)}
-						<article class="flex min-h-28 flex-col justify-between gap-3 bg-background p-4">
-							<div class="flex items-start gap-3">
-								<div
-									class="flex size-10 shrink-0 items-center justify-center rounded-lg {getPlatformColor(
-										account.platform
-									)}"
-								>
-									<PlatformIcon platform={account.platform} class="size-5 text-white" />
-								</div>
-								<div class="min-w-0 flex-1">
-									<div class="flex items-center gap-2">
-										<h3 class="truncate text-sm font-semibold">
-											{getPlatformName(account.platform)}
-										</h3>
-										{#if !account.is_active}
-											<span
-												class="size-1.5 rounded-full bg-amber-500"
-												aria-label={m.accounts_connection_paused()}
-											></span>
-										{/if}
-									</div>
-									<p class="mt-1 truncate text-sm text-muted-foreground">
-										{accountDisplayName(account)}
-									</p>
-								</div>
-								<DropdownMenu.Root>
-									<DropdownMenu.Trigger>
-										{#snippet child({ props })}
-											<Button
-												{...props}
-												variant="ghost"
-												size="icon-sm"
-												aria-label={m.accounts_actions_for({
-													account: accountDisplayName(account)
-												})}
-											>
-												<MoreHorizontalIcon class="size-4" />
-											</Button>
-										{/snippet}
-									</DropdownMenu.Trigger>
-									<DropdownMenu.Content align="end" class="w-48">
-										<DropdownMenu.Item onclick={() => openEditAccount(account)}
-											>{m.accounts_details()}</DropdownMenu.Item
-										>
-										<DropdownMenu.Separator />
-										<DropdownMenu.Item
-											class="text-destructive"
-											onclick={() => requestDisconnectAccount(account)}
-											>{m.common_disconnect()}</DropdownMenu.Item
-										>
-									</DropdownMenu.Content>
-								</DropdownMenu.Root>
-							</div>
-							<div
-								class="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground"
-							>
-								<span class="inline-flex min-w-0 items-center gap-1.5">
-									<span>{m.accounts_shortcut()}</span>
-									<code
-										class="max-w-44 truncate rounded bg-muted px-1.5 py-0.5 font-mono text-[0.6875rem] text-foreground"
-										>{accountSlug(account)}</code
-									>
-								</span>
-								{#if accountServer(account)}
-									<span class="truncate">{m.accounts_server()}: {accountServer(account)}</span>
-								{/if}
-								{#if !account.is_active}
-									<span class="text-amber-700 dark:text-amber-300"
-										>{m.accounts_connection_paused()}</span
-									>
-								{/if}
-							</div>
-						</article>
-					{/each}
-				</div>
-			{/if}
-		</div>
+				{#if error}
+					<InlineNotice
+						tone="error"
+						message={error}
+						dismissLabel={m.common_dismiss()}
+						onDismiss={() => (error = '')}
+						class="mb-6"
+					/>
+				{/if}
 
-		<!-- Connect a Platform -->
-		<div>
-			<SectionHeader
-				title={m.accounts_add_channel()}
-				description={m.accounts_add_channel_body()}
-				class="mb-4"
-			/>
-
-			{#if providersLoadError}
-				<div data-testid="providers-load-error">
-					<InlineNotice tone="error" message={providersLoadError}>
+				<!-- Connected Accounts -->
+				<div class="mb-10">
+					<SectionHeader
+						title={m.accounts_connected_channels()}
+						description={accountsLoadError
+							? undefined
+							: m.accounts_connection_summary({
+									count: accounts.length,
+									workspace: selectedWorkspaceName
+								})}
+						class="mb-4"
+					>
 						{#snippet actions()}
-							<Button
-								variant="outline"
-								size="sm"
-								onclick={() => void loadProviders()}
-								disabled={providersLoading}
-							>
-								{m.common_retry()}
-							</Button>
+							<Button href="/" size="sm">{m.accounts_create_post()}</Button>
 						{/snippet}
-					</InlineNotice>
-				</div>
-			{:else if providersLoading}
-				<PageLoading layout="grid" label={m.common_loading()} items={4} />
-			{:else}
-				<div class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-					{#each connectionProviderEntries as provider (providerKey(provider))}
+					</SectionHeader>
+
+					{#if accountsLoadError}
+						<div data-testid="accounts-load-error">
+							<InlineNotice tone="error" message={accountsLoadError}>
+								{#snippet actions()}
+									<Button
+										variant="outline"
+										size="sm"
+										onclick={() => void loadAccounts()}
+										disabled={accountsLoading}
+									>
+										{m.common_retry()}
+									</Button>
+								{/snippet}
+							</InlineNotice>
+						</div>
+					{:else if accountsLoading}
+						<PageLoading layout="grid" label={m.common_loading()} items={3} />
+					{:else if !accounts || accounts.length === 0}
+						<EmptyState
+							icon={UsersIcon}
+							title={m.accounts_empty_title()}
+							description={m.accounts_empty_body()}
+							actionLabel={m.accounts_sample_campaign_action()}
+							actionHref={sampleCampaignPathForPlan()}
+							variant="muted"
+							size="md"
+							headingLevel={3}
+						/>
+					{:else}
 						<div
-							data-testid={`provider-card-${provider.platform}`}
-							class="group flex h-full min-h-28 flex-col rounded-lg border bg-card p-4 transition-all hover:shadow-sm {providerCanConnect(
-								provider
-							)
-								? ''
-								: 'bg-muted/20'}"
+							class="grid gap-px overflow-hidden rounded-lg border bg-border sm:grid-cols-2 xl:grid-cols-3"
 						>
-							<div class="flex items-start gap-3">
-								<div
-									class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full {getPlatformColor(
-										provider.platform
-									)}"
-								>
-									<PlatformIcon platform={provider.platform} class="h-4 w-4 text-white" />
-								</div>
-								<div class="min-w-0 flex-1">
-									<div class="flex flex-wrap items-center gap-2">
-										<h3 class="text-sm font-medium">{providerTitle(provider)}</h3>
-										{#if providerStatus(provider) !== 'available'}
-											<span
-												class="inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium {providerStatusClass(
-													provider
-												)}"
+							{#each accounts as account (account.id)}
+								<article class="flex min-h-28 flex-col justify-between gap-3 bg-background p-4">
+									<div class="flex items-start gap-3">
+										<div
+											class="flex size-10 shrink-0 items-center justify-center rounded-lg {getPlatformColor(
+												account.platform
+											)}"
+										>
+											<PlatformIcon platform={account.platform} class="size-5 text-white" />
+										</div>
+										<div class="min-w-0 flex-1">
+											<div class="flex items-center gap-2">
+												<h3 class="truncate text-sm font-semibold">
+													{getPlatformName(account.platform)}
+												</h3>
+												{#if !account.is_active}
+													<span
+														class="size-1.5 rounded-full bg-amber-500"
+														aria-label={m.accounts_connection_paused()}
+													></span>
+												{/if}
+											</div>
+											<p class="mt-1 truncate text-sm text-muted-foreground">
+												{accountDisplayName(account)}
+											</p>
+										</div>
+										<DropdownMenu.Root>
+											<DropdownMenu.Trigger>
+												{#snippet child({ props })}
+													<Button
+														{...props}
+														variant="ghost"
+														size="icon-sm"
+														aria-label={m.accounts_actions_for({
+															account: accountDisplayName(account)
+														})}
+													>
+														<MoreHorizontalIcon class="size-4" />
+													</Button>
+												{/snippet}
+											</DropdownMenu.Trigger>
+											<DropdownMenu.Content align="end" class="w-48">
+												<DropdownMenu.Item onclick={() => openEditAccount(account)}
+													>{m.accounts_details()}</DropdownMenu.Item
+												>
+												<DropdownMenu.Separator />
+												<DropdownMenu.Item
+													class="text-destructive"
+													onclick={() => requestDisconnectAccount(account)}
+													>{m.common_disconnect()}</DropdownMenu.Item
+												>
+											</DropdownMenu.Content>
+										</DropdownMenu.Root>
+									</div>
+									<div
+										class="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground"
+									>
+										<span class="inline-flex min-w-0 items-center gap-1.5">
+											<span>{m.accounts_shortcut()}</span>
+											<code
+												class="max-w-44 truncate rounded bg-muted px-1.5 py-0.5 font-mono text-[0.6875rem] text-foreground"
+												>{accountSlug(account)}</code
 											>
-												{providerStatusLabel(provider)}
-											</span>
+										</span>
+										{#if accountServer(account)}
+											<span class="truncate">{m.accounts_server()}: {accountServer(account)}</span>
+										{/if}
+										{#if !account.is_active}
+											<span class="text-amber-700 dark:text-amber-300"
+												>{m.accounts_connection_paused()}</span
+											>
 										{/if}
 									</div>
-									<p class="truncate text-sm text-muted-foreground">
-										{providerDescription(provider)}
-									</p>
-								</div>
-							</div>
-							<Button
-								class="mt-3 min-h-11 self-end sm:min-h-9"
-								onclick={() => connectProvider(provider)}
-								size="sm"
-								disabled={!providerCanConnect(provider)}
-							>
-								{providerActionLabel(provider)}
-							</Button>
+								</article>
+							{/each}
 						</div>
-					{/each}
+					{/if}
+				</div>
+
+				<!-- Connect a Platform -->
+				<div>
+					<SectionHeader
+						title={m.accounts_add_channel()}
+						description={m.accounts_add_channel_body()}
+						class="mb-4"
+					/>
+
+					{#if providersLoadError}
+						<div data-testid="providers-load-error">
+							<InlineNotice tone="error" message={providersLoadError}>
+								{#snippet actions()}
+									<Button
+										variant="outline"
+										size="sm"
+										onclick={() => void loadProviders()}
+										disabled={providersLoading}
+									>
+										{m.common_retry()}
+									</Button>
+								{/snippet}
+							</InlineNotice>
+						</div>
+					{:else if providersLoading}
+						<PageLoading layout="grid" label={m.common_loading()} items={4} />
+					{:else}
+						<div class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+							{#each connectionProviderEntries as provider (providerKey(provider))}
+								<div
+									data-testid={`provider-card-${provider.platform}`}
+									class="group flex h-full min-h-28 flex-col rounded-lg border bg-card p-4 transition-all hover:shadow-sm {providerCanConnect(
+										provider
+									)
+										? ''
+										: 'bg-muted/20'}"
+								>
+									<div class="flex items-start gap-3">
+										<div
+											class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full {getPlatformColor(
+												provider.platform
+											)}"
+										>
+											<PlatformIcon platform={provider.platform} class="h-4 w-4 text-white" />
+										</div>
+										<div class="min-w-0 flex-1">
+											<div class="flex flex-wrap items-center gap-2">
+												<h3 class="text-sm font-medium">{providerTitle(provider)}</h3>
+												{#if providerStatus(provider) !== 'available'}
+													<span
+														class="inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium {providerStatusClass(
+															provider
+														)}"
+													>
+														{providerStatusLabel(provider)}
+													</span>
+												{/if}
+											</div>
+											<p class="truncate text-sm text-muted-foreground">
+												{providerDescription(provider)}
+											</p>
+										</div>
+									</div>
+									<Button
+										class="mt-3 min-h-11 self-end sm:min-h-9"
+										onclick={() => connectProvider(provider)}
+										size="sm"
+										disabled={!providerCanConnect(provider)}
+									>
+										{providerActionLabel(provider)}
+									</Button>
+								</div>
+							{/each}
+						</div>
+					{/if}
 				</div>
 			{/if}
 		</div>
-	{/if}
+	</div>
 </PageContainer>
 
 <DestructiveConfirmDialog

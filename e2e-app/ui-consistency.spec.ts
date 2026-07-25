@@ -196,6 +196,20 @@ for (const viewport of viewports) {
             await expect(month).toBeVisible();
           }
         }
+
+        if (route === "/accounts") {
+          const settingsNavigation = page.getByTestId("settings-navigation");
+          await expect(settingsNavigation).toBeVisible();
+          if (viewport.width < 1024) {
+            await expect(
+              settingsNavigation.locator('button[aria-label="Settings"]'),
+            ).toContainText("Social accounts");
+          } else {
+            await expect(
+              settingsNavigation.locator('[data-settings-tab="accounts"]'),
+            ).toHaveAttribute("aria-current", "page");
+          }
+        }
       });
     }
 
@@ -226,6 +240,16 @@ for (const viewport of viewports) {
     await scheduleSection.locator("#new-time").scrollIntoViewIfNeeded();
     await expect(scheduleSection.locator("#new-time")).toBeVisible();
     await expect(page.locator("h1")).toHaveCount(1);
+    await expectNoDocumentOverflow(page);
+
+    if (viewport.width < 1024) {
+      await mobileSettingsSelector.click();
+      await page.getByRole("option", { name: "Social accounts" }).click();
+    } else {
+      await page.locator('[data-settings-tab="accounts"]').click();
+    }
+    await expect(page).toHaveURL(/\/accounts$/);
+    await expect(page.getByTestId("settings-navigation")).toBeVisible();
     await expectNoDocumentOverflow(page);
   });
 }
@@ -333,9 +357,7 @@ test("media card controls are available on a portrait screen without hover", asy
   await expect(page.getByRole("menuitem", { name: "Download" })).toBeVisible();
   await page.keyboard.press("Escape");
 
-  await page
-    .getByRole("button", { name: "Select", exact: true })
-    .click();
+  await page.getByRole("button", { name: "Select", exact: true }).click();
   await expect(selectControl).toBeVisible();
   await expect(selectControl).toHaveAttribute("aria-pressed", "false");
   await selectControl.click();
