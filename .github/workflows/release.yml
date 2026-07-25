@@ -154,21 +154,25 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install Nix
-        uses: cachix/install-nix-action@v31
-
-      - name: Set up devenv cache
-        uses: cachix/cachix-action@v16
+      # Preflight already validates the locked Devenv environment. Keep this
+      # artifact-only job on the pinned application toolchain so a transient
+      # Nix store reference cannot prevent packaging verified frontend assets.
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
         with:
-          name: devenv
+          version: 11.7.0
 
-      - name: Install devenv
-        shell: bash
-        run: nix profile add nixpkgs#devenv
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
 
       - name: Build frontend
-        shell: devenv shell bash -- -e {0}
-        run: frontend-build
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm --filter @openpost/web build
 
       - name: Upload frontend assets
         uses: actions/upload-artifact@v4
@@ -267,20 +271,16 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install Nix
-        uses: cachix/install-nix-action@v31
-
-      - name: Set up devenv cache
-        uses: cachix/cachix-action@v16
+      # These targets are pure Go cross-builds. Preflight already validates
+      # them inside Devenv, so use the module-pinned Go toolchain directly.
+      - name: Set up Go
+        uses: actions/setup-go@v5
         with:
-          name: devenv
-
-      - name: Install devenv
-        shell: bash
-        run: nix profile add nixpkgs#devenv
+          go-version-file: cli/go.mod
+          cache-dependency-path: cli/go.sum
 
       - name: Build CLI binary
-        shell: devenv shell bash -- -e {0}
+        shell: bash
         run: |
           cd cli
           version="${GITHUB_REF_NAME:-dev}"

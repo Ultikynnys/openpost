@@ -19,6 +19,7 @@ All notable changes to this project are documented in this file.
 
 ### Fixed
 
+- Kept release artifact packaging on the pinned Node, pnpm, and Go toolchains after Devenv preflight so transient Nix store references cannot strand frontend, server, or CLI release assets.
 - Kept Brand kit text fields and color controls mounted while their values change so keyboard focus, selection, and color-picker state no longer reset during editing.
 - Kept resized Studio images flush with their frames by preserving source-pixel geometry during Fabric transforms, and kept canvas selection synchronized after document updates.
 - Routed uploads through the storage mode advertised by the server instead of probing an unsupported direct-upload endpoint, and raised the bounded frontend build heap to the verified bundle minimum.
