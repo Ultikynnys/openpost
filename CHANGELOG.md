@@ -67,6 +67,7 @@ All notable changes to this project are documented in this file.
 
 ### Fixed
 
+- Updated `brace-expansion` to its patched release after a new production dependency advisory.
 - Stopped permanent validation, authentication, permission, billing, and duplicate-content failures from consuming generic job retries while preserving bounded retries and uploaded-media state for transient failures.
 - Updated SvelteKit, PostCSS, and node-tar to patched releases after new production dependency advisories.
 - Kept generic provider quota caveats from marking connected accounts as needing attention in the composer.
