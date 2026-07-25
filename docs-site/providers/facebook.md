@@ -1,6 +1,6 @@
 # Facebook
 
-Facebook support is available as an initial Pages publishing slice. It uses Meta OAuth, asks the user to choose a Page, and stores the selected Page access token.
+Facebook Pages is a preview integration. It uses Meta OAuth, asks the user to choose a Page, and stores the selected Page access token.
 
 ## Requirements
 

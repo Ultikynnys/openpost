@@ -36,7 +36,7 @@ Self-hosted OpenPost has no software subscription. You operate its server, TLS, 
 ## What OpenPost supports
 
 - **Implemented integrations:** X, Mastodon, Bluesky, LinkedIn, and Threads
-- **Preview integrations:** Facebook Pages, Instagram Business, TikTok, and YouTube
+- **Preview integrations:** Facebook Pages, Instagram professional accounts, TikTok, and YouTube
 
 Preview means the code path exists but provider approval, app configuration, quotas, or live-account verification can still block production publishing. See [Supported Platforms & Limitations](/providers/platform-limits) for the current profile-level matrix.
 

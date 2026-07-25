@@ -1,6 +1,6 @@
-# Production Readiness Plan
+# Production Architecture and Readiness
 
-This is the implementation map for turning OpenPost into a production-ready self-hosted product plus OpenPost Cloud. The public repo should keep the shared product core, while private infrastructure stays in the deployment/ops layer.
+OpenPost runs as a production self-hosted product and managed service. This page records the shared architecture, remaining provider verification work, and the checks that keep both deployment models ready. Private credentials and infrastructure stay in the deployment and operations layer.
 
 ## Product Direction
 
@@ -20,7 +20,7 @@ This is the implementation map for turning OpenPost into a production-ready self
 - Treat billing as entitlements and usage limits, not provider-specific checks scattered through handlers.
 - Use background jobs for provider publishing, media processing, token refresh, and other restart-sensitive work.
 
-## Milestones
+## Current architecture and operating checks
 
 ### 1. Cloud Foundation
 
@@ -38,13 +38,8 @@ This is the implementation map for turning OpenPost into a production-ready self
 - Store local subscription state and entitlement snapshots; do not call Polar on every request. The Polar checkout, customer portal, and webhook foundation now creates hosted billing sessions, verifies signed events, deduplicates webhook deliveries, and upserts organization subscription snapshots.
 - Keep self-hosted entitlement defaults permissive and configurable.
 - Keep cloud pre-checkout access constrained. Cloud mode now allows a first bootstrap workspace, then evaluates workspace expansion from active organization subscription snapshots instead of falling back to self-hosted unlimited behavior.
-- Suggested launch plans:
-  - Starter: 3 open-web connections, Bluesky/Mastodon first, 1 workspace, 100 scheduled posts/month, 1 GB media.
-  - Creator: 6 connections, X/LinkedIn/Threads/Bluesky/Mastodon, 3 workspaces, 500 scheduled posts/month, 5 GB media.
-  - Pro: 15 connections, larger media/history limits, and solo power-user volume.
-  - Team: seat-based collaboration for small teams and multi-brand operators.
-  - Agency: higher workspace/account limits for client portfolio management.
-- Avoid a hosted free tier at launch. Any trial access should be deliberately granted through Polar's `trialing` state and described as non-automatic.
+- Keep the public plan catalog, backend entitlement snapshots, and Polar product metadata aligned. The current prices and limits are maintained in the [managed pricing page](https://openpost.social/pricing) and `marketing-site/src/routes/_marketing.ts`.
+- Keep cloud access before checkout constrained. Any trial access must come from Polar's `trialing` state and must not be described as automatic.
 
 ### 3. Provider Readiness
 
@@ -97,13 +92,10 @@ This is the implementation map for turning OpenPost into a production-ready self
 - Keep `devenv shell -- lint` as the push gate.
 - For hosted deployment work, verify the real app URL, docs URL, marketing URL, release workflow, database backups, and logs.
 
-## First Implementation Order
+## Change verification order
 
-1. Upgrade marketing-site into a real public front door.
-2. Add production-readiness docs and keep links discoverable.
-3. Backend config primitives for edition, database driver, and storage driver are implemented.
-4. Storage-driver tests and the S3-compatible storage driver are implemented.
-5. Add entitlement interfaces and self-host defaults. Done for the service contract and workspace creation boundary.
-6. Add usage tables and API boundary checks. Monthly usage counters, workspace quota enforcement, team invitation seat enforcement, social-account quota enforcement, media quota enforcement, scheduled-post quota enforcement, and publishing-worker usage/quota enforcement are in place.
-7. Add Playwright coverage around the core app flows.
-8. Start MCP with authenticated remote metadata and safe read/create/schedule tools. Remote auth, protected-resource metadata, authorization-server metadata, PKCE account linking, `mcp:read` and `mcp:full` scopes, tool security descriptors, Apps SDK output metadata, prompt templates, workspace listing, account listing, guarded URL media upload, draft creation, scheduled posting, status reads, scheduled-post cancellation, next-slot suggestions, settings-visible tool-call activity, and dedicated MCP API-token creation are in place.
+1. Update source behavior, generated contracts, tests, and public docs in the same change.
+2. Run `devenv shell -- doctor` before broad or release work.
+3. Run targeted checks while iterating, then `devenv shell -- verify`.
+4. For visible changes, run the relevant app, docs, or marketing browser suite at desktop and phone widths.
+5. For a production release, follow [Releases and Versioning](/development/releases) and verify the workflow, release, deployed revision, and public readiness.

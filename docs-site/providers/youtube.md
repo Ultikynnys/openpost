@@ -1,6 +1,6 @@
 # YouTube
 
-YouTube support is available as an initial video upload slice. It uses Google OAuth, asks the user to choose a YouTube channel, and stores the Google refresh token for scheduled uploads.
+YouTube is a preview integration for Shorts and long-form video uploads. It uses Google OAuth, asks the user to choose a channel, and stores the Google refresh token for scheduled uploads.
 
 ## Requirements
 

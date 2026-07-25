@@ -1,6 +1,6 @@
 # Instagram
 
-Instagram support is available as an initial Instagram Business publishing slice. It uses Meta OAuth, asks the user to choose an Instagram Business account connected to a Facebook Page, and stores the selected Page access token.
+Instagram professional publishing is a preview integration. It uses Meta OAuth, asks the user to choose a Business or Creator account connected to a Facebook Page, and stores the selected Page access token.
 
 ## Requirements
 
@@ -38,7 +38,7 @@ If `redirect_uri` is omitted, OpenPost derives it from `OPENPOST_APP_URL`.
 
 ## Current Scope
 
-- Connects a selected Instagram Business account behind a Facebook Page.
+- Connects a selected Instagram Business or Creator account behind a Facebook Page.
 - Publishes a single image URL with a caption.
 - Publishes a single video URL as a Reel.
 - Publishes 2-10 media items as a carousel when multiple compatible media items are attached.

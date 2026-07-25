@@ -45,6 +45,8 @@ jobs:
           cd ..
 
           pnpm install --frozen-lockfile
+          pnpm run check:docs
+          pnpm run check:release-version
           pnpm exec playwright install --with-deps chromium
           pnpm --filter @openpost/web lint
           pnpm --filter @openpost/web check

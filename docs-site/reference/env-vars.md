@@ -1,6 +1,6 @@
 # Environment Variables
 
-This is the low-level quick reference version of the configuration docs.
+This page lists the most common core and provider variables. Use [Environment Variables](/configuration/environment-variables) for required values, defaults, file-backed configuration, legacy aliases, and complete deployment notes.
 
 ## Studio
 
@@ -67,6 +67,7 @@ Most variables loaded through the main backend config loader can also be loaded 
 | `LINKEDIN_CLIENT_SECRET`              | LinkedIn client secret                                                                                      |
 | `LINKEDIN_REDIRECT_URI`               | LinkedIn callback override                                                                                  |
 | `LINKEDIN_DISABLE_THREAD_REPLIES`     | Disable LinkedIn thread replies                                                                             |
+| `LINKEDIN_API_VERSION`                | Optional LinkedIn REST API version override; direct adapter variable without `_FILE` support               |
 | `THREADS_CLIENT_ID`                   | Threads client ID                                                                                           |
 | `THREADS_CLIENT_SECRET`               | Threads client secret                                                                                       |
 | `THREADS_REDIRECT_URI`                | Threads callback override                                                                                   |
@@ -74,4 +75,4 @@ Most variables loaded through the main backend config loader can also be loaded 
 
 Facebook, Instagram, TikTok, and YouTube are configured through the provider app registry with providers `facebook`, `instagram`, `tiktok`, and `youtube`; no legacy env vars are required.
 
-Legacy aliases still work for upgrades: `OPENPOST_DB_PATH`, `OPENPOST_FRONTEND_URL`, `OPENPOST_CORS_EXTRA_ORIGINS`, `JWT_SECRET`, `ENCRYPTION_KEY`, `TWITTER_CLIENT_ID`, `TWITTER_CLIENT_SECRET`, `TWITTER_REDIRECT_URI`, and `OPENPOST_DISABLE_LINKEDIN_THREAD_REPLIES`.
+Legacy aliases still work for upgrades: `DATABASE_URL`, `OPENPOST_DB_PATH`, `OPENPOST_FRONTEND_URL`, `OPENPOST_CORS_EXTRA_ORIGINS`, `OPENPOST_POLAR_CUSTOMER_PORTAL_URL`, `JWT_SECRET`, `ENCRYPTION_KEY`, `TWITTER_CLIENT_ID`, `TWITTER_CLIENT_SECRET`, `TWITTER_REDIRECT_URI`, and `OPENPOST_DISABLE_LINKEDIN_THREAD_REPLIES`.

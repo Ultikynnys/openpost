@@ -1,6 +1,6 @@
 # Provider Roadmap
 
-OpenPost is moving toward an agentic social scheduler: draft once, adapt per network, schedule through the web app, CLI, MCP, or ChatGPT-style clients, and keep the provider-specific details in one place.
+OpenPost supports provider-aware publishing through the web app, CLI, HTTP API, MCP, and ChatGPT-style clients. This page records the contract for adding providers without exposing unfinished adapters as connectable.
 
 The provider discovery API returns current and planned providers so clients can render a consistent account-connection surface.
 
@@ -14,12 +14,12 @@ The provider discovery API returns current and planned providers so clients can 
 
 No planned adapter is exposed as connectable right now. New provider roadmap items should stay in `planned` status until backend publish behavior, provider discovery, UI states, docs, and tests land together.
 
-## Implemented first slices
+## Preview adapters
 
 | Provider | Current product focus                                                                                   |
 | -------- | ------------------------------------------------------------------------------------------------------- |
 | Facebook | Selected Page publishing for text, one public HTTPS image URL, or one public HTTPS video URL. |
-| Instagram | Selected Instagram Business account publishing for single image/Reel, carousel, story, and comment-reply paths, with live verification still recommended. |
+| Instagram | Selected Instagram Business or Creator account publishing for single image/Reel, carousel, Story, and comment-reply paths, with live verification still recommended. |
 | TikTok   | Direct-post video, inbox/upload video, and photo-post paths, with app-review/live-account verification still required. |
 | YouTube  | Selected channel uploads with privacy/metadata/thumbnail/playlist settings and resumable upload handling, with live verification still recommended. |
 
@@ -27,7 +27,7 @@ No planned adapter is exposed as connectable right now. New provider roadmap ite
 
 Some providers cannot be modeled as a single OAuth user profile:
 
-- Instagram connects the selected Instagram Business account behind a Facebook Page.
+- Instagram connects the selected Instagram Business or Creator account behind a Facebook Page.
 - YouTube connects the selected channel.
 
 Instagram, Facebook, and YouTube use the backend account-selection flow today. TikTok uses a direct OAuth account flow and is connectable when configured; its current adapter supports video plus photo-post paths, subject to TikTok app access and live verification.

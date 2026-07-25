@@ -1,8 +1,8 @@
 # OpenPost Roadmap
 
-> Status: July 2026 - production-readiness branch.
+> Status: July 2026.
 
-OpenPost is becoming a production-ready self-hosted scheduler plus OpenPost Cloud. The shared core stays open and portable; hosted-only concerns such as secrets, provider credentials, deployment, and live-account verification stay in operations.
+OpenPost is a production self-hosted scheduler and managed service. The shared core stays open and portable; hosted-only concerns such as secrets, provider credentials, deployment, and live-account verification stay in operations.
 
 ## Recently Landed
 
@@ -15,28 +15,29 @@ OpenPost is becoming a production-ready self-hosted scheduler plus OpenPost Clou
 - Production diagnostics: `/ready`, CLI `instance health`, redacted `instance diagnostics`, provider catalog snapshots, and billing usage snapshots.
 - E2E coverage for marketing, docs audience separation, auth/onboarding, settings/billing/MCP activity, provider discovery, workspace switching, composer scheduling, media library, and app smoke flows.
 
-## Current Launch Gates
+## Current Priorities
 
-1. **Hosted deploy verification**
-   - Verify the real `openpost.social`, `docs.openpost.social`, and `app.openpost.social` paths.
-   - Confirm the `rgo-vps` deployment config uses cloud mode, Postgres, S3/R2 media, Polar config, provider app registry, readiness probes, backups, and rollback notes.
-   - Run at least one database/media/secrets restore drill before launch.
+1. **Hosted operations**
+   - Keep `openpost.social`, `docs.openpost.social`, and `app.openpost.social` independently monitored and verified after changes.
+   - Keep the managed deployment on cloud mode, Postgres, S3/R2 media, Polar billing, readiness probes, backups, and tested recovery.
+   - Repeat database, media, and secrets restore drills as the hosted data model changes.
 
-2. **Provider live-account certification**
+2. **Provider live-account verification**
    - Re-test OAuth, refresh, media validation, publish, retry, and quota behavior with real accounts for every enabled provider.
-   - Keep Facebook, Instagram, TikTok, and YouTube in limited rollout until live account tests pass.
+   - Keep Facebook, Instagram, TikTok, and YouTube labeled Preview until current live-account tests pass.
    - Keep public docs conservative when provider APIs, permissions, or review requirements are uncertain.
 
-3. **Release hardening**
+3. **Release reliability**
    - Keep Docker, binary, CLI, Android, frontend, docs, and marketing release paths reproducible.
    - Confirm release artifacts and docs match the current tag before publishing.
-   - Continue running `devenv shell -- lint` before pushes and release tags.
+   - Follow SemVer from `v1.27.8` and keep release impact tied to Conventional Commits.
+   - Continue running `devenv shell -- verify` before release tags.
 
 4. **Operator support polish**
    - Keep `.env.example`, provider setup docs, backup/restore docs, production checklist, and CLI diagnostics aligned with runtime behavior.
    - Prefer support snapshots that are useful but never leak tokens, secrets, provider credentials, or private log payloads.
 
-## Next Feature Work
+## Next Work
 
 - Finish live-provider follow-through: better provider-specific error messages, retry notes, and launch-status updates after real verification.
 - Improve thread management for atomic updates to scheduled or failed thread chains.

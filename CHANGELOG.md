@@ -4,12 +4,13 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
-- Fix the scheduling dialog so its title and actions remain reachable while scrolling on mobile browsers.
-
-- Redesign the mobile app shell and composer with a safe-area-aware More menu, compact post controls, circular rendition targets, and always-visible touch actions for media and thread editing.
+## [1.27.8] - 2026-07-25
 
 ### Added
 
+- Added a tested SemVer release calculator that maps Conventional Commit impact to patch, minor, and major versions.
+- Added a Star History link and current-star entry point to the repository overview.
+- Added release and versioning documentation, including the corrected version-line rationale and immutable-tag failure policy.
 - Added an authenticated, operator-configured feedback form for bugs, ideas, and questions with explicit recipients, separately optional screenshot and diagnostics previews, strict privacy limits, durable delivery jobs, and a support fallback when disabled.
 - Added stable per-destination publishing failure categories, safe provider codes and retry times, direct recovery actions, manual target retry, and partial-outcome details in Activity.
 - Added OpenPost Studio with versioned multi-page designs, original starter templates, brand kits and WOFF2 fonts, mobile editing, autosave recovery, client-side background removal, camera capture, export, and composer return.
@@ -26,6 +27,10 @@ All notable changes to this project are documented in this file.
 
 ### Changed
 
+- Corrected the current stable line from `v1.1.22` to `v1.27.8` after replaying published release cohorts under SemVer. The previous code state maps to `v1.27.7`; this documentation and tooling release advances the patch. Historical tags remain unchanged.
+- Simplified the README around product purpose, supported platforms, setup, automation, and maintained documentation, and removed duplicated or stale repository details.
+- Consolidated CLI documentation in the maintained docs site and refreshed contributor, frontend, provider, upgrade, and release guidance against current code.
+- Redesigned the mobile app shell and composer with a safe-area-aware More menu, compact post controls, circular rendition targets, and always-visible touch actions for media and thread editing.
 - Made linked worktrees share the primary checkout's Go and pnpm caches, added a development doctor, installed pinned Chromium during setup, and made local browser suites use that reproducible runtime by default.
 - Made every active composer save revision-aware and atomic across source content, thread parts, media, destinations, overrides, segments, and settings, with serialized autosave and explicit conflict recovery.
 - Named the restored default authoring surface the text-and-thread composer to reflect its role as the fast path for Post and Thread.
@@ -69,6 +74,7 @@ All notable changes to this project are documented in this file.
 
 ### Fixed
 
+- Fixed the scheduling dialog so its title and actions remain reachable while scrolling on mobile browsers.
 - Aligned the product platform declaration with the responsive web app and Capacitor Android wrapper already shipped from the shared frontend.
 - Rebuilt Studio editing around stable in-place canvas updates, serialized autosaves, reliable inline text persistence, current previews, correct Back navigation, resizable desktop panels, and an inspector that stays within the viewport.
 - Scoped sidebar planner hover states to the exact calendar link or draft row so unrelated icons keep their color and only the active draft reveals its delete action.
@@ -80,7 +86,7 @@ All notable changes to this project are documented in this file.
 - Prevented focused publication drafts from reusing client placeholder segment IDs, remapped destination segments to server-owned IDs, and stopped exposing raw database errors when creation fails.
 - Unified publish, delete, scheduling, and validation controls across both composer styles; restored deletion for Story and video drafts; and replaced the focused media prompt with a larger native drop zone.
 - Captured feedback screenshots without the feedback dialog's dark, blurred backdrop.
-- Kept static frontend builds from changing the tracked embedded-public placeholder.
+- Kept generated embedded frontend output out of version control.
 - Updated `brace-expansion` to its patched release after a new production dependency advisory.
 - Stopped permanent validation, authentication, permission, billing, and duplicate-content failures from consuming generic job retries while preserving bounded retries and uploaded-media state for transient failures.
 - Updated SvelteKit, PostCSS, and node-tar to patched releases after new production dependency advisories.

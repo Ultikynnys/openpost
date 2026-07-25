@@ -10,6 +10,7 @@ Developer docs are separate from user-facing docs and self-hosting docs. They ca
 - [Architecture](/development/architecture) explains the main boundaries.
 - [Contributing](/development/contributing) covers contribution workflow.
 - [Testing](/development/testing) covers local and CI checks.
+- [Releases and Versioning](/development/releases) covers SemVer, production releases, and failure handling.
 
 ## Backend and API
 
@@ -23,7 +24,7 @@ Developer docs are separate from user-facing docs and self-hosting docs. They ca
 
 - [Frontend](/development/frontend) covers SvelteKit app conventions.
 - [MCP and ChatGPT App](/development/mcp) covers tool-server and Apps SDK integration notes.
-- [Production Readiness](/development/production-readiness) tracks the broader cloud-hosted roadmap.
+- [Production Architecture](/development/production-readiness) records shared hosted and self-hosted architecture, provider verification, and release checks.
 
 ## Adjacent docs
 

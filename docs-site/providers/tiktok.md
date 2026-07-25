@@ -1,6 +1,6 @@
 # TikTok
 
-TikTok support is available as an initial video/photo publishing slice. It uses OAuth plus the Content Posting API direct-post and upload flows.
+TikTok is a preview integration for video and photo publishing. It uses OAuth plus the Content Posting API Direct Post and upload flows.
 
 ## What you need
 

@@ -17,6 +17,8 @@ LINKEDIN_DISABLE_THREAD_REPLIES=false
 
 If your LinkedIn app cannot obtain the permissions required for comment-style replies, set `LINKEDIN_DISABLE_THREAD_REPLIES=true`.
 
+OpenPost defaults `LINKEDIN_API_VERSION` to the previous calendar month to avoid requesting a version LinkedIn has not activated yet. Set it only when your LinkedIn application requires an explicit supported version.
+
 ## Threading caveat
 
 LinkedIn thread child posts are implemented as comments on the first post rather than native threaded posts.

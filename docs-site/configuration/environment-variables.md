@@ -107,6 +107,7 @@ The backend exposes this registry through the instance-admin API. The current we
 | `LINKEDIN_CLIENT_SECRET`          | Yes for LinkedIn | empty                           | LinkedIn OAuth client secret.                                  |
 | `LINKEDIN_REDIRECT_URI`           |               No | derived from `OPENPOST_APP_URL` | LinkedIn callback URL override.                                |
 | `LINKEDIN_DISABLE_THREAD_REPLIES` |               No | `false`                         | Disable LinkedIn comment-style child replies for thread posts. |
+| `LINKEDIN_API_VERSION`            |               No | previous calendar month         | Override the LinkedIn REST API version. Read directly by the adapter; `_FILE` is not supported. |
 
 ## Threads
 
@@ -137,7 +138,7 @@ If `redirect_uri` is omitted, OpenPost derives `https://your-domain.com/api/v1/a
 
 ## Instagram
 
-Instagram Business publishing is configured through the provider app registry instead of legacy provider-specific env vars. Use `OPENPOST_PROVIDER_APPS` for bootstrap/self-hosting or the instance-admin provider app API for hosted/operator-managed credentials.
+Instagram professional publishing is configured through the provider app registry instead of legacy provider-specific env vars. Use `OPENPOST_PROVIDER_APPS` for bootstrap/self-hosting or the instance-admin provider app API for hosted/operator-managed credentials.
 
 Example:
 
@@ -188,13 +189,13 @@ Example:
 ]
 ```
 
-If `redirect_uri` is omitted, OpenPost derives `https://your-domain.com/api/v1/accounts/youtube/callback` from `OPENPOST_APP_URL`. The first adapter slice uploads one video as a private YouTube video and derives the video title from the first non-empty line of the post or platform variant.
+If `redirect_uri` is omitted, OpenPost derives `https://your-domain.com/api/v1/accounts/youtube/callback` from `OPENPOST_APP_URL`. OpenPost uploads one video per YouTube rendition, uses private visibility by default, accepts explicit YouTube privacy and metadata settings, and derives fallback title and description text from the post or platform variant.
 
 ## Notes
 
 - The preferred names above are what new deployments should use.
 - `OPENPOST_PROVIDER_APPS` accepts an array of objects with `provider`, `name`, `client_id`, `client_secret`, `redirect_uri`, and `instance_url`. The `provider_apps` table stores the same logical fields, with `client_secret` encrypted into `client_secret_encrypted`. Both currently support implemented adapters only: `x`, `mastodon`, `linkedin`, `threads`, `facebook`, `instagram`, `tiktok`, and `youtube`; Bluesky is enabled separately through app-password login.
-- Backward-compatible aliases still work for existing installs: `OPENPOST_DB_PATH`, `OPENPOST_FRONTEND_URL`, `OPENPOST_CORS_EXTRA_ORIGINS`, `JWT_SECRET`, `ENCRYPTION_KEY`, `TWITTER_CLIENT_ID`, `TWITTER_CLIENT_SECRET`, `TWITTER_REDIRECT_URI`, and `OPENPOST_DISABLE_LINKEDIN_THREAD_REPLIES`.
+- Backward-compatible aliases still work for existing installs: `DATABASE_URL`, `OPENPOST_DB_PATH`, `OPENPOST_FRONTEND_URL`, `OPENPOST_CORS_EXTRA_ORIGINS`, `OPENPOST_POLAR_CUSTOMER_PORTAL_URL`, `JWT_SECRET`, `ENCRYPTION_KEY`, `TWITTER_CLIENT_ID`, `TWITTER_CLIENT_SECRET`, `TWITTER_REDIRECT_URI`, and `OPENPOST_DISABLE_LINKEDIN_THREAD_REPLIES`.
 - File-backed aliases also work for existing installs, such as `DATABASE_URL_FILE`, `JWT_SECRET_FILE`, and `ENCRYPTION_KEY_FILE`.
 - The root `.env.example` is the best copy-paste starting point.
 - Set explicit public URLs in production even when defaults exist.

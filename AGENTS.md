@@ -14,7 +14,7 @@ Treat this as a living file: add concise repo learnings when they would save fut
 - **Package Manager:** pnpm.
 
 **Backend:**
-- **Language:** Go (1.25+).
+- **Language:** Go (1.26.5+).
 - **Framework:** Echo (`github.com/labstack/echo/v4`). Huma for OpenAPI spec generation.
 - **Database:** SQLite by default; Postgres is supported and required for hosted cloud mode.
 - **ORM:** Bun (`github.com/uptrace/bun`).
@@ -24,7 +24,7 @@ Treat this as a living file: add concise repo learnings when they would save fut
 **Deployment:**
 - **Strategy:** Single Go binary. SvelteKit's static output is embedded directly into the Go executable using `go:embed`.
 - **Hosted app:** `app.openpost.social` runs from the Docker image published by the GitHub `Build and Release` workflow and is pinned in `~/.config/home/hosts/rgo-vps/default.nix`.
-- **Push-to-deploy:** Production releases are tag-driven. `pnpm release:prod` pushes `main` and the next patch tag; `.github/workflows/release.yml` verifies the release, publishes the GHCR image, and calls the signed `deploy-openpost` VPS hook. The NixOS deploy script and readiness checks live in `~/.config/home/modules/hosting/deployments/default.nix`, while the container declaration lives in `~/.config/home/modules/services/openpost/default.nix`.
+- **Push-to-deploy:** Production releases are tag-driven. `pnpm release:prod` derives the next SemVer tag from Conventional Commits (`feat` is minor, `!` or `BREAKING CHANGE` is major, otherwise patch), pushes `main` and the tag, then waits for `.github/workflows/release.yml`. The workflow verifies the release, publishes the GHCR image, and calls the signed `deploy-openpost` VPS hook. The NixOS deploy script and readiness checks live in `~/.config/home/modules/hosting/deployments/default.nix`, while the container declaration lives in `~/.config/home/modules/services/openpost/default.nix`.
 - **Keep delivery fast and reproducible:** Preserve Devenv/Cachix and dependency caches in CI and the per-image BuildKit cache in the release workflow. Cache keys must track the relevant Devenv, pnpm, Go, frontend, and Docker inputs. Do not restore `no-cache` Docker builds unless investigating cache correctness; BuildKit invalidates changed layers. Validate workflow edits and confirm the tag run reaches `app.openpost.social/api/v1/ready` before considering a release delivered.
 
 ## 2. Platform Adapter Architecture
@@ -38,6 +38,10 @@ All social platform integrations follow the unified `platform.Adapter` interface
 | `bluesky.go` | Bluesky | App Passwords |
 | `linkedin.go` | LinkedIn | OAuth 2.0 |
 | `threads.go` | Threads | Meta OAuth 2.0 |
+| `facebook.go` | Facebook Pages | Meta OAuth 2.0 |
+| `instagram.go` | Instagram Business | Meta OAuth 2.0 |
+| `tiktok.go` | TikTok | OAuth 2.0 |
+| `youtube.go` | YouTube | Google OAuth 2.0 |
 
 Adapters are registered in `main.go` via a `map[string]platform.Adapter` and passed to the token manager, publisher, and OAuth handler. Provider selection uses adapter-map and capability-catalog lookups; switches internal to a single adapter may still dispatch that provider's content modes.
 
@@ -59,7 +63,7 @@ When an AI agent is invoked to assist with this repository, it MUST adhere to th
 - **Keep setup reproducible and non-destructive.** `install` uses the committed pnpm and Devenv lockfiles and a frozen pnpm install. `setup` creates `backend/.env` only when it is absent and never replaces an existing file. Treat dotenv as data: never `source` or `eval` it. The Go application safely loads `backend/.env` when launched from the backend directory. Keep secrets out of Nix expressions and the Nix store.
 - **Keep hooks fast and run broad gates explicitly.** Devenv installs the tracked `scripts/pre-push-lint.sh` gate, which checks backend formatting/lint and frontend lint without running tests or builds. Use `verify` before release tags or high-risk changes; CI remains authoritative for the full matrix.
 - **Run the project doctor before broad or release work.** Use `devenv shell -- doctor` to catch low disk space, dirty or divergent Git state, stale linked worktrees, missing pinned Chromium, and missing project tools before a long gate. Linked worktrees share the primary checkout's Devenv dependency caches; remove completed temporary worktrees after their branches are clean and verified remotely.
-- **Production release flow:** for normal “commit, push, release, deploy prod” requests, run `pnpm release:prod "<conventional commit message>"`. The script pushes `main`, creates the next patch tag, and waits for GitHub `Build and Release`; after preflight and image publication, that workflow calls the authenticated VPS deploy hook and verifies readiness. If a tag fails, do not retag it; fix forward with the next semver patch tag.
+- **Production release flow:** for normal “commit, push, release, deploy prod” requests, run `pnpm release:prod "<conventional commit message>"`. The script pushes `main`, creates the required SemVer tag from every commit since the last release, and waits for GitHub `Build and Release`; after preflight and image publication, that workflow calls the authenticated VPS deploy hook and verifies readiness. `RELEASE_BUMP` may only raise the inferred impact; `RELEASE_VERSION` is reserved for an intentional greater version-line correction and cannot undercut commit impact. If a tag fails, do not retag it; fix forward with a new SemVer tag.
 - **Keep release scope explicit.** `pnpm release:prod` stages the whole worktree. Audit `git status -sb`, tracked diffs, and untracked files first; if any file is unrelated or the branch diverges, commit/rebase deliberately and release from a clean linked worktree. A push is not a deployment: completion requires the tag workflow, GitHub release, public readiness, and deployed container revision.
 - **Go Backend:** Use Echo for HTTP handlers and Huma for OpenAPI endpoints. Follow the dependency injection pattern in `main.go`. Maintain separation of concerns: Handlers -> Services -> Database.
 - **Platform Adapters:** Implement `platform.Adapter`. Never put provider API logic outside the `internal/platform/` package. Use shared HTTP helpers from `http.go`.
@@ -117,6 +121,10 @@ When an AI agent is invoked to assist with this repository, it MUST adhere to th
 | Bluesky | `com.atproto.repo.uploadBlob` (raw binary) | `reply: {root, parent}` with uri+cid JSON |
 | LinkedIn | Vector Assets API (register→PUT→URN) | Comments API (`/socialActions/{urn}/comments`) |
 | Threads | Public URL in `image_url`/`video_url` | `reply_to_id` |
+| Facebook Pages | Public HTTPS URL for image/video publishing | Page comments |
+| Instagram Business | Public HTTPS URL for feed, carousel, Story, and Reel media | Comment replies |
+| TikTok | Public URL for Direct Post; binary upload for Inbox mode | No |
+| YouTube | Resumable video upload | No |
 
 ## 6. Provider Key Convention
 
@@ -129,5 +137,9 @@ Provider keys in the `providers` map follow specific formats:
 | Bluesky | `"bluesky"` | `"bluesky"` |
 | LinkedIn | `"linkedin"` | `"linkedin"` |
 | Threads | `"threads"` | `"threads"` |
+| Facebook Pages | `"facebook"` | `"facebook"` |
+| Instagram Business | `"instagram"` | `"instagram"` |
+| TikTok | `"tiktok"` | `"tiktok"` |
+| YouTube | `"youtube"` | `"youtube"` |
 
 **Important:** For Mastodon, the `instanceURL` stored in `SocialAccount.InstanceURL` must match exactly with the key used to register the adapter. The canonical adapter key is `"mastodon:" + server.InstanceURL` (the full URL from config, e.g., `https://masto.pt`). When looking up the provider, use `"mastodon:" + account.InstanceURL` without modification. Human-friendly server names may still be used as OAuth selection labels, but not as the persisted provider key.

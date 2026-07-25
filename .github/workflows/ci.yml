@@ -49,6 +49,9 @@ jobs:
               - 'cli/cmd/openpost-docs/**'
               - 'scripts/sync-docs-openapi.mjs'
               - 'scripts/check-contracts.mjs'
+              - 'scripts/check-doc-links.mjs'
+              - 'scripts/next-release-version.mjs'
+              - 'scripts/next-release-version.test.mjs'
               - 'marketing-site/**'
               - 'docs-site/**'
               - 'e2e/**'
@@ -351,6 +354,8 @@ jobs:
         shell: devenv shell bash -- -e {0}
         run: |
           pnpm install --frozen-lockfile
+          pnpm run check:docs
+          pnpm run check:release-version
           pnpm run check:contracts
           pnpm exec playwright install --with-deps chromium
           pnpm --filter @openpost/web test

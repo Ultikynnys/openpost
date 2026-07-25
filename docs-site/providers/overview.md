@@ -14,7 +14,7 @@ These providers have adapter code in OpenPost today. The Accounts page discovers
 | LinkedIn | OAuth 2.0              | Client ID + secret                              | Configurable | Replies may need extra approval.                               |
 | Threads  | Meta OAuth             | Client ID + secret + redirect URI               | Configurable | Public media URL required.                                     |
 | Facebook | Meta OAuth             | Provider app registry                           | Configurable | Pages only; public HTTPS media required.                       |
-| Instagram | Meta OAuth            | Provider app registry                           | Configurable | Business accounts only; public media URL required for media.   |
+| Instagram | Meta OAuth            | Provider app registry                           | Configurable | Business or Creator account; public media URL required.        |
 | TikTok   | OAuth 2.0              | Provider app registry                           | Configurable | Video and photo paths; provider approval and public media required. |
 | YouTube  | Google OAuth           | Provider app registry                           | Configurable | One-video upload with configurable privacy; live verification recommended. |
 
@@ -54,7 +54,7 @@ This matrix reflects current OpenPost support, not the full theoretical capabili
 - **LinkedIn:** Permissions and app review can block some publishing or reply workflows even when the integration code is present.
 - **Threads:** Media must be reachable at a public `OPENPOST_MEDIA_URL`, and Meta fetches those files server-side.
 - **Facebook:** Configure through the provider app registry with provider `facebook`. The adapter connects a selected Page and supports text, one image or video, multi-photo posts with 2–10 images, Stories, and Page comment replies. Media must use public HTTPS URLs.
-- **Instagram:** Configure through the provider app registry with provider `instagram`. The adapter connects a selected Instagram Business account behind a Facebook Page and implements single-image, carousel, Story, Reel, and comment-reply paths. Provider access and live verification still apply.
+- **Instagram:** Configure through the provider app registry with provider `instagram`. The adapter connects a selected Instagram Business or Creator account behind a Facebook Page and implements single-image, carousel, Story, Reel, and comment-reply paths. Provider access and live verification still apply.
 - **TikTok:** Configure through the provider app registry with provider `tiktok`. The adapter implements direct and inbox video paths plus photo posts using public HTTPS media. App review and live verification still apply.
 - **YouTube:** Configure through the provider app registry with provider `youtube`. The adapter connects a selected channel and uploads one video with privacy, metadata, thumbnail, and playlist settings. Live verification is still recommended.
 

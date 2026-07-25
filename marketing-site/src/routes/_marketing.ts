@@ -1044,7 +1044,7 @@ export const changelogEntries = [
 			'Account-specific renditions with provider validation before scheduling',
 			'Provider comment and moderation operations for supported networks'
 		],
-		href: `${githubUrl}/releases/tag/v1.0.34`
+		href: `${githubUrl}/releases/latest`
 	}
 ] as const;
 
