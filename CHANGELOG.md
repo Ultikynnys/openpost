@@ -10,6 +10,8 @@ All notable changes to this project are documented in this file.
 
 ### Added
 
+- Added an authenticated, operator-configured feedback form for bugs, ideas, and questions with explicit recipients, separately optional screenshot and diagnostics previews, strict privacy limits, durable delivery jobs, and a support fallback when disabled.
+- Added stable per-destination publishing failure categories, safe provider codes and retry times, direct recovery actions, manual target retry, and partial-outcome details in Activity.
 - Added OpenPost Studio with versioned multi-page designs, original starter templates, brand kits and WOFF2 fonts, mobile editing, autosave recovery, client-side background removal, camera capture, export, and composer return.
 - Rebuilt Media around reusable assets, designs, templates, brand resources, collections, tags, provenance, richer filtering, and one shared Library/Upload/Camera/Create picker.
 - Added normalized publication and rendition segments, provider-qualified output profiles, account capability resolution, scoped destination settings, and paginated account option searches.
@@ -24,8 +26,10 @@ All notable changes to this project are documented in this file.
 
 ### Changed
 
+- Made every active composer save revision-aware and atomic across source content, thread parts, media, destinations, overrides, segments, and settings, with serialized autosave and explicit conflict recovery.
+- Named the restored default authoring surface the text-and-thread composer to reflect its role as the fast path for Post and Thread.
 - Simplified the Media hub and picker, replaced blank design cards with source previews, curated the starter templates, and rebuilt the mobile Brand editor.
-- Kept one intent and capability model across composer flows while restoring the classic Post and Thread authoring surface.
+- Kept one intent and capability model across composer flows while restoring the text-and-thread authoring surface.
 - Moved destination-specific composer settings into account cog dialogs in the Publish to menu, with structured tag, category, and playlist controls for YouTube.
 - Rewrote the landing, pricing, security, open-source, changelog, platform, comparison, and tools pages around current product behavior, and refreshed the canonical composer, accounts, media, and settings screenshots.
 - Restored the OpenPost composer screenshot as the product-demo preview while keeping the recorded video behind the play action.
@@ -63,10 +67,11 @@ All notable changes to this project are documented in this file.
 
 ### Fixed
 
+- Stopped permanent validation, authentication, permission, billing, and duplicate-content failures from consuming generic job retries while preserving bounded retries and uploaded-media state for transient failures.
 - Updated SvelteKit, PostCSS, and node-tar to patched releases after new production dependency advisories.
 - Kept generic provider quota caveats from marking connected accounts as needing attention in the composer.
 - Stopped unavailable X settings from requesting unsupported account-option endpoints and replaced their empty controls with concise availability details.
-- Restored the compact Post and Thread controls, drag-and-drop editing, automatic drafts, full schedule picker, and next-queue action; made polls optional and removable; added an optional link field; preserved scoped destination settings through classic post saves; accepted exact local ISO schedule input; and kept mobile media actions at 44px.
+- Restored the compact Post and Thread controls, drag-and-drop editing, automatic drafts, full schedule picker, and next-queue action; made polls optional and removable; added an optional link field; preserved scoped destination settings through text-and-thread composer saves; accepted exact local ISO schedule input; and kept mobile media actions at 44px.
 - Restored publication autosave, safe workspace switching, next-slot scheduling, legacy draft redirects, and canonical publication drafts in the planner after the composer update.
 - Preserved segment and destination state through legacy draft migration and retries, and aligned X, Meta, LinkedIn, Mastodon, Bluesky, YouTube, and TikTok request payloads with their declared setting contracts.
 - Sent the YouTube synthetic-media disclosure selected in composer settings with the video upload metadata.
@@ -137,7 +142,7 @@ All notable changes to this project are documented in this file.
 
 ### Changed
 
-- Reworked the legacy composer schedule control into a dialog with natural-language time input, quick picks, timezone context, and the existing calendar/time selector.
+- Reworked the text-and-thread composer schedule control into a dialog with natural-language time input, quick picks, timezone context, and the existing calendar/time selector.
 - Renamed the default composer mode to Post and kept the mode picker in sync when users add or remove thread posts.
 
 ### Fixed

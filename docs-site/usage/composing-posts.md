@@ -1,6 +1,6 @@
 # Composing Posts
 
-OpenPost uses one composer for posts, threads, stories, short videos, and videos. You choose the publishing intent and content; OpenPost resolves the output for each selected account.
+OpenPost uses a fast text-and-thread composer for Post and Thread. The focused composer handles stories, short videos, videos, and other format-specific fields. Both use the same publication and rendition model.
 
 ## Typical workflow
 
@@ -17,6 +17,17 @@ Multiple images stay part of the Post intent. OpenPost resolves them to the prov
 Draft publications are the source of truth before publishing. Their ordered segments hold shared content and media. Each selected account has a rendition with its resolved output, destination settings, segment overrides, and media-item settings.
 
 Deselecting an account keeps its rendition and settings. Use **Delete destination** only when you want to remove that saved rendition.
+
+Each draft save includes the revision loaded by the editor. OpenPost saves source content, thread parts, media, destinations, overrides, and settings in one transaction. Saves are serialized, and scheduling or publishing waits for the pending save.
+
+If another tab or teammate saves first, OpenPost stops instead of overwriting their work. The conflict dialog lists the affected areas and lets you:
+
+- reload the saved version;
+- save your current work as a new draft;
+- overwrite only after reviewing the latest revision;
+- keep editing without taking an action yet.
+
+Closing or hiding a tab triggers a best-effort save, but browsers do not guarantee unload requests. Wait for the saved state before closing when the content matters.
 
 ## Platform previews
 

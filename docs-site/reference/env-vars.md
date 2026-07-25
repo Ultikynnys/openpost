@@ -9,6 +9,15 @@ This is the low-level quick reference version of the configuration docs.
 | `OPENPOST_STUDIO_ENABLED`        | `true`           | Enable the Studio UI and API. Disabling it leaves the Media library operational.                 |
 | `OPENPOST_STUDIO_MODEL_BASE_URL` | `/studio-models` | Serve the pinned background-removal model and runtime from another operator-controlled base URL. |
 
+## User feedback
+
+| Variable                            | Default                       | Purpose                                                                                      |
+| ----------------------------------- | ----------------------------- | -------------------------------------------------------------------------------------------- |
+| `OPENPOST_FEEDBACK_ENABLED`         | `false`                       | Enable the authenticated report form when the destination and recipient are also configured. |
+| `OPENPOST_FEEDBACK_DESTINATION_URL` | empty                         | Server-only HTTPS Discord-compatible webhook.                                                |
+| `OPENPOST_FEEDBACK_RECIPIENT`       | empty                         | Recipient name disclosed in the form before send.                                            |
+| `OPENPOST_FEEDBACK_SUPPORT_URL`     | OpenPost GitHub new-issue URL | Support link shown when delivery is not configured.                                          |
+
 Most variables loaded through the main backend config loader can also be loaded from `<VARIABLE>_FILE`; direct env values win over file-backed values. Legacy aliases support the same suffix, for example `DATABASE_URL_FILE`, `JWT_SECRET_FILE`, and `ENCRYPTION_KEY_FILE`. Adapter-only variables read directly by provider code, such as `META_GRAPH_API_VERSION`, do not currently support `_FILE` variants.
 
 | Variable                              | Purpose                                                                                                     |
@@ -22,6 +31,10 @@ Most variables loaded through the main backend config loader can also be loaded 
 | `OPENPOST_PUBLIC_URL`                 | Canonical browser origin used for WebAuthn/passkeys                                                         |
 | `OPENPOST_EXTRA_CORS_ORIGINS`         | Extra CORS allowlist                                                                                        |
 | `OPENPOST_DISABLE_REGISTRATIONS`      | Disable new signups after bootstrap                                                                         |
+| `OPENPOST_FEEDBACK_ENABLED`           | Enable the configured authenticated feedback form                                                           |
+| `OPENPOST_FEEDBACK_DESTINATION_URL`   | Server-only Discord-compatible webhook                                                                      |
+| `OPENPOST_FEEDBACK_RECIPIENT`         | Recipient label disclosed to users                                                                          |
+| `OPENPOST_FEEDBACK_SUPPORT_URL`       | Fallback support URL                                                                                        |
 | `OPENPOST_JWT_SECRET`                 | JWT signing secret                                                                                          |
 | `OPENPOST_ENCRYPTION_KEY`             | OAuth token encryption secret                                                                               |
 | `OPENPOST_STORAGE_DRIVER`             | Media storage driver: `local` or `s3`                                                                       |

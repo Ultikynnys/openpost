@@ -87,6 +87,7 @@ const selfHostingSidebar = [
 		items: [
 			{ text: 'Overview', link: '/configuration/overview' },
 			{ text: 'Environment Variables', link: '/configuration/environment-variables' },
+			{ text: 'User Feedback', link: '/configuration/feedback' },
 			{ text: 'Database', link: '/configuration/database' },
 			{ text: 'Media Storage', link: '/configuration/media-storage' },
 			{ text: 'CORS and URLs', link: '/configuration/cors-and-urls' },

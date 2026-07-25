@@ -24,14 +24,28 @@ The snapshot includes health/readiness checks, token presence, workspace context
 
 ## Common Symptoms
 
-| Symptom                                | Likely cause                                                            | Fix                                                                        |
-| -------------------------------------- | ----------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| Symptom                                | Likely cause                                                            | Fix                                                                                                                             |
+| -------------------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
 | Provider is unavailable on Accounts    | Missing provider app config                                             | Add provider env vars, `OPENPOST_PROVIDER_APPS`, or save credentials through the instance-admin provider app API, then restart. |
-| OAuth redirects to the wrong host      | `OPENPOST_APP_URL` or provider callback mismatch                        | Set one public HTTPS origin and update the provider console.               |
-| OAuth succeeds but no account is saved | Provider returned no usable profile, page, channel, or business account | Confirm scopes, account ownership, and provider app review state.          |
-| Text publishes but media fails         | Media URL is private, local, or not HTTPS                               | Use public `OPENPOST_MEDIA_URL` or S3/R2 public media URLs.                |
-| Scheduled post fails later             | Token expired, revoked, or provider rejected the payload                | Reconnect the account and retry with provider-compatible media.            |
-| Provider returns permission errors     | App lacks product access, scopes, or review approval                    | Enable the product and request the listed scopes in the provider console.  |
+| OAuth redirects to the wrong host      | `OPENPOST_APP_URL` or provider callback mismatch                        | Set one public HTTPS origin and update the provider console.                                                                    |
+| OAuth succeeds but no account is saved | Provider returned no usable profile, page, channel, or business account | Confirm scopes, account ownership, and provider app review state.                                                               |
+| Text publishes but media fails         | Media URL is private, local, or not HTTPS                               | Use public `OPENPOST_MEDIA_URL` or S3/R2 public media URLs.                                                                     |
+| Scheduled post fails later             | Token expired, revoked, or provider rejected the payload                | Reconnect the account and retry with provider-compatible media.                                                                 |
+| Provider returns permission errors     | App lacks product access, scopes, or review approval                    | Enable the product and request the listed scopes in the provider console.                                                       |
+
+## Destination failure actions
+
+Activity shows each destination separately. A publication can succeed on one account and fail on another.
+
+| Failure                                                  | What OpenPost does                                                        | Next action                           |
+| -------------------------------------------------------- | ------------------------------------------------------------------------- | ------------------------------------- |
+| Invalid content, unsupported media, or duplicate content | Stops automatic retries for that destination                              | Edit the draft, then publish again    |
+| Expired or revoked authentication                        | Stops automatic retries                                                   | Reconnect the account                 |
+| Provider permission or billing restriction               | Stops automatic retries                                                   | Open the provider or billing settings |
+| Rate limit, network failure, or provider outage          | Retries with bounded backoff and the provider's retry time when available | Wait, or use **Retry destination**    |
+| Unknown rejection                                        | Keeps a safe generic message and does not guess that retrying is safe     | Review the draft and provider status  |
+
+OpenPost stores only a safe failure category, status, provider code when it is suitable to expose, retry time, and direct action. Provider response bodies and credentials are not shown. Manual retry uses the existing publication job with one rendition target; Pass 1 does not migrate the whole queue to one job per destination.
 
 ## X
 
