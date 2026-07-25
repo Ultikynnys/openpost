@@ -71,10 +71,10 @@ let
       pkgs.pnpm
     ];
     text = ''
-      # The production bundle now needs slightly more than 1GB while
+      # The production bundle now needs slightly more than 1.5GB while
       # adapter-static finalizes the client output. Keep a bounded heap for
       # small-memory hosts, but leave enough headroom for release builds.
-      export NODE_OPTIONS="--max-old-space-size=1536"
+      export NODE_OPTIONS="--max-old-space-size=2048"
       cd "${config.git.root}"
       pnpm --filter @openpost/web build
       mkdir -p "${config.git.root}/backend/cmd/openpost/public"

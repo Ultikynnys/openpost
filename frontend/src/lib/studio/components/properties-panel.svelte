@@ -1,18 +1,32 @@
 <script lang="ts">
 	import { useStudioEditor } from '../editor.svelte';
 	import { defaultImageAdjustments } from '../document';
+	import { defaultTextCurve } from '../effects';
 	import { Input } from '$lib/components/ui/input';
 	import { Button } from '$lib/components/ui/button';
+	import { Slider } from '$lib/components/ui/slider';
+	import * as Collapsible from '$lib/components/ui/collapsible';
+	import * as Tooltip from '$lib/components/ui/tooltip';
+	import StudioColorPicker from './studio-color-picker.svelte';
+	import StudioFontPicker from './studio-font-picker.svelte';
+	import LayerEffectsPanel from './layer-effects-panel.svelte';
 	import CopyIcon from 'lucide-svelte/icons/copy';
 	import TrashIcon from 'lucide-svelte/icons/trash-2';
 	import BringToFrontIcon from 'lucide-svelte/icons/bring-to-front';
 	import SendToBackIcon from 'lucide-svelte/icons/send-to-back';
 	import FlipHorizontalIcon from 'lucide-svelte/icons/flip-horizontal-2';
 	import FlipVerticalIcon from 'lucide-svelte/icons/flip-vertical-2';
+	import RotateCcwIcon from 'lucide-svelte/icons/rotate-ccw';
+	import CropIcon from 'lucide-svelte/icons/crop';
+	import ChevronDownIcon from 'lucide-svelte/icons/chevron-down';
 	import { m } from '$lib/paraglide/messages';
+	import type { StudioTextCurveType } from '../types';
 
 	const editor = useStudioEditor();
 	let layer = $derived(editor.selectedLayers[0] ?? null);
+	let cropOpen = $state(false);
+	let brandColors = $derived(editor.brandKit?.colors ?? []);
+	let brandFonts = $derived(editor.brandKit?.fonts ?? []);
 
 	function numberValue(event: Event, fallback: number): number {
 		const value = Number((event.currentTarget as HTMLInputElement).value);
@@ -49,6 +63,31 @@
 		return m.studio_align_right();
 	}
 
+	function setTextCurveType(type: StudioTextCurveType): void {
+		if (!layer?.text || !editor.document) return;
+		editor.mutate('Change text curve', (document) => {
+			const current = document.pages
+				.find((page) => page.id === editor.activePageID)
+				?.layers.find((candidate) => candidate.id === layer?.id);
+			if (!current?.text) return;
+			const previousType = current.text.curve?.type ?? 'none';
+			current.text.curve = { ...(current.text.curve ?? defaultTextCurve()), type };
+			if (type !== 'circle' && type !== 'ellipse') return;
+			const nextHeight =
+				type === 'circle'
+					? current.transform.width
+					: previousType === 'circle'
+						? current.transform.width * 0.55
+						: Math.max(current.transform.height, current.transform.width * 0.55);
+			const centerY = current.transform.y + current.transform.height / 2;
+			current.transform.height = nextHeight;
+			current.transform.y = Math.max(
+				0,
+				Math.min(document.height_px - nextHeight, centerY - nextHeight / 2)
+			);
+		});
+	}
+
 	const adjustmentControls = [
 		[m.studio_brightness(), 'brightness', -1, 1],
 		[m.studio_contrast(), 'contrast', -1, 1],
@@ -76,33 +115,24 @@
 					<label for="page-background" class="mb-1 block text-xs font-medium"
 						>{m.studio_page_background()}</label
 					>
-					<div class="flex gap-2">
-						<input
-							id="page-background"
-							type="color"
-							value={editor.activePage?.background_color ?? '#ffffff'}
-							class="size-10 rounded-md border bg-background p-1"
-							disabled={!editor.canEdit}
-							oninput={(event) =>
-								editor.mutate(
-									'Change page background',
-									(document) => {
-										const page = document.pages.find((item) => item.id === editor.activePageID);
-										if (page) page.background_color = event.currentTarget.value;
-									},
-									'page-background'
-								)}
-						/>
-						<Input
-							value={editor.activePage?.background_color ?? '#ffffff'}
-							disabled={!editor.canEdit}
-							onchange={(event) =>
-								editor.mutate('Change page background', (document) => {
+					<StudioColorPicker
+						id="page-background"
+						label={m.studio_page_background()}
+						value={editor.activePage?.background_color ?? '#ffffff'}
+						disabled={!editor.canEdit}
+						{brandColors}
+						recentColors={editor.recentColors}
+						onChange={(value) =>
+							editor.mutate(
+								'Change page background',
+								(document) => {
 									const page = document.pages.find((item) => item.id === editor.activePageID);
-									if (page) page.background_color = event.currentTarget.value;
-								})}
-						/>
-					</div>
+									if (page) page.background_color = value;
+								},
+								'page-background'
+							)}
+						onCommit={(value) => editor.rememberColor(value)}
+					/>
 				</div>
 				<p class="text-sm text-muted-foreground">{m.studio_select_layer_help()}</p>
 			</section>
@@ -163,30 +193,62 @@
 						{/if}
 					{/if}
 					<div class="grid grid-cols-4 gap-1">
-						<Button
-							variant="outline"
-							size="icon-sm"
-							onclick={() => editor.reorderLayer(layer.id, 'front')}
-							aria-label={m.studio_bring_front()}><BringToFrontIcon /></Button
-						>
-						<Button
-							variant="outline"
-							size="icon-sm"
-							onclick={() => editor.reorderLayer(layer.id, 'back')}
-							aria-label={m.studio_send_back()}><SendToBackIcon /></Button
-						>
-						<Button
-							variant="outline"
-							size="icon-sm"
-							onclick={() => editor.duplicateSelected()}
-							aria-label={m.studio_duplicate()}><CopyIcon /></Button
-						>
-						<Button
-							variant="destructive"
-							size="icon-sm"
-							onclick={() => editor.deleteSelected()}
-							aria-label={m.studio_delete_layer()}><TrashIcon /></Button
-						>
+						<Tooltip.Root>
+							<Tooltip.Trigger>
+								{#snippet child({ props })}
+									<Button
+										{...props}
+										variant="outline"
+										size="icon-sm"
+										onclick={() => editor.reorderLayer(layer.id, 'front')}
+										aria-label={m.studio_bring_front()}><BringToFrontIcon /></Button
+									>
+								{/snippet}
+							</Tooltip.Trigger>
+							<Tooltip.Content>{m.studio_bring_front()}</Tooltip.Content>
+						</Tooltip.Root>
+						<Tooltip.Root>
+							<Tooltip.Trigger>
+								{#snippet child({ props })}
+									<Button
+										{...props}
+										variant="outline"
+										size="icon-sm"
+										onclick={() => editor.reorderLayer(layer.id, 'back')}
+										aria-label={m.studio_send_back()}><SendToBackIcon /></Button
+									>
+								{/snippet}
+							</Tooltip.Trigger>
+							<Tooltip.Content>{m.studio_send_back()}</Tooltip.Content>
+						</Tooltip.Root>
+						<Tooltip.Root>
+							<Tooltip.Trigger>
+								{#snippet child({ props })}
+									<Button
+										{...props}
+										variant="outline"
+										size="icon-sm"
+										onclick={() => editor.duplicateSelected()}
+										aria-label={m.studio_duplicate()}><CopyIcon /></Button
+									>
+								{/snippet}
+							</Tooltip.Trigger>
+							<Tooltip.Content>{m.studio_duplicate()}</Tooltip.Content>
+						</Tooltip.Root>
+						<Tooltip.Root>
+							<Tooltip.Trigger>
+								{#snippet child({ props })}
+									<Button
+										{...props}
+										variant="destructive"
+										size="icon-sm"
+										onclick={() => editor.deleteSelected()}
+										aria-label={m.studio_delete_layer()}><TrashIcon /></Button
+									>
+								{/snippet}
+							</Tooltip.Trigger>
+							<Tooltip.Content>{m.studio_delete_layer()}</Tooltip.Content>
+						</Tooltip.Root>
 					</div>
 				</section>
 
@@ -213,18 +275,45 @@
 							</label>
 						{/each}
 					</div>
-					<label class="grid gap-1 text-xs">
-						<span>{m.studio_rotation()}</span>
-						<Input
-							type="number"
-							value={Math.round(layer.transform.rotation)}
+					<div class="space-y-1">
+						<div class="flex items-center justify-between gap-2">
+							<span class="text-xs">{m.studio_rotation()}</span>
+							<div class="flex items-center gap-1">
+								<Input
+									type="number"
+									min="-180"
+									max="180"
+									value={Math.round(layer.transform.rotation)}
+									class="h-8 w-16 px-1.5 text-right text-xs"
+									disabled={!editor.canEdit || layer.locked}
+									oninput={(event) =>
+										editor.updateTransform(layer.id, {
+											rotation: numberValue(event, layer.transform.rotation)
+										})}
+								/>
+								<Button
+									variant="ghost"
+									size="icon-xs"
+									onclick={() => editor.updateTransform(layer.id, { rotation: 0 })}
+									disabled={!editor.canEdit || layer.locked}
+									aria-label={m.studio_reset_rotation()}
+									title={m.studio_reset_rotation()}
+								>
+									<RotateCcwIcon />
+								</Button>
+							</div>
+						</div>
+						<Slider
+							value={layer.transform.rotation}
+							min={-180}
+							max={180}
+							step={1}
 							disabled={!editor.canEdit || layer.locked}
-							oninput={(event) =>
-								editor.updateTransform(layer.id, {
-									rotation: numberValue(event, layer.transform.rotation)
-								})}
+							ariaLabel={m.studio_rotation()}
+							onValueChange={(rotation) =>
+								editor.updateTransform(layer.id, { rotation }, `rotation:${layer.id}`)}
 						/>
-					</label>
+					</div>
 					<div class="grid grid-cols-2 gap-2">
 						<Button
 							variant={layer.transform.flip_x ? 'secondary' : 'outline'}
@@ -245,22 +334,22 @@
 					</div>
 					<label class="grid gap-1 text-xs">
 						<span>{m.studio_opacity({ value: Math.round(layer.opacity * 100) })}</span>
-						<input
-							type="range"
-							min="0"
-							max="1"
-							step="0.01"
+						<Slider
+							min={0}
+							max={1}
+							step={0.01}
 							value={layer.opacity}
 							disabled={!editor.canEdit}
-							oninput={(event) =>
-								editor.updateLayer(
-									layer.id,
-									{ opacity: numberValue(event, layer.opacity) },
-									`opacity:${layer.id}`
-								)}
+							ariaLabel={m.studio_opacity({ value: Math.round(layer.opacity * 100) })}
+							onValueChange={(opacity) =>
+								editor.updateLayer(layer.id, { opacity }, `opacity:${layer.id}`)}
 						/>
 					</label>
 				</section>
+
+				{#if layer.type !== 'group'}
+					<LayerEffectsPanel {layer} />
+				{/if}
 
 				{#if layer.type === 'text' && layer.text}
 					<section class="space-y-2 border-t pt-4">
@@ -280,12 +369,19 @@
 						></textarea>
 						<label class="grid gap-1 text-xs">
 							<span>{m.studio_font_family()}</span>
-							<Input
+							<StudioFontPicker
 								value={layer.text.font_family}
 								disabled={!editor.canEdit}
-								onchange={(event) =>
+								{brandFonts}
+								onChange={(font) =>
 									editor.updateLayer(layer.id, {
-										text: { ...layer.text!, font_family: event.currentTarget.value }
+										text: {
+											...layer.text!,
+											font_family: font.family,
+											font_asset_id: font.assetID,
+											font_weight: font.weight ?? layer.text!.font_weight,
+											font_style: font.style ?? layer.text!.font_style
+										}
 									})}
 							/>
 						</label>
@@ -321,11 +417,9 @@
 											text: { ...layer.text!, font_weight: Number(event.currentTarget.value) }
 										})}
 								>
-									<option value="400">{m.studio_regular()}</option>
-									<option value="500">{m.studio_medium()}</option>
-									<option value="600">{m.studio_semibold()}</option>
-									<option value="700">{m.studio_bold()}</option>
-									<option value="800">{m.studio_extra_bold()}</option>
+									{#each [[100, m.studio_thin()], [200, m.studio_extra_light()], [300, m.studio_light()], [400, m.studio_regular()], [500, m.studio_medium()], [600, m.studio_semibold()], [700, m.studio_bold()], [800, m.studio_extra_bold()], [900, m.studio_black()]] as [weight, label] (weight)}
+										<option value={weight}>{weight} — {label}</option>
+									{/each}
 								</select>
 							</label>
 						</div>
@@ -395,17 +489,19 @@
 						</label>
 						<label class="grid gap-1 text-xs">
 							<span>{m.studio_color()}</span>
-							<input
-								type="color"
+							<StudioColorPicker
+								label={m.studio_color()}
 								value={layer.text.color}
-								class="h-10 w-full rounded-md border bg-background p-1"
 								disabled={!editor.canEdit}
-								oninput={(event) =>
+								{brandColors}
+								recentColors={editor.recentColors}
+								onChange={(value) =>
 									editor.updateLayer(
 										layer.id,
-										{ text: { ...layer.text!, color: event.currentTarget.value } },
+										{ text: { ...layer.text!, color: value } },
 										`text-color:${layer.id}`
 									)}
+								onCommit={(value) => editor.rememberColor(value)}
 							/>
 						</label>
 						<div class="grid grid-cols-3 gap-1">
@@ -423,128 +519,145 @@
 								>
 							{/each}
 						</div>
+						<div class="space-y-2 rounded-md border p-2">
+							<label class="grid gap-1 text-xs">
+								<span>{m.studio_text_curve()}</span>
+								<select
+									class="h-9 rounded-md border border-input bg-background px-2"
+									value={layer.text.curve?.type ?? 'none'}
+									disabled={!editor.canEdit}
+									onchange={(event) =>
+										setTextCurveType(event.currentTarget.value as StudioTextCurveType)}
+								>
+									<option value="none">{m.studio_curve_none()}</option>
+									<option value="arc_up">{m.studio_curve_arc_up()}</option>
+									<option value="arc_down">{m.studio_curve_arc_down()}</option>
+									<option value="wave">{m.studio_curve_wave()}</option>
+									<option value="circle">{m.studio_curve_circle()}</option>
+									<option value="ellipse">{m.studio_curve_ellipse()}</option>
+								</select>
+							</label>
+							{#if layer.text.curve && layer.text.curve.type !== 'none'}
+								{#if ['arc_up', 'arc_down', 'wave'].includes(layer.text.curve.type)}
+									<label class="grid gap-1 text-xs">
+										<span
+											>{m.studio_curve_strength()} · {Math.round(
+												layer.text.curve.strength * 100
+											)}%</span
+										>
+										<Slider
+											value={layer.text.curve.strength}
+											min={0.05}
+											max={1}
+											step={0.01}
+											disabled={!editor.canEdit}
+											ariaLabel={m.studio_curve_strength()}
+											onValueChange={(strength) =>
+												editor.updateLayer(
+													layer.id,
+													{
+														text: {
+															...layer.text!,
+															curve: { ...layer.text!.curve!, strength }
+														}
+													},
+													`text-curve-strength:${layer.id}`
+												)}
+										/>
+									</label>
+								{/if}
+								<label class="grid gap-1 text-xs">
+									<span
+										>{m.studio_curve_offset()} · {Math.round(layer.text.curve.offset * 100)}%</span
+									>
+									<Slider
+										value={layer.text.curve.offset}
+										min={-1}
+										max={1}
+										step={0.01}
+										disabled={!editor.canEdit}
+										ariaLabel={m.studio_curve_offset()}
+										onValueChange={(offset) =>
+											editor.updateLayer(
+												layer.id,
+												{
+													text: {
+														...layer.text!,
+														curve: { ...layer.text!.curve!, offset }
+													}
+												},
+												`text-curve-offset:${layer.id}`
+											)}
+									/>
+								</label>
+								<Button
+									variant={layer.text.curve.reverse ? 'secondary' : 'outline'}
+									size="xs"
+									onclick={() =>
+										editor.updateLayer(layer.id, {
+											text: {
+												...layer.text!,
+												curve: {
+													...layer.text!.curve!,
+													reverse: !layer.text!.curve!.reverse
+												}
+											}
+										})}
+								>
+									{m.studio_curve_reverse()}
+								</Button>
+							{/if}
+						</div>
 						<div class="grid grid-cols-2 gap-2">
 							<label class="grid gap-1 text-xs">
 								<span>{m.studio_highlight()}</span>
-								<input
-									type="color"
+								<StudioColorPicker
+									label={m.studio_highlight()}
 									value={layer.text.highlight_color?.slice(0, 7) || '#ffffff'}
-									class="h-10 w-full rounded-md border bg-background p-1"
 									disabled={!editor.canEdit}
-									oninput={(event) =>
+									{brandColors}
+									recentColors={editor.recentColors}
+									onChange={(value) =>
 										editor.updateLayer(layer.id, {
-											text: { ...layer.text!, highlight_color: event.currentTarget.value }
+											text: { ...layer.text!, highlight_color: value }
 										})}
+									onCommit={(value) => editor.rememberColor(value)}
 								/>
 							</label>
 							<label class="grid gap-1 text-xs">
 								<span>{m.studio_stroke()}</span>
-								<input
-									type="color"
+								<StudioColorPicker
+									label={m.studio_stroke()}
 									value={layer.text.stroke_color?.slice(0, 7) || '#000000'}
-									class="h-10 w-full rounded-md border bg-background p-1"
 									disabled={!editor.canEdit}
-									oninput={(event) =>
+									{brandColors}
+									recentColors={editor.recentColors}
+									onChange={(value) =>
 										editor.updateLayer(layer.id, {
-											text: { ...layer.text!, stroke_color: event.currentTarget.value }
+											text: { ...layer.text!, stroke_color: value }
 										})}
+									onCommit={(value) => editor.rememberColor(value)}
 								/>
 							</label>
 						</div>
-						<div class="grid grid-cols-2 gap-2">
-							<label class="grid gap-1 text-xs">
-								<span>{m.studio_stroke_width()}</span>
-								<Input
-									type="number"
-									min="0"
-									max="32"
-									step="0.5"
-									value={layer.text.stroke_width}
-									disabled={!editor.canEdit}
-									oninput={(event) =>
-										editor.updateLayer(layer.id, {
-											text: {
-												...layer.text!,
-												stroke_width: numberValue(event, layer.text!.stroke_width)
-											}
-										})}
-								/>
-							</label>
-							<label class="grid gap-1 text-xs">
-								<span>{m.studio_shadow_blur()}</span>
-								<Input
-									type="number"
-									min="0"
-									max="100"
-									value={layer.text.shadow.blur}
-									disabled={!editor.canEdit}
-									oninput={(event) =>
-										editor.updateLayer(layer.id, {
-											text: {
-												...layer.text!,
-												shadow: {
-													...layer.text!.shadow,
-													blur: numberValue(event, layer.text!.shadow.blur)
-												}
-											}
-										})}
-								/>
-							</label>
-						</div>
-						<div class="grid grid-cols-3 gap-2">
-							<label class="grid gap-1 text-xs">
-								<span>{m.studio_shadow()}</span>
-								<input
-									type="color"
-									value={layer.text.shadow.color.slice(0, 7)}
-									class="h-10 w-full rounded-md border bg-background p-1"
-									disabled={!editor.canEdit}
-									oninput={(event) =>
-										editor.updateLayer(layer.id, {
-											text: {
-												...layer.text!,
-												shadow: { ...layer.text!.shadow, color: event.currentTarget.value }
-											}
-										})}
-								/>
-							</label>
-							<label class="grid gap-1 text-xs">
-								<span>{m.studio_offset_x()}</span>
-								<Input
-									type="number"
-									value={layer.text.shadow.offset_x}
-									disabled={!editor.canEdit}
-									oninput={(event) =>
-										editor.updateLayer(layer.id, {
-											text: {
-												...layer.text!,
-												shadow: {
-													...layer.text!.shadow,
-													offset_x: numberValue(event, layer.text!.shadow.offset_x)
-												}
-											}
-										})}
-								/>
-							</label>
-							<label class="grid gap-1 text-xs">
-								<span>{m.studio_offset_y()}</span>
-								<Input
-									type="number"
-									value={layer.text.shadow.offset_y}
-									disabled={!editor.canEdit}
-									oninput={(event) =>
-										editor.updateLayer(layer.id, {
-											text: {
-												...layer.text!,
-												shadow: {
-													...layer.text!.shadow,
-													offset_y: numberValue(event, layer.text!.shadow.offset_y)
-												}
-											}
-										})}
-								/>
-							</label>
-						</div>
+						<label class="grid gap-1 text-xs">
+							<span>{m.studio_stroke_width()}</span>
+							<Input
+								type="number"
+								min="0"
+								max="32"
+								step="0.5"
+								value={layer.text.stroke_width}
+								disabled={!editor.canEdit}
+								oninput={(event) =>
+									editor.updateLayer(layer.id, {
+										text: {
+											...layer.text!,
+											stroke_width: numberValue(event, layer.text!.stroke_width)
+										}
+									})}
+							/>
+						</label>
 						<Button
 							variant="ghost"
 							size="xs"
@@ -555,7 +668,8 @@
 										highlight_color: undefined,
 										stroke_color: undefined,
 										stroke_width: 0,
-										shadow: { color: '#00000000', blur: 0, offset_x: 0, offset_y: 0 }
+										shadow: { color: '#00000000', blur: 0, offset_x: 0, offset_y: 0 },
+										curve: defaultTextCurve()
 									}
 								})}>{m.studio_clear_text_effects()}</Button
 						>
@@ -568,32 +682,61 @@
 							{m.studio_shape()}
 						</h3>
 						<label class="grid gap-1 text-xs">
-							<span>{m.studio_fill()}</span>
-							<input
-								type="color"
-								value={layer.shape.fill}
-								class="h-10 w-full rounded-md border bg-background p-1"
+							<span>{m.studio_shape_kind()}</span>
+							<select
+								class="h-9 rounded-md border border-input bg-background px-2"
+								value={layer.shape.kind}
 								disabled={!editor.canEdit}
-								oninput={(event) =>
+								onchange={(event) =>
+									editor.updateLayer(layer.id, {
+										shape: {
+											...layer.shape!,
+											kind: event.currentTarget.value as
+												'rectangle' | 'rounded_rectangle' | 'ellipse' | 'line',
+											radius:
+												event.currentTarget.value === 'rounded_rectangle'
+													? Math.max(24, layer.shape!.radius)
+													: layer.shape!.radius
+										}
+									})}
+							>
+								<option value="rectangle">{m.studio_rectangle()}</option>
+								<option value="rounded_rectangle">{m.studio_rounded_rectangle()}</option>
+								<option value="ellipse">{m.studio_ellipse()}</option>
+								<option value="line">{m.studio_line()}</option>
+							</select>
+						</label>
+						<label class="grid gap-1 text-xs">
+							<span>{m.studio_fill()}</span>
+							<StudioColorPicker
+								label={m.studio_fill()}
+								value={layer.shape.fill}
+								disabled={!editor.canEdit}
+								{brandColors}
+								recentColors={editor.recentColors}
+								onChange={(value) =>
 									editor.updateLayer(
 										layer.id,
-										{ shape: { ...layer.shape!, fill: event.currentTarget.value } },
+										{ shape: { ...layer.shape!, fill: value } },
 										`shape-fill:${layer.id}`
 									)}
+								onCommit={(value) => editor.rememberColor(value)}
 							/>
 						</label>
 						<div class="grid grid-cols-2 gap-2">
 							<label class="grid gap-1 text-xs">
 								<span>{m.studio_stroke()}</span>
-								<input
-									type="color"
+								<StudioColorPicker
+									label={m.studio_stroke()}
 									value={layer.shape.stroke}
-									class="h-10 w-full rounded-md border bg-background p-1"
 									disabled={!editor.canEdit}
-									oninput={(event) =>
+									{brandColors}
+									recentColors={editor.recentColors}
+									onChange={(value) =>
 										editor.updateLayer(layer.id, {
-											shape: { ...layer.shape!, stroke: event.currentTarget.value }
+											shape: { ...layer.shape!, stroke: value }
 										})}
+									onCommit={(value) => editor.rememberColor(value)}
 								/>
 							</label>
 							<label class="grid gap-1 text-xs">
@@ -620,12 +763,17 @@
 								type="number"
 								min="0"
 								value={layer.shape.radius}
-								disabled={!editor.canEdit || layer.shape.kind !== 'rounded_rectangle'}
+								disabled={!editor.canEdit ||
+									!['rectangle', 'rounded_rectangle'].includes(layer.shape.kind)}
 								oninput={(event) =>
 									editor.updateLayer(layer.id, {
 										shape: {
 											...layer.shape!,
-											radius: numberValue(event, layer.shape!.radius)
+											kind:
+												numberValue(event, layer.shape!.radius) > 0
+													? 'rounded_rectangle'
+													: 'rectangle',
+											radius: Math.max(0, numberValue(event, layer.shape!.radius))
 										}
 									})}
 							/>
@@ -657,9 +805,24 @@
 								<option value="stretch">{m.studio_stretch()}</option>
 							</select>
 						</label>
-						<div class="space-y-2 rounded-md border p-2">
-							<div class="flex items-center justify-between gap-2">
-								<span class="text-xs font-medium">{m.studio_crop_percent()}</span>
+						<Collapsible.Root bind:open={cropOpen} class="rounded-md border">
+							<div class="flex min-h-9 items-center gap-1 px-1">
+								<Collapsible.Trigger>
+									{#snippet child({ props })}
+										<button
+											{...props}
+											type="button"
+											class="flex min-h-8 min-w-0 flex-1 items-center gap-2 rounded px-1.5 text-left text-xs font-medium hover:bg-muted"
+										>
+											<CropIcon class="size-3.5" />
+											<span class="min-w-0 flex-1">{m.studio_crop()}</span>
+											<ChevronDownIcon
+												class="size-3.5 transition-transform data-[open=true]:rotate-180"
+												data-open={cropOpen}
+											/>
+										</button>
+									{/snippet}
+								</Collapsible.Trigger>
 								<Button
 									variant="ghost"
 									size="xs"
@@ -674,28 +837,31 @@
 									{m.studio_reset()}
 								</Button>
 							</div>
-							<div class="grid grid-cols-2 gap-2">
-								{#each [['X', 'x'], ['Y', 'y'], ['W', 'width'], ['H', 'height']] as [label, key] (key)}
-									<label class="grid grid-cols-[1.25rem_1fr] items-center gap-1 text-xs">
-										<span class="text-muted-foreground">{label}</span>
-										<Input
-											type="number"
-											min="0"
-											max="100"
-											step="1"
-											value={Math.round(cropValue(key as 'x' | 'y' | 'width' | 'height') * 100)}
-											disabled={!editor.canEdit}
-											oninput={(event) =>
-												updateCrop(
-													key as 'x' | 'y' | 'width' | 'height',
-													event,
-													cropValue(key as 'x' | 'y' | 'width' | 'height')
-												)}
-										/>
-									</label>
-								{/each}
-							</div>
-						</div>
+							<Collapsible.Content class="border-t p-2">
+								<p class="mb-2 text-xs text-muted-foreground">{m.studio_crop_percent()}</p>
+								<div class="grid grid-cols-2 gap-2">
+									{#each [['X', 'x'], ['Y', 'y'], ['W', 'width'], ['H', 'height']] as [label, key] (key)}
+										<label class="grid grid-cols-[1.25rem_1fr] items-center gap-1 text-xs">
+											<span class="text-muted-foreground">{label}</span>
+											<Input
+												type="number"
+												min="0"
+												max="100"
+												step="1"
+												value={Math.round(cropValue(key as 'x' | 'y' | 'width' | 'height') * 100)}
+												disabled={!editor.canEdit}
+												oninput={(event) =>
+													updateCrop(
+														key as 'x' | 'y' | 'width' | 'height',
+														event,
+														cropValue(key as 'x' | 'y' | 'width' | 'height')
+													)}
+											/>
+										</label>
+									{/each}
+								</div>
+							</Collapsible.Content>
+						</Collapsible.Root>
 						<div class="flex items-center justify-between">
 							<span class="text-xs font-medium">{m.studio_adjustments()}</span>
 							<Button
@@ -712,14 +878,14 @@
 						{#each adjustmentControls as [label, key, min, max] (key)}
 							<label class="grid gap-1 text-xs">
 								<span>{label}</span>
-								<input
-									type="range"
+								<Slider
 									{min}
 									{max}
-									step="0.01"
+									step={0.01}
 									value={layer.image.adjustments[key as keyof typeof layer.image.adjustments]}
 									disabled={!editor.canEdit}
-									oninput={(event) =>
+									ariaLabel={label}
+									onValueChange={(value) =>
 										editor.updateLayer(
 											layer.id,
 											{
@@ -727,10 +893,7 @@
 													...layer.image!,
 													adjustments: {
 														...layer.image!.adjustments,
-														[key]: numberValue(
-															event,
-															layer.image!.adjustments[key as keyof typeof layer.image.adjustments]
-														)
+														[key]: value
 													}
 												}
 											},

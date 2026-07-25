@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount, untrack } from 'svelte';
+	import { ContextMenu } from 'bits-ui';
 	import { page } from '$app/stores';
 	import { goto, replaceState } from '$app/navigation';
 	import { resolve } from '$app/paths';
@@ -10,6 +11,7 @@
 	import { uploadMediaFile } from '$lib/media-upload-client';
 	import {
 		deleteStudioTemplate,
+		duplicateStudioDesign,
 		listStudioDesigns,
 		listStudioTemplates,
 		loadStudioBrandKit,
@@ -738,6 +740,16 @@
 			return m.media_edited_image();
 		}
 		return title;
+	}
+
+	async function duplicateDesign(id: string): Promise<void> {
+		try {
+			await duplicateStudioDesign(id);
+			await loadStudioHub();
+			notify(m.studio_design_duplicated(), 'success');
+		} catch (cause) {
+			notify(cause instanceof Error ? cause.message : m.studio_design_duplicate_failed(), 'error');
+		}
 	}
 
 	function isImage(mimeType: string): boolean {
@@ -1520,37 +1532,71 @@
 					{:else}
 						<div class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
 							{#each designs as design (design.id)}
-								<a
-									href={resolve(`/studio/${design.id}` as '/')}
-									class="group min-w-0 overflow-hidden rounded-xl border bg-card transition-colors hover:border-foreground/25"
-								>
-									<div class="flex aspect-[4/3] items-center justify-center bg-neutral-900 p-3">
-										{#if design.cover_preview_media_id}
-											<img
-												src={getAuthenticatedMediaURL(`/media/${design.cover_preview_media_id}`)}
-												alt=""
-												class="max-h-full max-w-full object-contain shadow-md"
-											/>
-										{:else}
-											<div class="flex flex-col items-center gap-2 text-center text-neutral-400">
-												<PaletteIcon class="size-6" />
-												<span class="line-clamp-2 text-xs">{m.media_preview_unavailable()}</span>
-											</div>
-										{/if}
-									</div>
-									<div class="p-2.5">
-										<p class="truncate text-sm font-medium">
-											{designDisplayTitle(design.title)}
-										</p>
-										<p class="mt-0.5 truncate text-xs text-muted-foreground">
-											{m.media_design_pages({
-												count: design.page_count,
-												suffix: design.page_count === 1 ? '' : 's'
-											})}
-											· {formatDate(design.updated_at)}
-										</p>
-									</div>
-								</a>
+								<ContextMenu.Root>
+									<ContextMenu.Trigger>
+										{#snippet child({ props })}
+											<a
+												{...props}
+												href={resolve(`/studio/${design.id}` as '/')}
+												class="group min-w-0 overflow-hidden rounded-xl border bg-card transition-colors hover:border-foreground/25 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+											>
+												<div
+													class="flex aspect-[4/3] items-center justify-center bg-neutral-900 p-3"
+												>
+													{#if design.cover_preview_media_id}
+														<img
+															src={getAuthenticatedMediaURL(
+																`/media/${design.cover_preview_media_id}`
+															)}
+															alt=""
+															class="max-h-full max-w-full object-contain shadow-md"
+														/>
+													{:else}
+														<div
+															class="flex flex-col items-center gap-2 text-center text-neutral-400"
+														>
+															<PaletteIcon class="size-6" />
+															<span class="line-clamp-2 text-xs"
+																>{m.media_preview_unavailable()}</span
+															>
+														</div>
+													{/if}
+												</div>
+												<div class="p-2.5">
+													<p class="truncate text-sm font-medium">
+														{designDisplayTitle(design.title)}
+													</p>
+													<p class="mt-0.5 truncate text-xs text-muted-foreground">
+														{m.media_design_pages({
+															count: design.page_count,
+															suffix: design.page_count === 1 ? '' : 's'
+														})}
+														· {formatDate(design.updated_at)}
+													</p>
+												</div>
+											</a>
+										{/snippet}
+									</ContextMenu.Trigger>
+									<ContextMenu.Portal>
+										<ContextMenu.Content
+											class="z-50 min-w-44 rounded-lg bg-popover/95 p-1 text-sm text-popover-foreground shadow-md ring-1 ring-foreground/10 backdrop-blur outline-none"
+										>
+											<ContextMenu.Item
+												class="flex min-h-9 cursor-default items-center rounded-md px-2 outline-none data-highlighted:bg-muted"
+												onclick={() => goto(resolve(`/studio/${design.id}` as '/'))}
+											>
+												{m.studio_open_design()}
+											</ContextMenu.Item>
+											<ContextMenu.Item
+												class="flex min-h-9 cursor-default items-center rounded-md px-2 outline-none data-highlighted:bg-muted"
+												disabled={!mediaCanEdit}
+												onclick={() => duplicateDesign(design.id)}
+											>
+												{m.studio_duplicate_design()}
+											</ContextMenu.Item>
+										</ContextMenu.Content>
+									</ContextMenu.Portal>
+								</ContextMenu.Root>
 							{/each}
 						</div>
 					{/if}

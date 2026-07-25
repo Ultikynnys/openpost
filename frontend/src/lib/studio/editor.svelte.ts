@@ -4,18 +4,21 @@ import { m } from '$lib/paraglide/messages';
 import {
 	blankStudioPage,
 	cloneStudioDocument,
-	cloneStudioLayer,
 	cloneStudioPage,
 	defaultImageAdjustments,
 	defaultTransform,
 	studioID
 } from './document';
+import { defaultLayerEffects, defaultTextCurve } from './effects';
 import { StudioHistory } from './history';
+import { mergeSelectionIDs } from './selection';
 import type {
 	StudioDocument,
 	StudioDocumentResponse,
+	StudioBrandKit,
 	StudioLayer,
 	StudioPage,
+	StudioSelectionMode,
 	StudioSaveState,
 	StudioTool
 } from './types';
@@ -31,18 +34,23 @@ export class StudioEditor {
 	activePageID = $state('');
 	selectedLayerIDs = $state.raw<string[]>([]);
 	activeTool = $state<StudioTool>('select');
+	selectionMode = $state<StudioSelectionMode>('replace');
+	magicSelectTolerance = $state(12);
 	saveState = $state<StudioSaveState>('idle');
 	saveMessage = $state('');
 	zoom = $state(1);
 	panX = $state(0);
 	panY = $state(0);
-	leftPanel = $state<'media' | 'templates' | 'brand' | null>('media');
+	leftPanel = $state<'media' | null>('media');
 	rightPanelVisible = $state(true);
 	layersPanelOpen = $state(false);
 	pagesExpanded = $state(true);
+	brandKit = $state.raw<StudioBrandKit | null>(null);
+	recentColors = $state.raw<string[]>([]);
 	private history = new StudioHistory<StudioDocument>(cloneStudioDocument);
 	private historyRevision = $state(0);
 	private changeListeners = new SvelteSet<() => void>();
+	private selectionAnchorID = '';
 
 	get activePage(): StudioPage | null {
 		return this.document?.pages.find((page) => page.id === this.activePageID) ?? null;
@@ -69,6 +77,7 @@ export class StudioEditor {
 		this.document = cloneStudioDocument(response.document);
 		this.activePageID = response.document.pages[0]?.id ?? '';
 		this.selectedLayerIDs = [];
+		this.selectionAnchorID = '';
 		this.saveState = 'saved';
 		this.saveMessage = m.studio_saved();
 		this.history.clear();
@@ -125,23 +134,46 @@ export class StudioEditor {
 		this.emitChange();
 	}
 
-	selectLayer(id: string, additive = false): void {
+	selectLayer(id: string, mode: boolean | 'replace' | 'toggle' | 'range' = 'replace'): void {
 		if (!id) {
 			this.selectedLayerIDs = [];
+			this.selectionAnchorID = '';
 			return;
 		}
-		if (additive) {
+		const selectionMode = typeof mode === 'boolean' ? (mode ? 'toggle' : 'replace') : mode;
+		if (selectionMode === 'range' && this.selectionAnchorID) {
+			const order = this.layerSelectionOrder();
+			const anchorIndex = order.indexOf(this.selectionAnchorID);
+			const targetIndex = order.indexOf(id);
+			if (anchorIndex >= 0 && targetIndex >= 0) {
+				const start = Math.min(anchorIndex, targetIndex);
+				const end = Math.max(anchorIndex, targetIndex);
+				this.selectedLayerIDs = order.slice(start, end + 1);
+				return;
+			}
+		}
+		if (selectionMode === 'toggle') {
 			this.selectedLayerIDs = this.selectedLayerIDs.includes(id)
 				? this.selectedLayerIDs.filter((item) => item !== id)
 				: [...this.selectedLayerIDs, id];
 		} else {
 			this.selectedLayerIDs = [id];
 		}
+		this.selectionAnchorID = id;
+	}
+
+	applyLayerSelection(ids: string[], mode: StudioSelectionMode = 'replace'): void {
+		const available = new SvelteSet(this.activePage?.layers.map((layer) => layer.id) ?? []);
+		const candidates = ids.filter((id) => available.has(id));
+		this.selectedLayerIDs = mergeSelectionIDs(this.selectedLayerIDs, candidates, mode);
+		this.selectionAnchorID = this.selectedLayerIDs.at(-1) ?? '';
 	}
 
 	selectAll(): void {
-		this.selectedLayerIDs =
-			this.activePage?.layers.filter((layer) => !layer.locked).map((layer) => layer.id) ?? [];
+		this.selectedLayerIDs = this.layerSelectionOrder().filter(
+			(id) => !this.activePage?.layers.find((layer) => layer.id === id)?.locked
+		);
+		this.selectionAnchorID = this.selectedLayerIDs.at(-1) ?? '';
 	}
 
 	addText(): void {
@@ -170,8 +202,10 @@ export class StudioEditor {
 				line_height: 1.1,
 				letter_spacing: 0,
 				stroke_width: 0,
-				shadow: { color: '#00000000', blur: 0, offset_x: 0, offset_y: 0 }
-			}
+				shadow: { color: '#00000000', blur: 0, offset_x: 0, offset_y: 0 },
+				curve: defaultTextCurve()
+			},
+			effects: defaultLayerEffects()
 		};
 		this.addLayer(layer);
 	}
@@ -182,7 +216,14 @@ export class StudioEditor {
 		const layer: StudioLayer = {
 			id: studioID('layer'),
 			type: 'shape',
-			name: kind === 'ellipse' ? 'Ellipse' : 'Shape',
+			name:
+				kind === 'ellipse'
+					? m.studio_ellipse()
+					: kind === 'rounded_rectangle'
+						? m.studio_rounded_rectangle()
+						: kind === 'line'
+							? m.studio_line()
+							: m.studio_rectangle(),
 			visible: true,
 			locked: false,
 			opacity: 1,
@@ -198,7 +239,8 @@ export class StudioEditor {
 				stroke: '#c2410c',
 				stroke_width: 0,
 				radius: kind === 'rounded_rectangle' ? 32 : 0
-			}
+			},
+			effects: defaultLayerEffects()
 		};
 		this.addLayer(layer);
 	}
@@ -232,7 +274,8 @@ export class StudioEditor {
 				fit: 'cover',
 				crop: { x: 0, y: 0, width: 1, height: 1 },
 				adjustments: defaultImageAdjustments()
-			}
+			},
+			effects: defaultLayerEffects()
 		};
 		this.addLayer(layer);
 	}
@@ -271,12 +314,13 @@ export class StudioEditor {
 					.find((page) => page.id === this.activePageID)
 					?.layers.find((item) => item.id === id);
 				if (!layer) return;
-				if (layer.type !== 'group') {
-					Object.assign(layer.transform, updates);
-					return;
-				}
 				const page = document.pages.find((item) => item.id === this.activePageID);
 				if (!page) return;
+				if (layer.type !== 'group') {
+					Object.assign(layer.transform, updates);
+					this.recalculateAncestorBounds(page, layer.parent_id);
+					return;
+				}
 				const previous = { ...layer.transform };
 				const next = { ...previous, ...updates };
 				const scaleX = previous.width > 0 ? next.width / previous.width : 1;
@@ -317,6 +361,7 @@ export class StudioEditor {
 					}
 				}
 				Object.assign(layer.transform, next);
+				this.recalculateAncestorBounds(page, layer.parent_id);
 			},
 			coalesceKey
 		);
@@ -324,40 +369,63 @@ export class StudioEditor {
 
 	deleteSelected(): void {
 		if (this.selectedLayerIDs.length === 0) return;
-		const ids = new SvelteSet(this.selectedLayerIDs);
+		const ids = this.selectedWithDescendants();
 		this.mutate('Delete layers', (document) => {
 			const page = document.pages.find((item) => item.id === this.activePageID);
 			if (!page) return;
 			page.layers = page.layers.filter((layer) => !ids.has(layer.id));
-			for (const layer of page.layers) {
-				if (layer.parent_id && ids.has(layer.parent_id)) layer.parent_id = undefined;
-			}
+			this.recalculateAllGroupBounds(page);
 		});
 		this.selectedLayerIDs = [];
+		this.selectionAnchorID = '';
 	}
 
 	duplicateSelected(): void {
-		const source = this.selectedLayers;
-		if (source.length === 0) return;
-		const copies = source.map((layer) =>
-			cloneStudioLayer(layer, m.studio_layer_copy_name({ name: layer.name }))
-		);
+		const page = this.activePage;
+		const roots = this.selectedRootLayers();
+		if (!page || roots.length === 0) return;
+		const included = this.idsWithDescendants(roots.map((layer) => layer.id));
+		const idMap = new Map<string, string>();
+		for (const layer of page.layers) {
+			if (included.has(layer.id)) idMap.set(layer.id, studioID('layer'));
+		}
+		const rootIDs = new SvelteSet(roots.map((layer) => layer.id));
+		const copies = page.layers
+			.filter((layer) => included.has(layer.id))
+			.map((layer) => ({
+				...structuredClone(layer),
+				id: idMap.get(layer.id)!,
+				parent_id: layer.parent_id
+					? (idMap.get(layer.parent_id) ?? (rootIDs.has(layer.id) ? layer.parent_id : undefined))
+					: undefined,
+				name: rootIDs.has(layer.id) ? m.studio_layer_copy_name({ name: layer.name }) : layer.name,
+				transform: {
+					...layer.transform,
+					x: layer.transform.x + 24,
+					y: layer.transform.y + 24
+				}
+			}));
 		this.mutate('Duplicate layers', (document) => {
 			const page = document.pages.find((item) => item.id === this.activePageID);
 			page?.layers.push(...copies);
 		});
-		this.selectedLayerIDs = copies.map((layer) => layer.id);
+		this.selectedLayerIDs = roots.map((layer) => idMap.get(layer.id)!).filter(Boolean);
+		this.selectionAnchorID = this.selectedLayerIDs.at(-1) ?? '';
 	}
 
 	groupSelected(): void {
-		if (this.selectedLayers.length < 2) return;
+		const roots = this.selectedRootLayers();
+		if (roots.length < 2) return;
 		const groupID = studioID('layer');
-		const selected = new SvelteSet(this.selectedLayerIDs);
-		const bounds = this.selectionBounds();
+		const selected = new SvelteSet(roots.map((layer) => layer.id));
+		const bounds = this.selectionBounds(roots);
+		const parentIDs = new SvelteSet(roots.map((layer) => layer.parent_id ?? ''));
+		const commonParentID = parentIDs.size === 1 ? roots[0]?.parent_id : undefined;
 		const group: StudioLayer = {
 			id: groupID,
 			type: 'group',
 			name: m.studio_group(),
+			parent_id: commonParentID,
 			visible: true,
 			locked: false,
 			opacity: 1,
@@ -372,6 +440,7 @@ export class StudioEditor {
 			page.layers.push(group);
 		});
 		this.selectedLayerIDs = [groupID];
+		this.selectionAnchorID = groupID;
 	}
 
 	ungroupSelected(): void {
@@ -379,15 +448,28 @@ export class StudioEditor {
 			this.selectedLayers.filter((layer) => layer.type === 'group').map((l) => l.id)
 		);
 		if (groupIDs.size === 0) return;
+		const childIDs =
+			this.activePage?.layers
+				.filter((layer) => layer.parent_id && groupIDs.has(layer.parent_id))
+				.map((layer) => layer.id) ?? [];
 		this.mutate('Ungroup layers', (document) => {
 			const page = document.pages.find((item) => item.id === this.activePageID);
 			if (!page) return;
+			const groupParents = new Map(
+				page.layers
+					.filter((layer) => groupIDs.has(layer.id))
+					.map((layer) => [layer.id, layer.parent_id] as const)
+			);
 			for (const layer of page.layers) {
-				if (layer.parent_id && groupIDs.has(layer.parent_id)) layer.parent_id = undefined;
+				if (layer.parent_id && groupIDs.has(layer.parent_id)) {
+					layer.parent_id = groupParents.get(layer.parent_id);
+				}
 			}
 			page.layers = page.layers.filter((layer) => !groupIDs.has(layer.id));
+			this.recalculateAllGroupBounds(page);
 		});
-		this.selectedLayerIDs = [];
+		this.selectedLayerIDs = childIDs;
+		this.selectionAnchorID = childIDs.at(-1) ?? '';
 	}
 
 	reorderLayer(id: string, direction: 'front' | 'forward' | 'backward' | 'back'): void {
@@ -521,8 +603,34 @@ export class StudioEditor {
 		this.panY = 0;
 	}
 
-	private selectionBounds(): { x: number; y: number; width: number; height: number } {
-		const layers = this.selectedLayers;
+	setBrandKit(brandKit: StudioBrandKit | null): void {
+		this.brandKit = brandKit;
+	}
+
+	setRecentColors(colors: string[]): void {
+		this.recentColors = [
+			...new Set(
+				colors.map((color) => color.toLowerCase()).filter((color) => /^#[0-9a-f]{6}$/.test(color))
+			)
+		].slice(0, 8);
+	}
+
+	rememberColor(color: string): void {
+		if (!/^#[0-9a-f]{6}$/i.test(color)) return;
+		this.setRecentColors([color, ...this.recentColors]);
+		try {
+			localStorage.setItem('openpost-studio-recent-colors-v1', JSON.stringify(this.recentColors));
+		} catch {
+			// Recent colors are a convenience when browser storage is unavailable.
+		}
+	}
+
+	private selectionBounds(layers = this.selectedLayers): {
+		x: number;
+		y: number;
+		width: number;
+		height: number;
+	} {
 		const x = Math.min(...layers.map((layer) => layer.transform.x));
 		const y = Math.min(...layers.map((layer) => layer.transform.y));
 		const right = Math.max(...layers.map((layer) => layer.transform.x + layer.transform.width));
@@ -533,7 +641,98 @@ export class StudioEditor {
 	private reconcileSelection(): void {
 		const ids = new SvelteSet(this.activePage?.layers.map((layer) => layer.id) ?? []);
 		this.selectedLayerIDs = this.selectedLayerIDs.filter((id) => ids.has(id));
+		if (!ids.has(this.selectionAnchorID)) this.selectionAnchorID = '';
 	}
+
+	private layerSelectionOrder(): string[] {
+		const page = this.activePage;
+		if (!page) return [];
+		const byParent = new Map<string, StudioLayer[]>();
+		for (const layer of page.layers) {
+			const parent = layer.parent_id ?? '';
+			const children = byParent.get(parent) ?? [];
+			children.push(layer);
+			byParent.set(parent, children);
+		}
+		const ordered: string[] = [];
+		const append = (parentID: string): void => {
+			for (const layer of [...(byParent.get(parentID) ?? [])].reverse()) {
+				ordered.push(layer.id);
+				append(layer.id);
+			}
+		};
+		append('');
+		return ordered;
+	}
+
+	private selectedRootLayers(): StudioLayer[] {
+		const selected = new SvelteSet(this.selectedLayerIDs);
+		return this.selectedLayers.filter((layer) => {
+			let parentID = layer.parent_id;
+			while (parentID) {
+				if (selected.has(parentID)) return false;
+				parentID = this.activePage?.layers.find(
+					(candidate) => candidate.id === parentID
+				)?.parent_id;
+			}
+			return true;
+		});
+	}
+
+	private idsWithDescendants(rootIDs: string[]): SvelteSet<string> {
+		const ids = new SvelteSet(rootIDs);
+		const layers = this.activePage?.layers ?? [];
+		let changed = true;
+		while (changed) {
+			changed = false;
+			for (const layer of layers) {
+				if (layer.parent_id && ids.has(layer.parent_id) && !ids.has(layer.id)) {
+					ids.add(layer.id);
+					changed = true;
+				}
+			}
+		}
+		return ids;
+	}
+
+	private selectedWithDescendants(): SvelteSet<string> {
+		return this.idsWithDescendants(this.selectedRootLayers().map((layer) => layer.id));
+	}
+
+	private recalculateAncestorBounds(page: StudioPage, parentID?: string): void {
+		const visited = new Set<string>();
+		let currentID = parentID;
+		while (currentID && !visited.has(currentID)) {
+			visited.add(currentID);
+			const group = page.layers.find((layer) => layer.id === currentID && layer.type === 'group');
+			if (!group) break;
+			const children = page.layers.filter((layer) => layer.parent_id === group.id);
+			if (children.length > 0) {
+				Object.assign(group.transform, boundsForLayers(children));
+			}
+			currentID = group.parent_id;
+		}
+	}
+
+	private recalculateAllGroupBounds(page: StudioPage): void {
+		for (let pass = 0; pass < page.layers.length; pass++) {
+			for (const group of page.layers) {
+				if (group.type !== 'group') continue;
+				const children = page.layers.filter((layer) => layer.parent_id === group.id);
+				if (children.length > 0) Object.assign(group.transform, boundsForLayers(children));
+			}
+		}
+	}
+}
+
+function boundsForLayers(
+	layers: StudioLayer[]
+): Pick<StudioLayer['transform'], 'x' | 'y' | 'width' | 'height'> {
+	const x = Math.min(...layers.map((layer) => layer.transform.x));
+	const y = Math.min(...layers.map((layer) => layer.transform.y));
+	const right = Math.max(...layers.map((layer) => layer.transform.x + layer.transform.width));
+	const bottom = Math.max(...layers.map((layer) => layer.transform.y + layer.transform.height));
+	return { x, y, width: right - x, height: bottom - y };
 }
 
 export function provideStudioEditor(editor: StudioEditor): StudioEditor {

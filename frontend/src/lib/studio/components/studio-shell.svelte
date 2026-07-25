@@ -2,11 +2,14 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
+	import { Menubar } from 'bits-ui';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
 	import * as Sheet from '$lib/components/ui/sheet';
+	import * as Tooltip from '$lib/components/ui/tooltip';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
+	import { Slider } from '$lib/components/ui/slider';
 	import StudioCanvas from './studio-canvas.svelte';
 	import AssetPanel from './asset-panel.svelte';
 	import LayerTree from './layer-tree.svelte';
@@ -38,9 +41,11 @@
 	} from '../static-renderer';
 	import { StudioBackgroundRemoval } from '../background-removal';
 	import type {
+		StudioBrandKit,
 		StudioDocumentResponse,
 		StudioLayer,
 		StudioRevisionSummary,
+		StudioSelectionTool,
 		StudioTemplate,
 		StudioTool
 	} from '../types';
@@ -52,9 +57,13 @@
 	import DownloadIcon from 'lucide-svelte/icons/download';
 	import SaveIcon from 'lucide-svelte/icons/save';
 	import MousePointerIcon from 'lucide-svelte/icons/mouse-pointer-2';
-	import CropIcon from 'lucide-svelte/icons/crop';
+	import RectangleSelectIcon from 'lucide-svelte/icons/square-dashed-mouse-pointer';
+	import LassoSelectIcon from 'lucide-svelte/icons/lasso-select';
 	import TypeIcon from 'lucide-svelte/icons/type';
 	import SquareIcon from 'lucide-svelte/icons/square';
+	import CircleIcon from 'lucide-svelte/icons/circle';
+	import RectangleHorizontalIcon from 'lucide-svelte/icons/rectangle-horizontal';
+	import MinusIcon from 'lucide-svelte/icons/minus';
 	import HandIcon from 'lucide-svelte/icons/hand';
 	import ZoomInIcon from 'lucide-svelte/icons/zoom-in';
 	import LayersIcon from 'lucide-svelte/icons/layers-3';
@@ -65,7 +74,7 @@
 	import GroupIcon from 'lucide-svelte/icons/group';
 	import UngroupIcon from 'lucide-svelte/icons/ungroup';
 	import MoreIcon from 'lucide-svelte/icons/ellipsis';
-	import PipetteIcon from 'lucide-svelte/icons/pipette';
+	import CheckIcon from 'lucide-svelte/icons/check';
 	import { m } from '$lib/paraglide/messages';
 	import { startStudioMetric } from '../telemetry';
 
@@ -74,13 +83,15 @@
 		returnToken = '',
 		backgroundModelBaseURL = '/studio-models',
 		initialAction = '',
-		readOnlyReason = ''
+		readOnlyReason = '',
+		initialBrandKit = null
 	}: {
 		initial: StudioDocumentResponse;
 		returnToken?: string;
 		backgroundModelBaseURL?: string;
 		initialAction?: string;
 		readOnlyReason?: string;
+		initialBrandKit?: StudioBrandKit | null;
 	} = $props();
 
 	const editor = provideStudioEditor(new StudioEditor());
@@ -95,6 +106,9 @@
 	const INITIAL_SAVE_RETRY_DELAY = 2_000;
 	const MAXIMUM_SAVE_RETRY_DELAY = 30_000;
 	let saveTimer: ReturnType<typeof setTimeout> | undefined;
+	let savedIndicatorTimer: ReturnType<typeof setTimeout> | undefined;
+	let savedIndicatorVisible = $state(false);
+	let studioMenuValue = $state('');
 	let pendingSave: SaveRequest | null = null;
 	let saveDrain: Promise<boolean> | null = null;
 	let saveRetryDelay = INITIAL_SAVE_RETRY_DELAY;
@@ -152,6 +166,7 @@
 	function initializeShell() {
 		if (!editor.document) {
 			editor.load(initial);
+			editor.setBrandKit(initialBrandKit);
 			coverPreviewMediaID = initial.cover_preview_media_id ?? '';
 		}
 	}
@@ -164,6 +179,13 @@
 	}
 
 	onMount(() => {
+		try {
+			editor.setRecentColors(
+				JSON.parse(localStorage.getItem('openpost-studio-recent-colors-v1') || '[]') as string[]
+			);
+		} catch {
+			editor.setRecentColors([]);
+		}
 		try {
 			const stored = JSON.parse(localStorage.getItem('openpost-studio-layout-v1') || '{}') as {
 				assets?: number;
@@ -220,11 +242,27 @@
 		return () => {
 			unsubscribe();
 			clearTimeout(saveTimer);
+			clearTimeout(savedIndicatorTimer);
 			clearTimeout(previewTimer);
 			backgroundRemoval.dispose();
 			window.removeEventListener('beforeunload', beforeUnload);
 		};
 	});
+
+	function showSavedIndicator(): void {
+		clearTimeout(savedIndicatorTimer);
+		savedIndicatorVisible = true;
+		savedIndicatorTimer = setTimeout(() => {
+			savedIndicatorVisible = false;
+		}, 1_600);
+	}
+
+	function openStudioMenu(event: PointerEvent, value: string): void {
+		if (event.button !== 0 || event.ctrlKey) return;
+		event.preventDefault();
+		studioMenuValue = value;
+		(event.currentTarget as HTMLElement).focus();
+	}
 
 	function clampPanelSize(
 		value: number | undefined,
@@ -455,6 +493,7 @@
 				editor.document = response.document;
 				editor.saveState = 'saved';
 				editor.saveMessage = m.studio_saved();
+				showSavedIndicator();
 				await clearLocalStudioRecovery(editor.id);
 				statusAnnouncement = m.studio_saved_announcement();
 				if (request.recoveryReason === 'idle' && previewPending) schedulePreview();
@@ -721,38 +760,11 @@
 			editor.leftPanel = 'media';
 			if (window.innerWidth < 1024) mobileSheet = 'assets';
 		}
-		if (tool === 'eyedropper') void pickColor();
 	}
 
-	async function pickColor(): Promise<void> {
-		const EyeDropperConstructor = (
-			window as typeof window & {
-				EyeDropper?: new () => { open(): Promise<{ sRGBHex: string }> };
-			}
-		).EyeDropper;
-		if (!EyeDropperConstructor) {
-			statusAnnouncement = m.studio_eyedropper_unavailable();
-			editor.activeTool = 'select';
-			return;
-		}
-		try {
-			const { sRGBHex } = await new EyeDropperConstructor().open();
-			const selected = editor.selectedLayers[0];
-			if (selected?.text) {
-				editor.updateLayer(selected.id, { text: { ...selected.text, color: sRGBHex } });
-			} else if (selected?.shape) {
-				editor.updateLayer(selected.id, { shape: { ...selected.shape, fill: sRGBHex } });
-			} else {
-				editor.mutate('Pick page color', (document) => {
-					const page = document.pages.find((item) => item.id === editor.activePageID);
-					if (page) page.background_color = sRGBHex;
-				});
-			}
-		} catch {
-			// Closing the native eyedropper is not an error.
-		} finally {
-			editor.activeTool = 'select';
-		}
+	function addShape(kind: NonNullable<StudioLayer['shape']>['kind']): void {
+		editor.activeTool = 'shape';
+		editor.addShape(kind);
 	}
 
 	function editableTarget(target: EventTarget | null): boolean {
@@ -834,10 +846,11 @@
 		}
 		const tools: Record<string, StudioTool> = {
 			v: 'select',
-			c: 'crop',
+			m: 'marquee',
+			l: 'lasso',
+			w: 'magic_wand',
 			t: 'text',
 			u: 'shape',
-			i: 'eyedropper',
 			h: 'hand',
 			z: 'zoom'
 		};
@@ -1095,13 +1108,22 @@
 
 	const tools: Array<{ key: StudioTool; label: string; icon: typeof MousePointerIcon }> = [
 		{ key: 'select', label: m.studio_select(), icon: MousePointerIcon },
-		{ key: 'crop', label: m.studio_crop(), icon: CropIcon },
 		{ key: 'text', label: m.studio_text(), icon: TypeIcon },
 		{ key: 'shape', label: m.studio_shape(), icon: SquareIcon },
-		{ key: 'eyedropper', label: m.studio_eyedropper(), icon: PipetteIcon },
 		{ key: 'hand', label: m.studio_hand(), icon: HandIcon },
 		{ key: 'zoom', label: m.studio_zoom(), icon: ZoomInIcon }
 	];
+
+	function isSelectionTool(tool: StudioTool): tool is StudioSelectionTool {
+		return ['select', 'marquee', 'lasso', 'magic_wand'].includes(tool);
+	}
+
+	function selectionToolLabel(tool: StudioTool): string {
+		if (tool === 'marquee') return m.studio_rectangle_select();
+		if (tool === 'lasso') return m.studio_lasso_select();
+		if (tool === 'magic_wand') return m.studio_magic_select();
+		return m.studio_select();
+	}
 </script>
 
 <svelte:window
@@ -1129,9 +1151,167 @@
 		>
 			<ArrowLeftIcon />
 		</Button>
+		<Menubar.Root
+			bind:value={studioMenuValue}
+			class="ml-1 hidden items-center gap-0.5 lg:flex"
+			aria-label={m.studio_menus()}
+		>
+			<Menubar.Menu value="file">
+				<Menubar.Trigger
+					class="studio-menubar-trigger"
+					onpointerdown={(event) => openStudioMenu(event, 'file')}
+					>{m.studio_file()}</Menubar.Trigger
+				>
+				<Menubar.Portal>
+					<Menubar.Content class="studio-menubar-content" onclick={() => (studioMenuValue = '')}>
+						<Menubar.Item
+							class="studio-menubar-item"
+							onclick={() => saveNow()}
+							disabled={!editor.canEdit}><SaveIcon class="size-4" /> {m.common_save()}</Menubar.Item
+						>
+						<Menubar.Item class="studio-menubar-item" onclick={openHistory}
+							>{m.studio_version_history()}</Menubar.Item
+						>
+						<Menubar.Item
+							class="studio-menubar-item"
+							onclick={() => (checkpointDialogOpen = true)}
+							disabled={!editor.canEdit}>{m.studio_create_checkpoint()}</Menubar.Item
+						>
+						<Menubar.Item
+							class="studio-menubar-item"
+							onclick={openTemplateDialog}
+							disabled={!editor.canEdit}>{m.studio_save_template()}</Menubar.Item
+						>
+						<Menubar.Item
+							class="studio-menubar-item"
+							onclick={openResizeDialog}
+							disabled={!editor.canEdit}>{m.studio_resize_design()}</Menubar.Item
+						>
+						<Menubar.Separator class="my-1 h-px bg-border" />
+						<Menubar.Item class="studio-menubar-item" onclick={() => openExport('download')}
+							><DownloadIcon class="size-4" /> {m.studio_export()}</Menubar.Item
+						>
+					</Menubar.Content>
+				</Menubar.Portal>
+			</Menubar.Menu>
+			<Menubar.Menu value="edit">
+				<Menubar.Trigger
+					class="studio-menubar-trigger"
+					onpointerdown={(event) => openStudioMenu(event, 'edit')}
+					>{m.studio_edit()}</Menubar.Trigger
+				>
+				<Menubar.Portal>
+					<Menubar.Content class="studio-menubar-content" onclick={() => (studioMenuValue = '')}>
+						<Menubar.Item
+							class="studio-menubar-item"
+							onclick={() => editor.undo()}
+							disabled={!editor.canUndo}>{m.studio_undo()}</Menubar.Item
+						>
+						<Menubar.Item
+							class="studio-menubar-item"
+							onclick={() => editor.redo()}
+							disabled={!editor.canRedo}>{m.studio_redo()}</Menubar.Item
+						>
+						<Menubar.Separator class="my-1 h-px bg-border" />
+						<Menubar.Item
+							class="studio-menubar-item"
+							onclick={() => editor.duplicateSelected()}
+							disabled={editor.selectedLayerIDs.length === 0}>{m.studio_duplicate()}</Menubar.Item
+						>
+						<Menubar.Item
+							class="studio-menubar-item"
+							onclick={() => editor.deleteSelected()}
+							disabled={editor.selectedLayerIDs.length === 0}>{m.common_delete()}</Menubar.Item
+						>
+					</Menubar.Content>
+				</Menubar.Portal>
+			</Menubar.Menu>
+			<Menubar.Menu value="layer">
+				<Menubar.Trigger
+					class="studio-menubar-trigger"
+					onpointerdown={(event) => openStudioMenu(event, 'layer')}
+					>{m.studio_layer()}</Menubar.Trigger
+				>
+				<Menubar.Portal>
+					<Menubar.Content class="studio-menubar-content" onclick={() => (studioMenuValue = '')}>
+						<Menubar.Item
+							class="studio-menubar-item"
+							onclick={() => editor.groupSelected()}
+							disabled={editor.selectedLayers.length < 2}
+							><GroupIcon class="size-4" /> {m.studio_group()}</Menubar.Item
+						>
+						<Menubar.Item
+							class="studio-menubar-item"
+							onclick={() => editor.ungroupSelected()}
+							disabled={!editor.selectedLayers.some((layer) => layer.type === 'group')}
+							><UngroupIcon class="size-4" /> {m.studio_ungroup()}</Menubar.Item
+						>
+						<Menubar.Item
+							class="studio-menubar-item"
+							onclick={() => removeBackground()}
+							disabled={!editor.selectedLayers[0]?.image}
+							><WandIcon class="size-4" /> {m.studio_remove_background()}</Menubar.Item
+						>
+					</Menubar.Content>
+				</Menubar.Portal>
+			</Menubar.Menu>
+			<Menubar.Menu value="view">
+				<Menubar.Trigger
+					class="studio-menubar-trigger"
+					onpointerdown={(event) => openStudioMenu(event, 'view')}
+					>{m.studio_view()}</Menubar.Trigger
+				>
+				<Menubar.Portal>
+					<Menubar.Content class="studio-menubar-content" onclick={() => (studioMenuValue = '')}>
+						<Menubar.Item
+							class="studio-menubar-item"
+							onclick={() => (editor.rightPanelVisible = !editor.rightPanelVisible)}
+							>{m.studio_toggle_inspector()}</Menubar.Item
+						>
+						<Menubar.Item
+							class="studio-menubar-item"
+							onclick={() => {
+								editor.zoom = 0.75;
+								editor.panX = 0;
+								editor.panY = 0;
+							}}>{m.studio_fit_canvas()}</Menubar.Item
+						>
+						<Menubar.Item class="studio-menubar-item" onclick={() => (editor.zoom = 1)}
+							>{m.studio_zoom_100()}</Menubar.Item
+						>
+						<Menubar.Item
+							class="studio-menubar-item"
+							onclick={() => (focusedCanvas = !focusedCanvas)}
+							>{m.studio_focused_canvas()}</Menubar.Item
+						>
+					</Menubar.Content>
+				</Menubar.Portal>
+			</Menubar.Menu>
+		</Menubar.Root>
+		{#if editor.saveState === 'saving'}
+			<div class="hidden min-w-0 items-center gap-1.5 px-2 text-xs text-muted-foreground sm:flex">
+				<LoaderIcon class="size-3.5 animate-spin" />
+				<span>{m.common_saving()}</span>
+			</div>
+		{:else if savedIndicatorVisible && editor.saveState === 'saved'}
+			<div
+				class="hidden min-w-0 animate-in items-center gap-1.5 px-2 text-xs text-muted-foreground zoom-in-95 fade-in motion-reduce:animate-none sm:flex"
+			>
+				<CheckIcon class="size-3.5 text-primary" />
+				<span>{m.studio_saved()}</span>
+			</div>
+		{:else if ['local', 'offline', 'conflict', 'error'].includes(editor.saveState)}
+			<div
+				class="hidden max-w-52 min-w-0 items-center gap-1.5 truncate px-2 text-xs text-muted-foreground sm:flex"
+				title={editor.saveMessage}
+			>
+				<span class="size-1.5 shrink-0 rounded-full bg-amber-500"></span>
+				<span class="truncate">{editor.saveMessage}</span>
+			</div>
+		{/if}
 		<Input
 			value={editor.document?.title ?? ''}
-			class="h-11 min-w-0 flex-1 border-transparent bg-transparent px-2 font-medium hover:border-input focus:border-input sm:max-w-56 sm:flex-none md:h-11 lg:order-2 lg:ml-auto lg:h-8 lg:max-w-72"
+			class="h-11 min-w-0 flex-1 border-transparent bg-transparent px-2 font-medium hover:border-input focus:border-input sm:max-w-56 sm:flex-none md:h-11 lg:ml-auto lg:h-8 lg:max-w-72"
 			aria-label={m.studio_design_title()}
 			disabled={!editor.canEdit}
 			oninput={(event) =>
@@ -1141,105 +1321,7 @@
 					'document-title'
 				)}
 		/>
-		<span class="hidden min-w-20 text-xs text-muted-foreground sm:inline lg:order-2"
-			>{editor.saveMessage}</span
-		>
-		<nav class="ml-2 hidden items-center gap-0.5 lg:order-1 lg:flex" aria-label={m.studio_menus()}>
-			<DropdownMenu.Root>
-				<DropdownMenu.Trigger>
-					{#snippet child({ props })}
-						<Button {...props} variant="ghost" size="xs">{m.studio_file()}</Button>
-					{/snippet}
-				</DropdownMenu.Trigger>
-				<DropdownMenu.Content>
-					<DropdownMenu.Item onclick={() => saveNow()} disabled={!editor.canEdit}
-						><SaveIcon /> {m.common_save()}</DropdownMenu.Item
-					>
-					<DropdownMenu.Item onclick={openHistory}>{m.studio_version_history()}</DropdownMenu.Item>
-					<DropdownMenu.Item
-						onclick={() => (checkpointDialogOpen = true)}
-						disabled={!editor.canEdit}>{m.studio_create_checkpoint()}</DropdownMenu.Item
-					>
-					<DropdownMenu.Item onclick={openTemplateDialog} disabled={!editor.canEdit}
-						>{m.studio_save_template()}</DropdownMenu.Item
-					>
-					<DropdownMenu.Item onclick={openResizeDialog} disabled={!editor.canEdit}
-						>{m.studio_resize_design()}</DropdownMenu.Item
-					>
-					<DropdownMenu.Separator />
-					<DropdownMenu.Item onclick={() => openExport('download')}
-						><DownloadIcon /> {m.studio_export()}</DropdownMenu.Item
-					>
-				</DropdownMenu.Content>
-			</DropdownMenu.Root>
-			<DropdownMenu.Root>
-				<DropdownMenu.Trigger>
-					{#snippet child({ props })}
-						<Button {...props} variant="ghost" size="xs">{m.studio_edit()}</Button>
-					{/snippet}
-				</DropdownMenu.Trigger>
-				<DropdownMenu.Content>
-					<DropdownMenu.Item onclick={() => editor.undo()} disabled={!editor.canUndo}
-						>{m.studio_undo()}</DropdownMenu.Item
-					>
-					<DropdownMenu.Item onclick={() => editor.redo()} disabled={!editor.canRedo}
-						>{m.studio_redo()}</DropdownMenu.Item
-					>
-					<DropdownMenu.Item onclick={() => editor.duplicateSelected()}
-						>{m.studio_duplicate()}</DropdownMenu.Item
-					>
-					<DropdownMenu.Item onclick={() => editor.deleteSelected()}
-						>{m.common_delete()}</DropdownMenu.Item
-					>
-				</DropdownMenu.Content>
-			</DropdownMenu.Root>
-			<DropdownMenu.Root>
-				<DropdownMenu.Trigger>
-					{#snippet child({ props })}
-						<Button {...props} variant="ghost" size="xs">{m.studio_layer()}</Button>
-					{/snippet}
-				</DropdownMenu.Trigger>
-				<DropdownMenu.Content>
-					<DropdownMenu.Item onclick={() => editor.groupSelected()}
-						><GroupIcon /> {m.studio_group()}</DropdownMenu.Item
-					>
-					<DropdownMenu.Item onclick={() => editor.ungroupSelected()}
-						><UngroupIcon /> {m.studio_ungroup()}</DropdownMenu.Item
-					>
-					<DropdownMenu.Item
-						onclick={() => removeBackground()}
-						disabled={!editor.selectedLayers[0]?.image}
-						><WandIcon /> {m.studio_remove_background()}</DropdownMenu.Item
-					>
-				</DropdownMenu.Content>
-			</DropdownMenu.Root>
-			<DropdownMenu.Root>
-				<DropdownMenu.Trigger>
-					{#snippet child({ props })}
-						<Button {...props} variant="ghost" size="xs">{m.studio_view()}</Button>
-					{/snippet}
-				</DropdownMenu.Trigger>
-				<DropdownMenu.Content>
-					<DropdownMenu.Item onclick={() => (editor.rightPanelVisible = !editor.rightPanelVisible)}
-						>{m.studio_toggle_inspector()}</DropdownMenu.Item
-					>
-					<DropdownMenu.Item
-						onclick={() => {
-							editor.zoom = 0.75;
-							editor.panX = 0;
-							editor.panY = 0;
-						}}>{m.studio_fit_canvas()}</DropdownMenu.Item
-					>
-					<DropdownMenu.Item onclick={() => (editor.zoom = 1)}
-						>{m.studio_zoom_100()}</DropdownMenu.Item
-					>
-					<DropdownMenu.Item onclick={() => (focusedCanvas = !focusedCanvas)}
-						>{m.studio_focused_canvas()}</DropdownMenu.Item
-					>
-				</DropdownMenu.Content>
-			</DropdownMenu.Root>
-		</nav>
-		<div class="ml-auto flex items-center gap-1 lg:order-3">
+		<div class="flex items-center gap-1">
 			<Button
 				variant="ghost"
 				size="icon-sm"
@@ -1340,17 +1422,124 @@
 		>
 			{#each tools as tool (tool.key)}
 				{@const Icon = tool.icon}
-				<Button
-					variant={editor.activeTool === tool.key ? 'secondary' : 'ghost'}
-					size="icon-sm"
-					onclick={() => setTool(tool.key)}
-					aria-label={tool.label}
-					aria-pressed={editor.activeTool === tool.key}
-					title={tool.label}
-					disabled={!editor.canEdit && !['select', 'hand', 'zoom'].includes(tool.key)}
-				>
-					<Icon />
-				</Button>
+				{#if tool.key === 'select'}
+					<DropdownMenu.Root>
+						<Tooltip.Root>
+							<Tooltip.Trigger>
+								{#snippet child({ props: tooltipProps })}
+									<DropdownMenu.Trigger>
+										{#snippet child({ props: menuProps })}
+											<Button
+												{...tooltipProps}
+												{...menuProps}
+												variant={isSelectionTool(editor.activeTool) ? 'secondary' : 'ghost'}
+												size="icon-sm"
+												aria-label={selectionToolLabel(editor.activeTool)}
+												aria-pressed={isSelectionTool(editor.activeTool)}
+											>
+												{#if editor.activeTool === 'marquee'}
+													<RectangleSelectIcon />
+												{:else if editor.activeTool === 'lasso'}
+													<LassoSelectIcon />
+												{:else if editor.activeTool === 'magic_wand'}
+													<WandIcon />
+												{:else}
+													<MousePointerIcon />
+												{/if}
+											</Button>
+										{/snippet}
+									</DropdownMenu.Trigger>
+								{/snippet}
+							</Tooltip.Trigger>
+							<Tooltip.Content side="right">
+								{selectionToolLabel(editor.activeTool)}
+							</Tooltip.Content>
+						</Tooltip.Root>
+						<DropdownMenu.Content side="right" align="start" class="min-w-52">
+							<DropdownMenu.Item onclick={() => setTool('select')}>
+								<MousePointerIcon />
+								{m.studio_select()}
+								<span class="ml-auto text-xs text-muted-foreground">V</span>
+							</DropdownMenu.Item>
+							<DropdownMenu.Item onclick={() => setTool('marquee')}>
+								<RectangleSelectIcon />
+								{m.studio_rectangle_select()}
+								<span class="ml-auto text-xs text-muted-foreground">M</span>
+							</DropdownMenu.Item>
+							<DropdownMenu.Item onclick={() => setTool('lasso')}>
+								<LassoSelectIcon />
+								{m.studio_lasso_select()}
+								<span class="ml-auto text-xs text-muted-foreground">L</span>
+							</DropdownMenu.Item>
+							<DropdownMenu.Item onclick={() => setTool('magic_wand')}>
+								<WandIcon />
+								{m.studio_magic_select()}
+								<span class="ml-auto text-xs text-muted-foreground">W</span>
+							</DropdownMenu.Item>
+						</DropdownMenu.Content>
+					</DropdownMenu.Root>
+				{:else if tool.key === 'shape'}
+					<DropdownMenu.Root>
+						<Tooltip.Root>
+							<Tooltip.Trigger>
+								{#snippet child({ props: tooltipProps })}
+									<DropdownMenu.Trigger>
+										{#snippet child({ props: menuProps })}
+											<Button
+												{...tooltipProps}
+												{...menuProps}
+												variant={editor.activeTool === 'shape' ? 'secondary' : 'ghost'}
+												size="icon-sm"
+												aria-label={tool.label}
+												disabled={!editor.canEdit}
+											>
+												<SquareIcon />
+											</Button>
+										{/snippet}
+									</DropdownMenu.Trigger>
+								{/snippet}
+							</Tooltip.Trigger>
+							<Tooltip.Content side="right">{tool.label}</Tooltip.Content>
+						</Tooltip.Root>
+						<DropdownMenu.Content side="right" align="start" class="min-w-44">
+							<DropdownMenu.Item onclick={() => addShape('rectangle')}>
+								<SquareIcon />
+								{m.studio_rectangle()}
+							</DropdownMenu.Item>
+							<DropdownMenu.Item onclick={() => addShape('rounded_rectangle')}>
+								<RectangleHorizontalIcon />
+								{m.studio_rounded_rectangle()}
+							</DropdownMenu.Item>
+							<DropdownMenu.Item onclick={() => addShape('ellipse')}>
+								<CircleIcon />
+								{m.studio_ellipse()}
+							</DropdownMenu.Item>
+							<DropdownMenu.Item onclick={() => addShape('line')}>
+								<MinusIcon />
+								{m.studio_line()}
+							</DropdownMenu.Item>
+						</DropdownMenu.Content>
+					</DropdownMenu.Root>
+				{:else}
+					<Tooltip.Root>
+						<Tooltip.Trigger>
+							{#snippet child({ props })}
+								<Button
+									{...props}
+									variant={editor.activeTool === tool.key ? 'secondary' : 'ghost'}
+									size="icon-sm"
+									onclick={() => setTool(tool.key)}
+									aria-label={tool.label}
+									aria-pressed={editor.activeTool === tool.key}
+									disabled={!editor.canEdit && !['select', 'hand', 'zoom'].includes(tool.key)}
+								>
+									<Icon />
+								</Button>
+							{/snippet}
+						</Tooltip.Trigger>
+						<Tooltip.Content side="right">{tool.label}</Tooltip.Content>
+					</Tooltip.Root>
+				{/if}
 			{/each}
 		</nav>
 		{#if !focusedCanvas}
@@ -1446,32 +1635,110 @@
 	</div>
 
 	<nav
-		class="no-scrollbar flex h-[calc(4rem+env(safe-area-inset-bottom))] shrink-0 gap-1 overflow-x-auto border-t bg-background px-2 pt-1 pb-[env(safe-area-inset-bottom)] lg:hidden"
+		class="grid h-[calc(4rem+env(safe-area-inset-bottom))] shrink-0 grid-cols-7 border-t bg-background px-1 pt-1 pb-[env(safe-area-inset-bottom)] lg:hidden"
 		aria-label={m.studio_tools()}
 	>
 		<Button
 			variant="ghost"
-			class="h-12 min-w-14 flex-col gap-0 text-xs md:h-12"
+			class="h-12 min-w-0 flex-col gap-0 px-0 text-[11px] md:h-12"
 			onclick={() => (mobileSheet = 'assets')}
 		>
 			<PanelLeftIcon />
 			{m.studio_add()}
 		</Button>
-		{#each tools.filter( (tool) => ['select', 'text', 'shape', 'crop', 'hand'].includes(tool.key) ) as tool (tool.key)}
+		{#each tools.filter( (tool) => ['select', 'text', 'shape', 'hand'].includes(tool.key) ) as tool (tool.key)}
 			{@const Icon = tool.icon}
-			<Button
-				variant={editor.activeTool === tool.key ? 'secondary' : 'ghost'}
-				class="h-12 min-w-14 flex-col gap-0 text-xs md:h-12"
-				onclick={() => setTool(tool.key)}
-				disabled={!editor.canEdit && !['select', 'hand'].includes(tool.key)}
-			>
-				<Icon />
-				{tool.label}
-			</Button>
+			{#if tool.key === 'select'}
+				<DropdownMenu.Root>
+					<DropdownMenu.Trigger>
+						{#snippet child({ props })}
+							<Button
+								{...props}
+								variant={isSelectionTool(editor.activeTool) ? 'secondary' : 'ghost'}
+								class="h-12 min-w-0 flex-col gap-0 px-0 text-[11px] md:h-12"
+								aria-label={selectionToolLabel(editor.activeTool)}
+							>
+								{#if editor.activeTool === 'marquee'}
+									<RectangleSelectIcon />
+								{:else if editor.activeTool === 'lasso'}
+									<LassoSelectIcon />
+								{:else if editor.activeTool === 'magic_wand'}
+									<WandIcon />
+								{:else}
+									<MousePointerIcon />
+								{/if}
+								{m.studio_select()}
+							</Button>
+						{/snippet}
+					</DropdownMenu.Trigger>
+					<DropdownMenu.Content side="top" align="start" class="min-w-52">
+						<DropdownMenu.Item onclick={() => setTool('select')}>
+							<MousePointerIcon />
+							{m.studio_select()}
+						</DropdownMenu.Item>
+						<DropdownMenu.Item onclick={() => setTool('marquee')}>
+							<RectangleSelectIcon />
+							{m.studio_rectangle_select()}
+						</DropdownMenu.Item>
+						<DropdownMenu.Item onclick={() => setTool('lasso')}>
+							<LassoSelectIcon />
+							{m.studio_lasso_select()}
+						</DropdownMenu.Item>
+						<DropdownMenu.Item onclick={() => setTool('magic_wand')}>
+							<WandIcon />
+							{m.studio_magic_select()}
+						</DropdownMenu.Item>
+					</DropdownMenu.Content>
+				</DropdownMenu.Root>
+			{:else if tool.key === 'shape'}
+				<DropdownMenu.Root>
+					<DropdownMenu.Trigger>
+						{#snippet child({ props })}
+							<Button
+								{...props}
+								variant={editor.activeTool === 'shape' ? 'secondary' : 'ghost'}
+								class="h-12 min-w-0 flex-col gap-0 px-0 text-[11px] md:h-12"
+								disabled={!editor.canEdit}
+							>
+								<SquareIcon />
+								{tool.label}
+							</Button>
+						{/snippet}
+					</DropdownMenu.Trigger>
+					<DropdownMenu.Content side="top" align="start" class="min-w-44">
+						<DropdownMenu.Item onclick={() => addShape('rectangle')}>
+							<SquareIcon />
+							{m.studio_rectangle()}
+						</DropdownMenu.Item>
+						<DropdownMenu.Item onclick={() => addShape('rounded_rectangle')}>
+							<RectangleHorizontalIcon />
+							{m.studio_rounded_rectangle()}
+						</DropdownMenu.Item>
+						<DropdownMenu.Item onclick={() => addShape('ellipse')}>
+							<CircleIcon />
+							{m.studio_ellipse()}
+						</DropdownMenu.Item>
+						<DropdownMenu.Item onclick={() => addShape('line')}>
+							<MinusIcon />
+							{m.studio_line()}
+						</DropdownMenu.Item>
+					</DropdownMenu.Content>
+				</DropdownMenu.Root>
+			{:else}
+				<Button
+					variant={editor.activeTool === tool.key ? 'secondary' : 'ghost'}
+					class="h-12 min-w-0 flex-col gap-0 px-0 text-[11px] md:h-12"
+					onclick={() => setTool(tool.key)}
+					disabled={!editor.canEdit && !['select', 'hand'].includes(tool.key)}
+				>
+					<Icon />
+					{tool.label}
+				</Button>
+			{/if}
 		{/each}
 		<Button
 			variant="ghost"
-			class="h-12 min-w-14 flex-col gap-0 text-xs md:h-12"
+			class="h-12 min-w-0 flex-col gap-0 px-0 text-[11px] md:h-12"
 			onclick={() => (mobileSheet = 'layers')}
 		>
 			<LayersIcon />
@@ -1479,7 +1746,7 @@
 		</Button>
 		<Button
 			variant="ghost"
-			class="h-12 min-w-16 flex-col gap-0 text-xs md:h-12"
+			class="h-12 min-w-0 flex-col gap-0 px-0 text-[11px] md:h-12"
 			onclick={() => (mobileSheet = 'properties')}
 		>
 			<SlidersIcon />
@@ -1756,19 +2023,21 @@
 							quality: Math.round((editor.document?.export_defaults.quality ?? 0.92) * 100)
 						})}
 					</span>
-					<input
+					<Slider
 						class="h-10"
-						type="range"
-						min="0.5"
-						max="1"
-						step="0.01"
+						min={0.5}
+						max={1}
+						step={0.01}
 						value={editor.document?.export_defaults.quality ?? 0.92}
 						disabled={editor.document?.export_defaults.format === 'png'}
-						oninput={(event) =>
+						ariaLabel={m.studio_quality({
+							quality: Math.round((editor.document?.export_defaults.quality ?? 0.92) * 100)
+						})}
+						onValueChange={(quality) =>
 							editor.mutate(
 								'Change export quality',
 								(document) => {
-									document.export_defaults.quality = Number(event.currentTarget.value);
+									document.export_defaults.quality = quality;
 								},
 								'export-quality'
 							)}
@@ -1839,6 +2108,57 @@
 		--studio-panel-border: var(--border);
 	}
 
+	:global(.studio-menubar-trigger) {
+		min-height: 1.75rem;
+		border-radius: 0.375rem;
+		padding-inline: 0.5rem;
+		font-size: 0.75rem;
+		font-weight: 500;
+		outline: none;
+	}
+
+	:global(.studio-menubar-trigger:hover),
+	:global(.studio-menubar-trigger[data-highlighted]),
+	:global(.studio-menubar-trigger[data-state='open']) {
+		background: var(--muted);
+	}
+
+	:global(.studio-menubar-trigger:focus-visible) {
+		box-shadow: 0 0 0 2px var(--ring);
+	}
+
+	:global(.studio-menubar-content) {
+		z-index: 50;
+		min-width: 12rem;
+		border-radius: 0.5rem;
+		background: color-mix(in oklch, var(--popover) 96%, transparent);
+		padding: 0.25rem;
+		color: var(--popover-foreground);
+		box-shadow: 0 8px 24px rgb(0 0 0 / 0.14);
+		outline: 1px solid color-mix(in oklch, var(--foreground) 10%, transparent);
+		backdrop-filter: blur(16px);
+	}
+
+	:global(.studio-menubar-item) {
+		display: flex;
+		min-height: 2.25rem;
+		cursor: default;
+		align-items: center;
+		gap: 0.5rem;
+		border-radius: 0.375rem;
+		padding-inline: 0.5rem;
+		font-size: 0.875rem;
+		outline: none;
+	}
+
+	:global(.studio-menubar-item[data-highlighted]) {
+		background: var(--muted);
+	}
+
+	:global(.studio-menubar-item[data-disabled]) {
+		opacity: 0.45;
+	}
+
 	.studio-resize-handle::after {
 		position: absolute;
 		content: '';
@@ -1866,6 +2186,13 @@
 	.studio-resize-handle:focus-visible {
 		outline: 2px solid var(--ring);
 		outline-offset: -2px;
+	}
+
+	@media (max-width: 63.999rem) {
+		.studio-theme :global(button) {
+			min-width: 2.75rem;
+			min-height: 2.75rem;
+		}
 	}
 
 	@media (min-width: 64rem) {

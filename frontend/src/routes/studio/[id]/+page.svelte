@@ -4,7 +4,7 @@
 	import { loadStudioBrandKit, loadStudioConfig, loadStudioDesign } from '$lib/studio/api';
 	import { loadStudioBrandFonts } from '$lib/studio/fonts';
 	import { migrateStudioDocument } from '$lib/studio/document';
-	import type { StudioDocumentResponse } from '$lib/studio/types';
+	import type { StudioBrandKit, StudioDocumentResponse } from '$lib/studio/types';
 	import StudioShell from '$lib/studio/components/studio-shell.svelte';
 	import LoaderIcon from 'lucide-svelte/icons/loader-2';
 	import { m } from '$lib/paraglide/messages';
@@ -15,6 +15,7 @@
 	let loading = $state(true);
 	let error = $state('');
 	let readOnlyReason = $state('');
+	let brandKit = $state.raw<StudioBrandKit | null>(null);
 	let loadRequest = 0;
 	let returnToken = $derived(page.url.searchParams.get('return_token') || '');
 	let initialAction = $derived(page.url.searchParams.get('action') || '');
@@ -30,6 +31,7 @@
 		loading = true;
 		error = '';
 		readOnlyReason = '';
+		brandKit = null;
 		design = null;
 		try {
 			const [config, response] = await Promise.all([
@@ -49,6 +51,7 @@
 			const brand = await loadStudioBrandKit(response.workspace_id);
 			await loadStudioBrandFonts(brand);
 			if (request !== loadRequest) return;
+			brandKit = brand;
 			design = response;
 			finishMetric();
 		} catch (cause) {
@@ -88,5 +91,6 @@
 		{backgroundModelBaseURL}
 		{initialAction}
 		{readOnlyReason}
+		initialBrandKit={brandKit}
 	/>
 {/if}

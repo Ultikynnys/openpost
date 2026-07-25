@@ -9,8 +9,18 @@ export const STUDIO_LIMITS = {
 } as const;
 
 export type StudioLayerType = 'text' | 'image' | 'shape' | 'group';
+export type StudioSelectionTool = 'select' | 'marquee' | 'lasso' | 'magic_wand';
+export type StudioSelectionMode = 'replace' | 'add' | 'subtract' | 'toggle';
 export type StudioTool =
-	'select' | 'crop' | 'text' | 'shape' | 'image' | 'camera' | 'eyedropper' | 'hand' | 'zoom';
+	| StudioSelectionTool
+	| 'crop'
+	| 'text'
+	| 'shape'
+	| 'image'
+	| 'camera'
+	| 'eyedropper'
+	| 'hand'
+	| 'zoom';
 export type StudioSaveState =
 	'idle' | 'saving' | 'saved' | 'local' | 'conflict' | 'offline' | 'error';
 
@@ -31,6 +41,15 @@ export interface StudioTextShadow {
 	offset_y: number;
 }
 
+export type StudioTextCurveType = 'none' | 'arc_up' | 'arc_down' | 'wave' | 'circle' | 'ellipse';
+
+export interface StudioTextCurve {
+	type: StudioTextCurveType;
+	strength: number;
+	offset: number;
+	reverse: boolean;
+}
+
 export interface StudioTextValue {
 	text: string;
 	font_family: string;
@@ -46,6 +65,7 @@ export interface StudioTextValue {
 	stroke_color?: string;
 	stroke_width: number;
 	shadow: StudioTextShadow;
+	curve?: StudioTextCurve;
 }
 
 export interface StudioImageAdjustments {
@@ -83,6 +103,29 @@ export interface StudioShapeValue {
 	radius: number;
 }
 
+export type StudioBlendMode =
+	'normal' | 'multiply' | 'screen' | 'overlay' | 'darken' | 'lighten' | 'soft_light';
+
+export interface StudioShadowEffect {
+	color: string;
+	opacity: number;
+	blur: number;
+	angle: number;
+	distance: number;
+}
+
+export interface StudioLayerEffects {
+	blend_mode: StudioBlendMode;
+	drop_shadow?: StudioShadowEffect;
+	inner_shadow?: StudioShadowEffect;
+}
+
+export interface StudioLayerMask {
+	shape: 'rectangle' | 'rounded_rectangle' | 'circle' | 'ellipse' | 'diamond';
+	inset: number;
+	radius: number;
+}
+
 export interface StudioLayer {
 	id: string;
 	type: StudioLayerType;
@@ -95,6 +138,8 @@ export interface StudioLayer {
 	text?: StudioTextValue;
 	image?: StudioImageValue;
 	shape?: StudioShapeValue;
+	effects?: StudioLayerEffects;
+	mask?: StudioLayerMask;
 }
 
 export interface StudioPage {

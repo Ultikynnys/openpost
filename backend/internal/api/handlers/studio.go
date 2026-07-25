@@ -74,6 +74,13 @@ type StudioTextShadow struct {
 	OffsetY float64 `json:"offset_y"`
 }
 
+type StudioTextCurve struct {
+	Type     string  `json:"type" enum:"none,arc_up,arc_down,wave,circle,ellipse"`
+	Strength float64 `json:"strength" minimum:"0.05" maximum:"1"`
+	Offset   float64 `json:"offset" minimum:"-1" maximum:"1"`
+	Reverse  bool    `json:"reverse"`
+}
+
 type StudioTextValue struct {
 	Text           string           `json:"text"`
 	FontFamily     string           `json:"font_family"`
@@ -89,6 +96,7 @@ type StudioTextValue struct {
 	StrokeColor    string           `json:"stroke_color,omitempty"`
 	StrokeWidth    float64          `json:"stroke_width"`
 	Shadow         StudioTextShadow `json:"shadow"`
+	Curve          *StudioTextCurve `json:"curve,omitempty"`
 }
 
 type StudioImageAdjustments struct {
@@ -126,18 +134,40 @@ type StudioShapeValue struct {
 	Radius      float64 `json:"radius"`
 }
 
+type StudioShadowEffect struct {
+	Color    string  `json:"color"`
+	Opacity  float64 `json:"opacity" minimum:"0" maximum:"1"`
+	Blur     float64 `json:"blur" minimum:"0" maximum:"100"`
+	Angle    float64 `json:"angle" minimum:"-360" maximum:"360"`
+	Distance float64 `json:"distance" minimum:"0" maximum:"500"`
+}
+
+type StudioLayerEffects struct {
+	BlendMode   string              `json:"blend_mode" enum:"normal,multiply,screen,overlay,darken,lighten,soft_light"`
+	DropShadow  *StudioShadowEffect `json:"drop_shadow,omitempty"`
+	InnerShadow *StudioShadowEffect `json:"inner_shadow,omitempty"`
+}
+
+type StudioLayerMask struct {
+	Shape  string  `json:"shape" enum:"rectangle,rounded_rectangle,circle,ellipse,diamond"`
+	Inset  float64 `json:"inset" minimum:"0"`
+	Radius float64 `json:"radius" minimum:"0"`
+}
+
 type StudioLayer struct {
-	ID        string            `json:"id"`
-	Type      string            `json:"type" enum:"text,image,shape,group"`
-	Name      string            `json:"name"`
-	ParentID  string            `json:"parent_id,omitempty"`
-	Visible   bool              `json:"visible"`
-	Locked    bool              `json:"locked"`
-	Opacity   float64           `json:"opacity"`
-	Transform StudioTransform   `json:"transform"`
-	Text      *StudioTextValue  `json:"text,omitempty"`
-	Image     *StudioImageValue `json:"image,omitempty"`
-	Shape     *StudioShapeValue `json:"shape,omitempty"`
+	ID        string              `json:"id"`
+	Type      string              `json:"type" enum:"text,image,shape,group"`
+	Name      string              `json:"name"`
+	ParentID  string              `json:"parent_id,omitempty"`
+	Visible   bool                `json:"visible"`
+	Locked    bool                `json:"locked"`
+	Opacity   float64             `json:"opacity"`
+	Transform StudioTransform     `json:"transform"`
+	Text      *StudioTextValue    `json:"text,omitempty"`
+	Image     *StudioImageValue   `json:"image,omitempty"`
+	Shape     *StudioShapeValue   `json:"shape,omitempty"`
+	Effects   *StudioLayerEffects `json:"effects,omitempty"`
+	Mask      *StudioLayerMask    `json:"mask,omitempty"`
 }
 
 type StudioPagePayload struct {
@@ -1433,6 +1463,26 @@ func validateStudioLayer(layer StudioLayer) error {
 	if layer.Transform.Width < 0 || layer.Transform.Height < 0 {
 		return fmt.Errorf("studio layer dimensions cannot be negative")
 	}
+	if layer.Mask != nil {
+		if !oneOfStudioString(layer.Mask.Shape, "rectangle", "rounded_rectangle", "circle", "ellipse", "diamond") ||
+			!finiteStudioNumber(layer.Mask.Inset) ||
+			!finiteStudioNumber(layer.Mask.Radius) ||
+			layer.Mask.Inset < 0 ||
+			layer.Mask.Radius < 0 {
+			return fmt.Errorf("studio layer mask is invalid")
+		}
+	}
+	if layer.Effects != nil {
+		if !oneOfStudioString(layer.Effects.BlendMode, "normal", "multiply", "screen", "overlay", "darken", "lighten", "soft_light") {
+			return fmt.Errorf("studio layer blend mode is invalid")
+		}
+		if err := validateStudioShadowEffect(layer.Effects.DropShadow); err != nil {
+			return err
+		}
+		if err := validateStudioShadowEffect(layer.Effects.InnerShadow); err != nil {
+			return err
+		}
+	}
 	switch layer.Type {
 	case "text":
 		if layer.Text == nil || layer.Image != nil || layer.Shape != nil {
@@ -1464,6 +1514,16 @@ func validateStudioLayer(layer StudioLayer) error {
 			layer.Text.Shadow.Blur < 0 ||
 			layer.Text.Shadow.Blur > 100 {
 			return fmt.Errorf("text effects are invalid")
+		}
+		if layer.Text.Curve != nil &&
+			(!oneOfStudioString(layer.Text.Curve.Type, "none", "arc_up", "arc_down", "wave", "circle", "ellipse") ||
+				!finiteStudioNumber(layer.Text.Curve.Strength) ||
+				layer.Text.Curve.Strength < 0.05 ||
+				layer.Text.Curve.Strength > 1 ||
+				!finiteStudioNumber(layer.Text.Curve.Offset) ||
+				layer.Text.Curve.Offset < -1 ||
+				layer.Text.Curve.Offset > 1) {
+			return fmt.Errorf("text curve is invalid")
 		}
 	case "image":
 		if layer.Image == nil || layer.Text != nil || layer.Shape != nil || strings.TrimSpace(layer.Image.MediaID) == "" {
@@ -1515,11 +1575,33 @@ func validateStudioLayer(layer StudioLayer) error {
 			return fmt.Errorf("shape colors must use hexadecimal values")
 		}
 	case "group":
-		if layer.Text != nil || layer.Image != nil || layer.Shape != nil {
+		if layer.Text != nil || layer.Image != nil || layer.Shape != nil || layer.Effects != nil || layer.Mask != nil {
 			return fmt.Errorf("group layers cannot contain visual properties")
 		}
 	default:
 		return fmt.Errorf("unsupported Studio layer type")
+	}
+	return nil
+}
+
+func validateStudioShadowEffect(effect *StudioShadowEffect) error {
+	if effect == nil {
+		return nil
+	}
+	if !studioHexColor.MatchString(effect.Color) ||
+		!finiteStudioNumber(effect.Opacity) ||
+		!finiteStudioNumber(effect.Blur) ||
+		!finiteStudioNumber(effect.Angle) ||
+		!finiteStudioNumber(effect.Distance) ||
+		effect.Opacity < 0 ||
+		effect.Opacity > 1 ||
+		effect.Blur < 0 ||
+		effect.Blur > 100 ||
+		effect.Angle < -360 ||
+		effect.Angle > 360 ||
+		effect.Distance < 0 ||
+		effect.Distance > 500 {
+		return fmt.Errorf("studio layer shadow effect is invalid")
 	}
 	return nil
 }

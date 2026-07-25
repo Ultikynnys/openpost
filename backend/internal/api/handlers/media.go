@@ -202,10 +202,11 @@ type GetMediaStorageInput struct {
 
 type GetMediaStorageOutput struct {
 	Body struct {
-		UsedBytes     int64 `json:"used_bytes" doc:"Quota-counted media bytes"`
-		AssetCount    int   `json:"asset_count" doc:"Quota-counted media assets"`
-		InternalBytes int64 `json:"internal_bytes" doc:"Hidden preview bytes excluded from quota"`
-		LimitBytes    int64 `json:"limit_bytes" doc:"Storage limit, or zero when no fixed limit is exposed"`
+		UsedBytes             int64 `json:"used_bytes" doc:"Quota-counted media bytes"`
+		AssetCount            int   `json:"asset_count" doc:"Quota-counted media assets"`
+		InternalBytes         int64 `json:"internal_bytes" doc:"Hidden preview bytes excluded from quota"`
+		LimitBytes            int64 `json:"limit_bytes" doc:"Storage limit, or zero when no fixed limit is exposed"`
+		DirectUploadSupported bool  `json:"direct_upload_supported" doc:"Whether this instance supports direct-to-storage uploads"`
 	}
 }
 
@@ -644,6 +645,7 @@ func (h *MediaHandler) RegisterRoutes(api huma.API) {
 		out.Body.UsedBytes = storageUsage.UsedBytes
 		out.Body.AssetCount = storageUsage.AssetCount
 		out.Body.InternalBytes = storageUsage.InternalBytes
+		_, out.Body.DirectUploadSupported = h.storage.(mediastore.DirectUploadStorage)
 		return out, nil
 	})
 

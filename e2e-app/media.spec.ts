@@ -50,12 +50,8 @@ test("media library uploads and lists a local media file", async ({
   ).toBeVisible();
   await expect(page.getByText("Studio edits")).toHaveCount(0);
 
-  await page
-    .getByRole("button", { name: "Select", exact: true })
-    .click();
-  await page
-    .getByRole("button", { name: "Select launch-card.png" })
-    .click();
+  await page.getByRole("button", { name: "Select", exact: true }).click();
+  await page.getByRole("button", { name: "Select launch-card.png" }).click();
   await expect(
     page.getByRole("toolbar", { name: "Selected media actions" }),
   ).toContainText("1 selected");
@@ -76,4 +72,43 @@ test("media library uploads and lists a local media file", async ({
     can_delete: true,
     processing_status: "ready",
   });
+});
+
+test("brand kit inputs keep focus while editing", async ({ page, request }) => {
+  const unique = Date.now().toString(36);
+  const email = `brand-inputs-${unique}@example.com`;
+
+  const auth = await registerUser(request, email);
+  await createWorkspace(request, auth.token, "Brand Inputs E2E");
+
+  await authenticatePage(page, auth.token);
+  await page.goto("/media?view=brand");
+
+  const kitName = page.getByLabel("Brand kit name");
+  await expect(kitName).toBeVisible();
+  await kitName.fill("");
+  await kitName.pressSequentially("Field Notes", { delay: 20 });
+  await expect(kitName).toBeFocused();
+  await expect(kitName).toHaveValue("Field Notes");
+
+  await page.getByRole("button", { name: "Add color" }).click();
+  const colorName = page.getByLabel("Color name");
+  await colorName.fill("");
+  await colorName.pressSequentially("Signal orange", { delay: 20 });
+  await expect(colorName).toBeFocused();
+  await expect(colorName).toHaveValue("Signal orange");
+
+  await page.getByRole("button", { name: "Add style" }).click();
+  await page.getByText("Text style 1", { exact: true }).click();
+  const styleName = page.getByLabel("Style name");
+  await styleName.fill("");
+  await styleName.pressSequentially("Campaign heading", { delay: 20 });
+  await expect(styleName).toBeFocused();
+  await expect(styleName).toHaveValue("Campaign heading");
+
+  const fontFamily = page.getByLabel("Font family");
+  await fontFamily.fill("");
+  await fontFamily.pressSequentially("Geist Variable", { delay: 20 });
+  await expect(fontFamily).toBeFocused();
+  await expect(fontFamily).toHaveValue("Geist Variable");
 });

@@ -21,6 +21,8 @@ interface UploadProblem {
 	title?: string;
 }
 
+const directUploadCapabilityByWorkspace = new Map<string, Promise<boolean>>();
+
 export class UploadRequestError extends Error {
 	status: number;
 
@@ -48,6 +50,9 @@ export async function uploadMediaFile({
 		designDocumentId,
 		designPageId
 	};
+	if (!(await mediaStorageSupportsDirectUploads(workspaceId))) {
+		return uploadViaMultipart(workspaceId, file, altText, metadata);
+	}
 	try {
 		return await uploadViaDirectSession(workspaceId, file, altText, metadata);
 	} catch (error) {
@@ -96,6 +101,11 @@ export function shouldUseMultipartFallback(error: unknown): boolean {
 	return error.message.toLowerCase().includes('direct media upload sessions require s3 storage');
 }
 
+export function directUploadSupportedFromStorageResponse(value: unknown): boolean {
+	if (!value || typeof value !== 'object') return true;
+	return (value as { direct_upload_supported?: unknown }).direct_upload_supported !== false;
+}
+
 export function directUploadHeadersForBrowser(headers: Record<string, string>): Headers {
 	const directHeaders = new Headers();
 	for (const [key, value] of Object.entries(headers)) {
@@ -105,6 +115,24 @@ export function directUploadHeadersForBrowser(headers: Record<string, string>): 
 		directHeaders.set(key, value);
 	}
 	return directHeaders;
+}
+
+async function mediaStorageSupportsDirectUploads(workspaceId: string): Promise<boolean> {
+	const cacheKey = `${getApiBase()}:${workspaceId}`;
+	const cached = directUploadCapabilityByWorkspace.get(cacheKey);
+	if (cached) return cached;
+
+	const request = fetch(apiURL(`/media/storage?workspace_id=${encodeURIComponent(workspaceId)}`), {
+		credentials: 'include',
+		headers: apiHeaders(false)
+	})
+		.then(async (response) => {
+			if (!response.ok) return true;
+			return directUploadSupportedFromStorageResponse(await response.json());
+		})
+		.catch(() => true);
+	directUploadCapabilityByWorkspace.set(cacheKey, request);
+	return request;
 }
 
 async function uploadViaDirectSession(

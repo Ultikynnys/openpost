@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+	directUploadSupportedFromStorageResponse,
 	directUploadHeadersForBrowser,
 	shouldUseMultipartFallback,
 	UploadRequestError
@@ -18,6 +19,14 @@ describe('media-upload-client', () => {
 		expect(headers.has('Content-Length')).toBe(false);
 		expect(headers.get('Content-Type')).toBe('image/png');
 		expect(headers.get('x-amz-meta-workspace')).toBe('ws-1');
+	});
+
+	it('uses multipart uploads only when the storage capability explicitly disables direct uploads', () => {
+		expect(directUploadSupportedFromStorageResponse({ direct_upload_supported: false })).toBe(
+			false
+		);
+		expect(directUploadSupportedFromStorageResponse({ direct_upload_supported: true })).toBe(true);
+		expect(directUploadSupportedFromStorageResponse({})).toBe(true);
 	});
 
 	it('falls back only when direct upload sessions are unavailable', () => {

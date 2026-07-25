@@ -3593,6 +3593,8 @@ export interface components {
              * @description Quota-counted media assets
              */
             asset_count: number;
+            /** @description Whether this instance supports direct-to-storage uploads */
+            direct_upload_supported: boolean;
             /**
              * Format: int64
              * @description Hidden preview bytes excluded from quota
@@ -5442,9 +5444,11 @@ export interface components {
             source_width: number;
         };
         StudioLayer: {
+            effects?: components["schemas"]["StudioLayerEffects"];
             id: string;
             image?: components["schemas"]["StudioImageValue"];
             locked: boolean;
+            mask?: components["schemas"]["StudioLayerMask"];
             name: string;
             /** Format: double */
             opacity: number;
@@ -5455,6 +5459,20 @@ export interface components {
             /** @enum {string} */
             type: "text" | "image" | "shape" | "group";
             visible: boolean;
+        };
+        StudioLayerEffects: {
+            /** @enum {string} */
+            blend_mode: "normal" | "multiply" | "screen" | "overlay" | "darken" | "lighten" | "soft_light";
+            drop_shadow?: components["schemas"]["StudioShadowEffect"];
+            inner_shadow?: components["schemas"]["StudioShadowEffect"];
+        };
+        StudioLayerMask: {
+            /** Format: double */
+            inset: number;
+            /** Format: double */
+            radius: number;
+            /** @enum {string} */
+            shape: "rectangle" | "rounded_rectangle" | "circle" | "ellipse" | "diamond";
         };
         StudioPagePayload: {
             background_color: string;
@@ -5515,6 +5533,17 @@ export interface components {
             /** Format: int64 */
             revision: number;
         };
+        StudioShadowEffect: {
+            /** Format: double */
+            angle: number;
+            /** Format: double */
+            blur: number;
+            color: string;
+            /** Format: double */
+            distance: number;
+            /** Format: double */
+            opacity: number;
+        };
         StudioShapeValue: {
             fill: string;
             /** @enum {string} */
@@ -5543,6 +5572,15 @@ export interface components {
             updated_at?: string;
             workspace_id?: string;
         };
+        StudioTextCurve: {
+            /** Format: double */
+            offset: number;
+            reverse: boolean;
+            /** Format: double */
+            strength: number;
+            /** @enum {string} */
+            type: "none" | "arc_up" | "arc_down" | "wave" | "circle" | "ellipse";
+        };
         StudioTextShadow: {
             /** Format: double */
             blur: number;
@@ -5555,6 +5593,7 @@ export interface components {
         StudioTextValue: {
             align: string;
             color: string;
+            curve?: components["schemas"]["StudioTextCurve"];
             font_asset_id?: string;
             font_family: string;
             /** Format: double */

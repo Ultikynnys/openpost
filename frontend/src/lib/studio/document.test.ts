@@ -76,4 +76,50 @@ describe('Studio document contracts', () => {
 		expect(result.document?.schema_version).toBe(99);
 		expect(result.error).toContain('newer OpenPost version');
 	});
+
+	it('validates masks, curved text, blend modes, and layer shadows', () => {
+		const document = blankStudioDocument(preset);
+		document.pages[0].layers = [
+			{
+				id: 'effect-layer',
+				type: 'text',
+				name: 'Curved headline',
+				visible: true,
+				locked: false,
+				opacity: 1,
+				transform: defaultTransform(600, 180),
+				text: {
+					text: 'OpenPost',
+					font_family: 'Geist Variable',
+					font_weight: 700,
+					font_style: 'normal',
+					font_size: 72,
+					color: '#1c1917',
+					align: 'center',
+					line_height: 1.1,
+					letter_spacing: 0,
+					stroke_width: 0,
+					shadow: { color: '#00000000', blur: 0, offset_x: 0, offset_y: 0 },
+					curve: { type: 'wave', strength: 0.7, offset: 0, reverse: false }
+				},
+				effects: {
+					blend_mode: 'overlay',
+					drop_shadow: {
+						color: '#000000',
+						opacity: 0.3,
+						blur: 24,
+						angle: 45,
+						distance: 12
+					}
+				},
+				mask: { shape: 'ellipse', inset: 4, radius: 0 }
+			}
+		];
+
+		expect(validateStudioDocument(document)).toEqual([]);
+		document.pages[0].layers[0].effects!.drop_shadow!.opacity = 2;
+		expect(validateStudioDocument(document)).toContain(
+			'Curved headline has an invalid shadow effect.'
+		);
+	});
 });

@@ -3005,6 +3005,10 @@
 						"format": "int64",
 						"type": "integer"
 					},
+					"direct_upload_supported": {
+						"description": "Whether this instance supports direct-to-storage uploads",
+						"type": "boolean"
+					},
 					"internal_bytes": {
 						"description": "Hidden preview bytes excluded from quota",
 						"format": "int64",
@@ -3021,7 +3025,13 @@
 						"type": "integer"
 					}
 				},
-				"required": ["used_bytes", "asset_count", "internal_bytes", "limit_bytes"],
+				"required": [
+					"used_bytes",
+					"asset_count",
+					"internal_bytes",
+					"limit_bytes",
+					"direct_upload_supported"
+				],
 				"type": "object"
 			},
 			"GetMediaUsageOutputBody": {
@@ -7254,6 +7264,9 @@
 			"StudioLayer": {
 				"additionalProperties": false,
 				"properties": {
+					"effects": {
+						"$ref": "#/components/schemas/StudioLayerEffects"
+					},
 					"id": {
 						"type": "string"
 					},
@@ -7262,6 +7275,9 @@
 					},
 					"locked": {
 						"type": "boolean"
+					},
+					"mask": {
+						"$ref": "#/components/schemas/StudioLayerMask"
 					},
 					"name": {
 						"type": "string"
@@ -7291,6 +7307,44 @@
 					}
 				},
 				"required": ["id", "type", "name", "visible", "locked", "opacity", "transform"],
+				"type": "object"
+			},
+			"StudioLayerEffects": {
+				"additionalProperties": false,
+				"properties": {
+					"blend_mode": {
+						"enum": ["normal", "multiply", "screen", "overlay", "darken", "lighten", "soft_light"],
+						"type": "string"
+					},
+					"drop_shadow": {
+						"$ref": "#/components/schemas/StudioShadowEffect"
+					},
+					"inner_shadow": {
+						"$ref": "#/components/schemas/StudioShadowEffect"
+					}
+				},
+				"required": ["blend_mode"],
+				"type": "object"
+			},
+			"StudioLayerMask": {
+				"additionalProperties": false,
+				"properties": {
+					"inset": {
+						"format": "double",
+						"minimum": 0,
+						"type": "number"
+					},
+					"radius": {
+						"format": "double",
+						"minimum": 0,
+						"type": "number"
+					},
+					"shape": {
+						"enum": ["rectangle", "rounded_rectangle", "circle", "ellipse", "diamond"],
+						"type": "string"
+					}
+				},
+				"required": ["shape", "inset", "radius"],
 				"type": "object"
 			},
 			"StudioPagePayload": {
@@ -7421,6 +7475,40 @@
 				"required": ["id", "revision", "kind", "created_at"],
 				"type": "object"
 			},
+			"StudioShadowEffect": {
+				"additionalProperties": false,
+				"properties": {
+					"angle": {
+						"format": "double",
+						"maximum": 360,
+						"minimum": -360,
+						"type": "number"
+					},
+					"blur": {
+						"format": "double",
+						"maximum": 100,
+						"minimum": 0,
+						"type": "number"
+					},
+					"color": {
+						"type": "string"
+					},
+					"distance": {
+						"format": "double",
+						"maximum": 500,
+						"minimum": 0,
+						"type": "number"
+					},
+					"opacity": {
+						"format": "double",
+						"maximum": 1,
+						"minimum": 0,
+						"type": "number"
+					}
+				},
+				"required": ["color", "opacity", "blur", "angle", "distance"],
+				"type": "object"
+			},
 			"StudioShapeValue": {
 				"additionalProperties": false,
 				"properties": {
@@ -7490,6 +7578,32 @@
 				"required": ["id", "name", "category", "preset_key", "built_in", "document"],
 				"type": "object"
 			},
+			"StudioTextCurve": {
+				"additionalProperties": false,
+				"properties": {
+					"offset": {
+						"format": "double",
+						"maximum": 1,
+						"minimum": -1,
+						"type": "number"
+					},
+					"reverse": {
+						"type": "boolean"
+					},
+					"strength": {
+						"format": "double",
+						"maximum": 1,
+						"minimum": 0.05,
+						"type": "number"
+					},
+					"type": {
+						"enum": ["none", "arc_up", "arc_down", "wave", "circle", "ellipse"],
+						"type": "string"
+					}
+				},
+				"required": ["type", "strength", "offset", "reverse"],
+				"type": "object"
+			},
 			"StudioTextShadow": {
 				"additionalProperties": false,
 				"properties": {
@@ -7520,6 +7634,9 @@
 					},
 					"color": {
 						"type": "string"
+					},
+					"curve": {
+						"$ref": "#/components/schemas/StudioTextCurve"
 					},
 					"font_asset_id": {
 						"type": "string"

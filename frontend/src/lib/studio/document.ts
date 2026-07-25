@@ -133,6 +133,20 @@ export function validateStudioDocument(document: StudioDocument): string[] {
 				errors.push(`${layer.name} has invalid opacity.`);
 			}
 			if (layer.type === 'text' && !layer.text) errors.push(`${layer.name} has no text data.`);
+			if (
+				layer.text?.curve &&
+				(!['none', 'arc_up', 'arc_down', 'wave', 'circle', 'ellipse'].includes(
+					layer.text.curve.type
+				) ||
+					!Number.isFinite(layer.text.curve.strength) ||
+					layer.text.curve.strength < 0.05 ||
+					layer.text.curve.strength > 1 ||
+					!Number.isFinite(layer.text.curve.offset) ||
+					layer.text.curve.offset < -1 ||
+					layer.text.curve.offset > 1)
+			) {
+				errors.push(`${layer.name} has an invalid text curve.`);
+			}
 			if (layer.type === 'image' && !layer.image?.media_id) {
 				errors.push(`${layer.name} has no media.`);
 			}
@@ -169,6 +183,46 @@ export function validateStudioDocument(document: StudioDocument): string[] {
 				}
 			}
 			if (layer.type === 'shape' && !layer.shape) errors.push(`${layer.name} has no shape data.`);
+			if (
+				layer.mask &&
+				(!['rectangle', 'rounded_rectangle', 'circle', 'ellipse', 'diamond'].includes(
+					layer.mask.shape
+				) ||
+					![layer.mask.inset, layer.mask.radius].every(Number.isFinite) ||
+					layer.mask.inset < 0 ||
+					layer.mask.radius < 0)
+			) {
+				errors.push(`${layer.name} has an invalid mask.`);
+			}
+			if (layer.effects) {
+				if (
+					!['normal', 'multiply', 'screen', 'overlay', 'darken', 'lighten', 'soft_light'].includes(
+						layer.effects.blend_mode
+					)
+				) {
+					errors.push(`${layer.name} has an invalid blend mode.`);
+				}
+				for (const shadow of [layer.effects.drop_shadow, layer.effects.inner_shadow].filter(
+					Boolean
+				)) {
+					if (
+						!shadow ||
+						!HEX_COLOR.test(shadow.color) ||
+						![shadow.opacity, shadow.blur, shadow.angle, shadow.distance].every(Number.isFinite) ||
+						shadow.opacity < 0 ||
+						shadow.opacity > 1 ||
+						shadow.blur < 0 ||
+						shadow.blur > 100 ||
+						shadow.angle < -360 ||
+						shadow.angle > 360 ||
+						shadow.distance < 0 ||
+						shadow.distance > 500
+					) {
+						errors.push(`${layer.name} has an invalid shadow effect.`);
+						break;
+					}
+				}
+			}
 		}
 		for (const layer of page.layers) {
 			const visited = new Set<string>();

@@ -79,6 +79,24 @@ func TestStudioDesignSaveUsesOptimisticConcurrencyAndTracksMedia(t *testing.T) {
 			Fit:          "cover",
 			Crop:         StudioCrop{Width: 1, Height: 1},
 		},
+		Effects: &StudioLayerEffects{
+			BlendMode: "overlay",
+			DropShadow: &StudioShadowEffect{
+				Color:    "#000000",
+				Opacity:  0.3,
+				Blur:     24,
+				Angle:    45,
+				Distance: 12,
+			},
+			InnerShadow: &StudioShadowEffect{
+				Color:    "#000000",
+				Opacity:  0.2,
+				Blur:     16,
+				Angle:    135,
+				Distance: 8,
+			},
+		},
+		Mask: &StudioLayerMask{Shape: "circle", Inset: 4},
 	})
 	update := &UpdateStudioDesignInput{PathID: created.Body.ID}
 	update.Body.ExpectedRevision = 1
@@ -87,6 +105,8 @@ func TestStudioDesignSaveUsesOptimisticConcurrencyAndTracksMedia(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 2, saved.Body.Revision)
 	require.Equal(t, "Launch updated", saved.Body.Document.Title)
+	require.Equal(t, "overlay", saved.Body.Document.Pages[0].Layers[0].Effects.BlendMode)
+	require.Equal(t, "circle", saved.Body.Document.Pages[0].Layers[0].Mask.Shape)
 
 	count, err := handler.db.NewSelect().Model((*models.DesignMediaReference)(nil)).
 		Where("design_document_id = ? AND media_id = ?", created.Body.ID, "media-1").
