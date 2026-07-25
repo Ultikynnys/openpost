@@ -4,7 +4,7 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
-## [1.27.8] - 2026-07-25
+## [1.27.9] - 2026-07-25
 
 ### Added
 
@@ -27,7 +27,7 @@ All notable changes to this project are documented in this file.
 
 ### Changed
 
-- Corrected the current stable line from `v1.1.22` to `v1.27.8` after replaying published release cohorts under SemVer. The previous code state maps to `v1.27.7`; this documentation and tooling release advances the patch. Historical tags remain unchanged.
+- Corrected the current stable line from `v1.1.22` to `v1.27.9` after replaying published release cohorts under SemVer. The previous code state maps to `v1.27.7`; the `v1.27.8` correction tag failed preflight before publication or deployment, so this release fixes forward. Historical tags remain unchanged.
 - Simplified the README around product purpose, supported platforms, setup, automation, and maintained documentation, and removed duplicated or stale repository details.
 - Consolidated CLI documentation in the maintained docs site and refreshed contributor, frontend, provider, upgrade, and release guidance against current code.
 - Redesigned the mobile app shell and composer with a safe-area-aware More menu, compact post controls, circular rendition targets, and always-visible touch actions for media and thread editing.
@@ -74,6 +74,7 @@ All notable changes to this project are documented in this file.
 
 ### Fixed
 
+- Made the documentation link check validate the generated `/openapi.json` route against its tracked source in clean CI checkouts.
 - Fixed the scheduling dialog so its title and actions remain reachable while scrolling on mobile browsers.
 - Aligned the product platform declaration with the responsive web app and Capacitor Android wrapper already shipped from the shared frontend.
 - Rebuilt Studio editing around stable in-place canvas updates, serialized autosaves, reliable inline text persistence, current previews, correct Back navigation, resizable desktop panels, and an inspector that stays within the viewport.

@@ -60,6 +60,9 @@ for (const file of files) {
         ? [
             path.join(root, "docs-site", localTarget),
             path.join(root, "docs-site/public", localTarget),
+            ...(localTarget === "/openapi.json"
+              ? [path.join(root, "frontend/openapi.json")]
+              : []),
           ]
         : [path.resolve(path.dirname(sourcePath), localTarget)];
     const candidates = bases.flatMap((base) => [

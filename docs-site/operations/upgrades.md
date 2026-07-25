@@ -1,6 +1,6 @@
 # Upgrades
 
-OpenPost follows SemVer from `v1.27.8`. Read the [release notes](https://github.com/rodrgds/openpost/releases/latest) before every upgrade. A major version can require operator action; minor and patch releases remain backward compatible.
+OpenPost follows SemVer from `v1.27.9`. Read the [release notes](https://github.com/rodrgds/openpost/releases/latest) before every upgrade. A major version can require operator action; minor and patch releases remain backward compatible.
 
 ## Docker Compose
 
@@ -21,4 +21,4 @@ docker compose logs -f openpost
 - Check `/api/v1/ready`
 - Inspect the scheduled queue and recent logs
 
-Historical tags before `v1.27.8` used an inconsistent release sequence. The corrected version is newer even though it follows the same `v1` compatibility line.
+Historical releases before `v1.27.9` used an inconsistent release sequence. The corrected version is newer even though it follows the same `v1` compatibility line. The `v1.27.8` tag failed preflight and did not produce a GitHub release or production deployment.

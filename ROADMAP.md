@@ -30,7 +30,7 @@ OpenPost is a production self-hosted scheduler and managed service. The shared c
 3. **Release reliability**
    - Keep Docker, binary, CLI, Android, frontend, docs, and marketing release paths reproducible.
    - Confirm release artifacts and docs match the current tag before publishing.
-   - Follow SemVer from `v1.27.8` and keep release impact tied to Conventional Commits.
+   - Follow SemVer from `v1.27.9` and keep release impact tied to Conventional Commits.
    - Continue running `devenv shell -- verify` before release tags.
 
 4. **Operator support polish**
