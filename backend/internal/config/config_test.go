@@ -39,6 +39,10 @@ var configTestEnvKeys = []string{
 	"OPENPOST_SUPPORT_EMAIL",
 	"OPENPOST_STUDIO_ENABLED",
 	"OPENPOST_STUDIO_MODEL_BASE_URL",
+	"OPENPOST_FEEDBACK_ENABLED",
+	"OPENPOST_FEEDBACK_DESTINATION_URL",
+	"OPENPOST_FEEDBACK_RECIPIENT",
+	"OPENPOST_FEEDBACK_SUPPORT_URL",
 	"OPENPOST_SMTP_HOST",
 	"OPENPOST_SMTP_PORT",
 	"OPENPOST_SMTP_USERNAME",
@@ -104,6 +108,9 @@ func TestLoadProductionPrimitiveDefaults(t *testing.T) {
 	require.Empty(t, cfg.PolarWebhookSecret)
 	require.True(t, cfg.StudioEnabled)
 	require.Equal(t, "/studio-models", cfg.StudioModelBaseURL)
+	require.False(t, cfg.FeedbackEnabled)
+	require.Empty(t, cfg.FeedbackDestinationURL)
+	require.Equal(t, "https://github.com/rodrgds/openpost/issues/new", cfg.FeedbackSupportURL)
 }
 
 func TestLoadStudioConfiguration(t *testing.T) {
@@ -114,6 +121,27 @@ func TestLoadStudioConfiguration(t *testing.T) {
 
 	require.False(t, cfg.StudioEnabled)
 	require.Equal(t, "https://assets.example.com/openpost/studio", cfg.StudioModelBaseURL)
+}
+
+func TestLoadFeedbackConfigurationSupportsFileBackedWebhook(t *testing.T) {
+	t.Setenv("OPENPOST_FEEDBACK_ENABLED", "true")
+	t.Setenv(
+		"OPENPOST_FEEDBACK_DESTINATION_URL_FILE",
+		writeEnvFile(t, "feedback-webhook", "https://discord.com/api/webhooks/example/secret\n"),
+	)
+	t.Setenv("OPENPOST_FEEDBACK_RECIPIENT", "OpenPost team")
+	t.Setenv("OPENPOST_FEEDBACK_SUPPORT_URL", "https://github.com/example/openpost/issues/new")
+
+	cfg := Load()
+
+	require.True(t, cfg.FeedbackEnabled)
+	require.Equal(
+		t,
+		"https://discord.com/api/webhooks/example/secret",
+		cfg.FeedbackDestinationURL,
+	)
+	require.Equal(t, "OpenPost team", cfg.FeedbackRecipient)
+	require.Equal(t, "https://github.com/example/openpost/issues/new", cfg.FeedbackSupportURL)
 }
 
 func TestLoadCloudPostgresAndS3Primitives(t *testing.T) {

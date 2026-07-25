@@ -548,7 +548,7 @@ func (i *InstagramAdapter) waitForContainer(ctx context.Context, accessToken, co
 			return fmt.Errorf("decoding instagram container status: %w", err)
 		}
 		if statusResp.Error.Message != "" {
-			return fmt.Errorf("instagram container status: %s", statusResp.Error.Message)
+			return &HTTPError{StatusCode: http.StatusBadRequest, Code: "instagram_processing_error"}
 		}
 		switch statusResp.StatusCode {
 		case "", "FINISHED":
@@ -590,7 +590,7 @@ func instagramIDFromResponse(label string, respBody []byte) (string, error) {
 		return "", fmt.Errorf("decoding %s: %w", label, err)
 	}
 	if resp.Error.Message != "" {
-		return "", fmt.Errorf("%s: %s", label, resp.Error.Message)
+		return "", &HTTPError{StatusCode: http.StatusBadRequest, Code: "instagram_publish_error"}
 	}
 	if resp.ID == "" {
 		return "", fmt.Errorf("%s: missing id", label)

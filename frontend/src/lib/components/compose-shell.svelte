@@ -2,7 +2,7 @@
 	import { page } from '$app/state';
 	import { goto, replaceState } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import ComposeSimple from './compose-simple.svelte';
+	import ComposeTextPost from './compose-text-post.svelte';
 	import ComposeFocusedPublication from './compose-focused-publication.svelte';
 	import ComposeModeSelect from './compose-mode-select.svelte';
 	import SampleCampaign from './sample-campaign.svelte';
@@ -32,7 +32,7 @@
 
 	function handlePublicationDraftCreated(id: string) {
 		ui.setActiveComposerDraft(id);
-		replaceState(`/publications/${encodeURIComponent(id)}`, {});
+		replaceState(resolve(`/publications/${encodeURIComponent(id)}` as '/'), {});
 	}
 
 	function handlePostDraftCreated(id: string) {
@@ -79,8 +79,8 @@
 	{:else}
 		{#key composerResetCounter}
 			{#if selectedMode === 'post' || selectedMode === 'thread'}
-				<div data-testid="classic-composer-shell" class="flex min-h-0 flex-1 flex-col">
-					<ComposeSimple
+				<div data-testid="text-thread-composer-shell" class="flex min-h-0 flex-1 flex-col">
+					<ComposeTextPost
 						{initialScheduleDate}
 						{initialWorkspaceId}
 						onSuccess={handleComposerReset}
@@ -95,7 +95,7 @@
 								onModeChange={(mode) => (selectedMode = mode)}
 							/>
 						{/snippet}
-					</ComposeSimple>
+					</ComposeTextPost>
 				</div>
 			{:else}
 				{#key selectedMode}

@@ -19,6 +19,7 @@ import (
 	"github.com/openpost/backend/internal/capabilities"
 	"github.com/openpost/backend/internal/models"
 	"github.com/openpost/backend/internal/platform"
+	"github.com/openpost/backend/internal/services/drafts"
 	"github.com/openpost/backend/internal/services/entitlements"
 	"github.com/openpost/backend/internal/services/lifecycle"
 	"github.com/uptrace/bun"
@@ -124,17 +125,20 @@ type CreatePublicationInput struct {
 }
 
 type PublicationUpdateBody struct {
-	Title          *string                   `json:"title,omitempty" doc:"Internal publication title"`
-	Intent         *string                   `json:"intent,omitempty" enum:"post,thread,story,short_video,video" doc:"Publishing intent"`
-	ContentProfile *string                   `json:"content_profile,omitempty" doc:"Content profile"`
-	SourceText     *string                   `json:"source_text,omitempty" doc:"Canonical source text"`
-	SourceURL      *string                   `json:"source_url,omitempty" doc:"Source URL"`
-	Goal           *string                   `json:"goal,omitempty" doc:"Publication goal"`
-	Audience       *string                   `json:"audience,omitempty" doc:"Target audience"`
-	ScheduledAt    *time.Time                `json:"scheduled_at,omitempty" doc:"Optional schedule time"`
-	ClearSchedule  bool                      `json:"clear_schedule,omitempty" doc:"Clear the saved schedule and cancel its pending publication job"`
-	Metadata       map[string]interface{}    `json:"metadata,omitempty" doc:"Publication metadata"`
-	Segments       []PublicationSegmentInput `json:"segments,omitempty" doc:"Replacement ordered canonical segments"`
+	ExpectedRevision int                       `json:"expected_revision" minimum:"1" doc:"Revision loaded by the editor"`
+	Force            bool                      `json:"force,omitempty" doc:"Confirms an explicit overwrite after reviewing the latest revision"`
+	Title            *string                   `json:"title,omitempty" doc:"Internal publication title"`
+	Intent           *string                   `json:"intent,omitempty" enum:"post,thread,story,short_video,video" doc:"Publishing intent"`
+	ContentProfile   *string                   `json:"content_profile,omitempty" doc:"Content profile"`
+	SourceText       *string                   `json:"source_text,omitempty" doc:"Canonical source text"`
+	SourceURL        *string                   `json:"source_url,omitempty" doc:"Source URL"`
+	Goal             *string                   `json:"goal,omitempty" doc:"Publication goal"`
+	Audience         *string                   `json:"audience,omitempty" doc:"Target audience"`
+	ScheduledAt      *time.Time                `json:"scheduled_at,omitempty" doc:"Optional schedule time"`
+	ClearSchedule    bool                      `json:"clear_schedule,omitempty" doc:"Clear the saved schedule and cancel its pending publication job"`
+	Metadata         map[string]interface{}    `json:"metadata,omitempty" doc:"Publication metadata"`
+	Segments         []PublicationSegmentInput `json:"segments,omitempty" doc:"Replacement ordered canonical segments"`
+	Renditions       []RenditionInput          `json:"renditions,omitempty" doc:"Replacement destination renditions saved in the same transaction"`
 }
 
 type UpdatePublicationInput struct {
@@ -145,7 +149,8 @@ type UpdatePublicationInput struct {
 type UpsertRenditionsInput struct {
 	PathID string `path:"id" doc:"Publication ID"`
 	Body   struct {
-		Renditions []RenditionInput `json:"renditions" doc:"Renditions to replace or upsert"`
+		ExpectedRevision int              `json:"expected_revision" minimum:"1" doc:"Revision loaded by the editor"`
+		Renditions       []RenditionInput `json:"renditions" doc:"Renditions to replace or upsert"`
 	}
 }
 
@@ -170,10 +175,23 @@ type PublicationActionInput struct {
 	PathID string `path:"id" doc:"Publication ID"`
 }
 
-type DeletePublicationRenditionInput struct {
+type RetryRenditionInput struct {
 	PathID    string `path:"id" doc:"Publication ID"`
 	AccountID string `path:"account_id" doc:"Connected account ID"`
-	Confirm   bool   `query:"confirm" doc:"Explicit confirmation that saved destination settings may be deleted"`
+}
+
+type PublicationMutationActionInput struct {
+	PathID string `path:"id" doc:"Publication ID"`
+	Body   struct {
+		ExpectedRevision int `json:"expected_revision" minimum:"1" doc:"Revision saved immediately before this action"`
+	}
+}
+
+type DeletePublicationRenditionInput struct {
+	PathID           string `path:"id" doc:"Publication ID"`
+	AccountID        string `path:"account_id" doc:"Connected account ID"`
+	Confirm          bool   `query:"confirm" doc:"Explicit confirmation that saved destination settings may be deleted"`
+	ExpectedRevision int    `query:"expected_revision" minimum:"1" doc:"Revision loaded by the editor"`
 }
 
 type ReplyInput struct {
@@ -213,8 +231,9 @@ type PublicationEventsOutput struct {
 
 type ActionOutput struct {
 	Body struct {
-		Message string `json:"message"`
-		JobID   string `json:"job_id,omitempty"`
+		Message  string `json:"message"`
+		JobID    string `json:"job_id,omitempty"`
+		Revision int    `json:"revision,omitempty"`
 	}
 }
 
@@ -230,6 +249,7 @@ type PublicationResponse struct {
 	Goal           string                       `json:"goal,omitempty"`
 	Audience       string                       `json:"audience,omitempty"`
 	Status         string                       `json:"status"`
+	Revision       int                          `json:"revision"`
 	ScheduledAt    string                       `json:"scheduled_at,omitempty"`
 	ActualRunAt    string                       `json:"actual_run_at,omitempty"`
 	Metadata       map[string]any               `json:"metadata"`
@@ -266,6 +286,12 @@ type RenditionResponse struct {
 	ExternalID      string                     `json:"external_id,omitempty"`
 	ExternalURL     string                     `json:"external_url,omitempty"`
 	ErrorMessage    string                     `json:"error_message,omitempty"`
+	ErrorKind       string                     `json:"error_kind,omitempty"`
+	ErrorCode       string                     `json:"error_code,omitempty"`
+	ErrorHTTPStatus int                        `json:"error_http_status,omitempty"`
+	ErrorRetryable  bool                       `json:"error_retryable"`
+	ErrorRetryAt    string                     `json:"error_retry_at,omitempty"`
+	ErrorAction     string                     `json:"error_action,omitempty"`
 	Segments        []RenditionSegmentResponse `json:"segments"`
 	Media           []MediaSummary             `json:"media"`
 }
@@ -283,6 +309,12 @@ type RenditionSegmentResponse struct {
 	ExternalID           string                 `json:"external_id,omitempty"`
 	ExternalURL          string                 `json:"external_url,omitempty"`
 	ErrorMessage         string                 `json:"error_message,omitempty"`
+	ErrorKind            string                 `json:"error_kind,omitempty"`
+	ErrorCode            string                 `json:"error_code,omitempty"`
+	ErrorHTTPStatus      int                    `json:"error_http_status,omitempty"`
+	ErrorRetryable       bool                   `json:"error_retryable"`
+	ErrorRetryAt         string                 `json:"error_retry_at,omitempty"`
+	ErrorAction          string                 `json:"error_action,omitempty"`
 	Media                []MediaSummary         `json:"media"`
 }
 
@@ -336,6 +368,7 @@ func (h *PublicationHandler) RegisterRoutes(api huma.API) {
 	h.validatePublication(api)
 	h.schedulePublication(api)
 	h.publishNow(api)
+	h.retryRendition(api)
 	h.replyToRendition(api)
 }
 
@@ -353,14 +386,22 @@ func (h *PublicationHandler) deleteRendition(api huma.API) {
 		if !input.Confirm {
 			return nil, huma.Error400BadRequest("confirm=true is required to delete a saved destination")
 		}
-		publication, err := h.loadPublicationForEdit(ctx, input.PathID, middleware.GetUserID(ctx))
+		if err := drafts.RequireExpectedRevision(input.ExpectedRevision); err != nil {
+			return nil, err
+		}
+		userID := middleware.GetUserID(ctx)
+		publication, err := h.loadPublicationForEdit(ctx, input.PathID, userID)
 		if err != nil {
 			return nil, err
 		}
 		var deleted bool
 		err = h.db.RunInTx(ctx, &sql.TxOptions{}, func(txCtx context.Context, tx bun.Tx) error {
-			if _, err := h.loadEditablePublicationTx(txCtx, tx, publication.ID); err != nil {
+			current, err := h.loadEditablePublicationTx(txCtx, tx, publication.ID)
+			if err != nil {
 				return err
+			}
+			if current.Revision != input.ExpectedRevision {
+				return h.publicationRevisionConflict(txCtx, tx, current, input.ExpectedRevision)
 			}
 			result, err := tx.NewDelete().
 				Model((*models.Rendition)(nil)).
@@ -374,7 +415,41 @@ func (h *PublicationHandler) deleteRendition(api huma.API) {
 				return err
 			}
 			deleted = count > 0
-			return nil
+			if !deleted {
+				return nil
+			}
+			now := time.Now().UTC()
+			nextRevision := current.Revision + 1
+			if _, err := tx.NewUpdate().
+				Model((*models.Publication)(nil)).
+				Set("revision = ?", nextRevision).
+				Set("updated_at = ?", now).
+				Where("id = ? AND revision = ?", current.ID, current.Revision).
+				Exec(txCtx); err != nil {
+				return err
+			}
+			if err := h.syncTextPostRevisionsTx(
+				txCtx,
+				tx,
+				current.ID,
+				current.Revision,
+				nextRevision,
+				[]string{"destinations", "destination overrides", "media"},
+				userID,
+				now,
+			); err != nil {
+				return err
+			}
+			return drafts.RecordChange(
+				txCtx,
+				tx,
+				drafts.AggregatePublication,
+				current.ID,
+				nextRevision,
+				[]string{"destinations", "destination overrides", "media"},
+				userID,
+				now,
+			)
 		})
 		if err != nil {
 			return nil, publicationMutationHTTPError(err, "failed to delete publication destination")
@@ -382,7 +457,9 @@ func (h *PublicationHandler) deleteRendition(api huma.API) {
 		if !deleted {
 			return nil, huma.Error404NotFound("publication destination not found")
 		}
-		return actionMessage("publication destination deleted", ""), nil
+		output := actionMessage("publication destination deleted", "")
+		output.Body.Revision = publication.Revision + 1
+		return output, nil
 	})
 }
 
@@ -581,6 +658,7 @@ func (h *PublicationHandler) listPublicationEvents(api huma.API) {
 	})
 }
 
+//nolint:gocyclo // The transaction keeps revision checks, aggregate replacement, scheduling, and change tracking atomic.
 func (h *PublicationHandler) updatePublication(api huma.API) {
 	huma.Register(api, huma.Operation{
 		OperationID: "update-publication",
@@ -590,7 +668,11 @@ func (h *PublicationHandler) updatePublication(api huma.API) {
 		Tags:        []string{tagPublications},
 		Middlewares: huma.Middlewares{middleware.AuthMiddleware(api, h.auth)},
 	}, func(ctx context.Context, input *UpdatePublicationInput) (*PublicationOutput, error) {
-		existing, err := h.loadPublicationForEdit(ctx, input.PathID, middleware.GetUserID(ctx))
+		if err := drafts.RequireExpectedRevision(input.Body.ExpectedRevision); err != nil {
+			return nil, err
+		}
+		userID := middleware.GetUserID(ctx)
+		existing, err := h.loadPublicationForEdit(ctx, input.PathID, userID)
 		if err != nil {
 			return nil, err
 		}
@@ -599,10 +681,23 @@ func (h *PublicationHandler) updatePublication(api huma.API) {
 				return nil, err
 			}
 		}
+		accountMap := map[string]models.SocialAccount{}
+		if input.Body.Renditions != nil {
+			accountMap, err = h.loadAccounts(ctx, existing.WorkspaceID, renditionAccountIDs(input.Body.Renditions))
+			if err != nil {
+				return nil, err
+			}
+			if err := h.validateMediaBelongsToWorkspace(ctx, existing.WorkspaceID, allPublicationMediaIDs(nil, nil, input.Body.Renditions)); err != nil {
+				return nil, err
+			}
+		}
 		if err := h.db.RunInTx(ctx, &sql.TxOptions{}, func(txCtx context.Context, tx bun.Tx) error {
 			publication, err := h.loadEditablePublicationTx(txCtx, tx, input.PathID)
 			if err != nil {
 				return err
+			}
+			if publication.Revision != input.Body.ExpectedRevision {
+				return h.publicationRevisionConflict(txCtx, tx, publication, input.Body.ExpectedRevision)
 			}
 			clearQueuedSchedule, rescheduleQueuedJob, err := applyPublicationScheduleUpdate(
 				publication,
@@ -613,30 +708,74 @@ func (h *PublicationHandler) updatePublication(api huma.API) {
 			if err != nil {
 				return err
 			}
+			changedDomains := publicationChangedDomains(input.Body)
 			applyPublicationFieldUpdates(publication, input.Body)
 			publication.UpdatedAt = time.Now().UTC()
+			publication.Revision++
 			if clearQueuedSchedule {
 				if err := h.clearPublicationScheduleTx(txCtx, tx, publication.ID, publication.UpdatedAt); err != nil {
 					return err
 				}
 			}
-			if _, err := tx.NewUpdate().Model(publication).Where("id = ?", publication.ID).Exec(txCtx); err != nil {
+			result, err := tx.NewUpdate().
+				Model(publication).
+				Where("id = ? AND revision = ?", publication.ID, input.Body.ExpectedRevision).
+				Exec(txCtx)
+			if err != nil {
 				return err
+			}
+			if affected, _ := result.RowsAffected(); affected == 0 {
+				return h.publicationRevisionConflict(txCtx, tx, publication, input.Body.ExpectedRevision)
 			}
 			if input.Body.Segments != nil {
 				if err := h.replacePublicationSegments(txCtx, tx, publication, input.Body.Segments); err != nil {
 					return err
 				}
 			}
+			if input.Body.Renditions != nil {
+				if err := h.replaceAllPublicationRenditions(
+					txCtx,
+					tx,
+					publication,
+					input.Body.Segments,
+					input.Body.Renditions,
+					accountMap,
+				); err != nil {
+					return err
+				}
+			}
 			if rescheduleQueuedJob {
 				_, err := h.replacePublicationJobTx(txCtx, tx, publication.ID, publication.ScheduledAt)
+				if err != nil {
+					return err
+				}
+			}
+			if err := h.syncTextPostRevisionsTx(
+				txCtx,
+				tx,
+				publication.ID,
+				input.Body.ExpectedRevision,
+				publication.Revision,
+				changedDomains,
+				userID,
+				publication.UpdatedAt,
+			); err != nil {
 				return err
 			}
-			return nil
+			return drafts.RecordChange(
+				txCtx,
+				tx,
+				drafts.AggregatePublication,
+				publication.ID,
+				publication.Revision,
+				changedDomains,
+				userID,
+				publication.UpdatedAt,
+			)
 		}); err != nil {
 			return nil, publicationMutationHTTPError(err, "failed to update publication")
 		}
-		resp, err := h.loadPublicationResponse(ctx, input.PathID, middleware.GetUserID(ctx))
+		resp, err := h.loadPublicationResponse(ctx, input.PathID, userID)
 		if err != nil {
 			return nil, err
 		}
@@ -702,6 +841,136 @@ func applyPublicationFieldUpdates(publication *models.Publication, input Publica
 	}
 }
 
+func publicationChangedDomains(input PublicationUpdateBody) []string {
+	var domains []string
+	if input.Title != nil || input.Intent != nil || input.ContentProfile != nil ||
+		input.SourceText != nil || input.SourceURL != nil || input.Goal != nil ||
+		input.Audience != nil || input.Segments != nil {
+		domains = append(domains, "content")
+	}
+	if input.Segments != nil {
+		domains = append(domains, "segments", "media")
+	}
+	if input.Renditions != nil {
+		domains = append(domains, "destinations", "destination overrides", "media")
+	}
+	if input.ScheduledAt != nil || input.ClearSchedule {
+		domains = append(domains, "schedule")
+	}
+	if input.Metadata != nil {
+		domains = append(domains, "settings")
+	}
+	if len(domains) == 0 {
+		domains = append(domains, "draft")
+	}
+	return drafts.UniqueDomains(domains)
+}
+
+func (h *PublicationHandler) publicationRevisionConflict(
+	ctx context.Context,
+	db bun.IDB,
+	publication *models.Publication,
+	expectedRevision int,
+) error {
+	domains, err := drafts.ChangedDomainsSince(
+		ctx,
+		db,
+		drafts.AggregatePublication,
+		publication.ID,
+		expectedRevision,
+	)
+	if err != nil {
+		return err
+	}
+	if len(domains) == 0 {
+		domains = []string{"draft"}
+	}
+	return drafts.NewConflictError(drafts.ConflictMetadata{
+		AggregateType:    drafts.AggregatePublication,
+		AggregateID:      publication.ID,
+		ExpectedRevision: expectedRevision,
+		CurrentRevision:  publication.Revision,
+		Status:           publication.Status,
+		Title:            publication.Title,
+		UpdatedAt:        formatOptionalTime(publication.UpdatedAt),
+		ChangedDomains:   domains,
+	})
+}
+
+func (h *PublicationHandler) syncTextPostRevisionsTx(
+	ctx context.Context,
+	tx bun.Tx,
+	publicationID string,
+	expectedRevision int,
+	nextRevision int,
+	domains []string,
+	userID string,
+	now time.Time,
+) error {
+	var posts []models.Post
+	if err := tx.NewSelect().
+		Model(&posts).
+		Where("publication_id = ?", publicationID).
+		Scan(ctx); err != nil {
+		if isMissingLegacyPostsTable(err) {
+			return nil
+		}
+		return err
+	}
+	for index := range posts {
+		post := &posts[index]
+		if post.Revision != expectedRevision {
+			changed, err := drafts.ChangedDomainsSince(
+				ctx,
+				tx,
+				drafts.AggregateTextPost,
+				post.ID,
+				expectedRevision,
+			)
+			if err != nil {
+				return err
+			}
+			if len(changed) == 0 {
+				changed = []string{"draft"}
+			}
+			return drafts.NewConflictError(drafts.ConflictMetadata{
+				AggregateType:    drafts.AggregateTextPost,
+				AggregateID:      post.ID,
+				ExpectedRevision: expectedRevision,
+				CurrentRevision:  post.Revision,
+				Status:           post.Status,
+				UpdatedAt:        formatOptionalTime(post.UpdatedAt),
+				ChangedDomains:   changed,
+			})
+		}
+		result, err := tx.NewUpdate().
+			Model((*models.Post)(nil)).
+			Set("revision = ?", nextRevision).
+			Set("updated_at = ?", now).
+			Where("id = ? AND revision = ?", post.ID, expectedRevision).
+			Exec(ctx)
+		if err != nil {
+			return err
+		}
+		if affected, _ := result.RowsAffected(); affected == 0 {
+			return drafts.ErrRevisionConflict
+		}
+		if err := drafts.RecordChange(
+			ctx,
+			tx,
+			drafts.AggregateTextPost,
+			post.ID,
+			nextRevision,
+			domains,
+			userID,
+			now,
+		); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func validateFuturePublicationSchedule(scheduledAt, now time.Time) error {
 	if !scheduledAt.After(now.UTC()) {
 		return errPublicationScheduleFuture
@@ -709,6 +978,47 @@ func validateFuturePublicationSchedule(scheduledAt, now time.Time) error {
 	return nil
 }
 
+func (h *PublicationHandler) replaceAllPublicationRenditions(
+	ctx context.Context,
+	tx bun.Tx,
+	publication *models.Publication,
+	segmentInputs []PublicationSegmentInput,
+	renditionInputs []RenditionInput,
+	accounts map[string]models.SocialAccount,
+) error {
+	var renditionIDs []string
+	if err := tx.NewSelect().
+		Model((*models.Rendition)(nil)).
+		Column("id").
+		Where("publication_id = ?", publication.ID).
+		Scan(ctx, &renditionIDs); err != nil {
+		return err
+	}
+	if len(renditionIDs) > 0 {
+		if _, err := tx.NewDelete().
+			Model((*models.RenditionMedia)(nil)).
+			Where("rendition_id IN (?)", bun.List(renditionIDs)).
+			Exec(ctx); err != nil {
+			return err
+		}
+	}
+	if _, err := tx.NewDelete().
+		Model((*models.Rendition)(nil)).
+		Where("publication_id = ?", publication.ID).
+		Exec(ctx); err != nil {
+		return err
+	}
+	segments, loadedInputs, err := h.loadCanonicalSegmentInputsWithDB(ctx, tx, publication.ID)
+	if err != nil {
+		return err
+	}
+	if segmentInputs == nil {
+		segmentInputs = loadedInputs
+	}
+	return h.insertRenditions(ctx, tx, publication, segments, segmentInputs, renditionInputs, nil, accounts)
+}
+
+//nolint:gocyclo // The transaction preserves revision checks and both replacement and upsert semantics across renditions.
 func (h *PublicationHandler) upsertRenditions(api huma.API) {
 	huma.Register(api, huma.Operation{
 		OperationID: "upsert-publication-renditions",
@@ -718,7 +1028,11 @@ func (h *PublicationHandler) upsertRenditions(api huma.API) {
 		Tags:        []string{tagPublications},
 		Middlewares: huma.Middlewares{middleware.AuthMiddleware(api, h.auth)},
 	}, func(ctx context.Context, input *UpsertRenditionsInput) (*PublicationOutput, error) {
-		publication, err := h.loadPublicationForEdit(ctx, input.PathID, middleware.GetUserID(ctx))
+		if err := drafts.RequireExpectedRevision(input.Body.ExpectedRevision); err != nil {
+			return nil, err
+		}
+		userID := middleware.GetUserID(ctx)
+		publication, err := h.loadPublicationForEdit(ctx, input.PathID, userID)
 		if err != nil {
 			return nil, err
 		}
@@ -733,6 +1047,9 @@ func (h *PublicationHandler) upsertRenditions(api huma.API) {
 			currentPublication, err := h.loadEditablePublicationTx(txCtx, tx, publication.ID)
 			if err != nil {
 				return err
+			}
+			if currentPublication.Revision != input.Body.ExpectedRevision {
+				return h.publicationRevisionConflict(txCtx, tx, currentPublication, input.Body.ExpectedRevision)
 			}
 			if len(input.Body.Renditions) == 0 {
 				return nil
@@ -766,12 +1083,50 @@ func (h *PublicationHandler) upsertRenditions(api huma.API) {
 			if err != nil {
 				return err
 			}
-			return h.insertRenditions(txCtx, tx, currentPublication, segments, segmentInputs, input.Body.Renditions, nil, accountMap)
+			if err := h.insertRenditions(txCtx, tx, currentPublication, segments, segmentInputs, input.Body.Renditions, nil, accountMap); err != nil {
+				return err
+			}
+			now := time.Now().UTC()
+			nextRevision := currentPublication.Revision + 1
+			result, err := tx.NewUpdate().
+				Model((*models.Publication)(nil)).
+				Set("revision = ?", nextRevision).
+				Set("updated_at = ?", now).
+				Where("id = ? AND revision = ?", currentPublication.ID, currentPublication.Revision).
+				Exec(txCtx)
+			if err != nil {
+				return err
+			}
+			if affected, _ := result.RowsAffected(); affected == 0 {
+				return h.publicationRevisionConflict(txCtx, tx, currentPublication, input.Body.ExpectedRevision)
+			}
+			if err := h.syncTextPostRevisionsTx(
+				txCtx,
+				tx,
+				currentPublication.ID,
+				currentPublication.Revision,
+				nextRevision,
+				[]string{"destinations", "destination overrides", "media"},
+				userID,
+				now,
+			); err != nil {
+				return err
+			}
+			return drafts.RecordChange(
+				txCtx,
+				tx,
+				drafts.AggregatePublication,
+				currentPublication.ID,
+				nextRevision,
+				[]string{"destinations", "destination overrides", "media"},
+				userID,
+				now,
+			)
 		})
 		if err != nil {
 			return nil, publicationMutationHTTPError(err, "failed to update publication renditions")
 		}
-		resp, err := h.loadPublicationResponse(ctx, publication.ID, middleware.GetUserID(ctx))
+		resp, err := h.loadPublicationResponse(ctx, publication.ID, userID)
 		if err != nil {
 			return nil, err
 		}
@@ -811,7 +1166,10 @@ func (h *PublicationHandler) schedulePublication(api huma.API) {
 		Summary:     "Schedule a publication",
 		Tags:        []string{tagPublications},
 		Middlewares: huma.Middlewares{middleware.AuthMiddleware(api, h.auth)},
-	}, func(ctx context.Context, input *PublicationActionInput) (*ActionOutput, error) {
+	}, func(ctx context.Context, input *PublicationMutationActionInput) (*ActionOutput, error) {
+		if err := drafts.RequireExpectedRevision(input.Body.ExpectedRevision); err != nil {
+			return nil, err
+		}
 		publication, err := h.loadPublicationForEdit(ctx, input.PathID, middleware.GetUserID(ctx))
 		if err != nil {
 			return nil, err
@@ -821,7 +1179,11 @@ func (h *PublicationHandler) schedulePublication(api huma.API) {
 		} else if hasBlockingIssues(issues) {
 			return nil, publicationMutationHTTPError(errPublicationValidationBlocked, "publication capability validation failed")
 		}
-		jobID, err := h.queueScheduledPublication(ctx, publication.ID)
+		jobID, err := h.queueScheduledPublicationExpected(
+			ctx,
+			publication.ID,
+			input.Body.ExpectedRevision,
+		)
 		if err != nil {
 			return nil, publicationMutationHTTPError(err, "failed to enqueue publication")
 		}
@@ -837,7 +1199,10 @@ func (h *PublicationHandler) publishNow(api huma.API) {
 		Summary:     "Publish a publication now",
 		Tags:        []string{tagPublications},
 		Middlewares: huma.Middlewares{middleware.AuthMiddleware(api, h.auth)},
-	}, func(ctx context.Context, input *PublicationActionInput) (*ActionOutput, error) {
+	}, func(ctx context.Context, input *PublicationMutationActionInput) (*ActionOutput, error) {
+		if err := drafts.RequireExpectedRevision(input.Body.ExpectedRevision); err != nil {
+			return nil, err
+		}
 		publication, err := h.loadPublicationForEdit(ctx, input.PathID, middleware.GetUserID(ctx))
 		if err != nil {
 			return nil, err
@@ -847,11 +1212,112 @@ func (h *PublicationHandler) publishNow(api huma.API) {
 		} else if hasBlockingIssues(issues) {
 			return nil, publicationMutationHTTPError(errPublicationValidationBlocked, "publication capability validation failed")
 		}
-		jobID, err := h.queuePublicationNow(ctx, publication.ID)
+		jobID, err := h.queuePublicationNowExpected(
+			ctx,
+			publication.ID,
+			input.Body.ExpectedRevision,
+		)
 		if err != nil {
 			return nil, publicationMutationHTTPError(err, "failed to enqueue publication")
 		}
 		return actionMessage("publication queued", jobID), nil
+	})
+}
+
+func (h *PublicationHandler) retryRendition(api huma.API) {
+	huma.Register(api, huma.Operation{
+		OperationID: "retry-publication-rendition",
+		Method:      http.MethodPost,
+		Path:        "/publications/{id}/renditions/{account_id}/retry",
+		Summary:     "Retry one failed publication destination",
+		Tags:        []string{tagPublications},
+		Middlewares: huma.Middlewares{middleware.AuthMiddleware(api, h.auth)},
+		Errors:      []int{400, 403, 404, 409},
+	}, func(ctx context.Context, input *RetryRenditionInput) (*ActionOutput, error) {
+		publication, err := h.loadPublication(ctx, input.PathID, middleware.GetUserID(ctx))
+		if err != nil {
+			return nil, err
+		}
+		if err := h.checkWorkspaceEditAccess(
+			ctx,
+			publication.WorkspaceID,
+			middleware.GetUserID(ctx),
+		); err != nil {
+			return nil, err
+		}
+		var rendition models.Rendition
+		if err := h.db.NewSelect().
+			Model(&rendition).
+			Where("publication_id = ?", publication.ID).
+			Where("social_account_id = ?", input.AccountID).
+			Scan(ctx); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return nil, huma.Error404NotFound("rendition not found")
+			}
+			return nil, huma.Error500InternalServerError("failed to load rendition")
+		}
+		if rendition.Status != models.RenditionStatusFailed {
+			return nil, huma.Error409Conflict("only a failed destination can be retried")
+		}
+		if !rendition.ErrorRetryable {
+			return nil, huma.Error409Conflict("this failure requires the recommended account or content action")
+		}
+
+		jobID := uuid.NewString()
+		now := time.Now().UTC()
+		payload := mustJSON(map[string]string{
+			"publication_id": publication.ID,
+			"rendition_id":   rendition.ID,
+		})
+		err = h.db.RunInTx(ctx, &sql.TxOptions{}, func(txCtx context.Context, tx bun.Tx) error {
+			result, err := tx.NewUpdate().
+				Model((*models.Rendition)(nil)).
+				Set("status = ?", models.RenditionStatusScheduled).
+				Set("error_retry_at = NULL").
+				Set("updated_at = ?", now).
+				Where("id = ?", rendition.ID).
+				Where("status = ?", models.RenditionStatusFailed).
+				Where("error_retryable = ?", true).
+				Exec(txCtx)
+			if err != nil {
+				return err
+			}
+			affected, _ := result.RowsAffected()
+			if affected == 0 {
+				return errPublicationAlreadyProcessing
+			}
+			if _, err := tx.NewUpdate().
+				Model((*models.Publication)(nil)).
+				Set("status = ?", models.PublicationStatusScheduled).
+				Set("updated_at = ?", now).
+				Where("id = ?", publication.ID).
+				Where("status = ?", models.PublicationStatusFailed).
+				Exec(txCtx); err != nil {
+				return err
+			}
+			if _, err := tx.NewUpdate().
+				Model((*models.Post)(nil)).
+				Set("status = ?", models.PostStatusScheduled).
+				Where("publication_id = ?", publication.ID).
+				Where("status = ?", models.PostStatusFailed).
+				Exec(txCtx); err != nil && !isMissingLegacyPostsTable(err) {
+				return err
+			}
+			job := &models.Job{
+				ID:          jobID,
+				Type:        jobTypePublishPublication,
+				Payload:     payload,
+				Status:      jobStatusPending,
+				RunAt:       now,
+				MaxAttempts: 3,
+			}
+			_, err = tx.NewInsert().Model(job).Exec(txCtx)
+			return err
+		})
+		if err != nil {
+			return nil, publicationMutationHTTPError(err, "failed to queue destination retry")
+		}
+		return actionMessage("destination retry queued", jobID), nil
 	})
 }
 
@@ -1528,6 +1994,12 @@ func (h *PublicationHandler) loadRenditionSegmentResponsesWithDB(
 				ExternalID:           rendition.ExternalID,
 				ExternalURL:          rendition.ExternalURL,
 				ErrorMessage:         rendition.ErrorMessage,
+				ErrorKind:            rendition.ErrorKind,
+				ErrorCode:            rendition.ErrorCode,
+				ErrorHTTPStatus:      rendition.ErrorHTTPStatus,
+				ErrorRetryable:       rendition.ErrorRetryable,
+				ErrorRetryAt:         formatOptionalTime(rendition.ErrorRetryAt),
+				ErrorAction:          rendition.ErrorAction,
 			}}, nil
 		}
 		return nil, huma.Error500InternalServerError("failed to load rendition segments")
@@ -1545,6 +2017,12 @@ func (h *PublicationHandler) loadRenditionSegmentResponsesWithDB(
 			ExternalID:           rendition.ExternalID,
 			ExternalURL:          rendition.ExternalURL,
 			ErrorMessage:         rendition.ErrorMessage,
+			ErrorKind:            rendition.ErrorKind,
+			ErrorCode:            rendition.ErrorCode,
+			ErrorHTTPStatus:      rendition.ErrorHTTPStatus,
+			ErrorRetryable:       rendition.ErrorRetryable,
+			ErrorRetryAt:         formatOptionalTime(rendition.ErrorRetryAt),
+			ErrorAction:          rendition.ErrorAction,
 		}}, nil
 	}
 	segmentIDs := make([]string, 0, len(segments))
@@ -1572,6 +2050,12 @@ func (h *PublicationHandler) loadRenditionSegmentResponsesWithDB(
 			ExternalID:           segment.ExternalID,
 			ExternalURL:          segment.ExternalURL,
 			ErrorMessage:         segment.ErrorMessage,
+			ErrorKind:            segment.ErrorKind,
+			ErrorCode:            segment.ErrorCode,
+			ErrorHTTPStatus:      segment.ErrorHTTPStatus,
+			ErrorRetryable:       segment.ErrorRetryable,
+			ErrorRetryAt:         formatOptionalTime(segment.ErrorRetryAt),
+			ErrorAction:          segment.ErrorAction,
 			Media:                mediaBySegment[segment.ID],
 		})
 	}
@@ -1708,6 +2192,10 @@ func lockPublicationMutationTx(ctx context.Context, tx bun.Tx, publicationID str
 }
 
 func publicationMutationHTTPError(err error, fallback string) error {
+	var statusErr huma.StatusError
+	if errors.As(err, &statusErr) {
+		return statusErr
+	}
 	switch {
 	case errors.Is(err, errPublicationNotFound):
 		return huma.Error404NotFound(errPublicationNotFound.Error())
@@ -2255,13 +2743,21 @@ func (h *PublicationHandler) defaultRenditionInputs(accountIDs []string, profile
 }
 
 func (h *PublicationHandler) queuePublication(ctx context.Context, publicationID string, runAt time.Time) (string, error) {
-	return h.queuePublicationWithRunAt(ctx, publicationID, func(_ *models.Publication, _ time.Time) (time.Time, error) {
+	return h.queuePublicationWithRunAt(ctx, publicationID, 0, func(_ *models.Publication, _ time.Time) (time.Time, error) {
 		return runAt, nil
 	})
 }
 
 func (h *PublicationHandler) queueScheduledPublication(ctx context.Context, publicationID string) (string, error) {
-	return h.queuePublicationWithRunAt(ctx, publicationID, func(publication *models.Publication, now time.Time) (time.Time, error) {
+	return h.queueScheduledPublicationExpected(ctx, publicationID, 0)
+}
+
+func (h *PublicationHandler) queueScheduledPublicationExpected(
+	ctx context.Context,
+	publicationID string,
+	expectedRevision int,
+) (string, error) {
+	return h.queuePublicationWithRunAt(ctx, publicationID, expectedRevision, func(publication *models.Publication, now time.Time) (time.Time, error) {
 		if publication.ScheduledAt.IsZero() {
 			return time.Time{}, errPublicationScheduleRequired
 		}
@@ -2273,14 +2769,24 @@ func (h *PublicationHandler) queueScheduledPublication(ctx context.Context, publ
 }
 
 func (h *PublicationHandler) queuePublicationNow(ctx context.Context, publicationID string) (string, error) {
-	return h.queuePublicationWithRunAt(ctx, publicationID, func(_ *models.Publication, now time.Time) (time.Time, error) {
+	return h.queuePublicationNowExpected(ctx, publicationID, 0)
+}
+
+func (h *PublicationHandler) queuePublicationNowExpected(
+	ctx context.Context,
+	publicationID string,
+	expectedRevision int,
+) (string, error) {
+	return h.queuePublicationWithRunAt(ctx, publicationID, expectedRevision, func(_ *models.Publication, now time.Time) (time.Time, error) {
 		return now, nil
 	})
 }
 
+//nolint:gocyclo // Queue creation, revision checks, schedule state, and rendition state must commit as one transition.
 func (h *PublicationHandler) queuePublicationWithRunAt(
 	ctx context.Context,
 	publicationID string,
+	expectedRevision int,
 	resolveRunAt func(*models.Publication, time.Time) (time.Time, error),
 ) (string, error) {
 	var jobID string
@@ -2288,6 +2794,9 @@ func (h *PublicationHandler) queuePublicationWithRunAt(
 		publication, err := h.loadEditablePublicationTx(txCtx, tx, publicationID)
 		if err != nil {
 			return err
+		}
+		if expectedRevision > 0 && publication.Revision != expectedRevision {
+			return h.publicationRevisionConflict(txCtx, tx, publication, expectedRevision)
 		}
 		issues, err := h.validatePublicationByIDWithDB(txCtx, tx, publicationID)
 		if err != nil {
@@ -2509,6 +3018,7 @@ func publicationResponse(publication *models.Publication, media []MediaSummary) 
 		Goal:           publication.Goal,
 		Audience:       publication.Audience,
 		Status:         publication.Status,
+		Revision:       publication.Revision,
 		ScheduledAt:    formatOptionalTime(publication.ScheduledAt),
 		ActualRunAt:    formatOptionalTime(publication.ActualRunAt),
 		Metadata:       metadata,
@@ -2536,6 +3046,12 @@ func renditionResponse(rendition models.Rendition, media []MediaSummary) Renditi
 		ExternalID:      rendition.ExternalID,
 		ExternalURL:     rendition.ExternalURL,
 		ErrorMessage:    rendition.ErrorMessage,
+		ErrorKind:       rendition.ErrorKind,
+		ErrorCode:       rendition.ErrorCode,
+		ErrorHTTPStatus: rendition.ErrorHTTPStatus,
+		ErrorRetryable:  rendition.ErrorRetryable,
+		ErrorRetryAt:    formatOptionalTime(rendition.ErrorRetryAt),
+		ErrorAction:     rendition.ErrorAction,
 		Media:           media,
 	}
 }

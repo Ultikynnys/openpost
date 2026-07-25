@@ -319,18 +319,19 @@ test("unified composer sends workspace-local wall time as the exact scheduled in
   });
 
   let scheduledAt = "";
-  await page.route("**/api/v1/posts", async (route) => {
+  await page.route("**/api/v1/posts/draft", async (route) => {
     if (route.request().method() === "POST") {
+      const payload = route.request().postDataJSON() as {
+        scheduled_at?: string;
+      };
+      if (payload.scheduled_at) scheduledAt = payload.scheduled_at;
       await route.fulfill({
         contentType: "application/json",
         json: {
-          id: "scheduled-timezone-post",
+          post_id: "scheduled-timezone-post",
           publication_id: "scheduled-timezone-publication",
-          workspace_id: workspace.id,
-          content: "Schedule in the workspace timezone.",
-          status: "draft",
-          social_account_ids: ["timezone-account"],
-          media_ids: [],
+          revision: 1,
+          updated_at: "2026-07-24T12:00:00Z",
         },
       });
       return;
@@ -458,7 +459,7 @@ test("an in-flight autosave cannot attach an old-workspace draft after switching
     (resolveFinished) => (markFirstSaveFinished = resolveFinished),
   );
   const savedWorkspaceIDs: string[] = [];
-  await page.route("**/api/v1/posts", async (route) => {
+  await page.route("**/api/v1/posts/draft", async (route) => {
     if (route.request().method() !== "POST") {
       await route.continue();
       return;
@@ -471,13 +472,10 @@ test("an in-flight autosave cannot attach an old-workspace draft after switching
       await route.fulfill({
         contentType: "application/json",
         json: {
-          id: "post-workspace-a",
+          post_id: "post-workspace-a",
           publication_id: "draft-workspace-a",
-          workspace_id: first.id,
-          content: "Move this unsaved content safely.",
-          status: "draft",
-          social_account_ids: ["account-a"],
-          media_ids: [],
+          revision: 1,
+          updated_at: "2026-07-24T12:00:00Z",
         },
       });
       markFirstSaveFinished();
@@ -486,13 +484,10 @@ test("an in-flight autosave cannot attach an old-workspace draft after switching
     await route.fulfill({
       contentType: "application/json",
       json: {
-        id: "post-workspace-b",
+        post_id: "post-workspace-b",
         publication_id: "draft-workspace-b",
-        workspace_id: second.id,
-        content: "Move this unsaved content safely to workspace B.",
-        status: "draft",
-        social_account_ids: ["account-b"],
-        media_ids: [],
+        revision: 1,
+        updated_at: "2026-07-24T12:00:01Z",
       },
     });
   });

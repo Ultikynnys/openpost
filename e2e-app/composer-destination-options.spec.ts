@@ -155,26 +155,39 @@ test("Threads destination options stay scoped and touch accessible on mobile", a
       json: { accounts: [threadsResolvedCapability()] },
     });
   });
-  await page.route("**/api/v1/posts", async (route) => {
+  await page.route("**/api/v1/posts/draft", async (route) => {
     if (route.request().method() !== "POST") {
       await route.continue();
       return;
     }
+    const payload = route.request().postDataJSON() as {
+      publication: Record<string, unknown>;
+    };
+    publicationPayload = payload.publication;
     await route.fulfill({
       contentType: "application/json",
       json: {
-        id: "post-1",
+        post_id: "post-1",
         publication_id: "publication-1",
-        workspace_id: workspace.id,
-        content: "A scoped Threads poll",
-        status: "draft",
-        social_account_ids: [threadsAccount.id],
-        media_ids: [],
+        revision: 1,
+        updated_at: "2026-07-24T12:00:00Z",
       },
     });
   });
-  await page.route("**/api/v1/posts/*/variants", async (route) => {
-    await route.fulfill({ contentType: "application/json", json: {} });
+  await page.route("**/api/v1/posts/post-1/draft", async (route) => {
+    const payload = route.request().postDataJSON() as {
+      publication: Record<string, unknown>;
+    };
+    publicationPayload = payload.publication;
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        post_id: "post-1",
+        publication_id: "publication-1",
+        revision: 2,
+        updated_at: "2026-07-24T12:00:01Z",
+      },
+    });
   });
   await page.route("**/api/v1/publications/publication-1", async (route) => {
     if (route.request().method() === "PUT") {

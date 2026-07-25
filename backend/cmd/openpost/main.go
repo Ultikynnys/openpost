@@ -31,6 +31,7 @@ import (
 	cliauth "github.com/openpost/backend/internal/services/cli_auth"
 	"github.com/openpost/backend/internal/services/crypto"
 	"github.com/openpost/backend/internal/services/entitlements"
+	"github.com/openpost/backend/internal/services/feedback"
 	"github.com/openpost/backend/internal/services/mastodonapps"
 	"github.com/openpost/backend/internal/services/mcpoauth"
 	"github.com/openpost/backend/internal/services/mediasigner"
@@ -192,9 +193,28 @@ func main() {
 	mediaHandler.SetEntitlement(entitlementService)
 	profileHandler := handlers.NewProfileHandler(db, authenticator, storage)
 
+	var feedbackDestination feedback.Destination
+	if cfg.FeedbackEnabled {
+		if strings.TrimSpace(cfg.FeedbackRecipient) == "" {
+			log.Fatal("OPENPOST_FEEDBACK_RECIPIENT is required when feedback is enabled")
+		}
+		feedbackDestination, err = feedback.NewDiscordDestination(cfg.FeedbackDestinationURL)
+		if err != nil {
+			log.Fatalf("feedback destination configuration is invalid: %v", err)
+		}
+	}
+	feedbackService := feedback.NewService(db, feedback.Config{
+		Enabled:    cfg.FeedbackEnabled,
+		Recipient:  cfg.FeedbackRecipient,
+		SupportURL: cfg.FeedbackSupportURL,
+		AppVersion: version,
+	}, feedbackDestination)
+
 	worker := queue.NewWorker(db, "worker-1", 1*time.Second, publishSvc, tokenManager, storage)
+	worker.SetFeedbackService(feedbackService)
 
 	apiGroup := e.Group("/api/v1")
+	apiGroup.Use(handlers.FeedbackBodyLimitMiddleware)
 	humaConfig := huma.DefaultConfig("OpenPost API", "1.0.0")
 	api := humaecho.NewWithGroup(e, apiGroup, humaConfig)
 
@@ -267,6 +287,7 @@ func main() {
 		DisableLinkedInThreadReplies: cfg.DisableLinkedInThreadReplies,
 		StudioEnabled:                cfg.StudioEnabled,
 		StudioModelBaseURL:           cfg.StudioModelBaseURL,
+		FeedbackService:              feedbackService,
 		MediaHandler:                 mediaHandler,
 		ProfileHandler:               profileHandler,
 		BillingHandler:               billingHandler,

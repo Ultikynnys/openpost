@@ -524,7 +524,7 @@ func facebookPublishedID(label string, respBody []byte) (string, error) {
 		return "", fmt.Errorf("decoding %s: %w", label, err)
 	}
 	if publishResp.Error.Message != "" {
-		return "", fmt.Errorf("%s: %s", label, publishResp.Error.Message)
+		return "", &HTTPError{StatusCode: http.StatusBadRequest, Code: "facebook_publish_error"}
 	}
 	id := firstNonEmptyString(publishResp.PostID, publishResp.ID)
 	if id == "" {

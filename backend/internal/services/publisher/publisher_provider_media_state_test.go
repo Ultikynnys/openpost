@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/openpost/backend/internal/models"
+	"github.com/openpost/backend/internal/platform"
 	"github.com/openpost/backend/internal/services/crypto"
 	"github.com/openpost/backend/internal/services/tokenmanager"
 	"github.com/stretchr/testify/require"
@@ -142,7 +143,7 @@ func (s *publisherMediaStateTestServer) publishPost(t *testing.T, postID string)
 func TestPublisherReusesProviderMediaStateOnDestinationRetry(t *testing.T) {
 	t.Parallel()
 
-	adapter := &fakePublisherAdapter{publishErr: errFakePublishFailed}
+	adapter := &fakePublisherAdapter{publishErr: &platform.HTTPError{StatusCode: 503, Code: "temporarily_unavailable"}}
 	srv := newPublisherMediaStateTestServer(t, "x", adapter)
 	srv.seedPostWithMedia(t, "post-retry", models.MediaAttachment{
 		ID:       "media-retry",
@@ -152,7 +153,7 @@ func TestPublisherReusesProviderMediaStateOnDestinationRetry(t *testing.T) {
 
 	err := srv.publishPost(t, "post-retry")
 
-	require.ErrorIs(t, err, errFakePublishFailed)
+	require.Error(t, err)
 	require.Equal(t, 1, adapter.uploadCalls)
 	var state models.ProviderMediaState
 	require.NoError(t, srv.db.NewSelect().

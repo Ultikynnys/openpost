@@ -9,6 +9,7 @@ class UIState {
 	composerResetCounter = $state(0);
 	activeComposerDraftId = $state<string | null>(null);
 	promptText = $state<string | null>(null);
+	isFeedbackOpen = $state(false);
 
 	openCompose(date?: DateValue) {
 		this.composeInitialDate = date;
@@ -57,6 +58,14 @@ class UIState {
 
 	triggerRefresh() {
 		this.refreshCounter++;
+	}
+
+	openFeedback() {
+		this.isFeedbackOpen = true;
+	}
+
+	closeFeedback() {
+		this.isFeedbackOpen = false;
 	}
 }
 

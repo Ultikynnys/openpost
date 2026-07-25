@@ -68,113 +68,125 @@ func MigrateLegacyPublicationAuthoring(ctx context.Context, db *bun.DB) error {
 	return migrateLegacyPublicationAuthoring(ctx, db)
 }
 
-// RefreshLegacyPublicationAuthoring applies a compatibility mutation from the
-// legacy post tables to an already-linked canonical publication.
+// SyncTextPostAuthoring applies a text-and-thread composer mutation to its
+// linked canonical publication.
+func SyncTextPostAuthoring(ctx context.Context, db *bun.DB, postID string) error {
+	return db.RunInTx(ctx, &sql.TxOptions{}, func(txCtx context.Context, tx bun.Tx) error {
+		return SyncTextPostAuthoringTx(txCtx, tx, postID)
+	})
+}
+
+// RefreshLegacyPublicationAuthoring is retained as a source-compatible alias
+// for integrations built before the text composer became a first-class path.
+func RefreshLegacyPublicationAuthoring(ctx context.Context, db *bun.DB, postID string) error {
+	return SyncTextPostAuthoring(ctx, db, postID)
+}
+
+// SyncTextPostAuthoringTx keeps the text composer row, its destinations,
+// variants, segments, media, and canonical publication in one transaction.
 //
 //nolint:gocyclo
-func RefreshLegacyPublicationAuthoring(ctx context.Context, db *bun.DB, postID string) error {
-	return db.RunInTx(ctx, &sql.TxOptions{}, func(txCtx context.Context, tx bun.Tx) error {
-		var changed models.Post
-		if err := tx.NewSelect().Model(&changed).Where("id = ?", postID).Scan(txCtx); err != nil {
-			if errors.Is(err, sql.ErrNoRows) || isMissingLegacyAuthoringTable(err) {
-				return nil
-			}
-			return err
-		}
-		if changed.PublicationID == "" {
+func SyncTextPostAuthoringTx(ctx context.Context, tx bun.Tx, postID string) error {
+	var changed models.Post
+	if err := tx.NewSelect().Model(&changed).Where("id = ?", postID).Scan(ctx); err != nil {
+		if errors.Is(err, sql.ErrNoRows) || isMissingLegacyAuthoringTable(err) {
 			return nil
 		}
-		var threadPosts []models.Post
-		if err := tx.NewSelect().
-			Model(&threadPosts).
-			Where("publication_id = ?", changed.PublicationID).
-			Order("thread_sequence ASC", "created_at ASC", "id ASC").
-			Scan(txCtx); err != nil {
-			return err
-		}
-		if len(threadPosts) == 0 {
+		return err
+	}
+	if changed.PublicationID == "" {
+		return nil
+	}
+	var threadPosts []models.Post
+	if err := tx.NewSelect().
+		Model(&threadPosts).
+		Where("publication_id = ?", changed.PublicationID).
+		Order("thread_sequence ASC", "created_at ASC", "id ASC").
+		Scan(ctx); err != nil {
+		return err
+	}
+	if len(threadPosts) == 0 {
+		return nil
+	}
+	root := threadPosts[0]
+	segments, threadDraft, err := legacySegments(ctx, tx, root)
+	if err != nil {
+		return err
+	}
+	var publication models.Publication
+	if err := tx.NewSelect().Model(&publication).Where("id = ?", changed.PublicationID).Scan(ctx); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
 			return nil
 		}
-		root := threadPosts[0]
-		segments, threadDraft, err := legacySegments(txCtx, tx, root)
-		if err != nil {
-			return err
-		}
-		var publication models.Publication
-		if err := tx.NewSelect().Model(&publication).Where("id = ?", changed.PublicationID).Scan(txCtx); err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
-				return nil
-			}
-			return err
-		}
-		publication.Intent = models.PublishingIntentPost
-		publication.ContentProfile = models.ContentProfileShortText
-		if len(segments) > 1 || threadDraft != nil {
-			publication.Intent = models.PublishingIntentThread
-			publication.ContentProfile = models.ContentProfileThread
-		}
-		publication.Title = legacyPublicationTitle(segments, publication.Intent)
-		publication.SourceText = firstLegacySegmentBody(segments)
-		publication.SourceContent = publication.SourceText
-		publication.Status = legacyPublicationStatus(root.Status)
-		publication.ScheduledAt = root.ScheduledAt
-		publication.ActualRunAt = root.ActualRunAt
-		publication.UpdatedAt = time.Now().UTC()
-		if _, err := tx.NewUpdate().
-			Model(&publication).
-			Column("title", "intent", "content_profile", "source_text", "source_content", "status", "scheduled_at", "actual_run_at", "updated_at").
-			Where("id = ?", publication.ID).
-			Exec(txCtx); err != nil {
-			return err
-		}
+		return err
+	}
+	publication.Intent = models.PublishingIntentPost
+	publication.ContentProfile = models.ContentProfileShortText
+	if len(segments) > 1 || threadDraft != nil {
+		publication.Intent = models.PublishingIntentThread
+		publication.ContentProfile = models.ContentProfileThread
+	}
+	publication.Title = legacyPublicationTitle(segments, publication.Intent)
+	publication.SourceText = firstLegacySegmentBody(segments)
+	publication.SourceContent = publication.SourceText
+	publication.Status = legacyPublicationStatus(root.Status)
+	publication.ScheduledAt = root.ScheduledAt
+	publication.ActualRunAt = root.ActualRunAt
+	publication.UpdatedAt = time.Now().UTC()
+	if _, err := tx.NewUpdate().
+		Model(&publication).
+		Column("title", "intent", "content_profile", "source_text", "source_content", "status", "scheduled_at", "actual_run_at", "updated_at").
+		Where("id = ?", publication.ID).
+		Exec(ctx); err != nil {
+		return err
+	}
 
-		preservedSettings, err := loadLegacyAuthoringSettings(txCtx, tx, publication.ID)
-		if err != nil {
-			return err
-		}
-		var renditionIDs []string
-		if err := tx.NewSelect().
-			Model((*models.Rendition)(nil)).
-			Column("id").
-			Where("publication_id = ?", publication.ID).
-			Scan(txCtx, &renditionIDs); err != nil {
-			return err
-		}
-		if len(renditionIDs) > 0 {
-			if _, err := tx.NewDelete().
-				Model((*models.RenditionMedia)(nil)).
-				Where("rendition_id IN (?)", bun.List(renditionIDs)).
-				Exec(txCtx); err != nil {
-				return err
-			}
-		}
+	preservedSettings, err := loadLegacyAuthoringSettings(ctx, tx, publication.ID)
+	if err != nil {
+		return err
+	}
+	var renditionIDs []string
+	if err := tx.NewSelect().
+		Model((*models.Rendition)(nil)).
+		Column("id").
+		Where("publication_id = ?", publication.ID).
+		Scan(ctx, &renditionIDs); err != nil {
+		return err
+	}
+	if len(renditionIDs) > 0 {
 		if _, err := tx.NewDelete().
-			Model((*models.Rendition)(nil)).
-			Where("publication_id = ?", publication.ID).
-			Exec(txCtx); err != nil {
+			Model((*models.RenditionMedia)(nil)).
+			Where("rendition_id IN (?)", bun.List(renditionIDs)).
+			Exec(ctx); err != nil {
 			return err
 		}
-		if _, err := tx.NewDelete().
-			Model((*models.PublicationSegment)(nil)).
-			Where("publication_id = ?", publication.ID).
-			Exec(txCtx); err != nil {
-			return err
-		}
-		segmentModels, err := insertLegacyPublicationSegments(txCtx, tx, publication, segments)
-		if err != nil {
-			return err
-		}
-		if err := insertLegacyRenditions(txCtx, tx, publication, root, segmentModels, segments, threadDraft); err != nil {
-			return err
-		}
-		if err := restoreLegacyAuthoringSettings(txCtx, tx, preservedSettings); err != nil {
-			return err
-		}
-		if err := rewriteLegacyPublicationJobs(txCtx, tx, root.ID, publication.ID); err != nil {
-			return err
-		}
-		return syncLegacyPublicationJobs(txCtx, tx, root, publication.ID)
-	})
+	}
+	if _, err := tx.NewDelete().
+		Model((*models.Rendition)(nil)).
+		Where("publication_id = ?", publication.ID).
+		Exec(ctx); err != nil {
+		return err
+	}
+	if _, err := tx.NewDelete().
+		Model((*models.PublicationSegment)(nil)).
+		Where("publication_id = ?", publication.ID).
+		Exec(ctx); err != nil {
+		return err
+	}
+	segmentModels, err := insertLegacyPublicationSegments(ctx, tx, publication, segments)
+	if err != nil {
+		return err
+	}
+	if err := insertLegacyRenditions(ctx, tx, publication, root, segmentModels, segments, threadDraft); err != nil {
+		return err
+	}
+	if err := restoreLegacyAuthoringSettings(ctx, tx, preservedSettings); err != nil {
+		return err
+	}
+	if err := rewriteLegacyPublicationJobs(ctx, tx, root.ID, publication.ID); err != nil {
+		return err
+	}
+	return syncLegacyPublicationJobs(ctx, tx, root, publication.ID)
 }
 
 type legacyRenditionSettings struct {

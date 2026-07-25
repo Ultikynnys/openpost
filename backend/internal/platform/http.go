@@ -16,8 +16,7 @@ import (
 var httpClient = &http.Client{Timeout: 30 * time.Second}
 
 // DoRequest executes an HTTP request and returns the response body.
-// It sets all provided headers, and returns an error for non-2xx status codes
-// with the response body included for debugging.
+// Non-2xx responses retain only status, stable provider code, and Retry-After.
 func DoRequest(ctx context.Context, method, url string, body io.Reader, headers map[string]string) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, method, url, body)
 	if err != nil {
@@ -40,7 +39,7 @@ func DoRequest(ctx context.Context, method, url string, body io.Reader, headers 
 	}
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("%s %s returned %d: %s", method, sanitizeURL(url), resp.StatusCode, string(respBody))
+		return nil, NewHTTPError(resp.StatusCode, resp.Header, respBody)
 	}
 
 	return respBody, nil
@@ -151,19 +150,3 @@ func encodeFormValues(values map[string]string) []byte {
 
 // jsonMarshal is a thin wrapper to allow overriding in tests if needed.
 var jsonMarshal = json.Marshal
-
-func sanitizeURL(rawURL string) string {
-	parsed, err := url.Parse(rawURL)
-	if err != nil {
-		return rawURL
-	}
-
-	query := parsed.Query()
-	for _, key := range []string{string(RefreshCredentialAccessToken), "token", string(RefreshCredentialRefreshToken), oauthParamClientSecret} {
-		if query.Has(key) {
-			query.Set(key, "[redacted]")
-		}
-	}
-	parsed.RawQuery = query.Encode()
-	return parsed.String()
-}

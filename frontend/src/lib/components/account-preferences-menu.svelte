@@ -20,9 +20,11 @@
 	import CheckIcon from 'lucide-svelte/icons/check';
 	import Volume2Icon from 'lucide-svelte/icons/volume-2';
 	import CirclePlayIcon from 'lucide-svelte/icons/circle-play';
+	import MessageSquareIcon from 'lucide-svelte/icons/message-square-text';
 	import BuildingIcon from 'lucide-svelte/icons/building-2';
 	import ChevronDownIcon from 'lucide-svelte/icons/chevron-down';
 	import { setMode, userPrefersMode } from 'mode-watcher';
+	import { ui } from '$lib/stores/ui.svelte';
 
 	const productDemoUrl = 'https://youtu.be/_mZf3HzQaN8';
 
@@ -186,6 +188,16 @@
 			{m.sidebar_watch_demo()}
 		</a>
 	{/snippet}
+</DropdownMenu.Item>
+<DropdownMenu.Item
+	class={[menuItemClass, 'gap-3']}
+	onclick={() => {
+		onNavigate?.();
+		ui.openFeedback();
+	}}
+>
+	<MessageSquareIcon class="size-4 text-muted-foreground" />
+	{m.feedback_open()}
 </DropdownMenu.Item>
 {#if IS_CAPACITOR}
 	<DropdownMenu.Separator />

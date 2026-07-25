@@ -14,6 +14,7 @@ import (
 	cliauth "github.com/openpost/backend/internal/services/cli_auth"
 	servicecrypto "github.com/openpost/backend/internal/services/crypto"
 	"github.com/openpost/backend/internal/services/entitlements"
+	"github.com/openpost/backend/internal/services/feedback"
 	"github.com/openpost/backend/internal/services/mastodonapps"
 	"github.com/openpost/backend/internal/services/mcpoauth"
 	"github.com/openpost/backend/internal/services/mediasigner"
@@ -51,6 +52,7 @@ type RouteDeps struct {
 	DisableLinkedInThreadReplies bool
 	StudioEnabled                bool
 	StudioModelBaseURL           string
+	FeedbackService              *feedback.Service
 
 	MediaHandler    *handlers.MediaHandler
 	BillingHandler  *handlers.BillingHandler
@@ -158,10 +160,13 @@ func RegisterHumaRoutes(api huma.API, deps RouteDeps) {
 	workspaceHandler.UpdateWorkspaceSettings(api)
 
 	postHandler := handlers.NewPostHandler(deps.DB, deps.Authenticator, deps.Entitlement)
+	postHandler.SetCapabilityDependencies(deps.Providers, deps.TokenSource)
 	postHandler.CreatePost(api)
+	postHandler.CreateTextPostDraft(api)
 	postHandler.CreateThread(api)
 	postHandler.ListPosts(api)
 	postHandler.GetPost(api)
+	postHandler.SaveTextPostDraft(api)
 	postHandler.UpdatePost(api)
 	postHandler.DeletePost(api)
 	postHandler.GetScheduleOverview(api)
@@ -185,6 +190,7 @@ func RegisterHumaRoutes(api huma.API, deps RouteDeps) {
 	promptHandler.GetCategories(api)
 
 	handlers.NewJobHandler(deps.DB, deps.Authenticator).RegisterRoutes(api)
+	handlers.NewFeedbackHandler(deps.FeedbackService, deps.Authenticator).RegisterRoutes(api)
 
 	oauthHandler := handlers.NewOAuthHandler(
 		deps.DB,

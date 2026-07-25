@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onDestroy, onMount, tick, type Snippet } from 'svelte';
 	import { page } from '$app/stores';
-	import { goto, replaceState } from '$app/navigation';
+	import { beforeNavigate, goto, replaceState } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { MediaQuery, SvelteMap, SvelteSet } from 'svelte/reactivity';
 	import { client, type SocialAccount, type Workspace, getToken } from '$lib/api/client';
@@ -78,6 +78,7 @@
 	import { soundPreferences } from '$lib/stores/sound-preferences.svelte';
 	import InlineNotice from './inline-notice.svelte';
 	import DestructiveConfirmDialog from './destructive-confirm-dialog.svelte';
+	import DraftConflictDialog from './draft-conflict-dialog.svelte';
 	import MediaPicker from './media-picker.svelte';
 	import { consumeStudioReturnToken, createStudioReturnToken } from '$lib/studio/api';
 	import {
@@ -87,6 +88,8 @@
 	} from '$lib/studio/recovery';
 	import type { ComposerRecoverySnapshot } from '$lib/studio/types';
 	import { sampleCampaignPathForPlan, SAMPLE_CAMPAIGN_DISMISSED_KEY } from '$lib/sample-campaign';
+	import { parseDraftConflict, type DraftConflictProblem } from '$lib/draft-conflict';
+	import { SerializedSaveQueue } from '$lib/serialized-save-queue';
 
 	// --------------------------------------------------------------------------
 	// Types
@@ -98,10 +101,11 @@
 		content: string;
 		thread_draft?: string | null;
 		status: string;
+		revision: number;
 		scheduled_at: string;
 		random_delay_minutes?: number;
-		media: Array<{ media_id: string; mime_type?: string; alt_text?: string }>;
-		destinations: Array<{ social_account_id: string; platform: string }>;
+		media?: Array<{ media_id: string; mime_type?: string; alt_text?: string }> | null;
+		destinations?: Array<{ social_account_id: string; platform: string }> | null;
 	}
 
 	type Publication = components['schemas']['PublicationResponse'];
@@ -168,6 +172,7 @@
 	let activePostIndex = $state(0);
 	let draftId = $state<string | null>(null);
 	let publicationId = $state('');
+	let revision = $state(1);
 	let lastInitializedPostId = $state<string | null>(null);
 	let isSaving = $state(false);
 	let isSubmitting = $state(false);
@@ -175,6 +180,8 @@
 	let showDeleteConfirm = $state(false);
 	let error = $state('');
 	let success = $state('');
+	let draftConflict = $state<DraftConflictProblem | null>(null);
+	let conflictDialogOpen = $state(false);
 	let linkUrl = $state('');
 	let showLinkInput = $state(false);
 
@@ -195,6 +202,8 @@
 	let accountRequestSequence = 0;
 	let nextSlotRequestSequence = 0;
 	let saveGeneration = 0;
+	const saveQueue = new SerializedSaveQueue<string | null>(() => publicationId || null);
+	let allowNavigationOnce = false;
 
 	let selectedDate = $state<CalendarDate | undefined>(undefined);
 	let selectedTime = $state<string | null>(null);
@@ -287,12 +296,12 @@
 	const hasContent = $derived(hasAnyContent(posts));
 	const totalChars = $derived(posts.reduce((sum, p) => sum + p.content.length, 0));
 	const isThread = $derived(posts.length > 1);
-	const legacyMode = $derived<ComposerModeKey>(isThread ? 'thread' : 'post');
-	const legacyModeMeta = $derived(composerMode(legacyMode));
+	const textComposerMode = $derived<ComposerModeKey>(isThread ? 'thread' : 'post');
+	const textComposerModeMeta = $derived(composerMode(textComposerMode));
 	const compatibleAccounts = $derived(
 		accounts.filter(
 			(account) =>
-				isAccountCompatibleWithMode(legacyMode, account) &&
+				isAccountCompatibleWithMode(textComposerMode, account) &&
 				resolvedCapabilities[account.id]?.compatible !== false
 		)
 	);
@@ -337,7 +346,7 @@
 		JSON.stringify({
 			workspace: selectedWorkspaceId,
 			accounts: selectedAccountIds,
-			mode: legacyMode,
+			mode: textComposerMode,
 			linkUrl,
 			posts: posts.map((post) => ({
 				key: post.key,
@@ -788,7 +797,7 @@
 
 	function publicationPayload(targetPublicationID: string): FocusedPublicationPayload {
 		const payload = buildFocusedPublicationPayload({
-			mode: legacyMode,
+			mode: textComposerMode,
 			workspaceId: selectedWorkspaceId,
 			accounts: selectedAccounts.map((account) => ({
 				id: account.id,
@@ -858,36 +867,6 @@
 		return payload;
 	}
 
-	async function persistCanonicalPublication(
-		targetPublicationID: string,
-		scheduledAt: string | null = getScheduledAt() ?? null
-	) {
-		const payload = publicationPayload(targetPublicationID);
-		const { error: publicationError } = await client.PUT('/publications/{id}', {
-			params: { path: { id: targetPublicationID } },
-			body: {
-				title: payload.title,
-				intent: payload.intent,
-				content_profile: payload.content_profile,
-				source_text: payload.source_text,
-				source_url: payload.source_url ?? '',
-				...(scheduledAt ? { scheduled_at: scheduledAt } : { clear_schedule: true }),
-				metadata: payload.metadata,
-				segments: payload.segments
-			}
-		});
-		if (publicationError) {
-			throw new Error(publicationError.detail || m.compose_save_publication_failed());
-		}
-		const { error: renditionError } = await client.PUT('/publications/{id}/renditions', {
-			params: { path: { id: targetPublicationID } },
-			body: { renditions: payload.renditions }
-		});
-		if (renditionError) {
-			throw new Error(renditionError.detail || m.compose_save_outputs_failed());
-		}
-	}
-
 	async function loadCanonicalPublication(targetPublicationID: string) {
 		if (!targetPublicationID) return;
 		const { data, error: publicationError } = await client.GET('/publications/{id}', {
@@ -899,6 +878,7 @@
 
 	function hydrateCanonicalSettings(publication: Publication) {
 		publicationId = publication.id;
+		revision = publication.revision;
 		linkUrl = publication.source_url ?? '';
 		showLinkInput = Boolean(linkUrl);
 		settingsByAccount = Object.fromEntries(
@@ -980,7 +960,7 @@
 			const { data, error: resolveError } = await client.POST('/capabilities/resolve', {
 				body: {
 					account_ids: selectedAccountIds,
-					intent: legacyMode,
+					intent: textComposerMode,
 					source_url: linkUrl,
 					locale: getLocaleTag(),
 					region,
@@ -1423,6 +1403,7 @@
 		await ensureComposerWorkspace(post.workspace_id);
 		draftId = post.id;
 		publicationId = post.publication_id ?? '';
+		revision = post.revision;
 		lastInitializedPostId = post.id;
 		selectedWorkspaceId = post.workspace_id;
 		selectedAccountIds = post.destinations?.map((d) => d.social_account_id) ?? [];
@@ -1446,14 +1427,11 @@
 		}
 
 		// Read the thread state. Prefer the explicit `thread_draft`
-		// field on the post (new P0.2 representation, set by the
-		// backend when the post is a thread draft). Fall back to the
-		// legacy `__openpost_thread__:` blob inside `content` for posts
-		// that were saved before the migration ran. If neither is
-		// present, treat it as a single-post draft.
+		// field. Fall back to the pre-migration encoded value inside
+		// `content` so older saved drafts still open safely.
 		const threadSource: string | null = post.thread_draft ?? null;
-		const legacySource: string | null = isThreadDraft(post.content) ? post.content : null;
-		const source = threadSource ?? legacySource;
+		const migratedSource: string | null = isThreadDraft(post.content) ? post.content : null;
+		const source = threadSource ?? migratedSource;
 		if (source) {
 			const threadData = decodeThreadDraft(source);
 			if (threadData && threadData.posts.length > 0) {
@@ -1526,15 +1504,43 @@
 
 	onMount(() => {
 		showSampleCampaignEntry = localStorage.getItem(SAMPLE_CAMPAIGN_DISMISSED_KEY) !== 'true';
+		const handleVisibilityChange = () => {
+			if (document.visibilityState === 'hidden') void flushPendingTextDraft();
+		};
+		document.addEventListener('visibilitychange', handleVisibilityChange);
 		void (async () => {
 			await initializeComposer();
 			await restoreStudioReturn();
 		})();
+		return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
 	});
 
 	onDestroy(() => {
 		clearAutoSaveTimer();
 		if (capabilityResolveTimer) clearTimeout(capabilityResolveTimer);
+	});
+
+	beforeNavigate((navigation) => {
+		if (allowNavigationOnce) {
+			allowNavigationOnce = false;
+			return;
+		}
+		if (
+			!navigation.to?.url ||
+			!autoSavesDraft ||
+			!hasContent ||
+			getSaveSnapshot() === lastSavedSnapshot ||
+			draftConflict
+		) {
+			return;
+		}
+		const target = `${navigation.to.url.pathname}${navigation.to.url.search}${navigation.to.url.hash}`;
+		navigation.cancel();
+		void flushPendingTextDraft().then((saved) => {
+			if (!saved) return;
+			allowNavigationOnce = true;
+			return goto(resolve(target as '/'));
+		});
 	});
 
 	function dismissSampleCampaignEntry() {
@@ -1716,7 +1722,7 @@
 
 			const nextAccounts = data ?? [];
 			const nextCompatibleAccounts = nextAccounts.filter((account) =>
-				isAccountCompatibleWithMode(legacyMode, account)
+				isAccountCompatibleWithMode(textComposerMode, account)
 			);
 			accounts = nextAccounts;
 			if (selectionToPreserve && selectionToPreserve.length > 0) {
@@ -1790,7 +1796,7 @@
 
 	function toggleAccount(id: string) {
 		const account = accounts.find((candidate) => candidate.id === id);
-		if (!account || !isAccountCompatibleWithMode(legacyMode, account)) return;
+		if (!account || !isAccountCompatibleWithMode(textComposerMode, account)) return;
 		if (selectedAccountIds.includes(id)) {
 			selectedAccountIds = selectedAccountIds.filter((a) => a !== id);
 			if (variants.has(id)) {
@@ -1835,100 +1841,123 @@
 		}, 2000);
 	}
 
-	async function saveDraft(): Promise<string | null> {
+	function saveDraft(
+		options: {
+			force?: boolean;
+			saveAsCopy?: boolean;
+			scheduledAt?: string | null;
+		} = {}
+	): Promise<string | null> {
+		return saveQueue.run(() => saveDraftNow(options));
+	}
+
+	async function saveDraftNow(options: {
+		force?: boolean;
+		saveAsCopy?: boolean;
+		scheduledAt?: string | null;
+	}): Promise<string | null> {
 		if (!selectedWorkspaceId || !hasContent) return null;
 		const generation = saveGeneration;
 		const workspaceId = selectedWorkspaceId;
-		const startingDraftId = draftId;
-		const startingPublicationId = publicationId;
+		const startingDraftId = options.saveAsCopy ? null : draftId;
 		const snapshot = getSaveSnapshot();
 		isSaving = true;
 		error = '';
 
 		try {
-			// Threads: store the encoded draft in the new dedicated
-			// `thread_draft` field, and put the first post's text in
-			// `content` so the parent row still carries a meaningful
-			// preview. The backend is the source of truth on the
-			// server side; the prefix is no longer stored on the
-			// post row.
-			const isThreadDraft_ = isThread;
 			const sourcePosts = posts.map((post) => ({ ...post, mediaIds: [...post.mediaIds] }));
-			const sourceVariants = new Map(variants);
-			const threadDraft = isThreadDraft_
+			const threadDraft = isThread
 				? encodeThreadDraft(sourcePosts, getVariantPayloadForSave())
-				: null;
+				: '';
 			const draftContent = sourcePosts[0].content;
-			const draftMediaIds = isThreadDraft_
+			const draftMediaIds = isThread
 				? sourcePosts.flatMap((post) => post.mediaIds)
 				: sourcePosts[0].mediaIds;
-			const variantPayload = getPersistedVariantPayload(sourceVariants, sourcePosts);
-
-			const defaultDelay = effectiveRandomDelayMinutes;
+			const variantPayload = getPersistedVariantPayload(new Map(variants), sourcePosts);
+			const proposedSchedule =
+				options.scheduledAt === undefined ? (getScheduledAt() ?? null) : options.scheduledAt;
+			const canonicalID = publicationId || `text-draft:${sourcePosts[0].key}`;
+			const canonical = publicationPayload(canonicalID);
+			const publication = {
+				title: canonical.title,
+				intent: canonical.intent,
+				content_profile: canonical.content_profile,
+				source_text: canonical.source_text,
+				source_url: canonical.source_url ?? '',
+				...(proposedSchedule
+					? { scheduled_at: proposedSchedule, clear_schedule: false }
+					: { clear_schedule: true }),
+				metadata: canonical.metadata,
+				segments: canonical.segments,
+				renditions: canonical.renditions
+			};
 			const body = {
-				workspace_id: workspaceId,
 				content: draftContent,
+				scheduled_at: proposedSchedule ?? '',
 				social_account_ids: [...selectedAccountIds],
 				media_ids: draftMediaIds,
-				random_delay_minutes: defaultDelay,
-				...(threadDraft ? { thread_draft: threadDraft } : {})
+				random_delay_minutes: proposedSchedule ? effectiveRandomDelayMinutes : 0,
+				thread_draft: threadDraft,
+				variants: variantPayload,
+				publication
 			};
+
 			let savedDraftId = startingDraftId;
-			let savedPublicationId = startingPublicationId;
+			let savedPublicationId = options.saveAsCopy ? '' : publicationId;
+			let savedRevision = revision;
 			if (startingDraftId) {
-				const { error: patchErr } = await client.PATCH('/posts/{id}', {
+				const { data, error: saveError } = await client.PUT('/posts/{id}/draft', {
 					params: { path: { id: startingDraftId } },
 					body: {
-						content: draftContent,
-						scheduled_at: '',
-						social_account_ids: body.social_account_ids,
-						media_ids: draftMediaIds,
-						random_delay_minutes: defaultDelay,
-						...(threadDraft ? { thread_draft: threadDraft } : {})
+						...body,
+						expected_revision: revision,
+						force: Boolean(options.force)
 					}
 				});
-				if (patchErr) throw new Error((patchErr as any).detail || m.compose_update_draft_failed());
-			} else {
-				const { data, error: postErr } = await client.POST('/posts', { body });
-				if (postErr) throw new Error((postErr as any).detail || m.compose_save_draft_failed());
-				savedDraftId = data?.id ?? null;
-				savedPublicationId = data?.publication_id ?? '';
-			}
-
-			if (savedDraftId && !isThreadDraft_) {
-				await persistVariants(savedDraftId, variantPayload);
-			}
-			if (savedDraftId && !savedPublicationId) {
-				const { data, error: postError } = await client.GET('/posts/{id}', {
-					params: { path: { id: savedDraftId } }
-				});
-				if (postError) {
-					throw new Error(postError.detail || m.compose_save_publication_failed());
+				if (saveError) {
+					const conflict = parseDraftConflict(saveError);
+					if (conflict) {
+						draftConflict = conflict;
+						conflictDialogOpen = true;
+					}
+					throw new Error(saveError.detail || m.compose_update_draft_failed());
 				}
-				savedPublicationId = data?.publication_id ?? '';
-			}
-			if (savedPublicationId) {
-				await persistCanonicalPublication(savedPublicationId, null);
+				savedDraftId = data.post_id;
+				savedPublicationId = data.publication_id;
+				savedRevision = data.revision;
+			} else {
+				const { data, error: createError } = await client.POST('/posts/draft', {
+					body: { ...body, workspace_id: workspaceId }
+				});
+				if (createError) {
+					throw new Error(createError.detail || m.compose_save_draft_failed());
+				}
+				savedDraftId = data.post_id;
+				savedPublicationId = data.publication_id;
+				savedRevision = data.revision;
 			}
 
 			if (
 				generation !== saveGeneration ||
 				selectedWorkspaceId !== workspaceId ||
-				draftId !== startingDraftId
+				(startingDraftId && draftId !== startingDraftId)
 			) {
 				return null;
 			}
 			const createdDraftId = startingDraftId ? null : savedDraftId;
-			if (createdDraftId) draftId = createdDraftId;
+			draftId = savedDraftId;
 			publicationId = savedPublicationId;
+			revision = savedRevision;
+			draftConflict = null;
 			lastSavedSnapshot = snapshot;
+			ui.setActiveComposerDraft(savedDraftId);
 			ui.triggerRefresh();
 			if (createdDraftId) onDraftCreated?.(createdDraftId);
 			return savedPublicationId || null;
-		} catch (e) {
-			console.error('Failed to auto-save draft:', e);
+		} catch (cause) {
+			console.error('Failed to save text post draft:', cause);
 			if (generation === saveGeneration && selectedWorkspaceId === workspaceId) {
-				error = (e as Error).message || m.compose_save_draft_failed();
+				error = cause instanceof Error ? cause.message : m.compose_save_draft_failed();
 			}
 			return null;
 		} finally {
@@ -1936,6 +1965,46 @@
 				isSaving = false;
 			}
 		}
+	}
+
+	async function reloadSavedTextDraft() {
+		if (!draftConflict) return;
+		const { data, error: loadError } = await client.GET('/posts/{id}', {
+			params: { path: { id: draftConflict.conflict.aggregate_id } }
+		});
+		if (loadError || !data) {
+			throw new Error(loadError?.detail || m.compose_update_draft_failed());
+		}
+		await initializeFromPost(data);
+		error = '';
+		draftConflict = null;
+	}
+
+	async function saveConflictedTextDraftAsCopy() {
+		const saved = await saveDraft({ saveAsCopy: true });
+		if (!saved) throw new Error(error || m.compose_save_draft_failed());
+		lastSavedSnapshot = getSaveSnapshot();
+		success = m.compose_draft_saved();
+		error = '';
+	}
+
+	async function overwriteSavedTextDraft() {
+		if (!draftConflict) return;
+		revision = draftConflict.conflict.current_revision;
+		const saved = await saveDraft({ force: true });
+		if (!saved) throw new Error(error || m.compose_update_draft_failed());
+		lastSavedSnapshot = getSaveSnapshot();
+		success = m.compose_changes_saved();
+		error = '';
+	}
+
+	async function flushPendingTextDraft(): Promise<boolean> {
+		clearAutoSaveTimer();
+		await saveQueue.flush().catch(() => publicationId || null);
+		if (autoSavesDraft && hasContent && getSaveSnapshot() !== lastSavedSnapshot && !draftConflict) {
+			await saveDraft();
+		}
+		return !draftConflict && getSaveSnapshot() === lastSavedSnapshot;
 	}
 
 	async function deleteDraft() {
@@ -2005,42 +2074,23 @@
 			error = m.compose_invalid_timezone_time();
 			return;
 		}
-		const isThreadDraft_ = isThread;
-		const threadDraft = isThreadDraft_ ? encodeThreadDraft(posts, getVariantPayloadForSave()) : '';
-		const draftContent = posts[0]?.content ?? '';
-		const mediaIds = isThreadDraft_
-			? posts.flatMap((post) => post.mediaIds)
-			: (posts[0]?.mediaIds ?? []);
-		const randomDelay = scheduledAt ? effectiveRandomDelayMinutes : 0;
-
 		isSaving = true;
 		try {
-			const { error: patchErr } = await client.PATCH('/posts/{id}', {
-				params: { path: { id: draftId } },
-				body: {
-					content: draftContent,
-					scheduled_at: isThreadDraft_ ? '' : (scheduledAt ?? ''),
-					social_account_ids: selectedAccountIds,
-					media_ids: mediaIds,
-					random_delay_minutes: randomDelay,
-					thread_draft: threadDraft
-				}
-			});
-			if (patchErr) throw new Error((patchErr as any).detail || m.compose_save_changes_failed());
-
-			if (!isThreadDraft_) {
-				await persistVariants(draftId);
-			}
-			const targetPublicationID = publicationId || initialPost.publication_id || '';
+			const targetPublicationID = await saveDraft({ scheduledAt: scheduledAt ?? null });
 			if (!targetPublicationID) {
-				throw new Error(m.compose_save_publication_failed());
+				throw new Error(error || m.compose_save_publication_failed());
 			}
-			await persistCanonicalPublication(targetPublicationID, scheduledAt ?? null);
 			if (scheduledAt) {
 				const { error: scheduleError } = await client.POST('/publications/{id}/schedule', {
-					params: { path: { id: targetPublicationID } }
+					params: { path: { id: targetPublicationID } },
+					body: { expected_revision: revision }
 				});
 				if (scheduleError) {
+					const conflict = parseDraftConflict(scheduleError);
+					if (conflict) {
+						draftConflict = conflict;
+						conflictDialogOpen = true;
+					}
 					throw new Error(scheduleError.detail || m.compose_schedule_failed());
 				}
 			}
@@ -2123,14 +2173,12 @@
 			}
 			await resolveCapabilities();
 			if (capabilityResolveError) throw new Error(capabilityResolveError);
-			const targetPublicationID = await saveDraft();
+			const targetPublicationID = await saveDraft({
+				scheduledAt: publishNow ? null : (scheduledAt ?? null)
+			});
 			if (!targetPublicationID) {
 				throw new Error(error || m.compose_save_publication_failed());
 			}
-			await persistCanonicalPublication(
-				targetPublicationID,
-				publishNow ? null : (scheduledAt ?? null)
-			);
 			const { data: validation, error: validationError } = await client.POST(
 				'/publications/{id}/validate',
 				{ params: { path: { id: targetPublicationID } } }
@@ -2144,12 +2192,19 @@
 
 			const { error: actionError } = publishNow
 				? await client.POST('/publications/{id}/publish-now', {
-						params: { path: { id: targetPublicationID } }
+						params: { path: { id: targetPublicationID } },
+						body: { expected_revision: revision }
 					})
 				: await client.POST('/publications/{id}/schedule', {
-						params: { path: { id: targetPublicationID } }
+						params: { path: { id: targetPublicationID } },
+						body: { expected_revision: revision }
 					});
 			if (actionError) {
+				const conflict = parseDraftConflict(actionError);
+				if (conflict) {
+					draftConflict = conflict;
+					conflictDialogOpen = true;
+				}
 				throw new Error(
 					actionError.detail ||
 						(publishNow ? m.compose_publish_failed() : m.compose_schedule_failed())
@@ -2481,27 +2536,6 @@
 		}
 	}
 
-	async function persistVariants(
-		postId: string,
-		variantPayload = getPersistedVariantPayload(variants, posts)
-	) {
-		const { error: deleteErr } = await client.DELETE('/posts/{id}/variants', {
-			params: { path: { id: postId } }
-		});
-		if (deleteErr) {
-			throw new Error((deleteErr as any).detail || m.compose_reset_variants_failed());
-		}
-
-		if (variantPayload.length === 0) return;
-		const { error: upsertErr } = await client.PUT('/posts/{id}/variants', {
-			params: { path: { id: postId } },
-			body: { variants: variantPayload }
-		});
-		if (upsertErr) {
-			throw new Error((upsertErr as any).detail || m.compose_save_variants_failed());
-		}
-	}
-
 	function activateVariantTab(accountId: string | null) {
 		activeVariantAccountId = accountId;
 	}
@@ -2768,7 +2802,7 @@
 						triggerLabel={m.compose_publish_to()}
 						triggerVariant="outline"
 						triggerClass="h-11 px-2.5"
-						description={m.compose_accounts_compatible({ format: legacyModeMeta.label })}
+						description={m.compose_accounts_compatible({ format: textComposerModeMeta.label })}
 						onToggle={(account) => toggleAccount(account.id)}
 						onSelectAll={selectAllAccounts}
 						onClearAll={clearAllAccounts}
@@ -2894,7 +2928,7 @@
 						{warningAccountIds}
 						activeAccountId={activeVariantAccountId}
 						triggerLabel={m.compose_publish_to()}
-						description={m.compose_accounts_compatible({ format: legacyModeMeta.label })}
+						description={m.compose_accounts_compatible({ format: textComposerModeMeta.label })}
 						onToggle={(account) => toggleAccount(account.id)}
 						onSelectAll={selectAllAccounts}
 						onClearAll={clearAllAccounts}
@@ -3843,4 +3877,12 @@
 	title={m.sidebar_delete_draft_confirm()}
 	description={m.compose_delete_draft_body()}
 	onConfirm={deleteDraft}
+/>
+
+<DraftConflictDialog
+	bind:open={conflictDialogOpen}
+	conflict={draftConflict}
+	onReload={reloadSavedTextDraft}
+	onSaveCopy={saveConflictedTextDraftAsCopy}
+	onOverwrite={overwriteSavedTextDraft}
 />

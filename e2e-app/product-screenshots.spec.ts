@@ -333,7 +333,7 @@ test.describe("product screenshot capture", () => {
         },
       });
     });
-    await page.route("**/api/v1/posts", async (route) => {
+    await page.route("**/api/v1/posts/draft", async (route) => {
       if (route.request().method() !== "POST") {
         await route.continue();
         return;
@@ -341,10 +341,10 @@ test.describe("product screenshot capture", () => {
       await route.fulfill({
         contentType: "application/json",
         json: {
-          id: "screenshot-draft",
-          workspace_id: workspace.id,
-          content: "A clearer way to plan the next release.",
-          status: "draft",
+          post_id: "screenshot-draft",
+          publication_id: "screenshot-publication",
+          revision: 1,
+          updated_at: "2026-07-24T12:00:00Z",
         },
       });
     });

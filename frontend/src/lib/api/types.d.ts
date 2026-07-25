@@ -925,6 +925,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/feedback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Queue a user-approved feedback report
+         * @description Only the message and optional screenshot and diagnostics selected by the user are queued.
+         */
+        post: operations["submit-feedback"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/feedback/config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get feedback privacy and destination settings */
+        get: operations["get-feedback-config"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -1409,6 +1446,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/posts/draft": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Atomically create a text or thread draft */
+        post: operations["create-text-post-draft"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/posts/schedule-overview": {
         parameters: {
             query?: never;
@@ -1460,6 +1514,23 @@ export interface paths {
         head?: never;
         /** Update a post */
         patch: operations["update-post"];
+        trace?: never;
+    };
+    "/posts/{id}/draft": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Atomically save a text or thread draft */
+        put: operations["save-text-post-draft"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/posts/{id}/variants": {
@@ -1669,6 +1740,23 @@ export interface paths {
          * @description This permanently removes the destination and its segment and media overrides. Deselecting an account does not call this operation.
          */
         delete: operations["delete-publication-rendition"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/publications/{id}/renditions/{account_id}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Retry one failed publication destination */
+        post: operations["retry-publication-rendition"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -2365,6 +2453,8 @@ export interface components {
             readonly $schema?: string;
             job_id?: string;
             message: string;
+            /** Format: int64 */
+            revision?: number;
         };
         ApproveCLIAuthInputBody: {
             /**
@@ -2585,6 +2675,11 @@ export interface components {
             message: string;
             /** Format: int64 */
             revoked_sessions: number;
+        };
+        ClientError: {
+            message: string;
+            name: string;
+            timestamp: string;
         };
         CommentActionOutputBody: {
             /**
@@ -3064,6 +3159,35 @@ export interface components {
             preview_media_id?: string;
             workspace_id: string;
         };
+        CreateTextPostDraftInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/CreateTextPostDraftInputBody.json
+             */
+            readonly $schema?: string;
+            /** @description First post content */
+            content: string;
+            /** @description Aggregate media */
+            media_ids: string[] | null;
+            /** @description Canonical segments, media, settings, and destination renditions */
+            publication: components["schemas"]["TextPostPublicationInput"];
+            /**
+             * Format: int64
+             * @description Random schedule delay
+             */
+            random_delay_minutes?: number;
+            /** @description Proposed schedule time */
+            scheduled_at?: string;
+            /** @description Destinations */
+            social_account_ids: string[] | null;
+            /** @description Encoded multi-post draft */
+            thread_draft?: string;
+            /** @description Per-destination text variants */
+            variants: components["schemas"]["VariantInput"][] | null;
+            /** @description Target workspace ID */
+            workspace_id: string;
+        };
         CreateThreadInputBody: {
             /**
              * Format: uri
@@ -3299,6 +3423,15 @@ export interface components {
                 [key: string]: components["schemas"]["DestinationOption"][] | null;
             };
         };
+        Diagnostics: {
+            browser: string;
+            component?: string;
+            errors: components["schemas"]["ClientError"][] | null;
+            failed_requests: components["schemas"]["FailedAPIRequest"][] | null;
+            navigation: string[] | null;
+            route_path: string;
+            viewport: components["schemas"]["Viewport"];
+        };
         DirectMediaUploadTarget: {
             /** @description Upload URL expiration time */
             expires_at: string;
@@ -3385,6 +3518,15 @@ export interface components {
             server_name: string;
             /** @description Workspace ID */
             workspace_id: string;
+        };
+        FailedAPIRequest: {
+            /** Format: int64 */
+            duration_ms: number;
+            method: string;
+            path: string;
+            /** Format: int64 */
+            status: number;
+            timestamp: string;
         };
         FinishPasskeyLoginInputBody: {
             /**
@@ -4014,8 +4156,23 @@ export interface components {
             token?: string;
         };
         PostDestinationResponse: {
+            /** @description Recommended recovery action */
+            error_action?: string;
+            /** @description Safe provider error code */
+            error_code?: string;
+            /**
+             * Format: int64
+             * @description Provider HTTP status
+             */
+            error_http_status?: number;
+            /** @description Stable publishing failure kind */
+            error_kind?: string;
             /** @description Error message if publishing failed */
             error_message?: string;
+            /** @description Next automatic retry time */
+            error_retry_at?: string;
+            /** @description Whether retry is safe */
+            error_retryable: boolean;
             /** @description Platform name */
             platform: string;
             /** @description Social account ID */
@@ -4044,19 +4201,26 @@ export interface components {
             id: string;
             /** @description Attached media */
             media?: components["schemas"]["PostMediaResponse"][] | null;
-            /** @description Canonical publication ID for compatibility-translated authoring */
+            /** @description Canonical publication ID for the text composer */
             publication_id?: string;
             /**
              * Format: int64
              * @description Random delay in minutes (±N)
              */
             random_delay_minutes: number;
+            /**
+             * Format: int64
+             * @description Current atomic draft revision
+             */
+            revision: number;
             /** @description Scheduled time (ISO 8601) */
             scheduled_at: string;
             /** @description Post status */
             status: string;
             /** @description Set when this post is a thread-draft parent; contains the encoded thread JSON (with __openpost_thread__: prefix). */
             thread_draft?: string;
+            /** @description Last atomic draft save time (ISO 8601) */
+            updated_at: string;
             /** @description Workspace ID */
             workspace_id: string;
         };
@@ -4098,13 +4262,18 @@ export interface components {
             media_ids?: string[] | null;
             /** @description Previous post ID when this is a thread reply */
             parent_post_id?: string;
-            /** @description Canonical publication ID for compatibility-translated authoring */
+            /** @description Canonical publication ID for the text composer */
             publication_id?: string;
             /**
              * Format: int64
              * @description Random delay in minutes (±N)
              */
             random_delay_minutes: number;
+            /**
+             * Format: int64
+             * @description Current atomic draft revision
+             */
+            revision: number;
             /** @description Scheduled time (ISO 8601) */
             scheduled_at: string;
             /** @description Post status (draft, scheduled, publishing, published, failed) */
@@ -4116,6 +4285,8 @@ export interface components {
              * @description Zero-based position in a thread
              */
             thread_sequence?: number;
+            /** @description Last atomic draft save time (ISO 8601) */
+            updated_at: string;
             /** @description Workspace ID */
             workspace_id: string;
         };
@@ -4261,6 +4432,23 @@ export interface components {
             readonly $schema?: string;
             providers: components["schemas"]["ProviderReadinessItem"][] | null;
         };
+        PublicConfig: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/PublicConfig.json
+             */
+            readonly $schema?: string;
+            app_version: string;
+            diagnostic_categories: string[] | null;
+            enabled: boolean;
+            /** Format: int64 */
+            max_message_characters: number;
+            /** Format: int64 */
+            max_screenshot_bytes: number;
+            recipient?: string;
+            support_url?: string;
+        };
         PublicMediaHealth: {
             /** Format: int64 */
             checked_count: number;
@@ -4303,6 +4491,19 @@ export interface components {
              */
             thumbnail_timestamp_ms?: number;
         };
+        PublicationMutationActionInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/PublicationMutationActionInputBody.json
+             */
+            readonly $schema?: string;
+            /**
+             * Format: int64
+             * @description Revision saved immediately before this action
+             */
+            expected_revision: number;
+        };
         PublicationResponse: {
             /**
              * Format: uri
@@ -4323,6 +4524,8 @@ export interface components {
                 [key: string]: unknown;
             };
             renditions: components["schemas"]["RenditionResponse"][] | null;
+            /** Format: int64 */
+            revision: number;
             scheduled_at?: string;
             segments: components["schemas"]["PublicationSegmentResponse"][] | null;
             source_text: string;
@@ -4376,6 +4579,13 @@ export interface components {
             clear_schedule?: boolean;
             /** @description Content profile */
             content_profile?: string;
+            /**
+             * Format: int64
+             * @description Revision loaded by the editor
+             */
+            expected_revision: number;
+            /** @description Confirms an explicit overwrite after reviewing the latest revision */
+            force?: boolean;
             /** @description Publication goal */
             goal?: string;
             /**
@@ -4387,6 +4597,8 @@ export interface components {
             metadata?: {
                 [key: string]: unknown;
             };
+            /** @description Replacement destination renditions saved in the same transaction */
+            renditions?: components["schemas"]["RenditionInput"][] | null;
             /**
              * Format: date-time
              * @description Optional schedule time
@@ -4497,7 +4709,14 @@ export interface components {
         RenditionResponse: {
             body: string;
             description: string;
+            error_action?: string;
+            error_code?: string;
+            /** Format: int64 */
+            error_http_status?: number;
+            error_kind?: string;
             error_message?: string;
+            error_retry_at?: string;
+            error_retryable: boolean;
             external_id?: string;
             external_url?: string;
             id: string;
@@ -4537,7 +4756,14 @@ export interface components {
         RenditionSegmentResponse: {
             body: string;
             description: string;
+            error_action?: string;
+            error_code?: string;
+            /** Format: int64 */
+            error_http_status?: number;
+            error_kind?: string;
             error_message?: string;
+            error_retry_at?: string;
+            error_retryable: boolean;
             external_id?: string;
             external_url?: string;
             id: string;
@@ -4826,6 +5052,53 @@ export interface components {
             /** @description Whether the server must restart before adapter changes apply */
             requires_restart: boolean;
         };
+        SaveTextPostDraftInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/SaveTextPostDraftInputBody.json
+             */
+            readonly $schema?: string;
+            /** @description First post content */
+            content: string;
+            /**
+             * Format: int64
+             * @description Revision loaded by the editor
+             */
+            expected_revision: number;
+            /** @description Confirms an explicit overwrite after reviewing the latest revision */
+            force?: boolean;
+            /** @description Replacement aggregate media */
+            media_ids: string[] | null;
+            /** @description Canonical segments, media, settings, and destination renditions */
+            publication: components["schemas"]["TextPostPublicationInput"];
+            /**
+             * Format: int64
+             * @description Random schedule delay
+             */
+            random_delay_minutes?: number;
+            /** @description Proposed schedule time; empty clears it */
+            scheduled_at?: string;
+            /** @description Replacement destinations */
+            social_account_ids: string[] | null;
+            /** @description Encoded multi-post draft; empty clears it */
+            thread_draft?: string;
+            /** @description Replacement per-destination text variants */
+            variants: components["schemas"]["VariantInput"][] | null;
+        };
+        SaveTextPostDraftOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/SaveTextPostDraftOutputBody.json
+             */
+            readonly $schema?: string;
+            post_id: string;
+            publication_id: string;
+            /** Format: int64 */
+            revision: number;
+            updated_at: string;
+        };
         ScheduleDay: {
             /**
              * Format: int64
@@ -4884,6 +5157,10 @@ export interface components {
              * @description Year of the overview
              */
             year: number;
+        };
+        Screenshot: {
+            data: string;
+            mime_type: string;
         };
         SecurityStatusOutputBody: {
             /**
@@ -5304,6 +5581,36 @@ export interface components {
             /** Format: double */
             y: number;
         };
+        SubmitFeedbackInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/SubmitFeedbackInputBody.json
+             */
+            readonly $schema?: string;
+            /**
+             * @description Report category
+             * @enum {string}
+             */
+            category: "bug" | "idea" | "question";
+            /** @description Optional allowlisted diagnostics */
+            diagnostics?: components["schemas"]["Diagnostics"];
+            /** @description User-written report */
+            message: string;
+            /** @description Optional user-approved PNG or JPEG screenshot */
+            screenshot?: components["schemas"]["Screenshot"];
+        };
+        SubmitFeedbackOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/SubmitFeedbackOutputBody.json
+             */
+            readonly $schema?: string;
+            job_id: string;
+            queued: boolean;
+            recipient: string;
+        };
         SuggestScheduleInputBody: {
             /**
              * Format: uri
@@ -5330,6 +5637,37 @@ export interface components {
             message: string;
             /** @description Created schedule slots */
             schedules: components["schemas"]["PostingScheduleResponse"][] | null;
+        };
+        TextPostPublicationInput: {
+            /** @description Target audience */
+            audience?: string;
+            /** @description Clear the proposed schedule */
+            clear_schedule?: boolean;
+            /** @description Content profile */
+            content_profile?: string;
+            /** @description Publishing goal */
+            goal?: string;
+            /** @description Publishing intent */
+            intent?: string;
+            /** @description Safe publication metadata */
+            metadata?: {
+                [key: string]: unknown;
+            };
+            /** @description Replacement destination renditions */
+            renditions?: components["schemas"]["RenditionInput"][] | null;
+            /**
+             * Format: date-time
+             * @description Optional schedule time
+             */
+            scheduled_at?: string;
+            /** @description Replacement canonical segments */
+            segments?: components["schemas"]["PublicationSegmentInput"][] | null;
+            /** @description Canonical source text */
+            source_text?: string;
+            /** @description Canonical source URL */
+            source_url?: string;
+            /** @description Publication title */
+            title?: string;
         };
         ThreadPostInput: {
             /** @description Post content */
@@ -5554,6 +5892,11 @@ export interface components {
              * @example https://example.com/schemas/UpsertRenditionsInputBody.json
              */
             readonly $schema?: string;
+            /**
+             * Format: int64
+             * @description Revision loaded by the editor
+             */
+            expected_revision: number;
             /** @description Renditions to replace or upsert */
             renditions: components["schemas"]["RenditionInput"][] | null;
         };
@@ -5694,6 +6037,14 @@ export interface components {
             code: string;
             /** @description Pending MFA challenge token */
             mfa_token: string;
+        };
+        Viewport: {
+            /** Format: int64 */
+            height: number;
+            /** Format: double */
+            pixel_ratio: number;
+            /** Format: int64 */
+            width: number;
         };
         WorkspaceInvitationResponse: {
             /**
@@ -8990,6 +9341,113 @@ export interface operations {
             };
         };
     };
+    "submit-feedback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SubmitFeedbackInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubmitFeedbackOutputBody"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Request Entity Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "get-feedback-config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicConfig"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     "health-check": {
         parameters: {
             query?: never;
@@ -10845,6 +11303,66 @@ export interface operations {
             };
         };
     };
+    "create-text-post-draft": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateTextPostDraftInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SaveTextPostDraftOutputBody"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     "get-schedule-overview": {
         parameters: {
             query?: {
@@ -11131,6 +11649,87 @@ export interface operations {
             };
             /** @description Not Found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "save-text-post-draft": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Text post draft ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveTextPostDraftInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SaveTextPostDraftOutputBody"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Conflict */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -11886,7 +12485,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PublicationMutationActionInputBody"];
+            };
+        };
         responses: {
             /** @description OK */
             200: {
@@ -11949,7 +12552,88 @@ export interface operations {
             query?: {
                 /** @description Explicit confirmation that saved destination settings may be deleted */
                 confirm?: boolean;
+                /** @description Revision loaded by the editor */
+                expected_revision?: number;
             };
+            header?: never;
+            path: {
+                /** @description Publication ID */
+                id: string;
+                /** @description Connected account ID */
+                account_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActionOutputBody"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "retry-publication-rendition": {
+        parameters: {
+            query?: never;
             header?: never;
             path: {
                 /** @description Publication ID */
@@ -12036,7 +12720,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PublicationMutationActionInputBody"];
+            };
+        };
         responses: {
             /** @description OK */
             200: {

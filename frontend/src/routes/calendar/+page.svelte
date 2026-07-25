@@ -561,9 +561,10 @@
 				if (error) throw new Error(problemMessage(error, m.calendar_reschedule_failed()));
 			} else if (item.publication) {
 				const publication = item.publication;
-				const { error } = await client.PUT('/publications/{id}', {
+				const { data, error } = await client.PUT('/publications/{id}', {
 					params: { path: { id: item.id } },
 					body: {
+						expected_revision: publication.revision,
 						title: publication.title,
 						content_profile: publication.content_profile,
 						source_text: publication.source_text,
@@ -575,6 +576,9 @@
 					}
 				});
 				if (error) throw new Error(problemMessage(error, m.calendar_reschedule_failed()));
+				if (data) {
+					publications = publications.map((current) => (current.id === data.id ? data : current));
+				}
 			}
 			if (loadKey === mutationLoadKey) {
 				if (item.kind === 'post') {

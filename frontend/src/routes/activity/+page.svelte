@@ -37,6 +37,8 @@
 	let failedJobs = $state.raw<JobLog[]>([]);
 	let accounts = $state.raw<SocialAccount[]>([]);
 	let copiedReportPostID = $state('');
+	let retryingDestination = $state('');
+	let successMessage = $state('');
 	let loading = $state(true);
 	let hasLoaded = $state(false);
 	let error = $state('');
@@ -310,6 +312,69 @@
 			error = m.activity_report_copy_failed();
 		}
 	}
+
+	function destinationActionLabel(destination: NonNullable<Post['destinations']>[number]) {
+		switch (destination.error_action) {
+			case 'retry':
+				return m.activity_retry_destination();
+			case 'reconnect':
+				return m.activity_reconnect_account();
+			case 'billing':
+				return m.activity_open_billing();
+			case 'open_provider':
+				return m.activity_review_account();
+			default:
+				return m.common_edit();
+		}
+	}
+
+	async function runDestinationAction(
+		post: Post,
+		destination: NonNullable<Post['destinations']>[number]
+	) {
+		if (
+			destination.error_action === 'retry' &&
+			destination.error_retryable &&
+			post.publication_id
+		) {
+			const key = `${post.id}:${destination.social_account_id}`;
+			retryingDestination = key;
+			error = '';
+			successMessage = '';
+			try {
+				const { error: retryError } = await client.POST(
+					'/publications/{id}/renditions/{account_id}/retry',
+					{
+						params: {
+							path: {
+								id: post.publication_id,
+								account_id: destination.social_account_id
+							}
+						}
+					}
+				);
+				if (retryError) {
+					throw new Error(retryError.detail || m.activity_delivery_failed());
+				}
+				successMessage = m.activity_retry_queued();
+				await loadData();
+			} catch (cause) {
+				error = cause instanceof Error ? cause.message : m.activity_delivery_failed();
+			} finally {
+				retryingDestination = '';
+			}
+			return;
+		}
+		if (destination.error_action === 'reconnect' || destination.error_action === 'open_provider') {
+			await goto(resolve('/accounts'));
+			return;
+		}
+		if (destination.error_action === 'billing') {
+			await goto(resolve('/settings') + '?tab=billing#billing');
+			return;
+		}
+		await goto(resolve('/posts/[id]', { id: post.id }));
+	}
 </script>
 
 {#snippet postList(items: Post[], emptyTitle: string, emptyDescription: string)}
@@ -396,6 +461,16 @@
 															reason: destination.error_message || m.activity_unknown_failure()
 														})}
 													</p>
+													<Button
+														variant="link"
+														size="sm"
+														class="mt-1 h-auto min-h-8 px-0 text-xs"
+														disabled={retryingDestination ===
+															`${post.id}:${destination.social_account_id}`}
+														onclick={() => runDestinationAction(post, destination)}
+													>
+														{destinationActionLabel(destination)}
+													</Button>
 												{/if}
 											</div>
 										</div>
@@ -454,6 +529,14 @@
 				<Button variant="outline" size="sm" onclick={() => loadData()}>{m.common_refresh()}</Button>
 			{/snippet}
 		</InlineNotice>
+	{/if}
+	{#if successMessage}
+		<InlineNotice
+			tone="success"
+			message={successMessage}
+			onDismiss={() => (successMessage = '')}
+			dismissLabel={m.common_dismiss()}
+		/>
 	{/if}
 	{#if currentViewLoaded}
 		<Tabs bind:value={activeTab}>

@@ -118,13 +118,104 @@ func repairAppliedSchema(ctx context.Context, db *bun.DB, appliedSet map[int64]b
 }
 
 func prepareMigration(ctx context.Context, db *bun.DB, migration migration) error {
-	if migration.version != 36 {
-		return nil
-	}
-	if err := removeGlobalMediaHashConstraint(ctx, db); err != nil {
-		return fmt.Errorf("migration %s media hash preparation failed: %w", migration.name, err)
+	switch migration.version {
+	case 36:
+		if err := removeGlobalMediaHashConstraint(ctx, db); err != nil {
+			return fmt.Errorf("migration %s media hash preparation failed: %w", migration.name, err)
+		}
+	case 39:
+		if err := addPublishingFailureColumnsToPostDestinations(ctx, db); err != nil {
+			return fmt.Errorf("migration %s post destination preparation failed: %w", migration.name, err)
+		}
 	}
 	return nil
+}
+
+func addPublishingFailureColumnsToPostDestinations(ctx context.Context, db *bun.DB) error {
+	exists, err := migrationTableExists(ctx, db, "post_destinations")
+	if err != nil || !exists {
+		return err
+	}
+
+	columns := []struct {
+		name       string
+		definition string
+	}{
+		{name: "error_kind", definition: "TEXT NOT NULL DEFAULT ''"},
+		{name: "error_code", definition: "TEXT NOT NULL DEFAULT ''"},
+		{name: "error_http_status", definition: "INTEGER NOT NULL DEFAULT 0"},
+		{name: "error_retryable", definition: "BOOLEAN NOT NULL DEFAULT false"},
+		{name: "error_retry_at", definition: "TIMESTAMP"},
+		{name: "error_action", definition: "TEXT NOT NULL DEFAULT ''"},
+	}
+	for _, column := range columns {
+		present, err := migrationColumnExists(ctx, db, "post_destinations", column.name)
+		if err != nil {
+			return err
+		}
+		if present {
+			continue
+		}
+		if _, err := db.ExecContext(
+			ctx,
+			fmt.Sprintf("ALTER TABLE post_destinations ADD COLUMN %s %s", column.name, column.definition),
+		); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func migrationTableExists(ctx context.Context, db *bun.DB, table string) (bool, error) {
+	switch db.Dialect().Name() {
+	case dialect.PG:
+		var exists bool
+		err := db.NewSelect().
+			TableExpr("information_schema.tables").
+			ColumnExpr("EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = current_schema() AND table_name = ?)", table).
+			Scan(ctx, &exists)
+		return exists, err
+	case dialect.SQLite:
+		count, err := db.NewSelect().
+			TableExpr("sqlite_master").
+			Where("type = 'table' AND name = ?", table).
+			Count(ctx)
+		return count > 0, err
+	default:
+		return false, nil
+	}
+}
+
+func migrationColumnExists(ctx context.Context, db *bun.DB, table, column string) (bool, error) {
+	switch db.Dialect().Name() {
+	case dialect.PG:
+		count, err := db.NewSelect().
+			TableExpr("information_schema.columns").
+			Where("table_schema = current_schema()").
+			Where("table_name = ?", table).
+			Where("column_name = ?", column).
+			Count(ctx)
+		return count > 0, err
+	case dialect.SQLite:
+		type sqliteColumn struct {
+			Name string `bun:"name"`
+		}
+		var columns []sqliteColumn
+		if err := db.NewSelect().
+			TableExpr("pragma_table_info(?)", table).
+			Column("name").
+			Scan(ctx, &columns); err != nil {
+			return false, err
+		}
+		for _, existing := range columns {
+			if existing.Name == column {
+				return true, nil
+			}
+		}
+		return false, nil
+	default:
+		return false, nil
+	}
 }
 
 func removeGlobalMediaHashConstraint(ctx context.Context, db *bun.DB) error {

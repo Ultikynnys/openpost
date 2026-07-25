@@ -684,7 +684,7 @@ func (x *XAdapter) doSignedRequest(ctx context.Context, combinedAccessToken, met
 	}
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("%s %s returned %d: %s", method, requestURL, resp.StatusCode, string(respBody))
+		return nil, NewHTTPError(resp.StatusCode, resp.Header, respBody)
 	}
 
 	return respBody, nil

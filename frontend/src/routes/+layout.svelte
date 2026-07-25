@@ -20,6 +20,8 @@
 	import { onboardingPathForPlan } from '$lib/billing';
 	import { safeSameOriginRedirect } from '$lib/redirects';
 	import { soundPreferences } from '$lib/stores/sound-preferences.svelte';
+	import { feedbackDiagnostics } from '$lib/feedback-diagnostics';
+	import FeedbackDialog from '$lib/components/feedback-dialog.svelte';
 
 	let { children } = $props();
 
@@ -73,9 +75,14 @@
 	}
 
 	onMount(() => {
+		feedbackDiagnostics.initialize();
 		soundPreferences.initialize();
 		instance.initialize();
 		auth.initialize();
+	});
+
+	$effect(() => {
+		feedbackDiagnostics.recordNavigation(currentPath);
 	});
 
 	$effect(() => {
@@ -223,6 +230,7 @@
 			</div>
 			<MobileBottomNav />
 			<DayPostsModal />
+			<FeedbackDialog />
 		</Sidebar.Inset>
 	</Sidebar.Provider>
 {/if}

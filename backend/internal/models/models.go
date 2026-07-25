@@ -430,6 +430,7 @@ type Publication struct {
 	Goal            string    `json:"goal"`
 	Audience        string    `json:"audience"`
 	Status          string    `bun:",notnull,default:'draft'" json:"status"`
+	Revision        int       `bun:",notnull,default:1" json:"revision"`
 	ScheduledAt     time.Time `bun:"scheduled_at,nullzero" json:"scheduled_at"`
 	ActualRunAt     time.Time `bun:"actual_run_at,nullzero" json:"actual_run_at"`
 	MetadataJSON    string    `bun:"metadata_json,notnull,default:'{}'" json:"metadata_json"`
@@ -481,6 +482,12 @@ type Rendition struct {
 	ExternalID      string    `bun:"external_id" json:"external_id"`
 	ExternalURL     string    `bun:"external_url" json:"external_url"`
 	ErrorMessage    string    `bun:"error_message" json:"error_message"`
+	ErrorKind       string    `bun:"error_kind,notnull,default:''" json:"error_kind"`
+	ErrorCode       string    `bun:"error_code,notnull,default:''" json:"error_code"`
+	ErrorHTTPStatus int       `bun:"error_http_status,notnull,default:0" json:"error_http_status"`
+	ErrorRetryable  bool      `bun:"error_retryable,notnull,default:false" json:"error_retryable"`
+	ErrorRetryAt    time.Time `bun:"error_retry_at,nullzero" json:"error_retry_at"`
+	ErrorAction     string    `bun:"error_action,notnull,default:''" json:"error_action"`
 	CreatedAt       time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"created_at"`
 	UpdatedAt       time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"updated_at"`
 }
@@ -501,6 +508,12 @@ type RenditionSegment struct {
 	ExternalID           string    `bun:"external_id,notnull,default:''" json:"external_id"`
 	ExternalURL          string    `bun:"external_url,notnull,default:''" json:"external_url"`
 	ErrorMessage         string    `bun:"error_message,notnull,default:''" json:"error_message"`
+	ErrorKind            string    `bun:"error_kind,notnull,default:''" json:"error_kind"`
+	ErrorCode            string    `bun:"error_code,notnull,default:''" json:"error_code"`
+	ErrorHTTPStatus      int       `bun:"error_http_status,notnull,default:0" json:"error_http_status"`
+	ErrorRetryable       bool      `bun:"error_retryable,notnull,default:false" json:"error_retryable"`
+	ErrorRetryAt         time.Time `bun:"error_retry_at,nullzero" json:"error_retry_at"`
+	ErrorAction          string    `bun:"error_action,notnull,default:''" json:"error_action"`
 	CreatedAt            time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"created_at"`
 	UpdatedAt            time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"updated_at"`
 }
@@ -556,22 +569,44 @@ type Post struct {
 	ThreadSequence int    `bun:",default:0" json:"thread_sequence"`
 
 	Status             string    `bun:",notnull" json:"status"` // 'draft', 'scheduled', 'publishing', 'published', 'failed'
+	Revision           int       `bun:",notnull,default:1" json:"revision"`
 	ScheduledAt        time.Time `json:"scheduled_at"`
 	PublishedAt        time.Time `json:"published_at"`
 	RandomDelayMinutes int       `bun:",default:0" json:"random_delay_minutes"`
 	ActualRunAt        time.Time `bun:",nullzero" json:"actual_run_at"` // Set by worker, differs from ScheduledAt if randomized
 	CreatedAt          time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"created_at"`
+	UpdatedAt          time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"updated_at"`
+}
+
+// DraftRevisionChange records the safe, coarse domains changed by an atomic
+// authoring save. It never stores draft text, media contents, or provider
+// credentials.
+type DraftRevisionChange struct {
+	bun.BaseModel `bun:"table:draft_revision_changes"`
+
+	AggregateType  string    `bun:"aggregate_type,pk" json:"aggregate_type"`
+	AggregateID    string    `bun:"aggregate_id,pk" json:"aggregate_id"`
+	Revision       int       `bun:",pk" json:"revision"`
+	ChangedDomains string    `bun:"changed_domains,notnull,default:'[]'" json:"changed_domains"`
+	ChangedBy      string    `bun:"changed_by,notnull,default:''" json:"changed_by"`
+	CreatedAt      time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"created_at"`
 }
 
 type PostDestination struct {
 	bun.BaseModel `bun:"table:post_destinations"`
 
-	ID              string `bun:",pk" json:"id"`
-	PostID          string `bun:",notnull" json:"post_id"`
-	SocialAccountID string `bun:",notnull" json:"social_account_id"`
-	ExternalID      string `json:"external_id"`
-	Status          string `bun:",notnull" json:"status"` // 'pending', 'success', 'failed'
-	ErrorMessage    string `json:"error_message"`
+	ID              string    `bun:",pk" json:"id"`
+	PostID          string    `bun:",notnull" json:"post_id"`
+	SocialAccountID string    `bun:",notnull" json:"social_account_id"`
+	ExternalID      string    `json:"external_id"`
+	Status          string    `bun:",notnull" json:"status"` // 'pending', 'success', 'failed'
+	ErrorMessage    string    `json:"error_message"`
+	ErrorKind       string    `bun:"error_kind,notnull,default:''" json:"error_kind"`
+	ErrorCode       string    `bun:"error_code,notnull,default:''" json:"error_code"`
+	ErrorHTTPStatus int       `bun:"error_http_status,notnull,default:0" json:"error_http_status"`
+	ErrorRetryable  bool      `bun:"error_retryable,notnull,default:false" json:"error_retryable"`
+	ErrorRetryAt    time.Time `bun:"error_retry_at,nullzero" json:"error_retry_at"`
+	ErrorAction     string    `bun:"error_action,notnull,default:''" json:"error_action"`
 }
 
 type MediaAttachment struct {

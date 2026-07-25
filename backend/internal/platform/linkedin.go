@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -261,7 +262,7 @@ func (l *LinkedInAdapter) completeImageUpload(ctx context.Context, accessToken s
 		uploadURL = registerResult.Value.UploadInstructions.UploadURL
 	}
 	if uploadURL == "" {
-		return "", fmt.Errorf("no upload URL in linkedin response: %s", string(registerResp))
+		return "", errors.New("linkedin response did not include an upload URL")
 	}
 
 	headers := map[string]string{
@@ -309,7 +310,7 @@ func (l *LinkedInAdapter) completeVideoUpload(ctx context.Context, accessToken, 
 		return "", fmt.Errorf("no video URN in linkedin response")
 	}
 	if len(registerResult.Value.UploadInstructions) == 0 {
-		return "", fmt.Errorf("no video upload instructions in linkedin response: %s", string(registerResp))
+		return "", errors.New("linkedin response did not include video upload instructions")
 	}
 
 	uploadedPartIDs := make([]string, 0, len(registerResult.Value.UploadInstructions))
@@ -367,7 +368,7 @@ func (l *LinkedInAdapter) completeDocumentUpload(ctx context.Context, accessToke
 		return "", fmt.Errorf("no document URN in linkedin response")
 	}
 	if registerResult.Value.UploadURL == "" {
-		return "", fmt.Errorf("no document upload URL in linkedin response: %s", string(registerResp))
+		return "", errors.New("linkedin response did not include a document upload URL")
 	}
 
 	if _, err := DoRequest(ctx, "PUT", registerResult.Value.UploadURL, bytes.NewReader(data), map[string]string{
@@ -815,7 +816,7 @@ func doRequestWithHeaders(ctx context.Context, method, url string, body io.Reade
 	}
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("%s %s returned %d: %s", method, sanitizeURL(url), resp.StatusCode, string(respBody))
+		return nil, NewHTTPError(resp.StatusCode, resp.Header, respBody)
 	}
 
 	return resp.Header, nil

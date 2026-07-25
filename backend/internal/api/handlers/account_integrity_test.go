@@ -20,6 +20,11 @@ func createHandlerTestDB(t *testing.T, modelsToCreate ...interface{}) *bun.DB {
 	require.NoError(t, err)
 
 	db := bun.NewDB(sqldb, sqlitedialect.New())
+	_, err = db.NewCreateTable().
+		Model((*models.DraftRevisionChange)(nil)).
+		IfNotExists().
+		Exec(context.Background())
+	require.NoError(t, err)
 	for _, model := range modelsToCreate {
 		_, err := db.NewCreateTable().Model(model).IfNotExists().Exec(context.Background())
 		require.NoError(t, err)

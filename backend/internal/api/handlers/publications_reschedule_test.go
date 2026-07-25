@@ -78,7 +78,7 @@ func TestUpdateScheduledPublicationReschedulesPublishJob(t *testing.T) {
 	api := humaecho.NewWithGroup(e, e.Group("/api/v1"), huma.DefaultConfig("Test", "1.0.0"))
 	NewPublicationHandler(db, testAuthenticator{}, nil).RegisterRoutes(api)
 
-	body := bytes.NewBufferString(`{"scheduled_at":"` + newRunAt.Format(time.RFC3339) + `"}`)
+	body := bytes.NewBufferString(`{"expected_revision":1,"scheduled_at":"` + newRunAt.Format(time.RFC3339) + `"}`)
 	req := httptest.NewRequestWithContext(ctx, http.MethodPut, "/api/v1/publications/publication-1", body)
 	req.Header.Set("Authorization", "Bearer web-token")
 	req.Header.Set("Content-Type", "application/json")
@@ -259,7 +259,7 @@ func TestClearScheduledPublicationCancelsJobAndReturnsToDraft(t *testing.T) {
 		ctx,
 		http.MethodPut,
 		"/api/v1/publications/publication-1",
-		bytes.NewBufferString(`{"clear_schedule":true}`),
+		bytes.NewBufferString(`{"expected_revision":1,"clear_schedule":true}`),
 	)
 	req.Header.Set("Authorization", "Bearer web-token")
 	req.Header.Set("Content-Type", "application/json")
@@ -403,9 +403,9 @@ func TestProcessingPrimaryJobBlocksClearAndEditsAcrossRESTAndMCP(t *testing.T) {
 		requireUnchanged()
 	}
 
-	requireHTTPConflict("/api/v1/publications/publication-1", `{"title":"Changed"}`)
-	requireHTTPConflict("/api/v1/publications/publication-1/renditions", `{"renditions":[]}`)
-	requireHTTPConflict("/api/v1/publications/publication-1", `{"clear_schedule":true}`)
+	requireHTTPConflict("/api/v1/publications/publication-1", `{"expected_revision":1,"title":"Changed"}`)
+	requireHTTPConflict("/api/v1/publications/publication-1/renditions", `{"expected_revision":1,"renditions":[]}`)
+	requireHTTPConflict("/api/v1/publications/publication-1", `{"expected_revision":1,"clear_schedule":true}`)
 
 	mcpHandler := &MCPHandler{db: db}
 	result, rpcErr := mcpHandler.updatePublication(ctx, "user-1", map[string]any{
@@ -460,8 +460,9 @@ func TestSchedulePublicationRejectsNonFutureTime(t *testing.T) {
 	e := echo.New()
 	api := humaecho.NewWithGroup(e, e.Group("/api/v1"), huma.DefaultConfig("Test", "1.0.0"))
 	NewPublicationHandler(db, testAuthenticator{}, nil).RegisterRoutes(api)
-	req := httptest.NewRequestWithContext(ctx, http.MethodPost, "/api/v1/publications/publication-past/schedule", nil)
+	req := httptest.NewRequestWithContext(ctx, http.MethodPost, "/api/v1/publications/publication-past/schedule", bytes.NewBufferString(`{"expected_revision":1}`))
 	req.Header.Set("Authorization", "Bearer web-token")
+	req.Header.Set("Content-Type", "application/json")
 	resp := httptest.NewRecorder()
 	e.ServeHTTP(resp, req)
 
@@ -516,7 +517,7 @@ func TestReschedulePublicationRejectsNonFutureTimeWithoutReplacingJob(t *testing
 	e := echo.New()
 	api := humaecho.NewWithGroup(e, e.Group("/api/v1"), huma.DefaultConfig("Test", "1.0.0"))
 	NewPublicationHandler(db, testAuthenticator{}, nil).RegisterRoutes(api)
-	body := bytes.NewBufferString(`{"scheduled_at":"` + now.Add(-time.Minute).Format(time.RFC3339) + `"}`)
+	body := bytes.NewBufferString(`{"expected_revision":1,"scheduled_at":"` + now.Add(-time.Minute).Format(time.RFC3339) + `"}`)
 	req := httptest.NewRequestWithContext(ctx, http.MethodPut, "/api/v1/publications/publication-1", body)
 	req.Header.Set("Authorization", "Bearer web-token")
 	req.Header.Set("Content-Type", "application/json")
@@ -568,7 +569,7 @@ func TestClearScheduleCancelsOrphanPendingJobWhenPublicationStatusDrifted(t *tes
 	e := echo.New()
 	api := humaecho.NewWithGroup(e, e.Group("/api/v1"), huma.DefaultConfig("Test", "1.0.0"))
 	NewPublicationHandler(db, testAuthenticator{}, nil).RegisterRoutes(api)
-	req := httptest.NewRequestWithContext(ctx, http.MethodPut, "/api/v1/publications/publication-1", bytes.NewBufferString(`{"clear_schedule":true}`))
+	req := httptest.NewRequestWithContext(ctx, http.MethodPut, "/api/v1/publications/publication-1", bytes.NewBufferString(`{"expected_revision":1,"clear_schedule":true}`))
 	req.Header.Set("Authorization", "Bearer web-token")
 	req.Header.Set("Content-Type", "application/json")
 	resp := httptest.NewRecorder()
@@ -625,8 +626,9 @@ func TestSchedulePublicationRollsBackJobAndStatesTogether(t *testing.T) {
 	e := echo.New()
 	api := humaecho.NewWithGroup(e, e.Group("/api/v1"), huma.DefaultConfig("Test", "1.0.0"))
 	NewPublicationHandler(db, testAuthenticator{}, nil).RegisterRoutes(api)
-	req := httptest.NewRequestWithContext(ctx, http.MethodPost, "/api/v1/publications/publication-1/schedule", nil)
+	req := httptest.NewRequestWithContext(ctx, http.MethodPost, "/api/v1/publications/publication-1/schedule", bytes.NewBufferString(`{"expected_revision":1}`))
 	req.Header.Set("Authorization", "Bearer web-token")
+	req.Header.Set("Content-Type", "application/json")
 	resp := httptest.NewRecorder()
 	e.ServeHTTP(resp, req)
 
@@ -712,10 +714,10 @@ func TestPublishedPublicationMutationEndpointsPreserveDeliveryState(t *testing.T
 		path          string
 		body          string
 	}{
-		{publicationID: "publication-update", method: http.MethodPut, path: "/api/v1/publications/publication-update", body: `{"title":"Changed"}`},
-		{publicationID: "publication-renditions", method: http.MethodPut, path: "/api/v1/publications/publication-renditions/renditions", body: `{"renditions":[]}`},
-		{publicationID: "publication-schedule", method: http.MethodPost, path: "/api/v1/publications/publication-schedule/schedule"},
-		{publicationID: "publication-publish-now", method: http.MethodPost, path: "/api/v1/publications/publication-publish-now/publish-now"},
+		{publicationID: "publication-update", method: http.MethodPut, path: "/api/v1/publications/publication-update", body: `{"expected_revision":1,"title":"Changed"}`},
+		{publicationID: "publication-renditions", method: http.MethodPut, path: "/api/v1/publications/publication-renditions/renditions", body: `{"expected_revision":1,"renditions":[]}`},
+		{publicationID: "publication-schedule", method: http.MethodPost, path: "/api/v1/publications/publication-schedule/schedule", body: `{"expected_revision":1}`},
+		{publicationID: "publication-publish-now", method: http.MethodPost, path: "/api/v1/publications/publication-publish-now/publish-now", body: `{"expected_revision":1}`},
 	}
 	for _, request := range requests {
 		_, err = db.NewInsert().Model(&models.Publication{
@@ -921,8 +923,9 @@ func TestPublicationActionsRejectProcessingPrimaryJobAcrossRESTAndMCP(t *testing
 	e := echo.New()
 	api := humaecho.NewWithGroup(e, e.Group("/api/v1"), huma.DefaultConfig("Test", "1.0.0"))
 	NewPublicationHandler(db, testAuthenticator{}, nil).RegisterRoutes(api)
-	req := httptest.NewRequestWithContext(ctx, http.MethodPost, "/api/v1/publications/publication-1/schedule", nil)
+	req := httptest.NewRequestWithContext(ctx, http.MethodPost, "/api/v1/publications/publication-1/schedule", bytes.NewBufferString(`{"expected_revision":1}`))
 	req.Header.Set("Authorization", "Bearer web-token")
+	req.Header.Set("Content-Type", "application/json")
 	resp := httptest.NewRecorder()
 	e.ServeHTTP(resp, req)
 

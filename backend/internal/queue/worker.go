@@ -3,6 +3,7 @@ package queue
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"path/filepath"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/openpost/backend/internal/models"
+	"github.com/openpost/backend/internal/services/feedback"
 	"github.com/openpost/backend/internal/services/mediastore"
 	"github.com/openpost/backend/internal/services/publisher"
 	"github.com/openpost/backend/internal/services/tokenmanager"
@@ -39,7 +41,12 @@ type BackgroundWorker struct {
 	publisher *publisher.Service
 	tokens    *tokenmanager.TokenManager
 	storage   mediastore.BlobStorage
+	feedback  *feedback.Service
 	done      chan struct{}
+}
+
+func (w *BackgroundWorker) SetFeedbackService(service *feedback.Service) {
+	w.feedback = service
 }
 
 func NewWorker(db *bun.DB, id string, interval time.Duration, pub *publisher.Service, tokens *tokenmanager.TokenManager, storage mediastore.BlobStorage) *BackgroundWorker {
@@ -148,16 +155,32 @@ func (w *BackgroundWorker) handleLockedJob(ctx context.Context, job *models.Job)
 	<-heartbeatDone
 
 	if processErr != nil {
-		log.Printf("[Worker %s] job %s failed: %v\n", w.workerID, job.ID, processErr)
+		log.Printf("[Worker %s] job %s failed\n", w.workerID, job.ID)
 		job.Attempts++
-		if job.Attempts >= job.MaxAttempts {
+		retryable := true
+		retryAfter := time.Duration(0)
+		lastError := processErr.Error()
+		if job.Type == jobTypePublishPost || job.Type == jobTypePublishPublication {
+			failure := publisher.ClassifyFailure(processErr)
+			retryable = failure.Retryable
+			retryAfter = failure.RetryAfter
+			lastError = failure.Message
+			var directed *publisher.RetryableError
+			if errors.As(processErr, &directed) {
+				retryable = true
+				retryAfter = directed.Failure.RetryAfter
+				lastError = directed.Failure.Message
+			}
+		}
+		if !retryable || job.Attempts >= job.MaxAttempts {
 			job.Status = jobStatusFailed
 		} else {
 			job.Status = jobStatusPending
-			backoff := time.Duration(1<<(job.Attempts-1)) * time.Minute
+			jitter := float64((time.Now().UnixNano()%401)-200) / 1000
+			backoff := publisher.RetryDelay(job.Attempts, retryAfter, jitter)
 			job.RunAt = time.Now().Add(backoff)
 		}
-		job.LastError = processErr.Error()
+		job.LastError = lastError
 
 		if _, dbErr := w.db.NewUpdate().Model((*models.Job)(nil)).
 			Set("status = ?", job.Status).
@@ -217,6 +240,11 @@ func (w *BackgroundWorker) executeJob(ctx context.Context, job *models.Job) erro
 		return w.handleMediaCleanup(ctx, job.Payload)
 	case jobTypeStorageDelete:
 		return w.handleStorageDelete(job.Payload)
+	case feedback.JobType:
+		if w.feedback == nil {
+			return fmt.Errorf("feedback delivery is not configured")
+		}
+		return w.feedback.HandleDeliveryJob(ctx, job.Payload)
 	default:
 		return fmt.Errorf("unsupported job type %q", job.Type)
 	}

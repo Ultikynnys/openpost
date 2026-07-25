@@ -153,7 +153,7 @@ func TestPublisherRejectsWhenPublishedPostQuotaExceeded(t *testing.T) {
 
 	err := srv.publishPost(t, "post-quota")
 
-	require.ErrorContains(t, err, "published_posts_monthly limit exceeded")
+	require.NoError(t, err)
 	require.Equal(t, 0, adapter.publishCalls)
 	published, err := srv.usage.CurrentMonthly(context.Background(), "ws-1", entitlements.LimitPublishedPostsMonthly, time.Now().UTC())
 	require.NoError(t, err)
@@ -165,6 +165,10 @@ func TestPublisherRejectsWhenPublishedPostQuotaExceeded(t *testing.T) {
 	var post models.Post
 	require.NoError(t, srv.db.NewSelect().Model(&post).Where("id = ?", "post-quota").Scan(context.Background()))
 	require.Equal(t, models.PostStatusFailed, post.Status)
+	var destination models.PostDestination
+	require.NoError(t, srv.db.NewSelect().Model(&destination).Where("post_id = ?", "post-quota").Scan(context.Background()))
+	require.Equal(t, FailureBillingRequired, destination.ErrorKind)
+	require.False(t, destination.ErrorRetryable)
 }
 
 func TestPublisherRejectsWhenProviderWriteQuotaExceeded(t *testing.T) {
@@ -181,7 +185,7 @@ func TestPublisherRejectsWhenProviderWriteQuotaExceeded(t *testing.T) {
 
 	err := srv.publishPost(t, "post-write-quota")
 
-	require.ErrorContains(t, err, "provider_write_calls_monthly limit exceeded")
+	require.NoError(t, err)
 	require.Equal(t, 0, adapter.publishCalls)
 	writes, err := srv.usage.CurrentMonthly(context.Background(), "ws-1", entitlements.LimitProviderWriteCallsMonthly, time.Now().UTC())
 	require.NoError(t, err)
@@ -190,6 +194,10 @@ func TestPublisherRejectsWhenProviderWriteQuotaExceeded(t *testing.T) {
 	var post models.Post
 	require.NoError(t, srv.db.NewSelect().Model(&post).Where("id = ?", "post-write-quota").Scan(context.Background()))
 	require.Equal(t, models.PostStatusFailed, post.Status)
+	var destination models.PostDestination
+	require.NoError(t, srv.db.NewSelect().Model(&destination).Where("post_id = ?", "post-write-quota").Scan(context.Background()))
+	require.Equal(t, FailureBillingRequired, destination.ErrorKind)
+	require.False(t, destination.ErrorRetryable)
 }
 
 func TestPublisherRecordsProviderWriteUsageOnPublishFailure(t *testing.T) {
@@ -201,7 +209,7 @@ func TestPublisherRecordsProviderWriteUsageOnPublishFailure(t *testing.T) {
 
 	err := srv.publishPost(t, "post-2")
 
-	require.ErrorIs(t, err, errFakePublishFailed)
+	require.NoError(t, err)
 	require.Equal(t, 1, adapter.publishCalls)
 	published, err := srv.usage.CurrentMonthly(context.Background(), "ws-1", entitlements.LimitPublishedPostsMonthly, time.Now().UTC())
 	require.NoError(t, err)
@@ -213,4 +221,8 @@ func TestPublisherRecordsProviderWriteUsageOnPublishFailure(t *testing.T) {
 	var post models.Post
 	require.NoError(t, srv.db.NewSelect().Model(&post).Where("id = ?", "post-2").Scan(context.Background()))
 	require.Equal(t, models.PostStatusFailed, post.Status)
+	var destination models.PostDestination
+	require.NoError(t, srv.db.NewSelect().Model(&destination).Where("post_id = ?", "post-2").Scan(context.Background()))
+	require.Equal(t, FailureUnknown, destination.ErrorKind)
+	require.False(t, destination.ErrorRetryable)
 }

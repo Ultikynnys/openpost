@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"testing"
 	"time"
@@ -12,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/openpost/backend/internal/models"
+	"github.com/openpost/backend/internal/platform"
 	"github.com/openpost/backend/internal/services/crypto"
 	"github.com/openpost/backend/internal/services/lifecycle"
 	"github.com/openpost/backend/internal/services/tokenmanager"
@@ -34,9 +34,10 @@ func TestHandlePublishPublicationJobRecordsLifecycleEvents(t *testing.T) {
 func TestHandlePublishPublicationJobRecordsRetryAndFailureEvents(t *testing.T) {
 	t.Parallel()
 
-	srv := newPublisherLifecycleTestServer(t, &fakePublisherAdapter{publishErr: errors.New("provider rejected post")})
+	srv := newPublisherLifecycleTestServer(t, &fakePublisherAdapter{publishErr: &platform.HTTPError{StatusCode: 503, Code: "temporarily_unavailable"}})
 	_, err := srv.db.NewUpdate().Model((*models.Rendition)(nil)).
 		Set("status = ?", models.RenditionStatusFailed).
+		Set("error_retryable = ?", true).
 		Where("id = ?", "rendition-1").
 		Exec(context.Background())
 	require.NoError(t, err)
@@ -46,14 +47,15 @@ func TestHandlePublishPublicationJobRecordsRetryAndFailureEvents(t *testing.T) {
 	require.Error(t, err)
 	events := srv.lifecycleEvents(t)
 	requireLifecycleTypes(t, events, lifecycle.EventRetried, lifecycle.EventProviderProcessing, lifecycle.EventFailed)
-	require.Contains(t, events[len(events)-1].MetadataJSON, "provider rejected post")
+	require.Contains(t, events[len(events)-1].MetadataJSON, string(FailureProviderServer))
+	require.NotContains(t, events[len(events)-1].MetadataJSON, "provider rejected post")
 }
 
 func TestSegmentedRenditionRetryResumesWithoutDuplicatingPublishedPrefix(t *testing.T) {
 	t.Parallel()
 
 	adapter := &fakePublisherAdapter{
-		publishErrors: []error{nil, errors.New("second segment failed"), nil},
+		publishErrors: []error{nil, &platform.HTTPError{StatusCode: 503, Code: "temporarily_unavailable"}, nil},
 		externalIDs:   []string{"external-root", "", "external-reply"},
 	}
 	srv := newPublisherLifecycleTestServer(t, adapter)
@@ -71,7 +73,7 @@ func TestSegmentedRenditionRetryResumesWithoutDuplicatingPublishedPrefix(t *test
 	_, err = srv.db.NewInsert().Model(&renditionSegments).Exec(ctx)
 	require.NoError(t, err)
 
-	require.ErrorContains(t, srv.publishPublication(t), "second segment failed")
+	require.ErrorContains(t, srv.publishPublication(t), "temporarily unavailable")
 	var first models.RenditionSegment
 	require.NoError(t, srv.db.NewSelect().Model(&first).Where("id = ?", "rendition-segment-1").Scan(ctx))
 	require.Equal(t, models.RenditionStatusPublished, first.Status)
@@ -91,6 +93,121 @@ func TestSegmentedRenditionRetryResumesWithoutDuplicatingPublishedPrefix(t *test
 	require.NoError(t, srv.db.NewSelect().Model(&second).Where("id = ?", "rendition-segment-2").Scan(ctx))
 	require.Equal(t, models.RenditionStatusPublished, second.Status)
 	require.Equal(t, "external-reply", second.ExternalID)
+}
+
+func TestPublicationPartialSuccessKeepsPerDestinationSafeOutcomes(t *testing.T) {
+	t.Parallel()
+
+	adapter := &fakePublisherAdapter{
+		publishErrors: []error{
+			nil,
+			&platform.HTTPError{StatusCode: 422, Code: "invalid_media"},
+		},
+		externalIDs: []string{"external-success", ""},
+	}
+	srv := newPublisherLifecycleTestServer(t, adapter)
+	ctx := context.Background()
+	var firstAccount models.SocialAccount
+	require.NoError(t, srv.db.NewSelect().Model(&firstAccount).Where("id = ?", "account-1").Scan(ctx))
+	secondAccount := firstAccount
+	secondAccount.ID = "account-2"
+	secondAccount.AccountID = "x-account-2"
+	secondAccount.Slug = "x-account-2"
+	require.NoError(t, func() error {
+		_, err := srv.db.NewInsert().Model(&secondAccount).Exec(ctx)
+		return err
+	}())
+	require.NoError(t, func() error {
+		_, err := srv.db.NewInsert().Model(&models.Rendition{
+			ID:              "rendition-2",
+			PublicationID:   "publication-1",
+			SocialAccountID: "account-2",
+			Platform:        "x",
+			Profile:         models.ContentProfileShortText,
+			Body:            "Second destination",
+			Status:          models.RenditionStatusReady,
+		}).Exec(ctx)
+		return err
+	}())
+	require.NoError(t, func() error {
+		_, err := srv.db.NewInsert().Model(&models.PostDestination{
+			ID:              "destination-2",
+			PostID:          "post-1",
+			SocialAccountID: "account-2",
+			Status:          "pending",
+		}).Exec(ctx)
+		return err
+	}())
+
+	require.NoError(t, srv.publishPublication(t))
+
+	var destinations []models.PostDestination
+	require.NoError(t, srv.db.NewSelect().Model(&destinations).Order("social_account_id ASC").Scan(ctx))
+	require.Len(t, destinations, 2)
+	require.Equal(t, "success", destinations[0].Status)
+	require.Empty(t, destinations[0].ErrorMessage)
+	require.Equal(t, "failed", destinations[1].Status)
+	require.Equal(t, FailureValidation, destinations[1].ErrorKind)
+	require.Equal(t, "invalid_media", destinations[1].ErrorCode)
+	require.False(t, destinations[1].ErrorRetryable)
+	require.NotContains(t, destinations[1].ErrorMessage, "Second destination")
+}
+
+func TestTextPostPermanentFailureDoesNotRequestAJobRetry(t *testing.T) {
+	t.Parallel()
+
+	srv := newPublisherLifecycleTestServer(t, &fakePublisherAdapter{
+		publishErr: &platform.HTTPError{StatusCode: 422, Code: "invalid_media"},
+	})
+	var post models.Post
+	require.NoError(t, srv.db.NewSelect().Model(&post).Where("id = ?", "post-1").Scan(t.Context()))
+
+	require.NoError(t, srv.service.publishSinglePost(t.Context(), &post))
+
+	var destination models.PostDestination
+	require.NoError(t, srv.db.NewSelect().Model(&destination).Where("post_id = ?", post.ID).Scan(t.Context()))
+	require.Equal(t, FailureValidation, destination.ErrorKind)
+	require.False(t, destination.ErrorRetryable)
+}
+
+func TestTextPostTransientFailureStillRetriesWhenAnotherDestinationIsPermanent(t *testing.T) {
+	t.Parallel()
+
+	srv := newPublisherLifecycleTestServer(t, &fakePublisherAdapter{
+		publishErrors: []error{
+			&platform.HTTPError{StatusCode: 503, Code: "temporarily_unavailable"},
+			&platform.HTTPError{StatusCode: 422, Code: "invalid_media"},
+		},
+	})
+	ctx := t.Context()
+	var firstAccount models.SocialAccount
+	require.NoError(t, srv.db.NewSelect().Model(&firstAccount).Where("id = ?", "account-1").Scan(ctx))
+	secondAccount := firstAccount
+	secondAccount.ID = "account-2"
+	secondAccount.AccountID = "x-account-2"
+	secondAccount.Slug = "x-account-2"
+	_, err := srv.db.NewInsert().Model(&secondAccount).Exec(ctx)
+	require.NoError(t, err)
+	_, err = srv.db.NewInsert().Model(&models.PostDestination{
+		ID:              "destination-2",
+		PostID:          "post-1",
+		SocialAccountID: secondAccount.ID,
+		Status:          "pending",
+	}).Exec(ctx)
+	require.NoError(t, err)
+	var post models.Post
+	require.NoError(t, srv.db.NewSelect().Model(&post).Where("id = ?", "post-1").Scan(ctx))
+
+	err = srv.service.publishSinglePost(ctx, &post)
+
+	var retryable *RetryableError
+	require.ErrorAs(t, err, &retryable)
+	require.Equal(t, FailureProviderServer, retryable.Failure.Kind)
+	var destinations []models.PostDestination
+	require.NoError(t, srv.db.NewSelect().Model(&destinations).Order("id ASC").Scan(ctx))
+	require.Len(t, destinations, 2)
+	require.True(t, destinations[0].ErrorRetryable)
+	require.False(t, destinations[1].ErrorRetryable)
 }
 
 type publisherLifecycleTestServer struct {
@@ -118,6 +235,10 @@ func newPublisherLifecycleTestServer(t *testing.T, adapter *fakePublisherAdapter
 		(*models.MediaAttachment)(nil),
 		(*models.PublicationLifecycleEvent)(nil),
 		(*models.UsageCounter)(nil),
+		(*models.Post)(nil),
+		(*models.PostDestination)(nil),
+		(*models.PostMedia)(nil),
+		(*models.PostVariant)(nil),
 	} {
 		_, err = db.NewCreateTable().Model(model).IfNotExists().Exec(context.Background())
 		require.NoError(t, err)
@@ -163,6 +284,22 @@ func newPublisherLifecycleTestServer(t *testing.T, adapter *fakePublisherAdapter
 		Profile:         models.ContentProfileShortText,
 		Body:            "Launch update",
 		Status:          models.RenditionStatusReady,
+	}).Exec(ctx)
+	require.NoError(t, err)
+	_, err = db.NewInsert().Model(&models.Post{
+		ID:            "post-1",
+		WorkspaceID:   "ws-1",
+		CreatedByID:   "user-1",
+		PublicationID: "publication-1",
+		Content:       "Launch update",
+		Status:        models.PostStatusScheduled,
+	}).Exec(ctx)
+	require.NoError(t, err)
+	_, err = db.NewInsert().Model(&models.PostDestination{
+		ID:              "destination-1",
+		PostID:          "post-1",
+		SocialAccountID: "account-1",
+		Status:          "pending",
 	}).Exec(ctx)
 	require.NoError(t, err)
 

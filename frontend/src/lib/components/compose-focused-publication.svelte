@@ -2,7 +2,7 @@
 	import { onDestroy, onMount, type Snippet } from 'svelte';
 	import { SvelteSet } from 'svelte/reactivity';
 	import { page } from '$app/stores';
-	import { goto, replaceState } from '$app/navigation';
+	import { beforeNavigate, goto, replaceState } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { client, type SocialAccount } from '$lib/api/client';
 	import type { components } from '$lib/api/types';
@@ -18,6 +18,7 @@
 	import ComposerAccountMenu from './composer-account-menu.svelte';
 	import DestinationSettingsDialog from './destination-settings-dialog.svelte';
 	import DestructiveConfirmDialog from './destructive-confirm-dialog.svelte';
+	import DraftConflictDialog from './draft-conflict-dialog.svelte';
 	import InlineNotice from './inline-notice.svelte';
 	import MediaPicker from './media-picker.svelte';
 	import PageLoading from './page-loading.svelte';
@@ -67,6 +68,8 @@
 		storeComposerRecovery
 	} from '$lib/studio/recovery';
 	import type { ComposerRecoverySnapshot, StudioMediaItem } from '$lib/studio/types';
+	import { parseDraftConflict, type DraftConflictProblem } from '$lib/draft-conflict';
+	import { SerializedSaveQueue } from '$lib/serialized-save-queue';
 
 	type Capability = components['schemas']['Capability'];
 	type Publication = components['schemas']['PublicationResponse'];
@@ -131,6 +134,7 @@
 	}: Props = $props();
 
 	let publicationId = $state('');
+	let revision = $state(1);
 	let hydratedPublicationId = $state('');
 	let selectedWorkspaceId = $state('');
 	let accounts = $state<SocialAccount[]>([]);
@@ -169,6 +173,8 @@
 	let autoSaving = $state(false);
 	let error = $state('');
 	let success = $state('');
+	let draftConflict = $state<DraftConflictProblem | null>(null);
+	let conflictDialogOpen = $state(false);
 	let scheduleError = $state('');
 	let suggestingSlot = $state(false);
 	let schedulingSettings = $state<FocusedSchedulingSettings>(defaultFocusedSchedulingSettings());
@@ -180,6 +186,8 @@
 	let capabilityResolveRequestSequence = 0;
 	let nextSlotRequestSequence = 0;
 	let saveGeneration = 0;
+	const saveQueue = new SerializedSaveQueue(() => publicationId);
+	let allowNavigationOnce = false;
 	let autoSaveReady = false;
 	let autoSaveTimer: ReturnType<typeof setTimeout> | null = null;
 	let lastSavedSnapshot = '';
@@ -303,7 +311,38 @@
 		await restoreStudioReturn();
 	});
 
+	onMount(() => {
+		const handleVisibilityChange = () => {
+			if (document.visibilityState === 'hidden') void flushPendingSave();
+		};
+		document.addEventListener('visibilitychange', handleVisibilityChange);
+		return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+	});
+
 	onDestroy(clearAutoSaveTimer);
+
+	beforeNavigate((navigation) => {
+		if (allowNavigationOnce) {
+			allowNavigationOnce = false;
+			return;
+		}
+		if (
+			!navigation.to?.url ||
+			!autoSaveReady ||
+			!hasDraftContent() ||
+			saveSnapshot() === lastSavedSnapshot ||
+			draftConflict
+		) {
+			return;
+		}
+		const target = `${navigation.to.url.pathname}${navigation.to.url.search}${navigation.to.url.hash}`;
+		navigation.cancel();
+		void flushPendingSave().then((saved) => {
+			if (!saved) return;
+			allowNavigationOnce = true;
+			return goto(resolve(target as '/'));
+		});
+	});
 
 	$effect(() => {
 		if (
@@ -484,6 +523,7 @@
 	function hydrateInitialPublication(publication: Publication) {
 		hydratedPublicationId = publication.id;
 		publicationId = publication.id;
+		revision = publication.revision;
 		selectedWorkspaceId = publication.workspace_id;
 		fields = fieldsFromPublication(publication);
 		media = (publication.media ?? []).map(mediaSummaryToFocusedMedia);
@@ -1103,18 +1143,24 @@
 	async function confirmDeleteDestination() {
 		const account = deleteDestinationAccount;
 		if (!account || !publicationId) return;
-		const { error: deleteError } = await client.DELETE(
+		const { data, error: deleteError } = await client.DELETE(
 			'/publications/{id}/renditions/{account_id}',
 			{
 				params: {
 					path: { id: publicationId, account_id: account.id },
-					query: { confirm: true }
+					query: { confirm: true, expected_revision: revision }
 				}
 			}
 		);
 		if (deleteError) {
+			const conflict = parseDraftConflict(deleteError);
+			if (conflict) {
+				draftConflict = conflict;
+				conflictDialogOpen = true;
+			}
 			throw new Error(deleteError.detail || m.compose_save_outputs_failed());
 		}
+		if (data?.revision) revision = data.revision;
 		selectedAccountIds = selectedAccountIds.filter((id) => id !== account.id);
 		const nextSettings = { ...settingsByAccount };
 		delete nextSettings[account.id];
@@ -1771,17 +1817,41 @@
 		}
 	}
 
-	async function persistPublication(context?: {
-		generation: number;
-		workspaceId: string;
-		startingPublicationId: string;
-	}): Promise<string> {
+	async function persistPublication(
+		context?: {
+			generation: number;
+			workspaceId: string;
+			startingPublicationId: string;
+		},
+		options: {
+			force?: boolean;
+			saveAsCopy?: boolean;
+		} = {}
+	): Promise<string> {
+		return saveQueue.run(() => persistPublicationNow(context, options));
+	}
+
+	async function persistPublicationNow(
+		context?: {
+			generation: number;
+			workspaceId: string;
+			startingPublicationId: string;
+		},
+		options: {
+			force?: boolean;
+			saveAsCopy?: boolean;
+		} = {}
+	): Promise<string> {
 		const payload = publicationPayload();
-		const targetPublicationId = context?.startingPublicationId ?? publicationId;
+		const targetPublicationId = options.saveAsCopy
+			? ''
+			: context?.startingPublicationId || publicationId;
 		if (targetPublicationId) {
-			const { error: updateError } = await client.PUT('/publications/{id}', {
+			const { data, error: updateError } = await client.PUT('/publications/{id}', {
 				params: { path: { id: targetPublicationId } },
 				body: {
+					expected_revision: revision,
+					force: Boolean(options.force),
 					title: payload.title,
 					intent: payload.intent,
 					content_profile: payload.content_profile,
@@ -1791,15 +1861,20 @@
 						? { scheduled_at: payload.scheduled_at }
 						: { clear_schedule: true }),
 					metadata: payload.metadata,
-					segments: payload.segments
+					segments: payload.segments,
+					renditions: payload.renditions
 				}
 			});
-			if (updateError) throw new Error(updateError.detail || m.compose_save_publication_failed());
-			const { error: renditionError } = await client.PUT('/publications/{id}/renditions', {
-				params: { path: { id: targetPublicationId } },
-				body: { renditions: payload.renditions }
-			});
-			if (renditionError) throw new Error(renditionError.detail || m.compose_save_outputs_failed());
+			if (updateError) {
+				const conflict = parseDraftConflict(updateError);
+				if (conflict) {
+					draftConflict = conflict;
+					conflictDialogOpen = true;
+				}
+				throw new Error(updateError.detail || m.compose_save_publication_failed());
+			}
+			revision = data.revision;
+			draftConflict = null;
 			return targetPublicationId;
 		}
 
@@ -1816,9 +1891,56 @@
 			return data.id;
 		}
 		publicationId = data.id;
+		revision = data.revision;
+		draftConflict = null;
 		ui.setActiveComposerDraft(data.id);
 		onDraftCreated?.(data.id);
 		return data.id;
+	}
+
+	async function reloadSavedDraft() {
+		if (!draftConflict) return;
+		const { data, error: loadError } = await client.GET('/publications/{id}', {
+			params: { path: { id: draftConflict.conflict.aggregate_id } }
+		});
+		if (loadError || !data) {
+			throw new Error(loadError?.detail || m.compose_save_publication_failed());
+		}
+		hydrateInitialPublication(data);
+		lastSavedSnapshot = saveSnapshot();
+		error = '';
+		draftConflict = null;
+	}
+
+	async function saveConflictedDraftAsCopy() {
+		await persistPublication(undefined, { saveAsCopy: true });
+		lastSavedSnapshot = saveSnapshot();
+		success = m.compose_draft_saved();
+		error = '';
+	}
+
+	async function overwriteSavedDraft() {
+		if (!draftConflict) return;
+		revision = draftConflict.conflict.current_revision;
+		await persistPublication(undefined, { force: true });
+		lastSavedSnapshot = saveSnapshot();
+		success = m.compose_changes_saved();
+		error = '';
+	}
+
+	async function flushPendingSave(): Promise<boolean> {
+		clearAutoSaveTimer();
+		await saveQueue.flush().catch(() => publicationId);
+		if (
+			autoSaveReady &&
+			hasDraftContent() &&
+			saveSnapshot() !== lastSavedSnapshot &&
+			!draftConflict
+		) {
+			await persistPublication();
+			lastSavedSnapshot = saveSnapshot();
+		}
+		return !draftConflict && saveSnapshot() === lastSavedSnapshot;
 	}
 
 	async function validatePublication(id: string): Promise<ValidationIssue[]> {
@@ -1882,9 +2004,17 @@
 					throw new Error(m.compose_fix_before_scheduling());
 				}
 				const { data, error: scheduleError } = await client.POST('/publications/{id}/schedule', {
-					params: { path: { id } }
+					params: { path: { id } },
+					body: { expected_revision: revision }
 				});
-				if (scheduleError) throw new Error(scheduleError.detail || m.compose_schedule_failed());
+				if (scheduleError) {
+					const conflict = parseDraftConflict(scheduleError);
+					if (conflict) {
+						draftConflict = conflict;
+						conflictDialogOpen = true;
+					}
+					throw new Error(scheduleError.detail || m.compose_schedule_failed());
+				}
 				success = data?.message ?? m.compose_publication_scheduled();
 			} else if (action === 'publish') {
 				const issues = await validatePublication(id);
@@ -1892,9 +2022,17 @@
 					throw new Error(m.compose_fix_before_publishing());
 				}
 				const { data, error: publishError } = await client.POST('/publications/{id}/publish-now', {
-					params: { path: { id } }
+					params: { path: { id } },
+					body: { expected_revision: revision }
 				});
-				if (publishError) throw new Error(publishError.detail || m.compose_publish_failed());
+				if (publishError) {
+					const conflict = parseDraftConflict(publishError);
+					if (conflict) {
+						draftConflict = conflict;
+						conflictDialogOpen = true;
+					}
+					throw new Error(publishError.detail || m.compose_publish_failed());
+				}
 				success = data?.message ?? m.compose_publication_queued();
 			} else {
 				success = isEditMode ? m.compose_changes_saved() : m.compose_draft_saved();
@@ -2530,4 +2668,12 @@
 	description={m.compose_delete_destination_body()}
 	confirmLabel={m.compose_delete_destination_confirm()}
 	onConfirm={confirmDeleteDestination}
+/>
+
+<DraftConflictDialog
+	bind:open={conflictDialogOpen}
+	conflict={draftConflict}
+	onReload={reloadSavedDraft}
+	onSaveCopy={saveConflictedDraftAsCopy}
+	onOverwrite={overwriteSavedDraft}
 />

@@ -3,6 +3,7 @@ package platform
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/url"
@@ -270,8 +271,12 @@ func TestFacebookPublishRejectsNonHTTPSMediaURL(t *testing.T) {
 
 func TestFacebookPublishedIDRejectsGraphError(t *testing.T) {
 	_, err := facebookPublishedID("facebook publish", []byte(`{"error":{"message":"missing permission"}}`))
-	if err == nil || !strings.Contains(err.Error(), "missing permission") {
+	var providerErr *HTTPError
+	if !errors.As(err, &providerErr) || providerErr.Code != "facebook_publish_error" {
 		t.Fatalf("expected graph error, got %v", err)
+	}
+	if strings.Contains(err.Error(), "missing permission") {
+		t.Fatalf("provider response message leaked: %v", err)
 	}
 }
 

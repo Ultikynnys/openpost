@@ -1782,6 +1782,7 @@
 					{#if createdInviteURL}
 						<div
 							data-testid="team-invite-link"
+							data-feedback-redact
 							class="mb-4 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-4"
 						>
 							<p class="text-sm font-medium text-emerald-900">{m.settings_invite_created()}</p>
@@ -2196,7 +2197,10 @@
 											</Button>
 
 											{#if totpSetupChallengeId}
-												<div class="space-y-3 rounded-lg border bg-muted/20 p-4">
+												<div
+													class="space-y-3 rounded-lg border bg-muted/20 p-4"
+													data-feedback-redact
+												>
 													<img
 														src={totpQRCodeDataURL}
 														alt={m.settings_totp_qr_alt()}
@@ -2422,6 +2426,7 @@
 					{#if createdAPIToken}
 						<div
 							class="mb-4 rounded-lg border border-amber-300/50 bg-amber-50 p-4 text-sm text-amber-950"
+							data-feedback-redact
 						>
 							<p class="font-medium">{m.settings_copy_token_now()}</p>
 							<p class="mt-2 font-mono text-xs break-all">{createdAPIToken}</p>

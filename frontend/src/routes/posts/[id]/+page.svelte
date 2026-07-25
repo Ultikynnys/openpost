@@ -4,7 +4,7 @@
 	import { page } from '$app/stores';
 	import { client } from '$lib/api/client';
 	import type { components } from '$lib/api/types';
-	import ComposeSimple from '$lib/components/compose-simple.svelte';
+	import ComposeTextPost from '$lib/components/compose-text-post.svelte';
 	import { Button } from '$lib/components/ui/button';
 	import PageLoading from '$lib/components/page-loading.svelte';
 	import InlineNotice from '$lib/components/inline-notice.svelte';
@@ -83,6 +83,6 @@
 			<InlineNotice tone="error" message={error} class="mx-4 mt-3" />
 		{/if}
 
-		<ComposeSimple initialPost={post} onSuccess={handleSuccess} onDeleted={handleSuccess} />
+		<ComposeTextPost initialPost={post} onSuccess={handleSuccess} onDeleted={handleSuccess} />
 	</div>
 {/if}

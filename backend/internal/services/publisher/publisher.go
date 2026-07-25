@@ -163,6 +163,7 @@ func (s *Service) HandlePublishJob(ctx context.Context, jobPayload string) error
 	return s.publishSinglePost(ctx, post)
 }
 
+//nolint:gocyclo // One handler preserves publication, rendition, media, lifecycle, and retry state across every job action.
 func (s *Service) HandlePublishPublicationJob(ctx context.Context, jobPayload string) error {
 	var payload struct {
 		PublicationID string                   `json:"publication_id"`
@@ -222,6 +223,7 @@ func (s *Service) HandlePublishPublicationJob(ctx context.Context, jobPayload st
 			models.RenditionStatusScheduled,
 			models.RenditionStatusFailed,
 		})).
+		Where("(status != ? OR error_retryable = ?)", models.RenditionStatusFailed, true).
 		Order("created_at ASC")
 	if payload.RenditionID != "" {
 		query = query.Where("id = ?", payload.RenditionID)
@@ -230,7 +232,7 @@ func (s *Service) HandlePublishPublicationJob(ctx context.Context, jobPayload st
 		return err
 	}
 
-	var firstErr error
+	var retryFailure *RetryableError
 	for i := range renditions {
 		rendition := renditions[i]
 		wasRetry := rendition.Status == models.RenditionStatusFailed
@@ -242,35 +244,83 @@ func (s *Service) HandlePublishPublicationJob(ctx context.Context, jobPayload st
 		if _, err := s.db.NewUpdate().Model(&rendition).
 			Set("status = ?", models.RenditionStatusPublishing).
 			Set("error_message = ''").
+			Set("error_kind = ''").
+			Set("error_code = ''").
+			Set("error_http_status = 0").
+			Set("error_retryable = ?", false).
+			Set("error_retry_at = NULL").
+			Set("error_action = ''").
 			Set("updated_at = ?", time.Now().UTC()).
 			Where("id = ?", rendition.ID).
 			Exec(ctx); err != nil {
 			log.Printf("[Publisher] Failed to mark rendition %s as publishing: %v", rendition.ID, err)
 		}
 		if err := s.publishRendition(ctx, publication, &rendition); err != nil {
-			if firstErr == nil {
-				firstErr = err
+			failure := ClassifyFailure(err)
+			if failure.Retryable &&
+				(retryFailure == nil || failure.RetryAfter > retryFailure.Failure.RetryAfter) {
+				retryFailure = &RetryableError{Failure: failure}
 			}
-			log.Printf("[Publisher] Rendition %s failed: %v", rendition.ID, err)
-			if _, dbErr := s.db.NewUpdate().Model(&rendition).
-				Set("status = ?", models.RenditionStatusFailed).
-				Set("error_message = ?", err.Error()).
-				Set("updated_at = ?", time.Now().UTC()).
-				Where("id = ?", rendition.ID).
-				Exec(ctx); dbErr != nil {
+			log.Printf(
+				"[Publisher] Rendition %s failed (%s, status=%d, code=%s)",
+				rendition.ID,
+				failure.Kind,
+				failure.HTTPStatus,
+				failure.Code,
+			)
+			if dbErr := s.persistRenditionFailure(ctx, rendition.ID, failure); dbErr != nil {
 				log.Printf("[Publisher] Failed to mark rendition %s failed: %v", rendition.ID, dbErr)
 			}
 			s.recordPublicationLifecycleEvent(ctx, publication.WorkspaceID, publication.ID, rendition.ID, lifecycle.EventFailed, lifecycle.StatusFailed, "rendition publish failed", map[string]any{
-				"platform": rendition.Platform,
-				"error":    err.Error(),
-				"retry":    wasRetry,
+				"platform":    rendition.Platform,
+				"error_kind":  failure.Kind,
+				"error_code":  failure.Code,
+				"http_status": failure.HTTPStatus,
+				"retryable":   failure.Retryable,
+				"retry":       wasRetry,
 			})
 			continue
 		}
 	}
 
 	s.finalizePublication(ctx, publication)
-	return firstErr
+	if retryFailure != nil {
+		return retryFailure
+	}
+	return nil
+}
+
+func (s *Service) persistRenditionFailure(
+	ctx context.Context,
+	renditionID string,
+	failure Failure,
+) error {
+	var retryAt any
+	if failure.Retryable {
+		delay := failure.RetryAfter
+		if delay <= 0 {
+			delay = RetryDelay(1, 0, 0)
+		}
+		retryAt = time.Now().UTC().Add(delay)
+	}
+	query := s.db.NewUpdate().
+		Model((*models.Rendition)(nil)).
+		Set("status = ?", models.RenditionStatusFailed).
+		Set("error_message = ?", failure.Message).
+		Set("error_kind = ?", failure.Kind).
+		Set("error_code = ?", failure.Code).
+		Set("error_http_status = ?", failure.HTTPStatus).
+		Set("error_retryable = ?", failure.Retryable).
+		Set("error_action = ?", failure.Action).
+		Set("updated_at = ?", time.Now().UTC()).
+		Where("id = ?", renditionID)
+	if retryAt == nil {
+		query = query.Set("error_retry_at = NULL")
+	} else {
+		query = query.Set("error_retry_at = ?", retryAt)
+	}
+	_, err := query.Exec(ctx)
+	return err
 }
 
 //nolint:gocyclo
@@ -377,6 +427,12 @@ func (s *Service) publishRendition(ctx context.Context, publication *models.Publ
 		Set("external_id = ?", externalID).
 		Set("external_url = ?", externalURL).
 		Set("error_message = ''").
+		Set("error_kind = ''").
+		Set("error_code = ''").
+		Set("error_http_status = 0").
+		Set("error_retryable = ?", false).
+		Set("error_retry_at = NULL").
+		Set("error_action = ''").
 		Set("updated_at = ?", time.Now().UTC()).
 		Where("id = ?", rendition.ID).
 		Exec(ctx); err != nil {
@@ -466,6 +522,12 @@ func (s *Service) publishRenditionSegments(
 		if _, err := s.db.NewUpdate().Model(segment).
 			Set("status = ?", models.RenditionStatusPublishing).
 			Set("error_message = ''").
+			Set("error_kind = ''").
+			Set("error_code = ''").
+			Set("error_http_status = 0").
+			Set("error_retryable = ?", false).
+			Set("error_retry_at = NULL").
+			Set("error_action = ''").
 			Set("updated_at = ?", time.Now().UTC()).
 			Where("id = ?", segment.ID).
 			Exec(ctx); err != nil {
@@ -518,6 +580,12 @@ func (s *Service) publishRenditionSegments(
 			Set("external_id = ?", externalID).
 			Set("external_url = ?", externalURL).
 			Set("error_message = ''").
+			Set("error_kind = ''").
+			Set("error_code = ''").
+			Set("error_http_status = 0").
+			Set("error_retryable = ?", false).
+			Set("error_retry_at = NULL").
+			Set("error_action = ''").
 			Set("updated_at = ?", time.Now().UTC()).
 			Where("id = ?", segment.ID).
 			Exec(ctx); err != nil {
@@ -543,6 +611,12 @@ func (s *Service) publishRenditionSegments(
 		Set("external_id = ?", rootExternalID).
 		Set("external_url = ?", rootExternalURL).
 		Set("error_message = ''").
+		Set("error_kind = ''").
+		Set("error_code = ''").
+		Set("error_http_status = 0").
+		Set("error_retryable = ?", false).
+		Set("error_retry_at = NULL").
+		Set("error_action = ''").
 		Set("updated_at = ?", time.Now().UTC()).
 		Where("id = ?", rendition.ID).
 		Exec(ctx); err != nil {
@@ -555,12 +629,31 @@ func (s *Service) failRenditionSegment(ctx context.Context, segment *models.Rend
 	if failure == nil {
 		return nil
 	}
-	if _, err := s.db.NewUpdate().Model(segment).
+	classified := ClassifyFailure(failure)
+	var retryAt any
+	if classified.Retryable {
+		delay := classified.RetryAfter
+		if delay <= 0 {
+			delay = RetryDelay(1, 0, 0)
+		}
+		retryAt = time.Now().UTC().Add(delay)
+	}
+	query := s.db.NewUpdate().Model(segment).
 		Set("status = ?", models.RenditionStatusFailed).
-		Set("error_message = ?", failure.Error()).
+		Set("error_message = ?", classified.Message).
+		Set("error_kind = ?", classified.Kind).
+		Set("error_code = ?", classified.Code).
+		Set("error_http_status = ?", classified.HTTPStatus).
+		Set("error_retryable = ?", classified.Retryable).
+		Set("error_action = ?", classified.Action).
 		Set("updated_at = ?", time.Now().UTC()).
-		Where("id = ?", segment.ID).
-		Exec(ctx); err != nil {
+		Where("id = ?", segment.ID)
+	if retryAt == nil {
+		query = query.Set("error_retry_at = NULL")
+	} else {
+		query = query.Set("error_retry_at = ?", retryAt)
+	}
+	if _, err := query.Exec(ctx); err != nil {
 		log.Printf("[Publisher] Failed to mark rendition segment %s failed: %v", segment.ID, err)
 	}
 	return failure
@@ -688,7 +781,8 @@ func (s *Service) publishRenditionReply(ctx context.Context, renditionID, body, 
 func (s *Service) publishSinglePost(ctx context.Context, post *models.Post) error {
 	var dests []models.PostDestination
 	if err := s.db.NewSelect().Model(&dests).
-		Where("post_id = ? AND status IN ('pending', 'failed')", post.ID).
+		Where("post_id = ?", post.ID).
+		Where("(status = 'pending' OR (status = 'failed' AND error_retryable = ?))", true).
 		Scan(ctx); err != nil {
 		return err
 	}
@@ -702,42 +796,38 @@ func (s *Service) publishSinglePost(ctx context.Context, post *models.Post) erro
 	if err := s.checkMonthlyQuota(ctx, post.WorkspaceID, entitlements.LimitPublishedPostsMonthly); err != nil {
 		s.markDestinationsFailed(ctx, dests, err)
 		s.finalizePost(ctx, post)
-		return err
+		return nil
 	}
 
-	var firstError error
+	var retryFailure *RetryableError
 	for _, dest := range dests {
 		log.Printf("[Publisher] Publishing to destination %s (account: %s)", dest.ID, dest.SocialAccountID)
 		if err := s.publishToDestination(ctx, post, &dest); err != nil {
-			firstError = err
-			log.Printf("[Publisher] Failed to publish to %s: %v", dest.ID, err)
-			if _, dbErr := s.db.NewUpdate().Model(&dest).
-				Set("status = ?", "failed").
-				Set("error_message = ?", err.Error()).
-				Where("id = ?", dest.ID).
-				Exec(ctx); dbErr != nil {
-				log.Printf("[Publisher] Failed to update destination %s status: %v", dest.ID, dbErr)
+			failure := ClassifyFailure(err)
+			if failure.Retryable &&
+				(retryFailure == nil || failure.RetryAfter > retryFailure.Failure.RetryAfter) {
+				retryFailure = &RetryableError{Failure: failure}
 			}
+			log.Printf("[Publisher] Destination %s failed (%s, status=%d, code=%s)", dest.ID, failure.Kind, failure.HTTPStatus, failure.Code)
+			s.markDestinationFailed(ctx, dest, err)
 		} else {
 			log.Printf("[Publisher] Successfully published to destination %s", dest.ID)
-			if _, dbErr := s.db.NewUpdate().Model(&dest).
-				Set("status = ?", "success").
-				Where("id = ?", dest.ID).
-				Exec(ctx); dbErr != nil {
-				log.Printf("[Publisher] Failed to update destination %s status: %v", dest.ID, dbErr)
-			}
+			s.markDestinationSuccess(ctx, dest, true)
 		}
 	}
 
 	s.finalizePost(ctx, post)
-	return firstError
+	if retryFailure != nil {
+		return retryFailure
+	}
+	return nil
 }
 
 func (s *Service) publishThread(ctx context.Context, posts []*models.Post) error {
 	log.Printf("[Publisher] Publishing thread with %d posts", len(posts))
 
 	successfulAccounts := make(map[string]bool)
-	var firstError error
+	var retryFailure *RetryableError
 
 	for i, post := range posts {
 		log.Printf("[Publisher] Publishing thread post %d/%d: %s", i+1, len(posts), post.ID)
@@ -755,9 +845,6 @@ func (s *Service) publishThread(ctx context.Context, posts []*models.Post) error
 
 		if len(dests) > 0 {
 			if err := s.checkMonthlyQuota(ctx, post.WorkspaceID, entitlements.LimitPublishedPostsMonthly); err != nil {
-				if firstError == nil {
-					firstError = err
-				}
 				s.markDestinationsFailed(ctx, dests, err)
 				s.finalizePost(ctx, post)
 				successfulAccounts = make(map[string]bool)
@@ -765,7 +852,12 @@ func (s *Service) publishThread(ctx context.Context, posts []*models.Post) error
 			}
 		}
 
-		successfulInThisPost := s.publishThreadDestinations(ctx, post, dests)
+		successfulInThisPost, postRetryFailure := s.publishThreadDestinations(ctx, post, dests)
+		if postRetryFailure != nil &&
+			(retryFailure == nil ||
+				postRetryFailure.Failure.RetryAfter > retryFailure.Failure.RetryAfter) {
+			retryFailure = postRetryFailure
+		}
 
 		successfulAccounts = make(map[string]bool)
 		for _, accountID := range successfulInThisPost {
@@ -775,13 +867,17 @@ func (s *Service) publishThread(ctx context.Context, posts []*models.Post) error
 		s.finalizePost(ctx, post)
 	}
 
-	return firstError
+	if retryFailure != nil {
+		return retryFailure
+	}
+	return nil
 }
 
 func (s *Service) loadThreadDestinations(ctx context.Context, postID string) ([]models.PostDestination, error) {
 	var dests []models.PostDestination
 	err := s.db.NewSelect().Model(&dests).
-		Where("post_id = ? AND status IN ('pending', 'failed')", postID).
+		Where("post_id = ?", postID).
+		Where("(status = 'pending' OR (status = 'failed' AND error_retryable = ?))", true).
 		Scan(ctx)
 	return dests, err
 }
@@ -796,6 +892,12 @@ func (s *Service) filterThreadDestinationsAfterPreviousPost(ctx context.Context,
 		if _, dbErr := s.db.NewUpdate().Model(&dest).
 			Set("status = ?", "failed").
 			Set("error_message = ?", "previous post in thread failed for this account").
+			Set("error_kind = ?", FailureValidation).
+			Set("error_code = ?", "thread_parent_failed").
+			Set("error_http_status = 0").
+			Set("error_retryable = ?", false).
+			Set("error_retry_at = NULL").
+			Set("error_action = ?", FailureActionEdit).
 			Where("id = ?", dest.ID).
 			Exec(ctx); dbErr != nil {
 			log.Printf("[Publisher] Failed to update destination %s status: %v", dest.ID, dbErr)
@@ -804,8 +906,13 @@ func (s *Service) filterThreadDestinationsAfterPreviousPost(ctx context.Context,
 	return filteredDests
 }
 
-func (s *Service) publishThreadDestinations(ctx context.Context, post *models.Post, dests []models.PostDestination) []string {
+func (s *Service) publishThreadDestinations(
+	ctx context.Context,
+	post *models.Post,
+	dests []models.PostDestination,
+) ([]string, *RetryableError) {
 	var successfulInThisPost []string
+	var retryFailure *RetryableError
 	for _, dest := range dests {
 		if err := s.publishToDestination(ctx, post, &dest); err != nil {
 			if errors.Is(err, errLinkedInThreadReplySkipped) {
@@ -813,14 +920,19 @@ func (s *Service) publishThreadDestinations(ctx context.Context, post *models.Po
 				successfulInThisPost = append(successfulInThisPost, dest.SocialAccountID)
 				continue
 			}
-			log.Printf("[Publisher] Thread post %s failed at destination %s: %v", post.ID, dest.ID, err)
+			failure := ClassifyFailure(err)
+			if failure.Retryable &&
+				(retryFailure == nil || failure.RetryAfter > retryFailure.Failure.RetryAfter) {
+				retryFailure = &RetryableError{Failure: failure}
+			}
+			log.Printf("[Publisher] Thread post %s destination %s failed (%s, status=%d, code=%s)", post.ID, dest.ID, failure.Kind, failure.HTTPStatus, failure.Code)
 			s.markDestinationFailed(ctx, dest, err)
 			continue
 		}
 		s.markDestinationSuccess(ctx, dest, false)
 		successfulInThisPost = append(successfulInThisPost, dest.SocialAccountID)
 	}
-	return successfulInThisPost
+	return successfulInThisPost, retryFailure
 }
 
 func (s *Service) finalizePost(ctx context.Context, post *models.Post) {
@@ -1000,6 +1112,12 @@ func (s *Service) markDestinationsFailed(ctx context.Context, dests []models.Pos
 func (s *Service) markDestinationSuccess(ctx context.Context, dest models.PostDestination, clearError bool) {
 	query := s.db.NewUpdate().Model(&dest).
 		Set("status = ?", "success").
+		Set("error_kind = ''").
+		Set("error_code = ''").
+		Set("error_http_status = 0").
+		Set("error_retryable = ?", false).
+		Set("error_retry_at = NULL").
+		Set("error_action = ''").
 		Where("id = ?", dest.ID)
 	if clearError {
 		query = query.Set("error_message = ?", "")
@@ -1010,11 +1128,30 @@ func (s *Service) markDestinationSuccess(ctx context.Context, dest models.PostDe
 }
 
 func (s *Service) markDestinationFailed(ctx context.Context, dest models.PostDestination, cause error) {
-	if _, dbErr := s.db.NewUpdate().Model(&dest).
+	failure := ClassifyFailure(cause)
+	var retryAt any
+	if failure.Retryable {
+		delay := failure.RetryAfter
+		if delay <= 0 {
+			delay = RetryDelay(1, 0, 0)
+		}
+		retryAt = time.Now().UTC().Add(delay)
+	}
+	query := s.db.NewUpdate().Model(&dest).
 		Set("status = ?", "failed").
-		Set("error_message = ?", cause.Error()).
-		Where("id = ?", dest.ID).
-		Exec(ctx); dbErr != nil {
+		Set("error_message = ?", failure.Message).
+		Set("error_kind = ?", failure.Kind).
+		Set("error_code = ?", failure.Code).
+		Set("error_http_status = ?", failure.HTTPStatus).
+		Set("error_retryable = ?", failure.Retryable).
+		Set("error_action = ?", failure.Action).
+		Where("id = ?", dest.ID)
+	if retryAt == nil {
+		query = query.Set("error_retry_at = NULL")
+	} else {
+		query = query.Set("error_retry_at = ?", retryAt)
+	}
+	if _, dbErr := query.Exec(ctx); dbErr != nil {
 		log.Printf("[Publisher] Failed to update destination %s status: %v", dest.ID, dbErr)
 	}
 }
@@ -1473,7 +1610,56 @@ func (s *Service) finalizePublication(ctx context.Context, publication *models.P
 			publication.ID,
 			err,
 		)
+		return
 	}
+	if err := s.syncPublicationPostDestinations(ctx, publication.ID, renditions); err != nil {
+		log.Printf(
+			"[Publisher] Failed to sync destination outcomes for publication %s: %v",
+			publication.ID,
+			err,
+		)
+	}
+}
+
+func (s *Service) syncPublicationPostDestinations(
+	ctx context.Context,
+	publicationID string,
+	renditions []models.Rendition,
+) error {
+	postIDs := s.db.NewSelect().
+		Model((*models.Post)(nil)).
+		Column("id").
+		Where("publication_id = ?", publicationID)
+	for _, rendition := range renditions {
+		status := "pending"
+		switch rendition.Status {
+		case models.RenditionStatusPublished:
+			status = "success"
+		case models.RenditionStatusFailed:
+			status = "failed"
+		}
+		query := s.db.NewUpdate().
+			Model((*models.PostDestination)(nil)).
+			Set("status = ?", status).
+			Set("external_id = ?", rendition.ExternalID).
+			Set("error_message = ?", rendition.ErrorMessage).
+			Set("error_kind = ?", rendition.ErrorKind).
+			Set("error_code = ?", rendition.ErrorCode).
+			Set("error_http_status = ?", rendition.ErrorHTTPStatus).
+			Set("error_retryable = ?", rendition.ErrorRetryable).
+			Set("error_action = ?", rendition.ErrorAction).
+			Where("post_id IN (?)", postIDs).
+			Where("social_account_id = ?", rendition.SocialAccountID)
+		if rendition.ErrorRetryAt.IsZero() {
+			query = query.Set("error_retry_at = NULL")
+		} else {
+			query = query.Set("error_retry_at = ?", rendition.ErrorRetryAt)
+		}
+		if _, err := query.Exec(ctx); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func mustPublisherJSON(value interface{}) string {

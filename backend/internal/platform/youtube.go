@@ -509,7 +509,7 @@ func (y *YouTubeAdapter) insertYouTubeCaption(ctx context.Context, accessToken, 
 	if err != nil {
 		return fmt.Errorf("youtube caption upload: %w", err)
 	}
-	return youtubeAPIError("youtube caption upload", response.statusCode, response.body)
+	return youtubeAPIError(response)
 }
 
 func (y *YouTubeAdapter) setYouTubeThumbnail(ctx context.Context, accessToken, videoID string, req UploadMediaRequest) error {
@@ -533,7 +533,7 @@ func (y *YouTubeAdapter) setYouTubeThumbnail(ctx context.Context, accessToken, v
 	if err != nil {
 		return fmt.Errorf("youtube thumbnail upload: %w", err)
 	}
-	return youtubeAPIError("youtube thumbnail upload", resp.statusCode, resp.body)
+	return youtubeAPIError(resp)
 }
 
 func (y *YouTubeAdapter) startYouTubeResumableUpload(ctx context.Context, accessToken string, req UploadMediaRequest, metadata youtubeVideoInsertRequest, mediaSize int64) (string, error) {
@@ -556,7 +556,7 @@ func (y *YouTubeAdapter) startYouTubeResumableUpload(ctx context.Context, access
 	if err != nil {
 		return "", fmt.Errorf("youtube resumable upload session: %w", err)
 	}
-	if err := youtubeAPIError("youtube resumable upload session", resp.statusCode, resp.body); err != nil {
+	if err := youtubeAPIError(resp); err != nil {
 		return "", err
 	}
 	sessionURL := resp.header.Get("Location")
@@ -613,7 +613,7 @@ func (y *YouTubeAdapter) uploadYouTubeVideoBytes(ctx context.Context, sessionURL
 			}
 			offset = nextOffset
 		default:
-			return "", youtubeAPIError("youtube video upload", resp.statusCode, resp.body)
+			return "", youtubeAPIError(resp)
 		}
 	}
 	return "", fmt.Errorf("youtube video upload: retry limit exceeded")
@@ -632,7 +632,7 @@ func (y *YouTubeAdapter) queryYouTubeUploadOffset(ctx context.Context, sessionUR
 	if resp.statusCode == http.StatusOK || resp.statusCode == http.StatusCreated {
 		return mediaSize, nil
 	}
-	return 0, youtubeAPIError("youtube video upload status", resp.statusCode, resp.body)
+	return 0, youtubeAPIError(resp)
 }
 
 func (y *YouTubeAdapter) insertYouTubePlaylistItem(ctx context.Context, accessToken, playlistID, videoID string) error {
@@ -658,7 +658,7 @@ func (y *YouTubeAdapter) insertYouTubePlaylistItem(ctx context.Context, accessTo
 	if err != nil {
 		return fmt.Errorf("youtube playlist insert: %w", err)
 	}
-	return youtubeAPIError("youtube playlist insert", resp.statusCode, resp.body)
+	return youtubeAPIError(resp)
 }
 
 func (y *YouTubeAdapter) checkYouTubeProcessingStatus(ctx context.Context, accessToken, videoID string) error {
@@ -675,7 +675,7 @@ func (y *YouTubeAdapter) checkYouTubeProcessingStatus(ctx context.Context, acces
 		return fmt.Errorf("decoding youtube processing status: %w", err)
 	}
 	if statusResp.Error.Message != "" {
-		return fmt.Errorf("youtube processing status: %s", statusResp.Error.Message)
+		return &HTTPError{StatusCode: http.StatusBadRequest, Code: "youtube_processing_error"}
 	}
 	if len(statusResp.Items) == 0 {
 		return fmt.Errorf("youtube processing status: uploaded video was not returned")
@@ -698,7 +698,7 @@ func youtubeVideoIDFromResponse(label string, respBody []byte) (string, error) {
 		return "", fmt.Errorf("decoding %s: %w", label, err)
 	}
 	if resp.Error.Message != "" {
-		return "", fmt.Errorf("%s: %s", label, resp.Error.Message)
+		return "", &HTTPError{StatusCode: http.StatusBadRequest, Code: "youtube_publish_error"}
 	}
 	if resp.ID == "" {
 		return "", fmt.Errorf("%s: missing video id", label)
@@ -734,20 +734,11 @@ func doYouTubeRequest(ctx context.Context, method, endpoint string, body io.Read
 	return &youtubeHTTPResponse{statusCode: resp.StatusCode, header: resp.Header, body: respBody}, nil
 }
 
-func youtubeAPIError(label string, statusCode int, respBody []byte) error {
-	if statusCode >= 200 && statusCode < 300 {
+func youtubeAPIError(response *youtubeHTTPResponse) error {
+	if response.statusCode >= 200 && response.statusCode < 300 {
 		return nil
 	}
-	var resp struct {
-		Error struct {
-			Message string `json:"message"`
-		} `json:"error"`
-	}
-	_ = json.Unmarshal(respBody, &resp)
-	if resp.Error.Message != "" {
-		return fmt.Errorf("%s: %s", label, resp.Error.Message)
-	}
-	return fmt.Errorf("%s: unexpected status %d", label, statusCode)
+	return NewHTTPError(response.statusCode, response.header, response.body)
 }
 
 func youtubeNextUploadOffset(rangeHeader string) int64 {

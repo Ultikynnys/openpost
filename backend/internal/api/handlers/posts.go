@@ -16,10 +16,13 @@ import (
 	"github.com/openpost/backend/internal/api/middleware"
 	databasemigrations "github.com/openpost/backend/internal/database/migrations"
 	"github.com/openpost/backend/internal/models"
+	"github.com/openpost/backend/internal/platform"
+	"github.com/openpost/backend/internal/services/drafts"
 	"github.com/openpost/backend/internal/services/entitlements"
 	postservice "github.com/openpost/backend/internal/services/posts"
 	"github.com/openpost/backend/internal/services/usage"
 	"github.com/uptrace/bun"
+	"github.com/uptrace/bun/dialect"
 )
 
 const (
@@ -38,6 +41,13 @@ type PostHandler struct {
 	entitlement entitlements.Service
 	usage       *usage.Service
 	posts       *postservice.Service
+	providers   map[string]platform.Adapter
+	tokenSource AccessTokenSource
+}
+
+func (h *PostHandler) SetCapabilityDependencies(providers map[string]platform.Adapter, tokenSource AccessTokenSource) {
+	h.providers = providers
+	h.tokenSource = tokenSource
 }
 
 func NewPostHandler(db *bun.DB, authenticator middleware.Authenticator, entitlement ...entitlements.Service) *PostHandler {
@@ -87,24 +97,105 @@ type PostDestinationResponse struct {
 	Platform        string `json:"platform" doc:"Platform name"`
 	Status          string `json:"status" doc:"Destination status"`
 	ErrorMessage    string `json:"error_message,omitempty" doc:"Error message if publishing failed"`
+	ErrorKind       string `json:"error_kind,omitempty" doc:"Stable publishing failure kind"`
+	ErrorCode       string `json:"error_code,omitempty" doc:"Safe provider error code"`
+	ErrorHTTPStatus int    `json:"error_http_status,omitempty" doc:"Provider HTTP status"`
+	ErrorRetryable  bool   `json:"error_retryable" doc:"Whether retry is safe"`
+	ErrorRetryAt    string `json:"error_retry_at,omitempty" doc:"Next automatic retry time"`
+	ErrorAction     string `json:"error_action,omitempty" doc:"Recommended recovery action"`
 }
 
 type PostResponse struct {
 	ID                 string                    `json:"id" doc:"Post ID"`
-	PublicationID      string                    `json:"publication_id,omitempty" doc:"Canonical publication ID for compatibility-translated authoring"`
+	PublicationID      string                    `json:"publication_id,omitempty" doc:"Canonical publication ID for the text composer"`
 	WorkspaceID        string                    `json:"workspace_id" doc:"Workspace ID"`
 	CreatedByID        string                    `json:"created_by" doc:"Creator user ID"`
 	ParentPostID       string                    `json:"parent_post_id,omitempty" doc:"Previous post ID when this is a thread reply"`
 	ThreadSequence     int                       `json:"thread_sequence,omitempty" doc:"Zero-based position in a thread"`
 	Content            string                    `json:"content" doc:"Post content"`
 	Status             string                    `json:"status" doc:"Post status (draft, scheduled, publishing, published, failed)"`
+	Revision           int                       `json:"revision" doc:"Current atomic draft revision"`
 	ScheduledAt        string                    `json:"scheduled_at" doc:"Scheduled time (ISO 8601)"`
 	RandomDelayMinutes int                       `json:"random_delay_minutes" doc:"Random delay in minutes (±N)"`
 	ActualRunAt        string                    `json:"actual_run_at,omitempty" doc:"Actual run time after random delay (ISO 8601)"`
 	CreatedAt          string                    `json:"created_at" doc:"Creation time (ISO 8601)"`
+	UpdatedAt          string                    `json:"updated_at" doc:"Last atomic draft save time (ISO 8601)"`
 	Destinations       []PostDestinationResponse `json:"destinations,omitempty" doc:"Post destinations"`
 	MediaIDs           []string                  `json:"media_ids,omitempty" doc:"Attached media IDs"`
 	ThreadDraft        *string                   `json:"thread_draft,omitempty" doc:"Set when this post is a thread-draft parent; contains the encoded thread JSON (with __openpost_thread__: prefix)."`
+}
+
+type TextPostPublicationInput struct {
+	Title          *string                   `json:"title,omitempty" doc:"Publication title"`
+	Intent         *string                   `json:"intent,omitempty" doc:"Publishing intent"`
+	ContentProfile *string                   `json:"content_profile,omitempty" doc:"Content profile"`
+	SourceText     *string                   `json:"source_text,omitempty" doc:"Canonical source text"`
+	SourceURL      *string                   `json:"source_url,omitempty" doc:"Canonical source URL"`
+	Goal           *string                   `json:"goal,omitempty" doc:"Publishing goal"`
+	Audience       *string                   `json:"audience,omitempty" doc:"Target audience"`
+	ScheduledAt    *time.Time                `json:"scheduled_at,omitempty" doc:"Optional schedule time"`
+	ClearSchedule  bool                      `json:"clear_schedule,omitempty" doc:"Clear the proposed schedule"`
+	Metadata       map[string]any            `json:"metadata,omitempty" doc:"Safe publication metadata"`
+	Segments       []PublicationSegmentInput `json:"segments,omitempty" doc:"Replacement canonical segments"`
+	Renditions     []RenditionInput          `json:"renditions,omitempty" doc:"Replacement destination renditions"`
+}
+
+type SaveTextPostDraftInput struct {
+	PathID string `path:"id" doc:"Text post draft ID"`
+	Body   struct {
+		ExpectedRevision   int                      `json:"expected_revision" minimum:"1" doc:"Revision loaded by the editor"`
+		Force              bool                     `json:"force,omitempty" doc:"Confirms an explicit overwrite after reviewing the latest revision"`
+		Content            string                   `json:"content" doc:"First post content"`
+		ScheduledAt        *string                  `json:"scheduled_at,omitempty" doc:"Proposed schedule time; empty clears it"`
+		SocialAccountIDs   []string                 `json:"social_account_ids" doc:"Replacement destinations"`
+		MediaIDs           []string                 `json:"media_ids" doc:"Replacement aggregate media"`
+		RandomDelayMinutes int                      `json:"random_delay_minutes,omitempty" doc:"Random schedule delay"`
+		ThreadDraft        *string                  `json:"thread_draft,omitempty" doc:"Encoded multi-post draft; empty clears it"`
+		Variants           []VariantInput           `json:"variants" doc:"Replacement per-destination text variants"`
+		Publication        TextPostPublicationInput `json:"publication" doc:"Canonical segments, media, settings, and destination renditions"`
+	}
+}
+
+type CreateTextPostDraftInput struct {
+	Body struct {
+		WorkspaceID        string                   `json:"workspace_id" doc:"Target workspace ID"`
+		Content            string                   `json:"content" doc:"First post content"`
+		ScheduledAt        *string                  `json:"scheduled_at,omitempty" doc:"Proposed schedule time"`
+		SocialAccountIDs   []string                 `json:"social_account_ids" doc:"Destinations"`
+		MediaIDs           []string                 `json:"media_ids" doc:"Aggregate media"`
+		RandomDelayMinutes int                      `json:"random_delay_minutes,omitempty" doc:"Random schedule delay"`
+		ThreadDraft        *string                  `json:"thread_draft,omitempty" doc:"Encoded multi-post draft"`
+		Variants           []VariantInput           `json:"variants" doc:"Per-destination text variants"`
+		Publication        TextPostPublicationInput `json:"publication" doc:"Canonical segments, media, settings, and destination renditions"`
+	}
+}
+
+type SaveTextPostDraftOutput struct {
+	Body struct {
+		PostID        string `json:"post_id"`
+		PublicationID string `json:"publication_id"`
+		Revision      int    `json:"revision"`
+		UpdatedAt     string `json:"updated_at"`
+	}
+}
+
+type CreateTextPostDraftOutput = SaveTextPostDraftOutput
+
+func publicationUpdateFromTextPost(input TextPostPublicationInput) PublicationUpdateBody {
+	return PublicationUpdateBody{
+		Title:          input.Title,
+		Intent:         input.Intent,
+		ContentProfile: input.ContentProfile,
+		SourceText:     input.SourceText,
+		SourceURL:      input.SourceURL,
+		Goal:           input.Goal,
+		Audience:       input.Audience,
+		ScheduledAt:    input.ScheduledAt,
+		ClearSchedule:  input.ClearSchedule,
+		Metadata:       input.Metadata,
+		Segments:       input.Segments,
+		Renditions:     input.Renditions,
+	}
 }
 
 type ListPostsInput struct {
@@ -335,8 +426,10 @@ func (h *PostHandler) CreatePost(api huma.API) {
 			CreatedByID:        userID,
 			Content:            input.Body.Content,
 			Status:             status,
+			Revision:           1,
 			RandomDelayMinutes: input.Body.RandomDelayMinutes,
 			CreatedAt:          now,
+			UpdatedAt:          now,
 		}
 		if input.Body.ScheduledAt != nil {
 			post.ScheduledAt = *input.Body.ScheduledAt
@@ -435,9 +528,11 @@ func (h *PostHandler) CreatePost(api huma.API) {
 			ThreadSequence:     post.ThreadSequence,
 			Content:            post.Content,
 			Status:             post.Status,
+			Revision:           post.Revision,
 			ScheduledAt:        post.ScheduledAt.Format(time.RFC3339),
 			RandomDelayMinutes: post.RandomDelayMinutes,
 			CreatedAt:          post.CreatedAt.Format(time.RFC3339),
+			UpdatedAt:          post.UpdatedAt.Format(time.RFC3339),
 			ThreadDraft:        draftJSON,
 		}
 		if !post.ActualRunAt.IsZero() {
@@ -643,15 +738,21 @@ func (h *PostHandler) listPostDestinations(ctx context.Context, postIDs []string
 	}
 
 	var destinations []struct {
-		PostID          string `bun:"post_id"`
-		SocialAccountID string `bun:"social_account_id"`
-		Platform        string `bun:"platform"`
-		Status          string `bun:"status"`
-		ErrorMessage    string `bun:"error_message"`
+		PostID          string    `bun:"post_id"`
+		SocialAccountID string    `bun:"social_account_id"`
+		Platform        string    `bun:"platform"`
+		Status          string    `bun:"status"`
+		ErrorMessage    string    `bun:"error_message"`
+		ErrorKind       string    `bun:"error_kind"`
+		ErrorCode       string    `bun:"error_code"`
+		ErrorHTTPStatus int       `bun:"error_http_status"`
+		ErrorRetryable  bool      `bun:"error_retryable"`
+		ErrorRetryAt    time.Time `bun:"error_retry_at"`
+		ErrorAction     string    `bun:"error_action"`
 	}
 	err := h.db.NewSelect().
 		TableExpr("post_destinations AS pd").
-		ColumnExpr("pd.post_id, pd.social_account_id, sa.platform, pd.status, pd.error_message").
+		ColumnExpr("pd.post_id, pd.social_account_id, sa.platform, pd.status, pd.error_message, pd.error_kind, pd.error_code, pd.error_http_status, pd.error_retryable, pd.error_retry_at, pd.error_action").
 		Join("JOIN social_accounts AS sa ON sa.id = pd.social_account_id").
 		Where("pd.post_id IN (?)", bun.List(postIDs)).
 		Scan(ctx, &destinations)
@@ -665,6 +766,12 @@ func (h *PostHandler) listPostDestinations(ctx context.Context, postIDs []string
 			Platform:        d.Platform,
 			Status:          d.Status,
 			ErrorMessage:    d.ErrorMessage,
+			ErrorKind:       d.ErrorKind,
+			ErrorCode:       d.ErrorCode,
+			ErrorHTTPStatus: d.ErrorHTTPStatus,
+			ErrorRetryable:  d.ErrorRetryable,
+			ErrorRetryAt:    formatOptionalTime(d.ErrorRetryAt),
+			ErrorAction:     d.ErrorAction,
 		})
 	}
 	return destByPost, nil
@@ -706,9 +813,11 @@ func postResponseForList(p models.Post, destinations []PostDestinationResponse, 
 		ThreadSequence:     p.ThreadSequence,
 		Content:            p.Content,
 		Status:             p.Status,
+		Revision:           p.Revision,
 		ScheduledAt:        p.ScheduledAt.Format(time.RFC3339),
 		RandomDelayMinutes: p.RandomDelayMinutes,
 		CreatedAt:          p.CreatedAt.Format(time.RFC3339),
+		UpdatedAt:          p.UpdatedAt.Format(time.RFC3339),
 		Destinations:       destinations,
 		MediaIDs:           mediaIDs,
 	}
@@ -1213,15 +1322,17 @@ type PostMediaResponse struct {
 
 type PostDetailResponse struct {
 	ID                 string                    `json:"id" doc:"Post ID"`
-	PublicationID      string                    `json:"publication_id,omitempty" doc:"Canonical publication ID for compatibility-translated authoring"`
+	PublicationID      string                    `json:"publication_id,omitempty" doc:"Canonical publication ID for the text composer"`
 	WorkspaceID        string                    `json:"workspace_id" doc:"Workspace ID"`
 	CreatedByID        string                    `json:"created_by" doc:"Creator user ID"`
 	Content            string                    `json:"content" doc:"Post content"`
 	Status             string                    `json:"status" doc:"Post status"`
+	Revision           int                       `json:"revision" doc:"Current atomic draft revision"`
 	ScheduledAt        string                    `json:"scheduled_at" doc:"Scheduled time (ISO 8601)"`
 	RandomDelayMinutes int                       `json:"random_delay_minutes" doc:"Random delay in minutes (±N)"`
 	ActualRunAt        string                    `json:"actual_run_at,omitempty" doc:"Actual run time after random delay (ISO 8601)"`
 	CreatedAt          string                    `json:"created_at" doc:"Creation time (ISO 8601)"`
+	UpdatedAt          string                    `json:"updated_at" doc:"Last atomic draft save time (ISO 8601)"`
 	Media              []PostMediaResponse       `json:"media,omitempty" doc:"Attached media"`
 	Destinations       []PostDestinationResponse `json:"destinations,omitempty" doc:"Post destinations"`
 	ThreadDraft        *string                   `json:"thread_draft,omitempty" doc:"Set when this post is a thread-draft parent; contains the encoded thread JSON (with __openpost_thread__: prefix)."`
@@ -1256,15 +1367,21 @@ func (h *PostHandler) GetPost(api huma.API) {
 		}
 
 		var destinations []struct {
-			PostID          string `bun:"post_id"`
-			SocialAccountID string `bun:"social_account_id"`
-			Platform        string `bun:"platform"`
-			Status          string `bun:"status"`
-			ErrorMessage    string `bun:"error_message"`
+			PostID          string    `bun:"post_id"`
+			SocialAccountID string    `bun:"social_account_id"`
+			Platform        string    `bun:"platform"`
+			Status          string    `bun:"status"`
+			ErrorMessage    string    `bun:"error_message"`
+			ErrorKind       string    `bun:"error_kind"`
+			ErrorCode       string    `bun:"error_code"`
+			ErrorHTTPStatus int       `bun:"error_http_status"`
+			ErrorRetryable  bool      `bun:"error_retryable"`
+			ErrorRetryAt    time.Time `bun:"error_retry_at"`
+			ErrorAction     string    `bun:"error_action"`
 		}
 		err = h.db.NewSelect().
 			TableExpr("post_destinations AS pd").
-			ColumnExpr("pd.post_id, pd.social_account_id, sa.platform, pd.status, pd.error_message").
+			ColumnExpr("pd.post_id, pd.social_account_id, sa.platform, pd.status, pd.error_message, pd.error_kind, pd.error_code, pd.error_http_status, pd.error_retryable, pd.error_retry_at, pd.error_action").
 			Join("JOIN social_accounts AS sa ON sa.id = pd.social_account_id").
 			Where("pd.post_id = ?", input.PathID).
 			Scan(ctx, &destinations)
@@ -1297,6 +1414,12 @@ func (h *PostHandler) GetPost(api huma.API) {
 				Platform:        d.Platform,
 				Status:          d.Status,
 				ErrorMessage:    d.ErrorMessage,
+				ErrorKind:       d.ErrorKind,
+				ErrorCode:       d.ErrorCode,
+				ErrorHTTPStatus: d.ErrorHTTPStatus,
+				ErrorRetryable:  d.ErrorRetryable,
+				ErrorRetryAt:    formatOptionalTime(d.ErrorRetryAt),
+				ErrorAction:     d.ErrorAction,
 			}
 		}
 
@@ -1318,9 +1441,11 @@ func (h *PostHandler) GetPost(api huma.API) {
 			CreatedByID:        post.CreatedByID,
 			Content:            post.Content,
 			Status:             post.Status,
+			Revision:           post.Revision,
 			ScheduledAt:        post.ScheduledAt.Format(time.RFC3339),
 			RandomDelayMinutes: post.RandomDelayMinutes,
 			CreatedAt:          post.CreatedAt.Format(time.RFC3339),
+			UpdatedAt:          post.UpdatedAt.Format(time.RFC3339),
 			Media:              mediaResp,
 			Destinations:       destResp,
 		}}
@@ -1344,6 +1469,714 @@ func (h *PostHandler) GetPost(api huma.API) {
 		resp.Body.ThreadDraft = threadDraft
 		return resp, nil
 	})
+}
+
+// CreateTextPostDraft creates the text-composer row and canonical publication
+// in the same transaction.
+//
+//nolint:gocyclo
+func (h *PostHandler) CreateTextPostDraft(api huma.API) {
+	huma.Register(api, huma.Operation{
+		OperationID: "create-text-post-draft",
+		Method:      http.MethodPost,
+		Path:        "/posts/draft",
+		Summary:     "Atomically create a text or thread draft",
+		Tags:        []string{tagPosts},
+		Middlewares: huma.Middlewares{middleware.AuthMiddleware(api, h.auth)},
+		Errors:      []int{400, 403},
+	}, func(ctx context.Context, input *CreateTextPostDraftInput) (*CreateTextPostDraftOutput, error) {
+		userID := middleware.GetUserID(ctx)
+		if strings.TrimSpace(input.Body.WorkspaceID) == "" {
+			return nil, huma.Error400BadRequest("workspace_id is required")
+		}
+		if err := h.checkWorkspaceEditAccess(ctx, input.Body.WorkspaceID, userID); err != nil {
+			return nil, err
+		}
+		if err := h.validateAccountsBelongToWorkspace(
+			ctx,
+			input.Body.WorkspaceID,
+			input.Body.SocialAccountIDs,
+		); err != nil {
+			return nil, err
+		}
+		mediaIDs := append([]string{}, input.Body.MediaIDs...)
+		for _, variant := range input.Body.Variants {
+			if variant.MediaIDs == nil || strings.TrimSpace(*variant.MediaIDs) == "" {
+				continue
+			}
+			var variantMedia []string
+			if err := json.Unmarshal([]byte(*variant.MediaIDs), &variantMedia); err != nil {
+				return nil, huma.Error400BadRequest("variant media_ids must be a JSON array of media IDs")
+			}
+			mediaIDs = append(mediaIDs, variantMedia...)
+		}
+		if input.Body.ThreadDraft != nil && *input.Body.ThreadDraft != "" {
+			mediaIDs = append(mediaIDs, postservice.ThreadDraftMediaIDs(*input.Body.ThreadDraft)...)
+		}
+		mediaIDs = append(mediaIDs, allPublicationMediaIDs(
+			nil,
+			input.Body.Publication.Segments,
+			input.Body.Publication.Renditions,
+		)...)
+		if err := h.validateMediaBelongsToWorkspace(ctx, input.Body.WorkspaceID, mediaIDs); err != nil {
+			return nil, err
+		}
+
+		publicationHandler := NewPublicationHandler(h.db, h.auth, h.entitlement)
+		publicationHandler.SetCapabilityDependencies(h.providers, h.tokenSource)
+		accountMap, err := publicationHandler.loadAccounts(
+			ctx,
+			input.Body.WorkspaceID,
+			renditionAccountIDs(input.Body.Publication.Renditions),
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		var scheduledAt time.Time
+		if input.Body.ScheduledAt != nil && strings.TrimSpace(*input.Body.ScheduledAt) != "" {
+			scheduledAt, err = time.Parse(time.RFC3339, strings.TrimSpace(*input.Body.ScheduledAt))
+			if err != nil {
+				return nil, huma.Error400BadRequest("scheduled_at must be an RFC3339 timestamp")
+			}
+			if err := validateFuturePublicationSchedule(scheduledAt, time.Now().UTC()); err != nil {
+				return nil, huma.Error400BadRequest(err.Error())
+			}
+		}
+
+		now := time.Now().UTC()
+		postID := uuid.New().String()
+		publicationID := uuid.New().String()
+		content, threadDraft := postservice.ResolveThreadDraftInput(
+			input.Body.Content,
+			input.Body.ThreadDraft,
+		)
+		post := &models.Post{
+			ID:                 postID,
+			WorkspaceID:        input.Body.WorkspaceID,
+			CreatedByID:        userID,
+			PublicationID:      publicationID,
+			Content:            content,
+			Status:             models.PostStatusDraft,
+			Revision:           1,
+			ScheduledAt:        scheduledAt,
+			RandomDelayMinutes: input.Body.RandomDelayMinutes,
+			CreatedAt:          now,
+			UpdatedAt:          now,
+		}
+		publicationInput := input.Body.Publication
+		intent := publicationFirstNonEmpty(
+			valueOrEmpty(publicationInput.Intent),
+			publishingIntentForProfile(valueOrEmpty(publicationInput.ContentProfile)),
+			models.PublishingIntentPost,
+		)
+		profile := publicationFirstNonEmpty(
+			valueOrEmpty(publicationInput.ContentProfile),
+			compatibilityProfileForIntent(intent),
+		)
+		sourceText := publicationFirstNonEmpty(valueOrEmpty(publicationInput.SourceText), content)
+		title := publicationFirstNonEmpty(
+			valueOrEmpty(publicationInput.Title),
+			firstContentLine(sourceText),
+			"Untitled publication",
+		)
+		publication := &models.Publication{
+			ID:              publicationID,
+			WorkspaceID:     input.Body.WorkspaceID,
+			CreatedByID:     userID,
+			Title:           title,
+			Intent:          intent,
+			ContentProfile:  profile,
+			SourceText:      sourceText,
+			SourceContent:   sourceText,
+			SourceURL:       valueOrEmpty(publicationInput.SourceURL),
+			Goal:            valueOrEmpty(publicationInput.Goal),
+			Audience:        valueOrEmpty(publicationInput.Audience),
+			Status:          models.PublicationStatusDraft,
+			Revision:        1,
+			ScheduledAt:     scheduledAt,
+			MetadataJSON:    mustJSON(publicationInput.Metadata),
+			ReleasePlanJSON: mustJSON(publicationInput.Metadata),
+			CreatedAt:       now,
+			UpdatedAt:       now,
+		}
+		segments := publicationInput.Segments
+		if len(segments) == 0 {
+			segments = []PublicationSegmentInput{{Body: sourceText, Title: title}}
+		}
+
+		err = h.db.RunInTx(ctx, &sql.TxOptions{}, func(txCtx context.Context, tx bun.Tx) error {
+			if _, err := tx.NewInsert().Model(publication).Exec(txCtx); err != nil {
+				return err
+			}
+			if _, err := tx.NewInsert().Model(post).Exec(txCtx); err != nil {
+				return err
+			}
+			if err := postservice.UpsertThreadDraftTx(txCtx, tx, post.ID, threadDraft); err != nil {
+				return err
+			}
+			if err := replaceTextPostDestinationsTx(
+				txCtx,
+				tx,
+				post.ID,
+				input.Body.SocialAccountIDs,
+			); err != nil {
+				return err
+			}
+			if err := replaceTextPostMediaTx(txCtx, tx, post.ID, input.Body.MediaIDs); err != nil {
+				return err
+			}
+			if err := replaceTextPostVariantsTx(
+				txCtx,
+				tx,
+				post,
+				input.Body.Variants,
+				now,
+			); err != nil {
+				return err
+			}
+			canonical, err := publicationHandler.insertPublicationSegments(
+				txCtx,
+				tx,
+				publication,
+				segments,
+			)
+			if err != nil {
+				return err
+			}
+			if err := publicationHandler.insertRenditions(
+				txCtx,
+				tx,
+				publication,
+				canonical,
+				segments,
+				publicationInput.Renditions,
+				nil,
+				accountMap,
+			); err != nil {
+				return err
+			}
+			domains := []string{
+				"content",
+				"destinations",
+				"destination overrides",
+				"media",
+				"segments",
+				"settings",
+			}
+			if !scheduledAt.IsZero() {
+				domains = append(domains, "schedule")
+			}
+			if err := drafts.RecordChange(
+				txCtx,
+				tx,
+				drafts.AggregateTextPost,
+				post.ID,
+				1,
+				domains,
+				userID,
+				now,
+			); err != nil {
+				return err
+			}
+			return drafts.RecordChange(
+				txCtx,
+				tx,
+				drafts.AggregatePublication,
+				publication.ID,
+				1,
+				domains,
+				userID,
+				now,
+			)
+		})
+		if err != nil {
+			return nil, huma.Error500InternalServerError("failed to create text post draft")
+		}
+
+		output := &CreateTextPostDraftOutput{}
+		output.Body.PostID = post.ID
+		output.Body.PublicationID = publication.ID
+		output.Body.Revision = 1
+		output.Body.UpdatedAt = now.Format(time.RFC3339)
+		return output, nil
+	})
+}
+
+func valueOrEmpty(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
+}
+
+// SaveTextPostDraft persists every editable part of the text-and-thread
+// composer as one revision. A failed write rolls back the post, thread,
+// variants, destinations, media, canonical segments, and renditions together.
+//
+//nolint:gocyclo
+func (h *PostHandler) SaveTextPostDraft(api huma.API) {
+	huma.Register(api, huma.Operation{
+		OperationID: "save-text-post-draft",
+		Method:      http.MethodPut,
+		Path:        "/posts/{id}/draft",
+		Summary:     "Atomically save a text or thread draft",
+		Tags:        []string{tagPosts},
+		Middlewares: huma.Middlewares{middleware.AuthMiddleware(api, h.auth)},
+		Errors:      []int{400, 403, 404, 409},
+	}, func(ctx context.Context, input *SaveTextPostDraftInput) (*SaveTextPostDraftOutput, error) {
+		if err := drafts.RequireExpectedRevision(input.Body.ExpectedRevision); err != nil {
+			return nil, err
+		}
+		if err := databasemigrations.MigrateLegacyPublicationAuthoring(ctx, h.db); err != nil {
+			return nil, huma.Error500InternalServerError("failed to prepare text post authoring")
+		}
+
+		userID := middleware.GetUserID(ctx)
+		var post models.Post
+		if err := h.db.NewSelect().Model(&post).Where("id = ?", input.PathID).Scan(ctx); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return nil, huma.Error404NotFound("post not found")
+			}
+			return nil, huma.Error500InternalServerError("failed to load post")
+		}
+		if err := h.checkWorkspaceEditAccess(ctx, post.WorkspaceID, userID); err != nil {
+			return nil, err
+		}
+		if !isTextPostEditable(post.Status) {
+			return nil, huma.Error400BadRequest("published or publishing posts cannot be edited")
+		}
+		if err := h.validateAccountsBelongToWorkspace(ctx, post.WorkspaceID, input.Body.SocialAccountIDs); err != nil {
+			return nil, err
+		}
+		mediaIDs := append([]string{}, input.Body.MediaIDs...)
+		for _, variant := range input.Body.Variants {
+			if variant.MediaIDs == nil || strings.TrimSpace(*variant.MediaIDs) == "" {
+				continue
+			}
+			var variantMedia []string
+			if err := json.Unmarshal([]byte(*variant.MediaIDs), &variantMedia); err != nil {
+				return nil, huma.Error400BadRequest("variant media_ids must be a JSON array of media IDs")
+			}
+			mediaIDs = append(mediaIDs, variantMedia...)
+		}
+		if input.Body.ThreadDraft != nil && *input.Body.ThreadDraft != "" {
+			mediaIDs = append(mediaIDs, postservice.ThreadDraftMediaIDs(*input.Body.ThreadDraft)...)
+		}
+		mediaIDs = append(mediaIDs, allPublicationMediaIDs(
+			nil,
+			input.Body.Publication.Segments,
+			input.Body.Publication.Renditions,
+		)...)
+		if err := h.validateMediaBelongsToWorkspace(ctx, post.WorkspaceID, mediaIDs); err != nil {
+			return nil, err
+		}
+
+		publicationHandler := NewPublicationHandler(h.db, h.auth, h.entitlement)
+		publicationHandler.SetCapabilityDependencies(h.providers, h.tokenSource)
+		accountMap, err := publicationHandler.loadAccounts(
+			ctx,
+			post.WorkspaceID,
+			renditionAccountIDs(input.Body.Publication.Renditions),
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		var scheduledAt time.Time
+		if input.Body.ScheduledAt != nil && strings.TrimSpace(*input.Body.ScheduledAt) != "" {
+			scheduledAt, err = time.Parse(time.RFC3339, strings.TrimSpace(*input.Body.ScheduledAt))
+			if err != nil {
+				return nil, huma.Error400BadRequest("scheduled_at must be an RFC3339 timestamp")
+			}
+			if err := validateFuturePublicationSchedule(scheduledAt, time.Now().UTC()); err != nil {
+				return nil, huma.Error400BadRequest(err.Error())
+			}
+		}
+
+		now := time.Now().UTC()
+		nextRevision := input.Body.ExpectedRevision + 1
+		err = h.db.RunInTx(ctx, &sql.TxOptions{}, func(txCtx context.Context, tx bun.Tx) error {
+			current, err := h.lockTextPostTx(txCtx, tx, input.PathID)
+			if err != nil {
+				return err
+			}
+			if current.Revision != input.Body.ExpectedRevision {
+				return h.textPostRevisionConflict(txCtx, tx, current, input.Body.ExpectedRevision)
+			}
+			if current.PublicationID == "" {
+				return errors.New("text post has no canonical publication")
+			}
+			publication, err := publicationHandler.loadEditablePublicationTx(txCtx, tx, current.PublicationID)
+			if err != nil {
+				return err
+			}
+			if publication.Revision != input.Body.ExpectedRevision {
+				return publicationHandler.publicationRevisionConflict(
+					txCtx,
+					tx,
+					publication,
+					input.Body.ExpectedRevision,
+				)
+			}
+
+			content, threadDraft := postservice.ResolveThreadDraftInput(
+				input.Body.Content,
+				input.Body.ThreadDraft,
+			)
+			current.Content = content
+			current.RandomDelayMinutes = input.Body.RandomDelayMinutes
+			current.Revision = nextRevision
+			current.UpdatedAt = now
+			if input.Body.ScheduledAt != nil {
+				current.ScheduledAt = scheduledAt
+				if scheduledAt.IsZero() && current.Status == models.PostStatusScheduled {
+					current.Status = models.PostStatusDraft
+					current.ActualRunAt = time.Time{}
+				}
+			}
+			result, err := tx.NewUpdate().
+				Model(current).
+				Column(
+					"content",
+					"status",
+					"scheduled_at",
+					"actual_run_at",
+					"random_delay_minutes",
+					"revision",
+					"updated_at",
+				).
+				Where("id = ? AND revision = ?", current.ID, input.Body.ExpectedRevision).
+				Exec(txCtx)
+			if err != nil {
+				return err
+			}
+			if affected, _ := result.RowsAffected(); affected == 0 {
+				return h.textPostRevisionConflict(txCtx, tx, current, input.Body.ExpectedRevision)
+			}
+			if err := postservice.UpsertThreadDraftTx(txCtx, tx, current.ID, threadDraft); err != nil {
+				return err
+			}
+			if err := replaceTextPostDestinationsTx(
+				txCtx,
+				tx,
+				current.ID,
+				input.Body.SocialAccountIDs,
+			); err != nil {
+				return err
+			}
+			if err := replaceTextPostMediaTx(txCtx, tx, current.ID, input.Body.MediaIDs); err != nil {
+				return err
+			}
+			if err := replaceTextPostVariantsTx(
+				txCtx,
+				tx,
+				current,
+				input.Body.Variants,
+				now,
+			); err != nil {
+				return err
+			}
+
+			// Rebuild the compatibility projection inside this transaction, then
+			// apply the composer's richer canonical settings and segments.
+			if err := databasemigrations.SyncTextPostAuthoringTx(txCtx, tx, current.ID); err != nil {
+				return err
+			}
+			clearQueuedSchedule, rescheduleQueuedJob, err := applyPublicationScheduleUpdate(
+				publication,
+				input.Body.Publication.ScheduledAt,
+				input.Body.Publication.ClearSchedule,
+				now,
+			)
+			if err != nil {
+				return err
+			}
+			applyPublicationFieldUpdates(
+				publication,
+				publicationUpdateFromTextPost(input.Body.Publication),
+			)
+			publication.Revision = nextRevision
+			publication.UpdatedAt = now
+			if clearQueuedSchedule {
+				if err := publicationHandler.clearPublicationScheduleTx(
+					txCtx,
+					tx,
+					publication.ID,
+					now,
+				); err != nil {
+					return err
+				}
+			}
+			pubResult, err := tx.NewUpdate().
+				Model(publication).
+				Where("id = ? AND revision = ?", publication.ID, input.Body.ExpectedRevision).
+				Exec(txCtx)
+			if err != nil {
+				return err
+			}
+			if affected, _ := pubResult.RowsAffected(); affected == 0 {
+				return publicationHandler.publicationRevisionConflict(
+					txCtx,
+					tx,
+					publication,
+					input.Body.ExpectedRevision,
+				)
+			}
+			if input.Body.Publication.Segments != nil {
+				if err := publicationHandler.replacePublicationSegments(
+					txCtx,
+					tx,
+					publication,
+					input.Body.Publication.Segments,
+				); err != nil {
+					return err
+				}
+			}
+			if input.Body.Publication.Renditions != nil {
+				if err := publicationHandler.replaceAllPublicationRenditions(
+					txCtx,
+					tx,
+					publication,
+					input.Body.Publication.Segments,
+					input.Body.Publication.Renditions,
+					accountMap,
+				); err != nil {
+					return err
+				}
+			}
+			if rescheduleQueuedJob {
+				if _, err := publicationHandler.replacePublicationJobTx(
+					txCtx,
+					tx,
+					publication.ID,
+					publication.ScheduledAt,
+				); err != nil {
+					return err
+				}
+			}
+			domains := []string{
+				"content",
+				"destinations",
+				"destination overrides",
+				"media",
+				"segments",
+				"settings",
+			}
+			if input.Body.ScheduledAt != nil {
+				domains = append(domains, "schedule")
+			}
+			if err := drafts.RecordChange(
+				txCtx,
+				tx,
+				drafts.AggregateTextPost,
+				current.ID,
+				nextRevision,
+				domains,
+				userID,
+				now,
+			); err != nil {
+				return err
+			}
+			return drafts.RecordChange(
+				txCtx,
+				tx,
+				drafts.AggregatePublication,
+				publication.ID,
+				nextRevision,
+				domains,
+				userID,
+				now,
+			)
+		})
+		if err != nil {
+			return nil, textPostMutationHTTPError(err)
+		}
+
+		output := &SaveTextPostDraftOutput{}
+		output.Body.PostID = post.ID
+		output.Body.PublicationID = post.PublicationID
+		output.Body.Revision = nextRevision
+		output.Body.UpdatedAt = now.Format(time.RFC3339)
+		return output, nil
+	})
+}
+
+func isTextPostEditable(status string) bool {
+	return status == models.PostStatusDraft || status == models.PostStatusScheduled ||
+		status == models.PostStatusFailed
+}
+
+func (h *PostHandler) lockTextPostTx(
+	ctx context.Context,
+	tx bun.Tx,
+	postID string,
+) (*models.Post, error) {
+	if tx.Dialect().Name() == dialect.PG {
+		var post models.Post
+		if err := tx.NewSelect().
+			Model(&post).
+			Where("id = ?", postID).
+			For("UPDATE").
+			Scan(ctx); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return nil, errPublicationNotFound
+			}
+			return nil, err
+		}
+		return &post, nil
+	}
+	result, err := tx.NewUpdate().
+		Model((*models.Post)(nil)).
+		Set("id = id").
+		Where("id = ?", postID).
+		Exec(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if affected, _ := result.RowsAffected(); affected == 0 {
+		return nil, errPublicationNotFound
+	}
+	var post models.Post
+	if err := tx.NewSelect().Model(&post).Where("id = ?", postID).Scan(ctx); err != nil {
+		return nil, err
+	}
+	return &post, nil
+}
+
+func (h *PostHandler) textPostRevisionConflict(
+	ctx context.Context,
+	db bun.IDB,
+	post *models.Post,
+	expectedRevision int,
+) error {
+	domains, err := drafts.ChangedDomainsSince(
+		ctx,
+		db,
+		drafts.AggregateTextPost,
+		post.ID,
+		expectedRevision,
+	)
+	if err != nil {
+		return err
+	}
+	if len(domains) == 0 {
+		domains = []string{"draft"}
+	}
+	return drafts.NewConflictError(drafts.ConflictMetadata{
+		AggregateType:    drafts.AggregateTextPost,
+		AggregateID:      post.ID,
+		ExpectedRevision: expectedRevision,
+		CurrentRevision:  post.Revision,
+		Status:           post.Status,
+		UpdatedAt:        formatOptionalTime(post.UpdatedAt),
+		ChangedDomains:   domains,
+	})
+}
+
+func replaceTextPostDestinationsTx(
+	ctx context.Context,
+	tx bun.Tx,
+	postID string,
+	accountIDs []string,
+) error {
+	if _, err := tx.NewDelete().
+		Model((*models.PostDestination)(nil)).
+		Where("post_id = ?", postID).
+		Exec(ctx); err != nil {
+		return err
+	}
+	for _, accountID := range uniqueNonEmpty(accountIDs) {
+		row := &models.PostDestination{
+			ID:              uuid.New().String(),
+			PostID:          postID,
+			SocialAccountID: accountID,
+			Status:          postStatusPending,
+		}
+		if _, err := tx.NewInsert().Model(row).Exec(ctx); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func replaceTextPostMediaTx(
+	ctx context.Context,
+	tx bun.Tx,
+	postID string,
+	mediaIDs []string,
+) error {
+	if _, err := tx.NewDelete().
+		Model((*models.PostMedia)(nil)).
+		Where("post_id = ?", postID).
+		Exec(ctx); err != nil {
+		return err
+	}
+	for displayOrder, mediaID := range uniqueNonEmpty(mediaIDs) {
+		row := &models.PostMedia{
+			PostID:       postID,
+			MediaID:      mediaID,
+			DisplayOrder: displayOrder,
+		}
+		if _, err := tx.NewInsert().Model(row).Exec(ctx); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func replaceTextPostVariantsTx(
+	ctx context.Context,
+	tx bun.Tx,
+	post *models.Post,
+	variants []VariantInput,
+	now time.Time,
+) error {
+	if _, err := tx.NewDelete().
+		Model((*models.PostVariant)(nil)).
+		Where("post_id = ?", post.ID).
+		Exec(ctx); err != nil {
+		return err
+	}
+	for _, input := range variants {
+		content := post.Content
+		if input.Content != nil {
+			content = *input.Content
+		}
+		mediaIDs := "[]"
+		if input.MediaIDs != nil && strings.TrimSpace(*input.MediaIDs) != "" {
+			mediaIDs = *input.MediaIDs
+		}
+		row := &models.PostVariant{
+			ID:              uuid.New().String(),
+			PostID:          post.ID,
+			SocialAccountID: input.SocialAccountID,
+			Content:         content,
+			MediaIDs:        mediaIDs,
+			IsUnsynced:      input.IsUnsynced || input.Content != nil || input.MediaIDs != nil,
+			CreatedAt:       now,
+			UpdatedAt:       now,
+		}
+		if _, err := tx.NewInsert().Model(row).Exec(ctx); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func textPostMutationHTTPError(err error) error {
+	var statusErr huma.StatusError
+	if errors.As(err, &statusErr) {
+		return statusErr
+	}
+	if errors.Is(err, errPublicationNotFound) {
+		return huma.Error404NotFound("post or publication not found")
+	}
+	if errors.Is(err, errPublicationNotEditable) ||
+		errors.Is(err, errPublicationAlreadyProcessing) {
+		return publicationMutationHTTPError(err, "failed to save text post draft")
+	}
+	return huma.Error500InternalServerError("failed to save text post draft")
 }
 
 type UpdatePostInput struct {
@@ -1671,15 +2504,21 @@ func (h *PostHandler) UpdatePost(api huma.API) {
 		}
 
 		var destinations []struct {
-			PostID          string `bun:"post_id"`
-			SocialAccountID string `bun:"social_account_id"`
-			Platform        string `bun:"platform"`
-			Status          string `bun:"status"`
-			ErrorMessage    string `bun:"error_message"`
+			PostID          string    `bun:"post_id"`
+			SocialAccountID string    `bun:"social_account_id"`
+			Platform        string    `bun:"platform"`
+			Status          string    `bun:"status"`
+			ErrorMessage    string    `bun:"error_message"`
+			ErrorKind       string    `bun:"error_kind"`
+			ErrorCode       string    `bun:"error_code"`
+			ErrorHTTPStatus int       `bun:"error_http_status"`
+			ErrorRetryable  bool      `bun:"error_retryable"`
+			ErrorRetryAt    time.Time `bun:"error_retry_at"`
+			ErrorAction     string    `bun:"error_action"`
 		}
 		if err := h.db.NewSelect().
 			TableExpr("post_destinations AS pd").
-			ColumnExpr("pd.post_id, pd.social_account_id, sa.platform, pd.status, pd.error_message").
+			ColumnExpr("pd.post_id, pd.social_account_id, sa.platform, pd.status, pd.error_message, pd.error_kind, pd.error_code, pd.error_http_status, pd.error_retryable, pd.error_retry_at, pd.error_action").
 			Join("JOIN social_accounts AS sa ON sa.id = pd.social_account_id").
 			Where("pd.post_id = ?", post.ID).
 			Scan(ctx, &destinations); err != nil {
@@ -1710,6 +2549,12 @@ func (h *PostHandler) UpdatePost(api huma.API) {
 				Platform:        d.Platform,
 				Status:          d.Status,
 				ErrorMessage:    d.ErrorMessage,
+				ErrorKind:       d.ErrorKind,
+				ErrorCode:       d.ErrorCode,
+				ErrorHTTPStatus: d.ErrorHTTPStatus,
+				ErrorRetryable:  d.ErrorRetryable,
+				ErrorRetryAt:    formatOptionalTime(d.ErrorRetryAt),
+				ErrorAction:     d.ErrorAction,
 			}
 		}
 
@@ -1731,9 +2576,11 @@ func (h *PostHandler) UpdatePost(api huma.API) {
 			CreatedByID:        respPost.CreatedByID,
 			Content:            respPost.Content,
 			Status:             respPost.Status,
+			Revision:           respPost.Revision,
 			ScheduledAt:        respPost.ScheduledAt.Format(time.RFC3339),
 			RandomDelayMinutes: respPost.RandomDelayMinutes,
 			CreatedAt:          respPost.CreatedAt.Format(time.RFC3339),
+			UpdatedAt:          respPost.UpdatedAt.Format(time.RFC3339),
 			Media:              mediaResp,
 			Destinations:       destResp,
 		}}

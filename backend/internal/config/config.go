@@ -41,6 +41,10 @@ type Config struct {
 	SupportEmail            string
 	StudioEnabled           bool
 	StudioModelBaseURL      string
+	FeedbackEnabled         bool
+	FeedbackDestinationURL  string
+	FeedbackRecipient       string
+	FeedbackSupportURL      string
 
 	SMTPHost       string
 	SMTPPort       int
@@ -145,6 +149,10 @@ func Load() *Config {
 		SupportEmail:            getEnvDefault("OPENPOST_SUPPORT_EMAIL", defaultSupportEmail),
 		StudioEnabled:           getEnvBoolWithAliases(true, "OPENPOST_STUDIO_ENABLED"),
 		StudioModelBaseURL:      strings.TrimRight(getEnvDefault("OPENPOST_STUDIO_MODEL_BASE_URL", "/studio-models"), "/"),
+		FeedbackEnabled:         getEnvBoolWithAliases(false, "OPENPOST_FEEDBACK_ENABLED"),
+		FeedbackDestinationURL:  getEnvDefault("OPENPOST_FEEDBACK_DESTINATION_URL", ""),
+		FeedbackRecipient:       getEnvDefault("OPENPOST_FEEDBACK_RECIPIENT", ""),
+		FeedbackSupportURL:      getEnvDefault("OPENPOST_FEEDBACK_SUPPORT_URL", "https://github.com/rodrgds/openpost/issues/new"),
 
 		SMTPHost:       getEnvDefault("OPENPOST_SMTP_HOST", ""),
 		SMTPPort:       getEnvInt("OPENPOST_SMTP_PORT", 587),
