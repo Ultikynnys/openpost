@@ -60,7 +60,12 @@
 		accountCapabilityNeedsAttention,
 		isActionableAccountIssue
 	} from './compose/account-attention';
-	import { composerIssues, issueMatchesProvider, uniqueIssueMessages } from './compose/validation';
+	import {
+		composerIssues,
+		isAccountSpecificIssue,
+		issueMatchesProvider,
+		uniqueIssueMessages
+	} from './compose/validation';
 	import { loadableDestinationOptionSources } from './compose/destination-options';
 	import {
 		workspaceClock,
@@ -791,14 +796,21 @@
 		return uniqueIssueMessages(blockers);
 	}
 
-	function accountBlockers(account: SocialAccount): string[] {
+	function accountBlockers(account: SocialAccount, includeShared = true): string[] {
 		const provider = getPlatformKey(account.platform);
 		return uniqueIssueMessages([
 			...(resolvedCapabilities[account.id]?.issues ?? [])
-				.filter((issue) => issue.severity === 'error')
+				.filter(
+					(issue) => issue.severity === 'error' && (includeShared || isAccountSpecificIssue(issue))
+				)
 				.map((issue) => issue.message),
 			...validationIssues
-				.filter((issue) => issue.severity === 'error' && issueMatchesProvider(issue, provider))
+				.filter(
+					(issue) =>
+						issue.severity === 'error' &&
+						(includeShared || isAccountSpecificIssue(issue)) &&
+						issueMatchesProvider(issue, provider)
+				)
 				.map((issue) => issue.message),
 			configuredPollErrorForAccount(account)
 		]);
@@ -815,12 +827,12 @@
 			);
 		});
 		return uniqueIssueMessages([
-			...accountBlockers(account),
+			...accountBlockers(account, false),
 			...(resolvedCapabilities[account.id]?.issues ?? [])
-				.filter(isActionableAccountIssue)
+				.filter((issue) => isAccountSpecificIssue(issue) && isActionableAccountIssue(issue))
 				.map((issue) => issue.message),
 			...validationIssues
-				.filter((issue) => issueMatchesProvider(issue, provider))
+				.filter((issue) => isAccountSpecificIssue(issue) && issueMatchesProvider(issue, provider))
 				.map((issue) => issue.message),
 			...mediaWarnings
 		]);

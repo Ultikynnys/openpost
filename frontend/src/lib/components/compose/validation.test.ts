@@ -32,6 +32,24 @@ describe('composer validation placement', () => {
 		expect(composerIssues([], [providerIssue])).toEqual([]);
 	});
 
+	it('collapses a shared media requirement beside the account control', () => {
+		const youtubeIssue = issue({
+			code: 'media_required',
+			provider: 'youtube',
+			message: 'Add a video.'
+		});
+		const linkedinIssue = issue({
+			code: 'media_required',
+			provider: 'linkedin',
+			message: 'Add a video.'
+		});
+
+		expect(isAccountSpecificIssue(youtubeIssue)).toBe(false);
+		expect(composerIssues([], [youtubeIssue, linkedinIssue])).toEqual([
+			expect.objectContaining({ message: 'Add a video.', severity: 'error' })
+		]);
+	});
+
 	it('keeps canonical segment issues in the global summary', () => {
 		const segmentIssue = issue({ scope: 'segment', scope_id: 'segment-1' });
 		expect(isAccountSpecificIssue(segmentIssue)).toBe(false);
@@ -44,7 +62,7 @@ describe('composer validation placement', () => {
 		]);
 	});
 
-	it('keeps repeated destination issue identities out of the global keyed list', () => {
+	it('keeps repeated destination issue identities unique in the global keyed list', () => {
 		const repeatedIssue = {
 			code: 'media_required',
 			field: 'media',
@@ -55,7 +73,9 @@ describe('composer validation placement', () => {
 		const youtubeIssue = issue({ ...repeatedIssue, provider: 'youtube' });
 		const linkedinIssue = issue({ ...repeatedIssue, provider: 'linkedin' });
 
-		expect(composerIssues([], [youtubeIssue, linkedinIssue])).toEqual([]);
+		expect(composerIssues([], [youtubeIssue, linkedinIssue])).toEqual([
+			expect.objectContaining({ message: 'Add a video.', severity: 'error' })
+		]);
 		expect(
 			uniqueIssueMessages(
 				[youtubeIssue, linkedinIssue]

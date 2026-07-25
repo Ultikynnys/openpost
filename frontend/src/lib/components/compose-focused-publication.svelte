@@ -55,7 +55,12 @@
 		accountCapabilityNeedsAttention,
 		isActionableAccountIssue
 	} from './compose/account-attention';
-	import { composerIssues, issueMatchesProvider, uniqueIssueMessages } from './compose/validation';
+	import {
+		composerIssues,
+		isAccountSpecificIssue,
+		issueMatchesProvider,
+		uniqueIssueMessages
+	} from './compose/validation';
 	import { loadableDestinationOptionSources } from './compose/destination-options';
 	import ImagePlusIcon from 'lucide-svelte/icons/image-plus';
 	import LoaderIcon from 'lucide-svelte/icons/loader-2';
@@ -1377,22 +1382,25 @@
 		return blockers;
 	}
 
-	function accountBlockers(account: SocialAccount): string[] {
+	function accountBlockers(account: SocialAccount, includeShared = true): string[] {
 		const blockers: string[] = [];
 		const resolved = resolvedCapabilities[account.id];
 		for (const issue of resolved?.issues ?? []) {
-			if (issue.severity === 'error') blockers.push(issue.message);
+			if (issue.severity === 'error' && (includeShared || isAccountSpecificIssue(issue))) {
+				blockers.push(issue.message);
+			}
 		}
 		for (const issue of validationIssues) {
 			if (
 				issue.severity === 'error' &&
+				(includeShared || isAccountSpecificIssue(issue)) &&
 				issueMatchesProvider(issue, getPlatformKey(account.platform))
 			) {
 				blockers.push(issue.message);
 			}
 		}
 		const mediaMin = resolved?.media.min_count ?? 0;
-		if (mediaMin > 0 && media.length < mediaMin) {
+		if (includeShared && mediaMin > 0 && media.length < mediaMin) {
 			blockers.push(
 				mediaMin === 1
 					? m.compose_add_media_singular()
@@ -1445,12 +1453,12 @@
 	function accountIssueMessages(account: SocialAccount): string[] {
 		const provider = getPlatformKey(account.platform);
 		return uniqueIssueMessages([
-			...accountBlockers(account),
+			...accountBlockers(account, false),
 			...(resolvedCapabilities[account.id]?.issues ?? [])
-				.filter(isActionableAccountIssue)
+				.filter((issue) => isAccountSpecificIssue(issue) && isActionableAccountIssue(issue))
 				.map((issue) => issue.message),
 			...validationIssues
-				.filter((issue) => issueMatchesProvider(issue, provider))
+				.filter((issue) => isAccountSpecificIssue(issue) && issueMatchesProvider(issue, provider))
 				.map((issue) => issue.message)
 		]);
 	}

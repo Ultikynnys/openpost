@@ -1,9 +1,12 @@
 <script lang="ts">
+	import { page } from '$app/state';
 	import { getLocalTimeZone, today, type DateValue } from '@internationalized/date';
 	import { SvelteMap } from 'svelte/reactivity';
 	import { client, type Post, type ScheduleOverview } from '$lib/api/client';
 	import type { components } from '$lib/api/types';
 	import { getDraftPresentation } from '$lib/components/compose/draft-utils';
+	import AppToast from '$lib/components/app-toast.svelte';
+	import DestructiveConfirmDialog from '$lib/components/destructive-confirm-dialog.svelte';
 	import * as CalendarUi from '$lib/components/ui/calendar';
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import { ui } from '$lib/stores/ui.svelte';
@@ -14,12 +17,15 @@
 	import FileTextIcon from 'lucide-svelte/icons/file-text';
 	import ImageIcon from 'lucide-svelte/icons/image';
 	import MaximizeIcon from 'lucide-svelte/icons/maximize-2';
+	import TrashIcon from 'lucide-svelte/icons/trash-2';
 
 	let { onNavigate }: { onNavigate: (href: string) => void } = $props();
 
 	type Publication = components['schemas']['PublicationResponse'];
 	type PlannerDraft = {
 		id: string;
+		kind: 'post' | 'publication';
+		revision: number;
 		href: string;
 		title: string;
 		isThread: boolean;
@@ -34,6 +40,10 @@
 	let drafts = $state.raw<PlannerDraft[]>([]);
 	let loadingSchedule = $state(true);
 	let loadingDrafts = $state(true);
+	let deleteDraftDialogOpen = $state(false);
+	let draftPendingDelete = $state<PlannerDraft | null>(null);
+	let deletingDraftId = $state('');
+	let draftDeleteError = $state('');
 	let overviewRequest = 0;
 	let draftsRequest = 0;
 
@@ -119,7 +129,10 @@
 			const legacyPosts = legacyResult.error ? [] : (legacyResult.data ?? []);
 			drafts = [
 				...publications
-					.filter((publication) => !publication.id.startsWith('legacy-publication:'))
+					.filter(
+						(publication) =>
+							!publication.id.startsWith('legacy-publication:') && !publication.text_post_id
+					)
 					.map(publicationDraft),
 				...legacyPosts.map(legacyDraft)
 			]
@@ -136,6 +149,8 @@
 		const segments = publication.segments ?? [];
 		return {
 			id: publication.id,
+			kind: 'publication',
+			revision: publication.revision,
 			href: `/publications/${encodeURIComponent(publication.id)}`,
 			title:
 				publication.source_text.trim() ||
@@ -154,6 +169,8 @@
 		const presentation = getDraftPresentation(post);
 		return {
 			id: post.id,
+			kind: 'post',
+			revision: post.revision,
 			href: `/posts/${post.id}`,
 			title: presentation.title,
 			isThread: presentation.isThread,
@@ -161,6 +178,49 @@
 			hasMedia: presentation.hasMedia,
 			createdAt: post.created_at
 		};
+	}
+
+	function requestDraftDelete(draft: PlannerDraft) {
+		draftPendingDelete = draft;
+		draftDeleteError = '';
+		deleteDraftDialogOpen = true;
+	}
+
+	async function deleteDraft() {
+		const draft = draftPendingDelete;
+		if (!draft || deletingDraftId) return;
+		deletingDraftId = draft.id;
+		draftDeleteError = '';
+		try {
+			if (draft.kind === 'publication') {
+				const { error } = await client.DELETE('/publications/{id}', {
+					params: {
+						path: { id: draft.id },
+						query: { confirm: true, expected_revision: draft.revision }
+					}
+				});
+				if (error) {
+					throw new Error(error.detail || m.sidebar_delete_draft_failed());
+				}
+			} else {
+				const { error } = await client.DELETE('/posts/{id}', {
+					params: { path: { id: draft.id } }
+				});
+				if (error) {
+					throw new Error(error.detail || m.sidebar_delete_draft_failed());
+				}
+			}
+
+			drafts = drafts.filter((candidate) => candidate.id !== draft.id);
+			ui.triggerRefresh();
+			if (page.url.pathname === draft.href) onNavigate('/');
+		} catch (error) {
+			draftDeleteError = error instanceof Error ? error.message : m.sidebar_delete_draft_failed();
+			void loadDrafts(workspaceId);
+		} finally {
+			deletingDraftId = '';
+			draftPendingDelete = null;
+		}
 	}
 
 	function handleDateChange(date: DateValue | undefined) {
@@ -184,8 +244,8 @@
 	</div>
 {/snippet}
 
-<div class="flex shrink-0 flex-col" data-testid="desktop-sidebar-planner">
-	<section class="border-b border-sidebar-border px-2 pb-3">
+<div class="flex min-h-0 flex-1 flex-col" data-testid="desktop-sidebar-planner">
+	<section class="shrink-0 border-b border-sidebar-border px-2 pb-3">
 		<div class="mb-1 flex h-8 items-center justify-between px-2">
 			<button
 				type="button"
@@ -218,8 +278,8 @@
 		/>
 	</section>
 
-	<section class="min-h-0 border-b border-sidebar-border px-2 py-3">
-		<div class="mb-1 flex h-7 items-center justify-between px-2">
+	<section class="flex min-h-0 flex-1 flex-col border-b border-sidebar-border px-2 py-3">
+		<div class="mb-1 flex h-7 shrink-0 items-center justify-between px-2">
 			<div class="flex items-center gap-1.5">
 				<span class="text-xs font-medium tracking-[0.1em] text-sidebar-foreground/52 uppercase"
 					>{m.sidebar_drafts()}</span
@@ -258,12 +318,12 @@
 				>
 			</button>
 		{:else}
-			<ul class="max-h-40 space-y-0.5 overflow-y-auto" data-testid="sidebar-draft-list">
+			<ul class="min-h-0 flex-1 space-y-0.5 overflow-y-auto" data-testid="sidebar-draft-list">
 				{#each drafts as draft (draft.id)}
-					<li>
+					<li class="group relative">
 						<button
 							type="button"
-							class="group flex min-h-9 w-full items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-none"
+							class="flex min-h-9 w-full items-center gap-2 rounded-md py-1.5 pr-10 pl-2 text-left hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-none"
 							onclick={() => onNavigate(draft.href)}
 							aria-label={m.sidebar_resume_draft({ title: draft.title })}
 						>
@@ -289,9 +349,34 @@
 								/>
 							{/if}
 						</button>
+						<button
+							type="button"
+							class="absolute top-1/2 right-1 flex size-7 -translate-y-1/2 items-center justify-center rounded-md text-sidebar-foreground/48 opacity-0 transition-[color,background-color,opacity] group-focus-within:opacity-100 group-hover:opacity-100 hover:bg-destructive/12 hover:text-destructive focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-none"
+							disabled={deletingDraftId === draft.id}
+							onclick={() => requestDraftDelete(draft)}
+							aria-label={m.sidebar_delete_draft({ title: draft.title })}
+						>
+							<TrashIcon class="size-3.5" aria-hidden="true" />
+						</button>
 					</li>
 				{/each}
 			</ul>
 		{/if}
 	</section>
 </div>
+
+<DestructiveConfirmDialog
+	bind:open={deleteDraftDialogOpen}
+	title={m.sidebar_delete_draft_confirm()}
+	description={m.compose_delete_draft_body()}
+	onConfirm={deleteDraft}
+/>
+
+{#if draftDeleteError}
+	<AppToast
+		message={draftDeleteError}
+		tone="error"
+		dismissLabel={m.common_dismiss()}
+		onDismiss={() => (draftDeleteError = '')}
+	/>
+{/if}

@@ -557,7 +557,8 @@ func uniqueStrings(values []string) []string {
 func Resolve(provider string, input ResolveInput) ResolvedCapability {
 	provider = strings.ToLower(strings.TrimSpace(provider))
 	intent := normalizeIntent(input.Intent)
-	shape := resolveMediaShape(input.Segments, input.SourceURL)
+	inputShape := resolveMediaShape(input.Segments, input.SourceURL)
+	shape := intendedMediaShape(intent, inputShape)
 	issues := []ValidationIssue{}
 	if intent == IntentPost && shape == MediaShapeVideo {
 		issues = append(issues, validationIssue(
@@ -591,9 +592,13 @@ func Resolve(provider string, input ResolveInput) ResolvedCapability {
 				MediaShapes:        []string{shape},
 				CapabilityRevision: "2026-07-23.1",
 			},
-			Compatible:        false,
-			ActiveConstraints: map[string]any{"intent": intent, "media_shape": shape},
-			Issues:            issues,
+			Compatible: false,
+			ActiveConstraints: map[string]any{
+				"intent":            intent,
+				"media_shape":       shape,
+				"input_media_shape": inputShape,
+			},
+			Issues: issues,
 		}
 	}
 
@@ -625,14 +630,29 @@ func Resolve(provider string, input ResolveInput) ResolvedCapability {
 		Capability: *selected,
 		Compatible: !hasErrorIssues(issues),
 		ActiveConstraints: map[string]any{
-			"intent":        intent,
-			"media_shape":   shape,
-			"text_limit":    selected.TextLimit,
-			"media":         selected.Media,
-			"segment_count": len(input.Segments),
+			"intent":            intent,
+			"media_shape":       shape,
+			"input_media_shape": inputShape,
+			"text_limit":        selected.TextLimit,
+			"media":             selected.Media,
+			"segment_count":     len(input.Segments),
 		},
 		SettingGroups: groupSettings(activeSettings),
 		Issues:        issues,
+	}
+}
+
+func intendedMediaShape(intent, inputShape string) string {
+	if inputShape != MediaShapeText {
+		return inputShape
+	}
+	switch intent {
+	case IntentShortVideo, IntentVideo:
+		return MediaShapeVideo
+	case IntentStory:
+		return MediaShapeSingleImage
+	default:
+		return inputShape
 	}
 }
 
@@ -864,8 +884,24 @@ func validateCapability(capability Capability, body, title, description string, 
 	if capability.DescriptionRequired && strings.TrimSpace(description) == "" {
 		issues = append(issues, ValidationIssue{Severity: "error", Code: "description_required", Message: "Description is required", Provider: provider, Profile: profile, Field: "description"})
 	}
-	if len(media) < capability.Media.MinCount || len(media) > capability.Media.MaxCount {
-		issues = append(issues, ValidationIssue{Severity: "error", Code: "media_count", Message: fmt.Sprintf("Requires %d-%d media item(s)", capability.Media.MinCount, capability.Media.MaxCount), Provider: provider, Profile: profile, Field: "media"})
+	if len(media) < capability.Media.MinCount {
+		issues = append(issues, ValidationIssue{
+			Severity: "error",
+			Code:     "media_required",
+			Message:  missingMediaMessage(capability),
+			Provider: provider,
+			Profile:  profile,
+			Field:    "media",
+		})
+	} else if len(media) > capability.Media.MaxCount {
+		issues = append(issues, ValidationIssue{
+			Severity: "error",
+			Code:     "media_count",
+			Message:  fmt.Sprintf("Remove media until this destination has no more than %d item(s).", capability.Media.MaxCount),
+			Provider: provider,
+			Profile:  profile,
+			Field:    "media",
+		})
 	}
 	for _, item := range media {
 		issues = append(issues, validateMediaItem(capability, item)...)
@@ -899,6 +935,25 @@ func validateCapability(capability Capability, body, title, description string, 
 		}
 	}
 	return issues
+}
+
+func missingMediaMessage(capability Capability) string {
+	hasImage := false
+	hasVideo := false
+	for _, mimeType := range capability.Media.AllowedMIMEs {
+		hasImage = hasImage || strings.HasPrefix(mimeType, "image/")
+		hasVideo = hasVideo || strings.HasPrefix(mimeType, "video/")
+	}
+	switch {
+	case hasVideo && !hasImage && capability.Media.MinCount == 1:
+		return "Add a video."
+	case hasImage && !hasVideo && capability.Media.MinCount == 1:
+		return "Add an image."
+	case hasImage && hasVideo && capability.Media.MinCount == 1:
+		return "Add an image or video."
+	default:
+		return fmt.Sprintf("Add at least %d media item(s).", capability.Media.MinCount)
+	}
 }
 
 //nolint:gocyclo

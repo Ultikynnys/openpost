@@ -334,7 +334,7 @@ test("video composers tolerate repeated destination validation identities", asyn
             media_shapes: ["video"],
             settings: [],
             setting_groups: [],
-            compatible: true,
+            compatible: false,
             active_constraints: {},
             issues: [
               {
@@ -371,7 +371,15 @@ test("video composers tolerate repeated destination validation identities", asyn
 
     await page.getByTestId("composer-account-control").click();
     await expect(page.getByText("Add a video.", { exact: true })).toHaveCount(
-      2,
+      0,
+    );
+    await page.keyboard.press("Escape");
+
+    const validationControl = page.getByTestId("composer-validation-control");
+    await expect(validationControl).toBeVisible();
+    await validationControl.click();
+    await expect(page.getByText("Add a video.", { exact: true })).toHaveCount(
+      1,
     );
     await page.keyboard.press("Escape");
 

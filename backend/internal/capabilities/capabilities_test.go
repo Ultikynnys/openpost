@@ -36,6 +36,66 @@ func TestValidateBlocksFailedPublicURLVerification(t *testing.T) {
 	requireIssueCode(t, issues, "public_url_unreachable")
 }
 
+func TestResolveMediaFirstIntentsBeforeMediaIsAttached(t *testing.T) {
+	tests := []struct {
+		name         string
+		provider     string
+		intent       string
+		wantProfile  string
+		wantShape    string
+		wantMessage  string
+		wantSettings bool
+	}{
+		{
+			name:         "YouTube Short",
+			provider:     ProviderYouTube,
+			intent:       IntentShortVideo,
+			wantProfile:  models.ContentProfileShortVideo,
+			wantShape:    MediaShapeVideo,
+			wantMessage:  "Add a video.",
+			wantSettings: true,
+		},
+		{
+			name:         "LinkedIn video",
+			provider:     ProviderLinkedIn,
+			intent:       IntentVideo,
+			wantProfile:  models.ContentProfileLongVideo,
+			wantShape:    MediaShapeVideo,
+			wantMessage:  "Add a video.",
+			wantSettings: true,
+		},
+		{
+			name:        "Facebook Story",
+			provider:    ProviderFacebook,
+			intent:      IntentStory,
+			wantProfile: models.ContentProfileStory,
+			wantShape:   MediaShapeSingleImage,
+			wantMessage: "Add an image or video.",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resolved := Resolve(tt.provider, ResolveInput{
+				Intent:   tt.intent,
+				Segments: []ResolveSegment{{ID: "segment-1", Body: "Caption"}},
+			})
+
+			require.Equal(t, tt.wantProfile, resolved.Profile)
+			require.Equal(t, tt.wantShape, resolved.ActiveConstraints["media_shape"])
+			require.Equal(t, MediaShapeText, resolved.ActiveConstraints["input_media_shape"])
+			requireIssueCode(t, resolved.Issues, "media_required")
+			require.Equal(t, tt.wantMessage, issueMessage(resolved.Issues, "media_required"))
+			for _, issue := range resolved.Issues {
+				require.NotEqual(t, "unsupported_intent_shape", issue.Code)
+			}
+			if tt.wantSettings {
+				require.NotEmpty(t, resolved.Settings)
+			}
+		})
+	}
+}
+
 func TestCapabilitiesExposeValidationCategories(t *testing.T) {
 	capability, ok := Find(ProviderYouTube, models.ContentProfileLongVideo)
 
@@ -43,6 +103,15 @@ func TestCapabilitiesExposeValidationCategories(t *testing.T) {
 	require.Contains(t, capability.ValidationCategories, "duration")
 	require.Contains(t, capability.ValidationCategories, "title")
 	require.Contains(t, capability.ValidationCategories, "thumbnail")
+}
+
+func issueMessage(issues []ValidationIssue, code string) string {
+	for _, issue := range issues {
+		if issue.Code == code {
+			return issue.Message
+		}
+	}
+	return ""
 }
 
 func TestYouTubeCapabilitiesExposeStructuredPublishingSettings(t *testing.T) {

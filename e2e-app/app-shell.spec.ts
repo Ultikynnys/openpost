@@ -61,6 +61,7 @@ test("first autosave establishes the draft URL and keeps draft actions in one co
   const unique = Date.now().toString(36);
   const email = `composer-draft-${unique}@example.com`;
   const content = "Keep this draft attached to its own URL.";
+  const link = "https://example.com/openpost-draft";
 
   const auth = await registerUser(request, email);
   await createWorkspace(request, auth.token, "Draft URL E2E");
@@ -88,6 +89,8 @@ test("first autosave establishes the draft URL and keeps draft actions in one co
     .toBeLessThanOrEqual(0.001);
   await page.emulateMedia({ reducedMotion: "no-preference" });
 
+  await page.getByRole("button", { name: "Link URL", exact: true }).click();
+  await page.getByRole("textbox", { name: "Link URL", exact: true }).fill(link);
   await page.getByLabel("Post text").fill(content);
   await expect(page).toHaveURL(/\/posts\/[a-zA-Z0-9-]+$/, {
     timeout: 10_000,
@@ -112,11 +115,36 @@ test("first autosave establishes the draft URL and keeps draft actions in one co
   await page.reload();
   await expect(page.getByLabel("Post text")).toHaveValue(content);
   await expect(
+    page.getByRole("textbox", { name: "Link URL", exact: true }),
+  ).toHaveValue(link);
+  await expect(
     page.getByRole("button", { name: "Save changes", exact: true }),
   ).toHaveCount(0);
   await expect(
     page.getByRole("button", { name: "Schedule", exact: true }).first(),
   ).toBeVisible();
+
+  const textPostId = new URL(page.url()).pathname.split("/").pop();
+  expect(textPostId).toBeTruthy();
+  const postDetail = await request.get(`/api/v1/posts/${textPostId}`, {
+    headers: { Authorization: `Bearer ${auth.token}` },
+  });
+  expect(postDetail.ok()).toBeTruthy();
+  const postDetailBody = (await postDetail.json()) as {
+    publication_id: string;
+  };
+  expect(postDetailBody.publication_id).toBeTruthy();
+
+  await page.goto(`/publications/${postDetailBody.publication_id}`);
+  await expect(page).toHaveURL(new RegExp(`/posts/${textPostId}$`));
+  await expect(page.getByLabel("Post text")).toHaveValue(content);
+  await expect(
+    page.getByRole("textbox", { name: "Link URL", exact: true }),
+  ).toHaveValue(link);
+  await expect(page.getByTestId("focused-composer")).toHaveCount(0);
+  await expect(
+    page.getByTestId("sidebar-draft-list").locator("li"),
+  ).toHaveCount(1);
 });
 
 test("collapsed sidebar keeps the OpenPost mark without overflowing text", async ({
@@ -164,8 +192,21 @@ test("desktop planning sidebar resumes drafts and stays out of mobile navigation
   });
   expect(draft.ok()).toBeTruthy();
   const draftBody = (await draft.json()) as { id: string };
+  for (let index = 2; index <= 8; index += 1) {
+    const extraDraft = await request.post("/api/v1/posts", {
+      headers: { Authorization: `Bearer ${auth.token}` },
+      data: {
+        workspace_id: workspace.id,
+        content: `Sidebar draft ${index}`,
+        social_account_ids: [],
+        media_ids: [],
+      },
+    });
+    expect(extraDraft.ok()).toBeTruthy();
+  }
 
   await authenticatePage(page, auth.token);
+  await page.setViewportSize({ width: 1280, height: 720 });
   await page.goto("/");
 
   const planner = page.getByTestId("desktop-sidebar-planner");
@@ -180,6 +221,43 @@ test("desktop planning sidebar resumes drafts and stays out of mobile navigation
   await expect(
     page.getByRole("button", { name: "Accounts", exact: true }),
   ).toBeVisible();
+  const draftList = page.getByTestId("sidebar-draft-list");
+  await expect(draftList.locator("li")).toHaveCount(8);
+  const draftListMetrics = await draftList.evaluate((element) => ({
+    clientHeight: element.clientHeight,
+    scrollHeight: element.scrollHeight,
+  }));
+  expect(draftListMetrics.scrollHeight).toBeGreaterThan(
+    draftListMetrics.clientHeight,
+  );
+  const draftListBox = await draftList.boundingBox();
+  const workspaceFooterBox = await page
+    .getByTestId("sidebar-workspace-footer")
+    .boundingBox();
+  expect(draftListBox).not.toBeNull();
+  expect(workspaceFooterBox).not.toBeNull();
+  expect(
+    workspaceFooterBox!.y - (draftListBox!.y + draftListBox!.height),
+  ).toBeLessThanOrEqual(32);
+  await draftList.evaluate((element) => {
+    element.scrollTop = element.scrollHeight;
+  });
+  await expect(draftList.locator("li").last()).toBeVisible();
+
+  const draftToDelete = page.getByRole("button", {
+    name: "Resume draft: Sidebar draft 2",
+  });
+  await draftToDelete.scrollIntoViewIfNeeded();
+  const deleteDraftButton = page.getByRole("button", {
+    name: "Delete draft: Sidebar draft 2",
+  });
+  await expect(deleteDraftButton).toHaveCSS("opacity", "0");
+  await draftToDelete.hover();
+  await expect(deleteDraftButton).toHaveCSS("opacity", "1");
+  await deleteDraftButton.click();
+  await expect(page.getByText("Delete this draft?", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Delete", exact: true }).click();
+  await expect(draftList.locator("li")).toHaveCount(7);
 
   await page
     .getByRole("button", {

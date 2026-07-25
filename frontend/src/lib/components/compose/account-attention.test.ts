@@ -58,4 +58,10 @@ describe('accountCapabilityNeedsAttention', () => {
 		expect(accountCapabilityNeedsAttention(capability([issue('media_aspect')]))).toBe(true);
 		expect(accountCapabilityNeedsAttention(capability([issue('quota_warning')], false))).toBe(true);
 	});
+
+	it('leaves shared missing-media feedback on the composer control', () => {
+		expect(
+			accountCapabilityNeedsAttention(capability([issue('media_required', 'error')], false))
+		).toBe(false);
+	});
 });

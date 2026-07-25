@@ -68,6 +68,9 @@ All notable changes to this project are documented in this file.
 
 ### Fixed
 
+- Routed linked Post and Thread publications back to the text-and-thread composer, removed their duplicate sidebar entries, and added quick draft deletion from the draft list.
+- Resolved empty media-first drafts against their chosen Story or video format, and collapsed their shared media requirement into one clear composer warning instead of marking every destination as incompatible.
+- Let the desktop draft list use and scroll through all available space above the fixed Workspace actions.
 - Prevented repeated destination validation issues from crashing the Video and Short video composers and leaving their loading skeleton visible.
 - Prevented focused publication drafts from reusing client placeholder segment IDs, remapped destination segments to server-owned IDs, and stopped exposing raw database errors when creation fails.
 - Unified publish, delete, scheduling, and validation controls across both composer styles; restored deletion for Story and video drafts; and replaced the focused media prompt with a larger native drop zone.

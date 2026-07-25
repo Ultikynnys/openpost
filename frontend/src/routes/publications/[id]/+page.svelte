@@ -36,6 +36,13 @@
 			});
 			if (err) throw new Error((err as any)?.detail || m.publication_edit_load_failed());
 			if (requestSequence !== publicationRequestSequence || publicationId !== id) return;
+			const mode = publicationMode(data);
+			if ((mode === 'post' || mode === 'thread') && data.text_post_id) {
+				await goto(resolve(`/posts/${encodeURIComponent(data.text_post_id)}` as '/'), {
+					replaceState: true
+				});
+				return;
+			}
 			publication = data;
 		} catch (err) {
 			if (requestSequence !== publicationRequestSequence || publicationId !== id) return;

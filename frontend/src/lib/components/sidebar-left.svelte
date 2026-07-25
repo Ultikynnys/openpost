@@ -189,7 +189,7 @@
 		</DropdownMenu.Root>
 	</Sidebar.Header>
 
-	<Sidebar.Content class={showDesktopPlanner ? 'py-2' : 'px-2 py-3'}>
+	<Sidebar.Content class={showDesktopPlanner ? 'overflow-hidden py-2' : 'px-2 py-3'}>
 		{#if showDesktopPlanner}
 			<SidebarPlanner onNavigate={navigate} />
 		{:else}
@@ -220,7 +220,7 @@
 		{/if}
 	</Sidebar.Content>
 
-	<Sidebar.Footer class="border-t border-sidebar-border p-2">
+	<Sidebar.Footer class="border-t border-sidebar-border p-2" data-testid="sidebar-workspace-footer">
 		{#if showDesktopPlanner}
 			<div class="pb-1">
 				<p

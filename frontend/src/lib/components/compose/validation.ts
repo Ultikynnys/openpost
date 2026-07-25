@@ -8,7 +8,14 @@ export interface ComposerIssue {
 	severity: 'error' | 'warning';
 }
 
+const sharedComposerIssueCodes = new Set(['media_required']);
+
+export function isSharedComposerIssue(issue: ValidationIssue): boolean {
+	return sharedComposerIssueCodes.has(issue.code);
+}
+
 export function isAccountSpecificIssue(issue: ValidationIssue): boolean {
+	if (isSharedComposerIssue(issue)) return false;
 	return Boolean(issue.provider?.trim() || issue.profile?.trim() || issue.output_profile?.trim());
 }
 
