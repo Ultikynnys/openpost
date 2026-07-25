@@ -164,11 +164,13 @@ test("mobile shell and composer expose touch-first controls without overflow", a
   expect(Math.max(...overflow.childRightEdges)).toBeLessThanOrEqual(390);
 
   await expect(page.getByTestId("composer-account-control")).toHaveCount(1);
+  const actions = controls.getByTestId("composer-action-controls");
+  await expect(actions).toBeVisible();
   await expect(
-    controls.getByRole("button", { name: "Publish", exact: true }),
+    actions.getByRole("button", { name: "Publish Now", exact: true }),
   ).toHaveCount(1);
   await expect(
-    controls.getByRole("button", { name: /Schedule post:/ }),
+    actions.getByRole("button", { name: "Schedule", exact: true }),
   ).toHaveCount(1);
 
   await expectMinimumTouchTarget(
@@ -183,7 +185,7 @@ test("mobile shell and composer expose touch-first controls without overflow", a
     controls.getByRole("button", { name: "Save draft", exact: true }),
   ).toHaveCount(0);
   await expectMinimumTouchTarget(
-    controls.getByRole("button", { name: /Schedule post:/ }),
+    actions.getByRole("button", { name: "Schedule", exact: true }),
     "schedule button",
   );
 
@@ -225,18 +227,22 @@ test("mobile shell and composer expose touch-first controls without overflow", a
   const desktopControls = page.getByTestId("desktop-composer-controls");
   await expect(desktopControls).toBeVisible();
   await expect(page.getByTestId("composer-account-control")).toHaveCount(1);
+  const desktopActions = desktopControls.getByTestId(
+    "composer-action-controls",
+  );
+  await expect(desktopActions).toBeVisible();
   await expect(
-    desktopControls.getByRole("button", { name: "Publish", exact: true }),
+    desktopActions.getByRole("button", { name: "Publish Now", exact: true }),
   ).toHaveCount(1);
   await expect(
-    desktopControls.getByRole("button", { name: "Schedule", exact: true }),
+    desktopActions.getByRole("button", { name: "Schedule", exact: true }),
   ).toHaveCount(1);
   await expect(
     desktopControls.getByRole("button", {
       name: "Schedule to next free slot",
       exact: true,
     }),
-  ).toHaveCount(1);
+  ).toHaveCount(0);
 });
 
 test("attached media controls stay touch accessible on mobile and desktop", async ({

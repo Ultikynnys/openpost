@@ -43,4 +43,25 @@ describe('composer validation placement', () => {
 			'Fix the title.'
 		]);
 	});
+
+	it('keeps repeated destination issue identities out of the global keyed list', () => {
+		const repeatedIssue = {
+			code: 'media_required',
+			field: 'media',
+			media_id: '',
+			message: 'Add a video.',
+			severity: 'error' as const
+		};
+		const youtubeIssue = issue({ ...repeatedIssue, provider: 'youtube' });
+		const linkedinIssue = issue({ ...repeatedIssue, provider: 'linkedin' });
+
+		expect(composerIssues([], [youtubeIssue, linkedinIssue])).toEqual([]);
+		expect(
+			uniqueIssueMessages(
+				[youtubeIssue, linkedinIssue]
+					.filter((candidate) => issueMatchesProvider(candidate, 'youtube'))
+					.map((candidate) => candidate.message)
+			)
+		).toEqual(['Add a video.']);
+	});
 });

@@ -247,3 +247,138 @@ test("composer renders account-specific renditions", async ({
     .click();
   await expect.poll(() => deleteRequested).toBe(true);
 });
+
+test("video composers tolerate repeated destination validation identities", async ({
+  page,
+  request,
+}) => {
+  const unique = Date.now().toString(36);
+  const email = `composer-video-validation-${unique}@example.com`;
+  const pageErrors: Error[] = [];
+
+  page.on("pageerror", (error) => pageErrors.push(error));
+
+  const auth = await registerUser(request, email);
+  await createWorkspace(request, auth.token, "Video Validation E2E");
+  await authenticatePage(page, auth.token);
+
+  const accounts = [
+    {
+      id: "youtube-main",
+      slug: "youtube-main",
+      platform: "youtube",
+      account_id: "youtube-channel",
+      account_username: "OpenPost",
+      account_avatar_url: "",
+      instance_url: "",
+      is_active: true,
+      thread_replies_supported: false,
+    },
+    {
+      id: "linkedin-main",
+      slug: "linkedin-main",
+      platform: "linkedin",
+      account_id: "linkedin-profile",
+      account_username: "openpost",
+      account_avatar_url: "",
+      instance_url: "",
+      is_active: true,
+      thread_replies_supported: false,
+    },
+  ];
+
+  await page.route("**/api/v1/accounts?**", async (route) => {
+    await route.fulfill({ contentType: "application/json", json: accounts });
+  });
+  await page.route("**/api/v1/provider-readiness?**", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        providers: ["youtube", "linkedin"].map((provider) => ({
+          provider,
+          configured_app_state: "ready",
+          connected_accounts: 1,
+          blocking_issues: [],
+          next_actions: [],
+        })),
+      },
+    });
+  });
+  await page.route("**/api/v1/capabilities/resolve", async (route) => {
+    const payload = route.request().postDataJSON() as {
+      account_ids: string[];
+      intent: "short_video" | "video";
+    };
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        accounts: payload.account_ids.map((accountID) => {
+          const provider = accountID.startsWith("youtube")
+            ? "youtube"
+            : "linkedin";
+          return {
+            account_id: accountID,
+            provider,
+            profile: payload.intent === "video" ? "long_video" : "short_video",
+            output_profile: `${provider}.video`,
+            label: `${provider} video`,
+            text_limit: 3000,
+            media: {
+              min_count: 1,
+              max_count: 1,
+              allowed_mimes: ["video/mp4"],
+              requires_public_url: false,
+              requires_https_fetchable: false,
+            },
+            intents: ["short_video", "video"],
+            media_shapes: ["video"],
+            settings: [],
+            setting_groups: [],
+            compatible: true,
+            active_constraints: {},
+            issues: [
+              {
+                code: "media_required",
+                field: "media",
+                media_id: "",
+                message: "Add a video.",
+                fallback_message: "Add a video.",
+                severity: "error",
+                provider,
+              },
+            ],
+            capability_revision: "test-v1",
+            dynamic_options: {},
+          };
+        }),
+      },
+    });
+  });
+
+  await page.goto("/");
+
+  for (const mode of ["short_video", "video"] as const) {
+    await page.getByTestId("composer-mode-select").click();
+    await page.getByTestId(`composer-mode-option-${mode}`).click();
+
+    await expect(page.getByTestId("focused-composer")).toBeVisible();
+    await expect(page.getByTestId("page-loading")).toHaveCount(0);
+    await expect(
+      page
+        .getByTestId("composer-account-control")
+        .getByTestId("composer-account-icon"),
+    ).toHaveCount(2);
+
+    await page.getByTestId("composer-account-control").click();
+    await expect(page.getByText("Add a video.", { exact: true })).toHaveCount(
+      2,
+    );
+    await page.keyboard.press("Escape");
+
+    expect(
+      pageErrors.filter((error) =>
+        error.message.includes("each_key_duplicate"),
+      ),
+    ).toEqual([]);
+  }
+});

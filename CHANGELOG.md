@@ -68,6 +68,7 @@ All notable changes to this project are documented in this file.
 
 ### Fixed
 
+- Prevented repeated destination validation issues from crashing the Video and Short video composers and leaving their loading skeleton visible.
 - Prevented focused publication drafts from reusing client placeholder segment IDs, remapped destination segments to server-owned IDs, and stopped exposing raw database errors when creation fails.
 - Unified publish, delete, scheduling, and validation controls across both composer styles; restored deletion for Story and video drafts; and replaced the focused media prompt with a larger native drop zone.
 - Captured feedback screenshots without the feedback dialog's dark, blurred backdrop.

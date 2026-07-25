@@ -345,10 +345,8 @@ test("portrait calendar and composer reject past creation and rescheduling", asy
     page.getByText("Choose a future date and time.", { exact: true }),
   ).toBeVisible();
   const mobileScheduleButton = page
-    .getByTestId("mobile-composer-controls")
-    .getByRole("button", {
-      name: /Schedule post:/,
-    });
+    .getByTestId("composer-action-controls")
+    .getByRole("button", { name: "Schedule", exact: true });
   await expect(mobileScheduleButton).toBeVisible();
   await mobileScheduleButton.click();
 
