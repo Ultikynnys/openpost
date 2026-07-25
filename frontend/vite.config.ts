@@ -66,6 +66,7 @@ export default defineConfig({
 			'lucide-svelte/icons/arrow-right',
 			'lucide-svelte/icons/calendar-clock',
 			'lucide-svelte/icons/check-circle-2',
+			'lucide-svelte/icons/circle-alert',
 			'lucide-svelte/icons/image-plus',
 			'lucide-svelte/icons/images',
 			'lucide-svelte/icons/link',

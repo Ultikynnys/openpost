@@ -29,6 +29,7 @@
 		customAccountIds?: string[];
 		settingsAccountIds?: string[];
 		accountSummaries?: Record<string, string>;
+		accountIssues?: Record<string, string[]>;
 		warningAccountIds?: string[];
 		activeAccountId?: string | null;
 		triggerLabel?: string;
@@ -51,6 +52,7 @@
 		customAccountIds = [],
 		settingsAccountIds = [],
 		accountSummaries = {},
+		accountIssues = {},
 		warningAccountIds = [],
 		activeAccountId = null,
 		triggerLabel = m.compose_target_accounts(),
@@ -273,6 +275,16 @@
 									>{accountSummaries[account.id] ?? getPlatformName(account.platform)}</span
 								>
 							</span>
+							{#if selected && accountIssues[account.id]?.length > 0}
+								<ul class="mt-1 space-y-0.5 text-xs leading-4 text-amber-700 dark:text-amber-300">
+									{#each accountIssues[account.id] as issue (issue)}
+										<li class="flex gap-1.5">
+											<span aria-hidden="true">•</span>
+											<span>{issue}</span>
+										</li>
+									{/each}
+								</ul>
+							{/if}
 						</span>
 						<span
 							class={cn(

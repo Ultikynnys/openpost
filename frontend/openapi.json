@@ -5083,7 +5083,7 @@
 						"type": "string"
 					},
 					"id": {
-						"description": "Stable segment ID",
+						"description": "Client segment reference on create, or an existing server segment ID on update",
 						"type": "string"
 					},
 					"media": {
@@ -5371,7 +5371,7 @@
 						"type": "string"
 					},
 					"id": {
-						"description": "Existing rendition ID for upsert",
+						"description": "Legacy client reference; replacement IDs are server-generated",
 						"type": "string"
 					},
 					"media": {
@@ -5521,7 +5521,7 @@
 						"type": "string"
 					},
 					"id": {
-						"description": "Existing rendition segment ID",
+						"description": "Legacy client reference; replacement IDs are server-generated",
 						"type": "string"
 					},
 					"media": {
@@ -5532,7 +5532,7 @@
 						"type": ["array", "null"]
 					},
 					"publication_segment_id": {
-						"description": "Canonical segment ID",
+						"description": "Server canonical segment ID, or its matching client segment reference in the same request",
 						"type": "string"
 					},
 					"settings": {
@@ -16599,6 +16599,118 @@
 			}
 		},
 		"/publications/{id}": {
+			"delete": {
+				"description": "Permanently deletes an editable publication, its destinations, and any linked draft post.",
+				"operationId": "delete-publication",
+				"parameters": [
+					{
+						"description": "Publication ID",
+						"in": "path",
+						"name": "id",
+						"required": true,
+						"schema": {
+							"description": "Publication ID",
+							"type": "string"
+						}
+					},
+					{
+						"description": "Explicit confirmation that the publication may be permanently deleted",
+						"explode": false,
+						"in": "query",
+						"name": "confirm",
+						"schema": {
+							"description": "Explicit confirmation that the publication may be permanently deleted",
+							"type": "boolean"
+						}
+					},
+					{
+						"description": "Revision loaded by the editor",
+						"explode": false,
+						"in": "query",
+						"name": "expected_revision",
+						"schema": {
+							"description": "Revision loaded by the editor",
+							"format": "int64",
+							"minimum": 1,
+							"type": "integer"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/ActionOutputBody"
+								}
+							}
+						},
+						"description": "OK"
+					},
+					"400": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Bad Request"
+					},
+					"403": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Forbidden"
+					},
+					"404": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Not Found"
+					},
+					"409": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Conflict"
+					},
+					"422": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Unprocessable Entity"
+					},
+					"500": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Internal Server Error"
+					}
+				},
+				"summary": "Delete a publication",
+				"tags": ["Publications"]
+			},
 			"get": {
 				"operationId": "get-publication",
 				"parameters": [

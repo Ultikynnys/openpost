@@ -7,15 +7,17 @@
 	import { client, type SocialAccount } from '$lib/api/client';
 	import type { components } from '$lib/api/types';
 	import { getAuthenticatedMediaByID } from '$lib/media-url';
-	import { uploadMediaFile } from '$lib/media-upload-client';
+	import { isSupportedMediaFile, uploadMediaFile } from '$lib/media-upload-client';
 	import { workspaceCtx } from '$lib/stores/workspace.svelte';
 	import { ui } from '$lib/stores/ui.svelte';
 	import { Button } from '$lib/components/ui/button';
-	import { Calendar } from '$lib/components/ui/calendar';
 	import { Input } from '$lib/components/ui/input';
-	import * as Popover from '$lib/components/ui/popover';
 	import { Textarea } from '$lib/components/ui/textarea';
 	import ComposerAccountMenu from './composer-account-menu.svelte';
+	import ComposerMediaDropzone from './composer-media-dropzone.svelte';
+	import ComposerPublishActions from './composer-publish-actions.svelte';
+	import ComposerScheduleDialog from './composer-schedule-dialog.svelte';
+	import ComposerValidationMenu from './composer-validation-menu.svelte';
 	import DestinationSettingsDialog from './destination-settings-dialog.svelte';
 	import DestructiveConfirmDialog from './destructive-confirm-dialog.svelte';
 	import DraftConflictDialog from './draft-conflict-dialog.svelte';
@@ -49,14 +51,14 @@
 		snapshotFocusedSchedulingSettings,
 		type FocusedSchedulingSettings
 	} from './compose/focused-workspace';
-	import { accountCapabilityNeedsAttention } from './compose/account-attention';
+	import {
+		accountCapabilityNeedsAttention,
+		isActionableAccountIssue
+	} from './compose/account-attention';
+	import { composerIssues, issueMatchesProvider, uniqueIssueMessages } from './compose/validation';
 	import { loadableDestinationOptionSources } from './compose/destination-options';
-	import AlertCircleIcon from 'lucide-svelte/icons/alert-circle';
-	import CalendarClockIcon from 'lucide-svelte/icons/calendar-clock';
 	import ImagePlusIcon from 'lucide-svelte/icons/image-plus';
 	import LoaderIcon from 'lucide-svelte/icons/loader-2';
-	import SaveIcon from 'lucide-svelte/icons/save';
-	import SendIcon from 'lucide-svelte/icons/send';
 	import PlusIcon from 'lucide-svelte/icons/plus';
 	import Trash2Icon from 'lucide-svelte/icons/trash-2';
 	import XIcon from 'lucide-svelte/icons/x';
@@ -161,12 +163,13 @@
 	let destinationOptionsLoadingAccountId = $state('');
 	let selectedDate = $state<CalendarDate | undefined>(undefined);
 	let selectedTime = $state<string | null>(null);
-	let showSchedulePopover = $state(false);
+	let showScheduleDialog = $state(false);
 	let validationIssues = $state<ValidationIssue[]>([]);
 	let loading = $state(true);
 	let accountsLoading = $state(false);
 	let accountsError = $state('');
 	let uploading = $state(false);
+	let draggingMedia = $state(false);
 	let mediaPickerOpen = $state(false);
 	let mediaPickerPurpose = $state<'media' | 'thumbnail'>('media');
 	let saving = $state(false);
@@ -175,6 +178,8 @@
 	let success = $state('');
 	let draftConflict = $state<DraftConflictProblem | null>(null);
 	let conflictDialogOpen = $state(false);
+	let deletePublicationDialogOpen = $state(false);
+	let deletingPublication = $state(false);
 	let scheduleError = $state('');
 	let suggestingSlot = $state(false);
 	let schedulingSettings = $state<FocusedSchedulingSettings>(defaultFocusedSchedulingSettings());
@@ -227,9 +232,18 @@
 	const hasYouTubeTarget = $derived(
 		selectedAccounts.some((account) => getPlatformKey(account.platform) === 'youtube')
 	);
-	const blockingIssues = $derived(validationIssues.filter((issue) => issue.severity === 'error'));
-	const warningIssues = $derived(validationIssues.filter((issue) => issue.severity === 'warning'));
 	const localBlockers = $derived(formBlockers());
+	const globalIssues = $derived(composerIssues(localBlockers, validationIssues));
+	const accountIssues = $derived.by(() =>
+		Object.fromEntries(
+			selectedAccounts
+				.map((account) => [account.id, accountIssueMessages(account)] as const)
+				.filter(([, issues]) => issues.length > 0)
+		)
+	);
+	const accountBlockingMessages = $derived(
+		selectedAccounts.flatMap((account) => accountBlockers(account))
+	);
 	const canSaveDraft = $derived(Boolean(selectedWorkspaceId) && !saving && !autoSaving);
 	const selectedReadinessProviders = $derived(
 		selectedAccounts.map((account) => getPlatformKey(account.platform))
@@ -249,7 +263,8 @@
 		canSaveDraft &&
 			selectedProviderReadinessReady &&
 			!capabilityResolveLoading &&
-			localBlockers.length === 0
+			localBlockers.length === 0 &&
+			accountBlockingMessages.length === 0
 	);
 	const accountSummaries = $derived(
 		Object.fromEntries(
@@ -260,9 +275,14 @@
 		)
 	);
 	const warningAccountIds = $derived(
-		Object.values(resolvedCapabilities)
-			.filter(accountCapabilityNeedsAttention)
-			.map((capability) => capability.account_id)
+		Array.from(
+			new Set([
+				...Object.values(resolvedCapabilities)
+					.filter(accountCapabilityNeedsAttention)
+					.map((capability) => capability.account_id),
+				...Object.keys(accountIssues)
+			])
+		)
 	);
 	const isEditMode = $derived(Boolean(initialPublication?.id));
 	const selectedWorkspaceSettingsReady = $derived(
@@ -703,7 +723,7 @@
 		capabilityResolveRequestSequence += 1;
 		selectedDate = undefined;
 		selectedTime = null;
-		showSchedulePopover = false;
+		showScheduleDialog = false;
 		validationIssues = [];
 		schedulingSettings = defaultFocusedSchedulingSettings();
 		schedulingSettingsWorkspaceId = '';
@@ -998,6 +1018,44 @@
 		setFocusedMediaSelection(ids, items);
 	}
 
+	async function uploadFocusedFiles(files: File[]) {
+		if (!selectedWorkspaceId || uploading) return;
+		const available = Math.max(0, composerMediaLimit - media.length);
+		const selected = files
+			.filter(
+				(file) =>
+					isSupportedMediaFile(file) &&
+					(mode === 'post' || file.type.startsWith('image/') || file.type.startsWith('video/'))
+			)
+			.slice(0, available);
+		if (selected.length === 0) return;
+		uploading = true;
+		error = '';
+		try {
+			const uploaded: FocusedMedia[] = [];
+			for (const file of selected) {
+				const item = await uploadMediaFile({ workspaceId: selectedWorkspaceId, file });
+				uploaded.push({
+					id: item.id,
+					mime_type: item.mime_type,
+					url: item.url,
+					size: item.size,
+					filename: item.original_filename || file.name,
+					altText: item.alt_text
+				});
+			}
+			media = [...media, ...uploaded].slice(0, composerMediaLimit);
+			validationIssues = [];
+			await resolveSelectedCapabilities();
+			queueAutoSave();
+		} catch (uploadError) {
+			error = uploadError instanceof Error ? uploadError.message : m.compose_upload_failed();
+		} finally {
+			uploading = false;
+			draggingMedia = false;
+		}
+	}
+
 	async function openStudioFromFocusedComposer() {
 		if (!selectedWorkspaceId) return;
 		mediaPickerOpen = false;
@@ -1173,6 +1231,39 @@
 		ui.triggerRefresh();
 	}
 
+	async function deletePublication() {
+		if (!publicationId || deletingPublication) return;
+		clearAutoSaveTimer();
+		deletingPublication = true;
+		error = '';
+		try {
+			const { error: deleteError } = await client.DELETE('/publications/{id}', {
+				params: {
+					path: { id: publicationId },
+					query: { confirm: true, expected_revision: revision }
+				}
+			});
+			if (deleteError) {
+				const conflict = parseDraftConflict(deleteError);
+				if (conflict) {
+					draftConflict = conflict;
+					conflictDialogOpen = true;
+				}
+				throw new Error(deleteError.detail || m.compose_delete_post_failed());
+			}
+			publicationId = '';
+			lastSavedSnapshot = '';
+			deletePublicationDialogOpen = false;
+			ui.clearActiveComposerDraft();
+			ui.triggerRefresh();
+			onSuccess?.();
+		} catch (deleteError) {
+			error = deleteError instanceof Error ? deleteError.message : m.compose_delete_post_failed();
+		} finally {
+			deletingPublication = false;
+		}
+	}
+
 	function removeMedia(mediaId: string) {
 		media = media.filter((item) => item.id !== mediaId);
 		validationIssues = [];
@@ -1183,54 +1274,6 @@
 		thumbnailMedia = null;
 		thumbnailMediaId = '';
 		validationIssues = [];
-	}
-
-	function validationIssueActionLabel(issue: ValidationIssue): string {
-		switch (issue.field) {
-			case 'poll_options':
-				return m.compose_remove_poll();
-			case 'quote_url':
-				return m.compose_remove_quote();
-			case 'media':
-				return m.compose_remove_all_media();
-			default:
-				return '';
-		}
-	}
-
-	function resolveValidationIssue(issue: ValidationIssue) {
-		const field = issue.field;
-		if (field === 'media') {
-			media = [];
-			segments = segments.map((segment) => ({ ...segment, media: [] }));
-		} else if (field === 'poll_options' || field === 'quote_url') {
-			const accountIds = selectedAccounts
-				.filter((account) => getPlatformKey(account.platform) === issue.provider)
-				.map((account) => account.id);
-			settingsByAccount = Object.fromEntries(
-				Object.entries(settingsByAccount).map(([accountId, values]) => [
-					accountId,
-					accountIds.includes(accountId) ? { ...values, [field]: '' } : values
-				])
-			);
-			segmentSettingsByAccount = Object.fromEntries(
-				Object.entries(segmentSettingsByAccount).map(([accountId, values]) => [
-					accountId,
-					accountIds.includes(accountId) ? { ...values, [field]: '' } : values
-				])
-			);
-			segments = segments.map((segment) => ({
-				...segment,
-				settingsByAccount: Object.fromEntries(
-					Object.entries(segment.settingsByAccount ?? {}).map(([accountId, values]) => [
-						accountId,
-						accountIds.includes(accountId) ? { ...values, [field]: '' } : values
-					])
-				)
-			}));
-		}
-		validationIssues = validationIssues.filter((candidate) => candidate !== issue);
-		void resolveSelectedCapabilities();
 	}
 
 	function getScheduledAt(): string | undefined {
@@ -1248,28 +1291,10 @@
 		})} ${selectedTime}`;
 	}
 
-	function scheduleInputValue(): string {
-		if (!selectedDate || !selectedTime) return '';
-		return `${selectedDate.toString()}T${selectedTime}`;
-	}
-
-	function updateScheduleInput(value: string) {
-		const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(value);
-		if (!match) {
-			selectedDate = undefined;
-			selectedTime = null;
-			return;
-		}
-		selectedDate = new CalendarDate(Number(match[1]), Number(match[2]), Number(match[3]));
-		selectedTime = `${match[4]}:${match[5]}`;
-		scheduleError = '';
-	}
-
 	function clearSchedule() {
 		selectedDate = undefined;
 		selectedTime = null;
 		scheduleError = '';
-		showSchedulePopover = false;
 	}
 
 	function applyInitialScheduleDate() {
@@ -1349,10 +1374,24 @@
 				blockers.push(m.compose_field_required({ field: field.label }));
 			}
 		}
-		const mediaMin = Math.max(
-			0,
-			...selectedCapabilities.map((capability) => capability.media.min_count)
-		);
+		return blockers;
+	}
+
+	function accountBlockers(account: SocialAccount): string[] {
+		const blockers: string[] = [];
+		const resolved = resolvedCapabilities[account.id];
+		for (const issue of resolved?.issues ?? []) {
+			if (issue.severity === 'error') blockers.push(issue.message);
+		}
+		for (const issue of validationIssues) {
+			if (
+				issue.severity === 'error' &&
+				issueMatchesProvider(issue, getPlatformKey(account.platform))
+			) {
+				blockers.push(issue.message);
+			}
+		}
+		const mediaMin = resolved?.media.min_count ?? 0;
 		if (mediaMin > 0 && media.length < mediaMin) {
 			blockers.push(
 				mediaMin === 1
@@ -1360,65 +1399,69 @@
 					: m.compose_add_media_plural({ count: mediaMin })
 			);
 		}
-		for (const account of selectedAccounts) {
-			const resolved = resolvedCapabilities[account.id];
-			for (const issue of resolved?.issues ?? []) {
-				if (issue.severity === 'error') blockers.push(issue.message);
-			}
-			for (const setting of visibleSettings(account)) {
-				if (!setting.required) continue;
-				if (setting.scope === 'media_item') {
-					for (const item of mediaForSettingsDialog()) {
-						const values = item.settingsByAccount?.[account.id] ?? {};
-						if (!settingDependenciesMet(setting, values)) continue;
-						const value = values[setting.key];
-						if (
-							value === undefined ||
-							value === null ||
-							String(value).trim() === '' ||
-							(setting.type === 'boolean' && value !== true)
-						) {
-							blockers.push(
-								m.compose_destination_setting_required({
-									setting: setting.label,
-									platform: getPlatformName(account.platform)
-								})
-							);
-						}
+		for (const setting of visibleSettings(account)) {
+			if (!setting.required) continue;
+			if (setting.scope === 'media_item') {
+				for (const item of mediaForSettingsDialog()) {
+					const values = item.settingsByAccount?.[account.id] ?? {};
+					if (!settingDependenciesMet(setting, values)) continue;
+					const value = values[setting.key];
+					if (requiredSettingMissing(setting, value)) {
+						blockers.push(
+							m.compose_destination_setting_required({
+								setting: setting.label,
+								platform: getPlatformName(account.platform)
+							})
+						);
 					}
-					continue;
 				}
-				const values =
-					setting.scope === 'segment'
-						? segmentSettingsForAccount(account)
-						: settingsForAccount(account);
-				if (!settingDependenciesMet(setting, values)) continue;
-				const value = values[setting.key];
-				if (
-					value === undefined ||
-					value === null ||
-					String(value).trim() === '' ||
-					(setting.type === 'boolean' && value !== true)
-				) {
-					blockers.push(
-						m.compose_destination_setting_required({
-							setting: setting.label,
-							platform: getPlatformName(account.platform)
-						})
-					);
-				}
+				continue;
 			}
-			const blockersForAccount = readinessBlockers(account);
-			if (blockersForAccount.length > 0) {
+			const values =
+				setting.scope === 'segment'
+					? segmentSettingsForAccount(account)
+					: settingsForAccount(account);
+			if (!settingDependenciesMet(setting, values)) continue;
+			if (requiredSettingMissing(setting, values[setting.key])) {
 				blockers.push(
-					m.compose_provider_blocked({
-						platform: getPlatformName(account.platform),
-						reason: accountBlockerText(account)
+					m.compose_destination_setting_required({
+						setting: setting.label,
+						platform: getPlatformName(account.platform)
 					})
 				);
 			}
 		}
-		return blockers;
+		if (readinessBlockers(account).length > 0) {
+			blockers.push(
+				m.compose_provider_blocked({
+					platform: getPlatformName(account.platform),
+					reason: accountBlockerText(account)
+				})
+			);
+		}
+		return uniqueIssueMessages(blockers);
+	}
+
+	function accountIssueMessages(account: SocialAccount): string[] {
+		const provider = getPlatformKey(account.platform);
+		return uniqueIssueMessages([
+			...accountBlockers(account),
+			...(resolvedCapabilities[account.id]?.issues ?? [])
+				.filter(isActionableAccountIssue)
+				.map((issue) => issue.message),
+			...validationIssues
+				.filter((issue) => issueMatchesProvider(issue, provider))
+				.map((issue) => issue.message)
+		]);
+	}
+
+	function requiredSettingMissing(setting: SettingDefinition, value: unknown): boolean {
+		return (
+			value === undefined ||
+			value === null ||
+			String(value).trim() === '' ||
+			(setting.type === 'boolean' && value !== true)
+		);
 	}
 
 	function normalizeAllAccountSettings(
@@ -1952,19 +1995,24 @@
 		return validationIssues;
 	}
 
-	async function runAction(action: 'draft' | 'validate' | 'schedule' | 'publish') {
+	async function runAction(action: 'validate' | 'schedule' | 'publish') {
 		if (action === 'schedule' && !selectedWorkspaceSettingsReady) {
 			error = m.compose_load_workspace_settings_failed();
 			success = '';
 			return;
 		}
-		if (action !== 'draft' && !selectedProviderReadinessReady) {
+		if (!selectedProviderReadinessReady) {
 			error = providerReadinessError || m.compose_load_readiness_failed();
 			success = '';
 			return;
 		}
-		if (action !== 'draft' && localBlockers.length > 0) {
+		if (localBlockers.length > 0) {
 			error = localBlockers[0];
+			success = '';
+			return;
+		}
+		if (accountBlockingMessages.length > 0) {
+			error = accountBlockingMessages[0];
 			success = '';
 			return;
 		}
@@ -2034,8 +2082,6 @@
 					throw new Error(publishError.detail || m.compose_publish_failed());
 				}
 				success = data?.message ?? m.compose_publication_queued();
-			} else {
-				success = isEditMode ? m.compose_changes_saved() : m.compose_draft_saved();
 			}
 			lastSavedSnapshot = saveSnapshot();
 			ui.triggerRefresh();
@@ -2127,6 +2173,7 @@
 								.filter((account) => visibleSettings(account).length > 0)
 								.map((account) => account.id)}
 							{accountSummaries}
+							{accountIssues}
 							{warningAccountIds}
 							triggerLabel={m.compose_target_accounts()}
 							triggerClass="h-11 md:h-8"
@@ -2136,155 +2183,23 @@
 							onClearAll={clearAllAccounts}
 							onSettings={openDestinationSettings}
 						/>
+						<ComposerValidationMenu issues={globalIssues} class="md:size-8" />
 					{/if}
 				</div>
 
-				<div
-					class="flex w-full min-w-0 items-center justify-end gap-1.5 md:w-auto md:gap-2"
-					data-testid="composer-action-controls"
-				>
-					<Button
-						variant="ghost"
-						size="sm"
-						class="h-11 min-w-0 flex-1 gap-1.5 md:h-8 md:flex-none"
-						disabled={!canSaveDraft}
-						onclick={() => runAction('draft')}
-					>
-						{#if saving || autoSaving}
-							<LoaderIcon class="h-3.5 w-3.5 animate-spin" />
-						{:else}
-							<SaveIcon class="h-3.5 w-3.5" />
-						{/if}
-						{isEditMode ? m.compose_save_changes() : m.compose_save_draft()}
-					</Button>
-					<Popover.Root bind:open={showSchedulePopover}>
-						<Popover.Trigger>
-							{#snippet child({ props })}
-								<Button
-									{...props}
-									size="sm"
-									class="h-11 min-w-0 flex-1 gap-1.5 md:h-8 md:flex-none"
-									disabled={saving || autoSaving || !selectedWorkspaceSettingsReady}
-								>
-									<CalendarClockIcon class="h-3.5 w-3.5" />
-									{scheduleLabel()}
-								</Button>
-							{/snippet}
-						</Popover.Trigger>
-						<Popover.Content
-							class="w-[min(24rem,calc(100vw-1rem))] p-0"
-							align="end"
-							data-testid="schedule-dialog-shell"
-						>
-							<div class="space-y-3 p-3">
-								<div>
-									<p class="text-sm font-medium">{m.compose_schedule()}</p>
-									<p class="text-xs text-muted-foreground">
-										{m.compose_schedule_timezone({ timezone: scheduleTimezoneLabel })}
-									</p>
-								</div>
-								<Button
-									type="button"
-									variant="secondary"
-									class="h-11 w-full"
-									disabled={suggestingSlot}
-									onclick={fillNextSlot}
-								>
-									{#if suggestingSlot}
-										<LoaderIcon class="size-4 animate-spin" />
-									{/if}
-									{m.compose_next_free_slot()}
-								</Button>
-								<Input
-									type="datetime-local"
-									aria-label={m.compose_schedule_time()}
-									class="h-11"
-									value={scheduleInputValue()}
-									oninput={(event) => updateScheduleInput(event.currentTarget.value)}
-								/>
-								{#if scheduleError}
-									<p class="text-xs text-destructive">{scheduleError}</p>
-								{/if}
-								<Calendar
-									type="single"
-									bind:value={selectedDate}
-									minValue={workspaceClock(scheduleTimezoneLabel).date}
-									class="bg-transparent p-0 [--cell-size:--spacing(8)]"
-									weekdayFormat="short"
-									weekStartsOn={schedulingSettings.weekStartsOn}
-								/>
-								<div class="mt-3 max-h-48 overflow-y-auto">
-									<div class="grid grid-cols-3 gap-1.5 sm:grid-cols-4">
-										{#each timeSlots as time (time)}
-											<Button
-												variant={selectedTime === time ? 'default' : 'outline'}
-												size="sm"
-												class="h-11 text-xs md:h-9"
-												onclick={() => {
-													if (!selectedDate) {
-														selectedDate = workspaceClock(scheduleTimezoneLabel).date;
-													}
-													selectedTime = time;
-													scheduleError = '';
-												}}
-											>
-												{time}
-											</Button>
-										{/each}
-									</div>
-								</div>
-								<p class="text-xs text-muted-foreground">
-									{#if selectedDate && selectedTime}
-										{m.compose_selected_schedule({ schedule: scheduleLabel() })}
-									{:else}
-										{m.compose_select_date_time()}
-									{/if}
-								</p>
-								<div class="flex gap-2 border-t pt-3">
-									<Button
-										variant="outline"
-										size="sm"
-										class="h-11 flex-1 text-xs md:h-9"
-										onclick={() => (showSchedulePopover = false)}
-									>
-										{m.common_cancel()}
-									</Button>
-									{#if selectedDate || selectedTime}
-										<Button
-											variant="ghost"
-											size="sm"
-											class="h-11 flex-1 text-xs md:h-9"
-											onclick={clearSchedule}
-										>
-											{m.compose_clear()}
-										</Button>
-									{/if}
-									<Button
-										size="sm"
-										class="h-11 flex-1 text-xs md:h-9"
-										disabled={!canSchedule || !getScheduledAt()}
-										onclick={() => {
-											showSchedulePopover = false;
-											runAction('schedule');
-										}}
-									>
-										{m.compose_schedule()}
-									</Button>
-								</div>
-							</div>
-						</Popover.Content>
-					</Popover.Root>
-					<Button
-						variant="outline"
-						size="sm"
-						class="h-11 min-w-0 flex-1 gap-1.5 md:h-8 md:flex-none"
-						disabled={!canQueue}
-						onclick={() => runAction('publish')}
-					>
-						<SendIcon class="h-3.5 w-3.5" />
-						{m.compose_publish_now()}
-					</Button>
-				</div>
+				<ComposerPublishActions
+					class="w-full md:w-auto"
+					scheduleLabel={scheduleLabel()}
+					publishLabel={m.compose_publish_now()}
+					deleteLabel={m.common_delete()}
+					busy={saving || autoSaving}
+					deleting={deletingPublication}
+					canOpenSchedule={selectedWorkspaceSettingsReady}
+					canPublish={canQueue}
+					onSchedule={() => (showScheduleDialog = true)}
+					onPublish={() => runAction('publish')}
+					onDelete={publicationId ? () => (deletePublicationDialogOpen = true) : undefined}
+				/>
 			</div>
 		</div>
 	{/if}
@@ -2346,28 +2261,18 @@
 
 				<section class="flex flex-col gap-5">
 					<div class="{modeMeta.mediaFirst ? 'order-1' : 'order-2'} space-y-3">
-						<div class="rounded-md border border-dashed bg-muted/20 p-4">
-							<div class="flex flex-wrap items-center gap-3">
-								<Button
-									type="button"
-									variant="outline"
-									class="h-11 gap-2"
-									disabled={uploading || !selectedWorkspaceId}
-									onclick={() => openFocusedMediaPicker('media')}
-								>
-									{#if uploading}
-										<LoaderIcon class="h-4 w-4 animate-spin" />
-									{:else}
-										<ImagePlusIcon class="h-4 w-4" />
-									{/if}
-									{m.media_picker_add_media()}
-								</Button>
-								<p class="text-sm text-muted-foreground">
-									{mode === 'video' ? m.compose_add_long_video() : m.compose_add_media()}
-								</p>
-							</div>
+						<div class="space-y-3">
+							<ComposerMediaDropzone
+								bind:dragging={draggingMedia}
+								disabled={!selectedWorkspaceId || media.length >= composerMediaLimit}
+								{uploading}
+								description={mode === 'video' ? m.compose_add_long_video() : m.compose_add_media()}
+								class={media.length > 0 ? 'min-h-28 py-4' : ''}
+								onChoose={() => openFocusedMediaPicker('media')}
+								onDropFiles={uploadFocusedFiles}
+							/>
 							{#if media.length > 0}
-								<div class="mt-4 grid gap-2 sm:grid-cols-2">
+								<div class="grid gap-2 sm:grid-cols-2">
 									{#each media as item (item.id)}
 										<div class="group relative overflow-hidden rounded-md border bg-background">
 											{#if isImage(item)}
@@ -2544,46 +2449,27 @@
 						{/if}
 					</div>
 				</section>
-
-				{#if localBlockers.length > 0 || blockingIssues.length > 0 || warningIssues.length > 0}
-					<section
-						class="space-y-2 border-t pt-5 text-sm"
-						aria-label={m.compose_publishing_issues()}
-					>
-						<h2 class="font-semibold">{m.compose_check_before_publishing()}</h2>
-						{#each localBlockers as blocker (blocker)}
-							<div class="flex gap-2 text-destructive">
-								<AlertCircleIcon class="mt-0.5 size-4 shrink-0" /><span>{blocker}</span>
-							</div>
-						{/each}
-						{#each blockingIssues as issue (`error-${issue.code}-${issue.field}-${issue.media_id}`)}
-							<div class="flex flex-wrap items-start gap-2 text-destructive">
-								<AlertCircleIcon class="mt-0.5 size-4 shrink-0" />
-								<span class="min-w-0 flex-1">{issue.message}</span>
-								{#if validationIssueActionLabel(issue)}
-									<Button
-										type="button"
-										variant="outline"
-										size="sm"
-										class="h-8 border-destructive/30 text-destructive hover:text-destructive"
-										onclick={() => resolveValidationIssue(issue)}
-									>
-										{validationIssueActionLabel(issue)}
-									</Button>
-								{/if}
-							</div>
-						{/each}
-						{#each warningIssues as issue (`warning-${issue.code}-${issue.field}-${issue.media_id}`)}
-							<div class="flex gap-2 text-amber-700 dark:text-amber-300">
-								<AlertCircleIcon class="mt-0.5 size-4 shrink-0" /><span>{issue.message}</span>
-							</div>
-						{/each}
-					</section>
-				{/if}
 			</div>
 		</div>
 	{/if}
 </div>
+
+<ComposerScheduleDialog
+	bind:open={showScheduleDialog}
+	bind:selectedDate
+	bind:selectedTime
+	{timeSlots}
+	timezone={scheduleTimezoneLabel}
+	weekStartsOn={schedulingSettings.weekStartsOn}
+	selectedDisplay={scheduleLabel()}
+	externalError={scheduleError}
+	suggesting={suggestingSlot}
+	submitting={saving}
+	{canSchedule}
+	onSuggest={fillNextSlot}
+	onSchedule={() => runAction('schedule')}
+	onClear={clearSchedule}
+/>
 
 <MediaPicker
 	bind:open={mediaPickerOpen}
@@ -2658,6 +2544,13 @@
 	)
 		? () => requestDeleteDestination(settingsAccount)
 		: undefined}
+/>
+
+<DestructiveConfirmDialog
+	bind:open={deletePublicationDialogOpen}
+	title={m.sidebar_delete_draft_confirm()}
+	description={m.compose_delete_draft_body()}
+	onConfirm={deletePublication}
 />
 
 <DestructiveConfirmDialog

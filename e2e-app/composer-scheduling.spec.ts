@@ -140,6 +140,7 @@ test("composer schedules a publication from the selected time", async ({
         json: {
           id: "publication-schedule",
           workspace_id: publicationPayload.workspace_id,
+          revision: 1,
           title: "Short text",
           content_profile: publicationPayload.content_profile,
           source_text: publicationPayload.source_text,
@@ -217,6 +218,9 @@ test("composer schedules a publication from the selected time", async ({
   await expect(
     page.getByRole("button", { name: "Target accounts" }),
   ).toBeVisible();
+  await expect(page.getByTestId("composer-action-controls")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Save draft" })).toHaveCount(0);
+  await expect(page.getByTestId("composer-media-dropzone")).toBeVisible();
   await page.getByLabel("Caption").fill(postContent);
   await page.getByRole("button", { name: "Schedule" }).first().click();
   const futureDate = new Date();
@@ -227,14 +231,15 @@ test("composer schedules a publication from the selected time", async ({
     month: "long",
     day: "numeric",
   }).format(futureDate);
-  const schedulePopover = page.locator("[data-popover-content]");
-  await schedulePopover
+  const scheduleDialog = page.getByTestId("schedule-dialog-shell");
+  await expect(scheduleDialog).toBeVisible();
+  await scheduleDialog
     .getByRole("button", { name: futureDateLabel, exact: true })
     .click();
-  await schedulePopover
+  await scheduleDialog
     .getByRole("button", { name: "10:30", exact: true })
     .click();
-  const confirmSchedule = schedulePopover.getByRole("button", {
+  const confirmSchedule = scheduleDialog.getByRole("button", {
     name: "Schedule",
     exact: true,
   });

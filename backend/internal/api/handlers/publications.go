@@ -22,6 +22,7 @@ import (
 	"github.com/openpost/backend/internal/services/drafts"
 	"github.com/openpost/backend/internal/services/entitlements"
 	"github.com/openpost/backend/internal/services/lifecycle"
+	postservice "github.com/openpost/backend/internal/services/posts"
 	"github.com/uptrace/bun"
 	"github.com/uptrace/bun/dialect"
 )
@@ -72,7 +73,7 @@ type PublicationMediaInput struct {
 }
 
 type PublicationSegmentInput struct {
-	ID          string                  `json:"id,omitempty" doc:"Stable segment ID"`
+	ID          string                  `json:"id,omitempty" doc:"Client segment reference on create, or an existing server segment ID on update"`
 	Body        string                  `json:"body,omitempty" doc:"Canonical segment body"`
 	Title       string                  `json:"title,omitempty" doc:"Canonical segment title"`
 	Description string                  `json:"description,omitempty" doc:"Canonical segment description"`
@@ -82,8 +83,8 @@ type PublicationSegmentInput struct {
 }
 
 type RenditionSegmentInput struct {
-	ID                   string                  `json:"id,omitempty" doc:"Existing rendition segment ID"`
-	PublicationSegmentID string                  `json:"publication_segment_id,omitempty" doc:"Canonical segment ID"`
+	ID                   string                  `json:"id,omitempty" doc:"Legacy client reference; replacement IDs are server-generated"`
+	PublicationSegmentID string                  `json:"publication_segment_id,omitempty" doc:"Server canonical segment ID, or its matching client segment reference in the same request"`
 	Body                 string                  `json:"body,omitempty" doc:"Destination segment body override"`
 	Title                string                  `json:"title,omitempty" doc:"Destination segment title override"`
 	Description          string                  `json:"description,omitempty" doc:"Destination segment description override"`
@@ -93,7 +94,7 @@ type RenditionSegmentInput struct {
 }
 
 type RenditionInput struct {
-	ID              string                  `json:"id,omitempty" doc:"Existing rendition ID for upsert"`
+	ID              string                  `json:"id,omitempty" doc:"Legacy client reference; replacement IDs are server-generated"`
 	SocialAccountID string                  `json:"social_account_id" doc:"Social account ID"`
 	Profile         string                  `json:"profile,omitempty" doc:"Content profile override"`
 	OutputProfile   string                  `json:"output_profile,omitempty" doc:"Resolved provider-qualified output profile"`
@@ -164,6 +165,12 @@ type ListPublicationsInput struct {
 
 type GetPublicationInput struct {
 	PathID string `path:"id" doc:"Publication ID"`
+}
+
+type DeletePublicationInput struct {
+	PathID           string `path:"id" doc:"Publication ID"`
+	Confirm          bool   `query:"confirm" doc:"Explicit confirmation that the publication may be permanently deleted"`
+	ExpectedRevision int    `query:"expected_revision" minimum:"1" doc:"Revision loaded by the editor"`
 }
 
 type ListPublicationEventsInput struct {
@@ -363,6 +370,7 @@ func (h *PublicationHandler) RegisterRoutes(api huma.API) {
 	h.getPublication(api)
 	h.listPublicationEvents(api)
 	h.updatePublication(api)
+	h.deletePublication(api)
 	h.upsertRenditions(api)
 	h.deleteRendition(api)
 	h.validatePublication(api)
@@ -551,7 +559,7 @@ func (h *PublicationHandler) createPublication(api huma.API) {
 			return h.insertRenditions(txCtx, tx, publication, segments, input.Body.Segments, input.Body.Renditions, input.Body.Media, accountMap)
 		})
 		if err != nil {
-			return nil, huma.Error500InternalServerError(err.Error())
+			return nil, huma.Error500InternalServerError("failed to create publication")
 		}
 
 		resp, err := h.loadPublicationResponse(ctx, publication.ID, userID)
@@ -629,6 +637,75 @@ func (h *PublicationHandler) getPublication(api huma.API) {
 			return nil, err
 		}
 		return &PublicationOutput{Body: resp}, nil
+	})
+}
+
+func (h *PublicationHandler) deletePublication(api huma.API) {
+	huma.Register(api, huma.Operation{
+		OperationID: "delete-publication",
+		Method:      http.MethodDelete,
+		Path:        publicationPathByID,
+		Summary:     "Delete a publication",
+		Description: "Permanently deletes an editable publication, its destinations, and any linked draft post.",
+		Tags:        []string{tagPublications},
+		Middlewares: huma.Middlewares{middleware.AuthMiddleware(api, h.auth)},
+		Errors:      []int{400, 403, 404, 409},
+	}, func(ctx context.Context, input *DeletePublicationInput) (*ActionOutput, error) {
+		if !input.Confirm {
+			return nil, huma.Error400BadRequest("confirm=true is required to delete a publication")
+		}
+		if err := drafts.RequireExpectedRevision(input.ExpectedRevision); err != nil {
+			return nil, err
+		}
+		publication, err := h.loadPublicationForEdit(ctx, input.PathID, middleware.GetUserID(ctx))
+		if err != nil {
+			return nil, err
+		}
+		err = h.db.RunInTx(ctx, &sql.TxOptions{}, func(txCtx context.Context, tx bun.Tx) error {
+			current, err := h.loadEditablePublicationTx(txCtx, tx, publication.ID)
+			if err != nil {
+				return err
+			}
+			if current.Revision != input.ExpectedRevision {
+				return h.publicationRevisionConflict(txCtx, tx, current, input.ExpectedRevision)
+			}
+			if _, err := tx.NewDelete().
+				Model((*models.Job)(nil)).
+				Where(primaryPublishPublicationJobWhere(h.db), jobTypePublishPublication, current.ID).
+				Exec(txCtx); err != nil {
+				return fmt.Errorf("delete publication jobs: %w", err)
+			}
+			var linkedPostIDs []string
+			if err := tx.NewSelect().
+				Model((*models.Post)(nil)).
+				Column("id").
+				Where("publication_id = ?", current.ID).
+				Scan(txCtx, &linkedPostIDs); err != nil && !isMissingLegacyPostsTable(err) {
+				return fmt.Errorf("load linked draft posts: %w", err)
+			}
+			if err := postservice.DeletePostsCascadeTx(txCtx, tx, linkedPostIDs); err != nil {
+				return err
+			}
+			result, err := tx.NewDelete().
+				Model((*models.Publication)(nil)).
+				Where("id = ? AND revision = ?", current.ID, current.Revision).
+				Exec(txCtx)
+			if err != nil {
+				return fmt.Errorf("delete publication: %w", err)
+			}
+			if affected, _ := result.RowsAffected(); affected == 0 {
+				latest, err := h.loadEditablePublicationTx(txCtx, tx, current.ID)
+				if err != nil {
+					return err
+				}
+				return h.publicationRevisionConflict(txCtx, tx, latest, input.ExpectedRevision)
+			}
+			return nil
+		})
+		if err != nil {
+			return nil, publicationMutationHTTPError(err, "failed to delete publication")
+		}
+		return actionMessage("publication deleted", ""), nil
 	})
 }
 
@@ -1366,7 +1443,7 @@ func (h *PublicationHandler) insertPublicationSegments(
 	segments := make([]models.PublicationSegment, 0, len(inputs))
 	for position, input := range inputs {
 		segment := models.PublicationSegment{
-			ID:            publicationFirstNonEmpty(input.ID, uuid.New().String()),
+			ID:            uuid.New().String(),
 			PublicationID: publication.ID,
 			Position:      position,
 			Body:          input.Body,
@@ -1383,7 +1460,7 @@ func (h *PublicationHandler) insertPublicationSegments(
 				for remainingPosition := position + 1; remainingPosition < len(inputs); remainingPosition++ {
 					remaining := inputs[remainingPosition]
 					segments = append(segments, models.PublicationSegment{
-						ID:            publicationFirstNonEmpty(remaining.ID, uuid.New().String()),
+						ID:            uuid.New().String(),
 						PublicationID: publication.ID,
 						Position:      remainingPosition,
 						Body:          remaining.Body,
@@ -1445,7 +1522,7 @@ func (h *PublicationHandler) replacePublicationSegments(
 		segmentID := strings.TrimSpace(input.ID)
 		existingSegment, exists := existingByID[segmentID]
 		if segmentID == "" || !exists {
-			segmentID = publicationFirstNonEmpty(segmentID, uuid.New().String())
+			segmentID = uuid.New().String()
 			row := &models.PublicationSegment{
 				ID:            segmentID,
 				PublicationID: publication.ID,
@@ -1562,7 +1639,7 @@ func (h *PublicationHandler) insertRenditions(
 			firstCanonical = canonicalSegments[0]
 		}
 		rendition := &models.Rendition{
-			ID:              publicationFirstNonEmpty(input.ID, uuid.New().String()),
+			ID:              uuid.New().String(),
 			PublicationID:   publication.ID,
 			SocialAccountID: input.SocialAccountID,
 			Platform:        account.Platform,
@@ -1625,20 +1702,14 @@ func (h *PublicationHandler) insertRenditionSegments(
 	now := time.Now().UTC()
 	legacyMediaSeen := map[string]struct{}{}
 	for position, input := range inputs {
-		canonical := models.PublicationSegment{}
-		if position < len(canonicalSegments) {
-			canonical = canonicalSegments[position]
-		}
-		if input.PublicationSegmentID != "" {
-			for _, candidate := range canonicalSegments {
-				if candidate.ID == input.PublicationSegmentID {
-					canonical = candidate
-					break
-				}
-			}
-		}
+		canonical := canonicalPublicationSegment(
+			position,
+			input.PublicationSegmentID,
+			canonicalSegments,
+			canonicalInputs,
+		)
 		segment := &models.RenditionSegment{
-			ID:                   publicationFirstNonEmpty(input.ID, uuid.New().String()),
+			ID:                   uuid.New().String(),
 			RenditionID:          rendition.ID,
 			PublicationSegmentID: canonical.ID,
 			Position:             position,
@@ -1696,6 +1767,31 @@ func (h *PublicationHandler) insertRenditionSegments(
 		}
 	}
 	return nil
+}
+
+func canonicalPublicationSegment(
+	position int,
+	requestedID string,
+	segments []models.PublicationSegment,
+	inputs []PublicationSegmentInput,
+) models.PublicationSegment {
+	canonical := models.PublicationSegment{}
+	if position < len(segments) {
+		canonical = segments[position]
+	}
+	if requestedID == "" {
+		return canonical
+	}
+	for candidatePosition, candidate := range segments {
+		inputID := ""
+		if candidatePosition < len(inputs) {
+			inputID = inputs[candidatePosition].ID
+		}
+		if candidate.ID == requestedID || inputID == requestedID {
+			return candidate
+		}
+	}
+	return canonical
 }
 
 func (h *PublicationHandler) insertLegacyRenditionMedia(

@@ -15,19 +15,18 @@
 	} from '$lib/media-capabilities';
 	import { workspaceCtx } from '$lib/stores/workspace.svelte';
 	import { Button } from '$lib/components/ui/button';
-	import { Calendar } from '$lib/components/ui/calendar';
 	import { Input } from '$lib/components/ui/input';
-	import * as Dialog from '$lib/components/ui/dialog';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
-	import * as Select from '$lib/components/ui/select';
 	import * as Tooltip from '$lib/components/ui/tooltip';
 	import ComposerAccountMenu from './composer-account-menu.svelte';
+	import ComposerPublishActions from './composer-publish-actions.svelte';
+	import ComposerScheduleDialog from './composer-schedule-dialog.svelte';
+	import ComposerValidationMenu from './composer-validation-menu.svelte';
 	import DestinationSettingsDialog from './destination-settings-dialog.svelte';
 	import PlatformIcon from './platform-icon.svelte';
 	import { Badge } from '$lib/components/ui/badge';
 	import { getPlatformKey, getPlatformName } from '$lib/utils';
 	import { CalendarDate, isEqualDay } from '@internationalized/date';
-	import ArrowRightIcon from 'lucide-svelte/icons/arrow-right';
 	import LoaderIcon from 'lucide-svelte/icons/loader-2';
 	import PlusIcon from 'lucide-svelte/icons/plus';
 	import XIcon from 'lucide-svelte/icons/x';
@@ -39,7 +38,6 @@
 	import Trash2Icon from 'lucide-svelte/icons/trash-2';
 	import TypeIcon from 'lucide-svelte/icons/type';
 	import MoreHorizontalIcon from 'lucide-svelte/icons/ellipsis';
-	import CalendarClockIcon from 'lucide-svelte/icons/calendar-clock';
 	import LinkIcon from 'lucide-svelte/icons/link';
 	import { ui } from '$lib/stores/ui.svelte';
 	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
@@ -58,9 +56,12 @@
 	} from './compose/draft-utils';
 	import { minimumAccountCharacterLimit, uniquePlatformLimits } from './compose/platform-limits';
 	import { editorAccountIdAfterVariantLoad } from './compose/editor-target';
-	import { accountCapabilityNeedsAttention } from './compose/account-attention';
+	import {
+		accountCapabilityNeedsAttention,
+		isActionableAccountIssue
+	} from './compose/account-attention';
+	import { composerIssues, issueMatchesProvider, uniqueIssueMessages } from './compose/validation';
 	import { loadableDestinationOptionSources } from './compose/destination-options';
-	import { parseNaturalScheduleInput } from './compose/schedule-language';
 	import {
 		workspaceClock,
 		workspaceScheduleFromISO,
@@ -209,7 +210,6 @@
 	let selectedTime = $state<string | null>(null);
 	let suggestingSlot = $state(false);
 	let showScheduleDialog = $state(false);
-	let scheduleInput = $state('');
 	let scheduleInputError = $state('');
 	let randomDelayOverride = $state<string>('default');
 
@@ -337,10 +337,30 @@
 			])
 		)
 	);
+	const localBlockers = $derived(globalFormBlockers());
+	const globalIssues = $derived(composerIssues(localBlockers, validationIssues));
+	const accountIssues = $derived.by(() =>
+		Object.fromEntries(
+			selectedAccounts
+				.map((account) => [account.id, accountIssueMessages(account)] as const)
+				.filter(([, issues]) => issues.length > 0)
+		)
+	);
+	const accountBlockingMessages = $derived(
+		selectedAccounts.flatMap((account) => accountBlockers(account))
+	);
 	const warningAccountIds = $derived(
-		Object.values(resolvedCapabilities)
-			.filter(accountCapabilityNeedsAttention)
-			.map((capability) => capability.account_id)
+		Array.from(
+			new Set([
+				...Object.values(resolvedCapabilities)
+					.filter(accountCapabilityNeedsAttention)
+					.map((capability) => capability.account_id),
+				...Object.keys(accountIssues)
+			])
+		)
+	);
+	const canSubmitPublication = $derived(
+		localBlockers.length === 0 && accountBlockingMessages.length === 0
 	);
 	const capabilityInputSnapshot = $derived(
 		JSON.stringify({
@@ -358,25 +378,6 @@
 			mediaSettingsByAccount
 		})
 	);
-	const mediaCapabilityWarnings = $derived.by(() => {
-		const warnings: string[] = [];
-		const sourcePosts = isThread ? posts : activePost ? [activePost] : [];
-
-		for (const account of selectedAccounts) {
-			const platform = getPlatformKey(account.platform);
-			for (const post of sourcePosts) {
-				const mediaIds = getVariantMediaIds(account.id, post.key) ?? post.mediaIds;
-				warnings.push(
-					...providerMediaWarningMessages(
-						platform,
-						mediaCapabilityItemsFromIds(mediaIds, mediaMimeTypes, mediaSizes)
-					)
-				);
-			}
-		}
-
-		return Array.from(new Set(warnings));
-	});
 	const activeVariantAccount = $derived(
 		activeVariantAccountId ? (accounts.find((a) => a.id === activeVariantAccountId) ?? null) : null
 	);
@@ -442,13 +443,6 @@
 		return 'text-muted-foreground';
 	}
 
-	function formatRandomDelay(minutes: number): string {
-		if (!Number.isFinite(minutes) || minutes <= 0) return m.compose_exact_time();
-		if (minutes === 1) return m.compose_random_delay_one_minute();
-		if (minutes === 60) return m.compose_random_delay_one_hour();
-		return m.compose_random_delay_minutes({ minutes });
-	}
-
 	function normalizeRandomDelayValue(value: number | null | undefined): string {
 		if (value === undefined || value === null || !Number.isFinite(value)) return 'default';
 		return String(Math.max(0, Math.round(value)));
@@ -480,7 +474,6 @@
 		}
 		selectedDate = date;
 		selectedTime = slotsForDate(date)[0] ?? allTimeSlots[0] ?? '09:00';
-		scheduleInput = '';
 		scheduleInputError = '';
 	}
 
@@ -755,30 +748,82 @@
 	}
 
 	function configuredPollError(): string {
-		for (const post of posts) {
-			for (const account of selectedAccounts) {
-				const definition = visibleSettings(account).find(
-					(setting) => setting.key === 'poll_options' && setting.scope === 'segment'
-				);
-				if (!definition) continue;
-				const raw = segmentSettingsByPost[post.key]?.[account.id]?.poll_options;
-				if (typeof raw !== 'string' || raw === '') continue;
-				const options = raw.split('\n');
-				const minimum = Math.max(2, definition.constraints?.min_items ?? 2);
-				if (options.length < minimum) {
-					return m.compose_poll_minimum({ count: minimum });
-				}
-				const emptyIndex = options.findIndex((option) => option.trim() === '');
-				if (emptyIndex >= 0) {
-					return m.compose_poll_option_required({ number: emptyIndex + 1 });
-				}
-				const maximum = Math.max(minimum, definition.constraints?.max_items ?? 4);
-				if (options.length > maximum) {
-					return m.compose_poll_maximum({ count: maximum });
-				}
-			}
+		for (const account of selectedAccounts) {
+			const issue = configuredPollErrorForAccount(account);
+			if (issue) return issue;
 		}
 		return '';
+	}
+
+	function configuredPollErrorForAccount(account: SocialAccount): string {
+		for (const post of posts) {
+			const definition = visibleSettings(account).find(
+				(setting) => setting.key === 'poll_options' && setting.scope === 'segment'
+			);
+			if (!definition) continue;
+			const raw = segmentSettingsByPost[post.key]?.[account.id]?.poll_options;
+			if (typeof raw !== 'string' || raw === '') continue;
+			const options = raw.split('\n');
+			const minimum = Math.max(2, definition.constraints?.min_items ?? 2);
+			if (options.length < minimum) return m.compose_poll_minimum({ count: minimum });
+			const emptyIndex = options.findIndex((option) => option.trim() === '');
+			if (emptyIndex >= 0) {
+				return m.compose_poll_option_required({ number: emptyIndex + 1 });
+			}
+			const maximum = Math.max(minimum, definition.constraints?.max_items ?? 4);
+			if (options.length > maximum) return m.compose_poll_maximum({ count: maximum });
+		}
+		return '';
+	}
+
+	function globalFormBlockers(): string[] {
+		const blockers: string[] = [];
+		if (!selectedWorkspaceId) blockers.push(m.compose_choose_workspace_blocker());
+		if (selectedAccountIds.length === 0) blockers.push(m.compose_choose_account_blocker());
+		if (!hasContent) blockers.push(m.compose_please_enter_content());
+		if (
+			isThread &&
+			posts.filter((post) => post.content.trim() || post.mediaIds.length > 0).length < 2
+		) {
+			blockers.push(m.compose_thread_minimum());
+		}
+		if (capabilityResolveError) blockers.push(capabilityResolveError);
+		return uniqueIssueMessages(blockers);
+	}
+
+	function accountBlockers(account: SocialAccount): string[] {
+		const provider = getPlatformKey(account.platform);
+		return uniqueIssueMessages([
+			...(resolvedCapabilities[account.id]?.issues ?? [])
+				.filter((issue) => issue.severity === 'error')
+				.map((issue) => issue.message),
+			...validationIssues
+				.filter((issue) => issue.severity === 'error' && issueMatchesProvider(issue, provider))
+				.map((issue) => issue.message),
+			configuredPollErrorForAccount(account)
+		]);
+	}
+
+	function accountIssueMessages(account: SocialAccount): string[] {
+		const provider = getPlatformKey(account.platform);
+		const sourcePosts = isThread ? posts : activePost ? [activePost] : [];
+		const mediaWarnings = sourcePosts.flatMap((post) => {
+			const mediaIds = getVariantMediaIds(account.id, post.key) ?? post.mediaIds;
+			return providerMediaWarningMessages(
+				provider,
+				mediaCapabilityItemsFromIds(mediaIds, mediaMimeTypes, mediaSizes)
+			);
+		});
+		return uniqueIssueMessages([
+			...accountBlockers(account),
+			...(resolvedCapabilities[account.id]?.issues ?? [])
+				.filter(isActionableAccountIssue)
+				.map((issue) => issue.message),
+			...validationIssues
+				.filter((issue) => issueMatchesProvider(issue, provider))
+				.map((issue) => issue.message),
+			...mediaWarnings
+		]);
 	}
 
 	function focusedMedia(mediaIDs: string[]): FocusedMediaInput[] {
@@ -1766,7 +1811,6 @@
 		selectedDate = undefined;
 		selectedTime = null;
 		showScheduleDialog = false;
-		scheduleInput = '';
 		scheduleInputError = '';
 		randomDelayOverride = 'default';
 		posts = posts.map((post) => ({ ...post, mediaIds: [] }));
@@ -2568,58 +2612,14 @@
 	// --------------------------------------------------------------------------
 	// Scheduling
 	// --------------------------------------------------------------------------
-	function applyScheduleInput(): boolean {
-		const trimmed = scheduleInput.trim();
-		if (!trimmed) {
-			scheduleInputError = '';
-			return true;
-		}
-
-		const parsed = parseNaturalScheduleInput(trimmed, new Date(), scheduleTimezoneLabel);
-		if (!parsed) {
-			scheduleInputError = m.compose_parse_time_failed();
-			return false;
-		}
-		if (!workspaceScheduleToISO(parsed.date, parsed.time, scheduleTimezoneLabel)) {
-			scheduleInputError = m.compose_invalid_timezone_time();
-			return false;
-		}
-
-		selectedDate = parsed.date;
-		selectedTime = parsed.time;
-		scheduleInputError = '';
-		return true;
-	}
-
-	function closeScheduleDialog() {
-		scheduleInputError = '';
-		showScheduleDialog = false;
-	}
-
-	function applyScheduleInputAndClose() {
-		if (!applyScheduleInput()) return;
-		closeScheduleDialog();
-	}
-
 	function openScheduleDialog() {
 		if (!selectedWorkspaceSettingsReady) {
 			error = m.compose_load_workspace_settings_failed();
 			workspaceSettingsError = error;
 			return;
 		}
-		scheduleInput = '';
 		scheduleInputError = '';
 		showScheduleDialog = true;
-	}
-
-	async function scheduleWithSelectedTime() {
-		if (showScheduleDialog && !applyScheduleInput()) return;
-		if (!selectedDate || !selectedTime) {
-			openScheduleDialog();
-			return;
-		}
-		showScheduleDialog = false;
-		await publish(false);
 	}
 
 	async function fillNextSlot(showComposerError = false): Promise<boolean> {
@@ -2668,7 +2668,6 @@
 				if (slotInstant && new Date(slotInstant).getTime() <= Date.now()) {
 					selectedDate = selectedDate.add({ days: 1 });
 				}
-				scheduleInput = '';
 				scheduleInputError = '';
 				return true;
 			}
@@ -2695,32 +2694,6 @@
 		await fillNextSlot(false);
 	}
 
-	async function scheduleNextFreeSlot() {
-		if (!selectedWorkspaceId) {
-			error = m.compose_please_select_workspace();
-			return;
-		}
-		if (!hasContent) {
-			error = m.compose_please_enter_content();
-			return;
-		}
-		if (selectedAccountIds.length === 0) {
-			error = m.compose_select_account();
-			return;
-		}
-
-		if (selectedDate && selectedTime) {
-			showScheduleDialog = false;
-			await publish(false);
-			return;
-		}
-
-		const didApplySlot = await fillNextSlot(true);
-		if (!didApplySlot) return;
-		showScheduleDialog = false;
-		await publish(false);
-	}
-
 	function formatScheduledDisplay(): string {
 		if (!selectedDate) return m.compose_schedule();
 		const now = workspaceClock(scheduleTimezoneLabel).date;
@@ -2735,10 +2708,6 @@
 			day: 'numeric',
 			timeZone: scheduleTimezoneLabel
 		})}${timeSuffix}`;
-	}
-
-	function scheduleButtonLabel(): string {
-		return m.compose_schedule_post({ schedule: formatScheduledDisplay() });
 	}
 
 	// --------------------------------------------------------------------------
@@ -2771,7 +2740,7 @@
 			class="sticky top-0 z-20 border-b bg-background/94 px-3 py-2 backdrop-blur-md"
 			data-testid="mobile-composer-controls"
 		>
-			<div class="flex min-w-0 items-center gap-1.5">
+			<div class="flex min-w-0 flex-wrap items-center gap-1.5">
 				{#if modeControl}
 					<div class="shrink-0 [&_[data-testid=composer-mode-select]]:h-11">
 						{@render modeControl()}
@@ -2797,6 +2766,7 @@
 						customAccountIds={[...variants.keys()]}
 						{settingsAccountIds}
 						{accountSummaries}
+						{accountIssues}
 						{warningAccountIds}
 						activeAccountId={activeVariantAccountId}
 						triggerLabel={m.compose_publish_to()}
@@ -2811,6 +2781,7 @@
 						onReset={(account) => resyncAccount(account.id)}
 						onSettings={openDestinationSettings}
 					/>
+					<ComposerValidationMenu issues={globalIssues} />
 				{/if}
 				<DropdownMenu.Root>
 					<DropdownMenu.Trigger>
@@ -2835,62 +2806,44 @@
 							<LightbulbIcon class="mr-2 size-4" />
 							{showPromptCard ? m.compose_dismiss_inspiration() : m.compose_need_inspiration()}
 						</DropdownMenu.Item>
-						{#if draftId}
-							<DropdownMenu.Item
-								class="min-h-11 text-destructive focus:text-destructive"
-								onclick={() => (showDeleteConfirm = true)}
-								disabled={isDeleting || isSaving || isSubmitting}
-							>
-								<Trash2Icon class="mr-2 size-4" />{m.common_delete()}
-							</DropdownMenu.Item>
-						{/if}
 					</DropdownMenu.Content>
 				</DropdownMenu.Root>
 				{#if isEditMode && !autoSavesDraft}
 					<Button
 						type="button"
-						variant="outline"
+						variant="ghost"
 						size="icon"
-						class="ml-auto size-11 shrink-0"
-						title={scheduleButtonLabel()}
-						aria-label={scheduleButtonLabel()}
-						onclick={openScheduleDialog}
-						disabled={isSubmitting || isSaving}
+						class="size-11 text-muted-foreground hover:text-destructive md:size-8"
+						aria-label={m.common_delete()}
+						title={m.common_delete()}
+						onclick={() => (showDeleteConfirm = true)}
+						disabled={isDeleting || isSaving || isSubmitting}
 					>
-						<CalendarClockIcon class="size-4" />
+						<Trash2Icon class="size-4" />
 					</Button>
 					<Button
 						size="sm"
-						class="h-11 shrink-0 px-3"
+						class="ml-auto h-11 shrink-0 px-3"
 						onclick={saveEditedPost}
-						disabled={isSaving || isSubmitting || !hasContent || selectedAccountIds.length === 0}
+						disabled={isSaving || isSubmitting || !canSubmitPublication}
 					>
 						{#if isSaving}<LoaderIcon class="size-3.5 animate-spin" />{/if}
 						<span>{isSaving ? m.compose_saving_changes() : m.compose_save_changes()}</span>
 					</Button>
 				{:else}
-					<Button
-						type="button"
-						variant="outline"
-						size="icon"
-						class="ml-auto size-11 shrink-0"
-						title={scheduleButtonLabel()}
-						aria-label={scheduleButtonLabel()}
-						onclick={openScheduleDialog}
-						disabled={isSubmitting || isSaving}
-					>
-						<CalendarClockIcon class="size-4" />
-					</Button>
-					<Button
-						type="button"
-						size="sm"
-						class="h-11 shrink-0 px-3"
-						onclick={() => publish(true)}
-						disabled={isSubmitting || !hasContent || selectedAccountIds.length === 0}
-					>
-						{#if isSubmitting}<LoaderIcon class="size-3.5 animate-spin" />{/if}
-						{m.compose_publish()}
-					</Button>
+					<ComposerPublishActions
+						class="w-full"
+						scheduleLabel={formatScheduledDisplay()}
+						publishLabel={m.compose_publish_now()}
+						deleteLabel={m.common_delete()}
+						busy={isSubmitting || isSaving}
+						deleting={isDeleting}
+						canOpenSchedule={selectedWorkspaceSettingsReady}
+						canPublish={canSubmitPublication}
+						onSchedule={openScheduleDialog}
+						onPublish={() => publish(true)}
+						onDelete={draftId ? () => (showDeleteConfirm = true) : undefined}
+					/>
 				{/if}
 			</div>
 		</div>
@@ -2925,6 +2878,7 @@
 						customAccountIds={[...variants.keys()]}
 						{settingsAccountIds}
 						{accountSummaries}
+						{accountIssues}
 						{warningAccountIds}
 						activeAccountId={activeVariantAccountId}
 						triggerLabel={m.compose_publish_to()}
@@ -2937,6 +2891,7 @@
 						onReset={(account) => resyncAccount(account.id)}
 						onSettings={openDestinationSettings}
 					/>
+					<ComposerValidationMenu issues={globalIssues} class="size-8" />
 				{/if}
 			</div>
 
@@ -2969,311 +2924,65 @@
 					</Tooltip.Content>
 				</Tooltip.Root>
 
-				{#if draftId}
-					<Tooltip.Root>
-						<Tooltip.Trigger>
-							{#snippet child({ props })}
-								<Button
-									{...props}
-									variant="ghost"
-									size="icon"
-									class="h-8 w-8 text-muted-foreground hover:text-destructive"
-									aria-label={m.common_delete()}
-									data-testid="composer-delete"
-									onclick={() => (showDeleteConfirm = true)}
-									disabled={isDeleting || isSaving || isSubmitting}
-								>
-									<Trash2Icon class="size-4" />
-								</Button>
-							{/snippet}
-						</Tooltip.Trigger>
-						<Tooltip.Content><p class="text-sm">{m.common_delete()}</p></Tooltip.Content>
-					</Tooltip.Root>
-				{/if}
-
 				{#if isEditMode && !autoSavesDraft}
+					<Button
+						type="button"
+						variant="ghost"
+						size="icon"
+						class="size-8 text-muted-foreground hover:text-destructive"
+						aria-label={m.common_delete()}
+						title={m.common_delete()}
+						onclick={() => (showDeleteConfirm = true)}
+						disabled={isDeleting || isSaving || isSubmitting}
+					>
+						<Trash2Icon class="size-4" />
+					</Button>
 					<Button
 						size="sm"
 						class="gap-1.5"
 						onclick={saveEditedPost}
-						disabled={isSaving || isSubmitting || !hasContent || selectedAccountIds.length === 0}
+						disabled={isSaving || isSubmitting || !canSubmitPublication}
 					>
 						{#if isSaving}<LoaderIcon class="h-3.5 w-3.5 animate-spin" />{/if}
 						<span>{isSaving ? m.compose_saving_changes() : m.compose_save_changes()}</span>
 					</Button>
 				{:else}
-					<div
-						class="inline-flex overflow-hidden rounded-md border bg-background"
-						title={formatScheduledDisplay()}
-					>
-						<Button
-							type="button"
-							variant="ghost"
-							size="sm"
-							class="h-8 rounded-none border-r border-border px-3 shadow-none"
-							onclick={openScheduleDialog}
-							disabled={isSubmitting || isSaving}
-						>
-							{formatScheduledDisplay()}
-						</Button>
-						<Tooltip.Root>
-							<Tooltip.Trigger>
-								{#snippet child({ props })}
-									<Button
-										{...props}
-										type="button"
-										variant="ghost"
-										size="icon-sm"
-										class="h-8 w-8 rounded-none shadow-none"
-										aria-label={m.compose_schedule_next_slot()}
-										onclick={scheduleNextFreeSlot}
-										disabled={suggestingSlot ||
-											isSubmitting ||
-											!hasContent ||
-											selectedAccountIds.length === 0}
-									>
-										{#if suggestingSlot || isSubmitting}
-											<LoaderIcon class="h-3.5 w-3.5 animate-spin" />
-										{:else}
-											<ArrowRightIcon class="h-3.5 w-3.5" />
-										{/if}
-									</Button>
-								{/snippet}
-							</Tooltip.Trigger>
-							<Tooltip.Content>
-								<p class="text-sm">{m.compose_schedule_next_slot()}</p>
-							</Tooltip.Content>
-						</Tooltip.Root>
-					</div>
-
-					<Button
-						type="button"
-						size="sm"
-						class="h-8 px-3"
-						onclick={() => publish(true)}
-						disabled={isSubmitting || !hasContent || selectedAccountIds.length === 0}
-					>
-						{#if isSubmitting}<LoaderIcon class="h-3.5 w-3.5 animate-spin" />{/if}
-						{m.compose_publish()}
-					</Button>
+					<ComposerPublishActions
+						scheduleLabel={formatScheduledDisplay()}
+						publishLabel={m.compose_publish_now()}
+						deleteLabel={m.common_delete()}
+						busy={isSubmitting || isSaving}
+						deleting={isDeleting}
+						canOpenSchedule={selectedWorkspaceSettingsReady}
+						canPublish={canSubmitPublication}
+						onSchedule={openScheduleDialog}
+						onPublish={() => publish(true)}
+						onDelete={draftId ? () => (showDeleteConfirm = true) : undefined}
+					/>
 				{/if}
 			</div>
 		</div>
 	{/if}
 
-	<Dialog.Root bind:open={showScheduleDialog}>
-		<Dialog.Content
-			data-testid="schedule-dialog-shell"
-			class="flex max-h-[calc(100dvh-1rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-3xl"
-		>
-			<Dialog.Header
-				class="shrink-0 border-b px-5 pt-[max(1.25rem,env(safe-area-inset-top))] pb-4 text-center"
-			>
-				<Dialog.Title class="text-2xl font-semibold">{m.compose_schedule()}</Dialog.Title>
-				<Dialog.Description class="text-sm text-muted-foreground">
-					{m.compose_schedule_timezone({ timezone: scheduleTimezoneLabel })}
-				</Dialog.Description>
-			</Dialog.Header>
-
-			<div data-testid="schedule-dialog-body" class="min-h-0 flex-1 space-y-4 overflow-y-auto p-5">
-				<form
-					class="space-y-2"
-					onsubmit={(event) => {
-						event.preventDefault();
-						applyScheduleInputAndClose();
-					}}
-				>
-					<Input
-						bind:value={scheduleInput}
-						placeholder={m.compose_schedule_input_placeholder()}
-						class="h-10 bg-muted/40 text-base"
-						aria-label={m.compose_schedule_time()}
-					/>
-					{#if scheduleInputError}
-						<p class="px-1 text-xs text-destructive">{scheduleInputError}</p>
-					{/if}
-				</form>
-
-				<div class="grid gap-2 sm:grid-cols-3">
-					<Button
-						type="button"
-						variant="secondary"
-						class="h-10 justify-center gap-2"
-						onclick={suggestNextSlot}
-						disabled={suggestingSlot}
-					>
-						{#if suggestingSlot}
-							<LoaderIcon class="h-4 w-4 animate-spin" />
-						{:else}
-							<ArrowRightIcon class="h-4 w-4" />
-						{/if}
-						{m.compose_next_free_slot()}
-					</Button>
-					<Button
-						type="button"
-						variant="secondary"
-						class="h-10 justify-center"
-						onclick={() => {
-							const next = workspaceClock(scheduleTimezoneLabel).date.add({ days: 1 });
-							selectedDate = new CalendarDate(next.year, next.month, next.day);
-							selectedTime = '09:00';
-							scheduleInput = '';
-							scheduleInputError = '';
-						}}
-					>
-						{m.compose_tomorrow_time({ time: '09:00' })}
-					</Button>
-					<Button
-						type="button"
-						variant="secondary"
-						class="h-10 justify-center"
-						onclick={() => {
-							const parsed = parseNaturalScheduleInput(
-								'in 3 hours',
-								new Date(),
-								scheduleTimezoneLabel
-							);
-							if (!parsed) return;
-							selectedDate = parsed.date;
-							selectedTime = parsed.time;
-							scheduleInput = '';
-							scheduleInputError = '';
-						}}
-					>
-						{m.compose_in_three_hours()}
-					</Button>
-				</div>
-
-				<div class="overflow-hidden rounded-lg border bg-muted/15 md:grid md:grid-cols-[1fr_10rem]">
-					<div class="flex justify-center p-3 md:p-4">
-						<Calendar
-							type="single"
-							bind:value={selectedDate}
-							minValue={workspaceClock(scheduleTimezoneLabel).date}
-							class="bg-transparent p-0 [--cell-size:--spacing(9)]"
-							weekdayFormat="short"
-							weekStartsOn={workspaceCtx.weekStartsOn}
-						/>
-					</div>
-					<div class="border-t md:border-t-0 md:border-l">
-						<div class="border-b px-3 py-2 text-center text-sm font-medium">
-							{m.compose_time()}
-						</div>
-						<div data-testid="schedule-dialog-time-list" class="p-2 md:max-h-72 md:overflow-y-auto">
-							{#if timeSlots.length === 0}
-								<p class="px-2 py-6 text-center text-xs text-muted-foreground">
-									{m.compose_no_remaining_slots_today()}
-								</p>
-							{:else}
-								<div class="grid grid-cols-2 gap-1.5 md:grid-cols-1">
-									{#each timeSlots as time (time)}
-										<Button
-											type="button"
-											variant={selectedTime === time ? 'default' : 'ghost'}
-											size="sm"
-											onclick={() => {
-												if (!selectedDate) {
-													const date = workspaceClock(scheduleTimezoneLabel).date;
-													selectedDate = new CalendarDate(date.year, date.month, date.day);
-												}
-												selectedTime = time;
-												scheduleInput = '';
-												scheduleInputError = '';
-											}}
-											class="h-9 justify-center text-sm tabular-nums"
-										>
-											{time}
-										</Button>
-									{/each}
-								</div>
-							{/if}
-						</div>
-					</div>
-				</div>
-
-				<div class="rounded-lg border bg-muted/10 p-3">
-					<div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-						<div class="space-y-1">
-							<div class="text-sm font-medium">{m.compose_randomize_time()}</div>
-							<div class="text-xs text-muted-foreground">
-								{m.compose_workspace_default({
-									delay: formatRandomDelay(workspaceCtx.settings.random_delay_minutes)
-								})}.
-								{m.compose_delay_applies_to_post()}
-							</div>
-						</div>
-						<Select.Root
-							type="single"
-							value={randomDelayOverride}
-							onValueChange={(value) => (randomDelayOverride = value || 'default')}
-						>
-							<Select.Trigger class="w-full sm:w-52">
-								{#if randomDelayOverride === 'default'}
-									{m.compose_workspace_default({
-										delay: formatRandomDelay(workspaceCtx.settings.random_delay_minutes)
-									})}
-								{:else}
-									{formatRandomDelay(effectiveRandomDelayMinutes)}
-								{/if}
-							</Select.Trigger>
-							<Select.Content>
-								<Select.Item value="default">
-									{m.compose_workspace_default({
-										delay: formatRandomDelay(workspaceCtx.settings.random_delay_minutes)
-									})}
-								</Select.Item>
-								{#each randomDelaySelectOptions as minutes (minutes)}
-									<Select.Item value={String(minutes)}>{formatRandomDelay(minutes)}</Select.Item>
-								{/each}
-							</Select.Content>
-						</Select.Root>
-					</div>
-				</div>
-
-				<div class="flex flex-wrap items-center justify-between gap-3 text-sm">
-					<div class="text-muted-foreground">
-						{#if selectedDate && selectedTime}
-							{m.compose_selected_schedule({ schedule: formatScheduledDisplay() })}
-						{:else}
-							{m.compose_select_date_time()}
-						{/if}
-					</div>
-					{#if selectedDate || selectedTime}
-						<Button
-							type="button"
-							variant="ghost"
-							size="sm"
-							onclick={() => {
-								selectedDate = undefined;
-								selectedTime = null;
-								scheduleInput = '';
-								scheduleInputError = '';
-							}}
-						>
-							{m.compose_clear_schedule()}
-						</Button>
-					{/if}
-				</div>
-			</div>
-
-			<Dialog.Footer class="shrink-0 border-t px-5 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
-				<Button type="button" variant="outline" onclick={closeScheduleDialog}
-					>{m.common_cancel()}</Button
-				>
-				<Button type="button" variant="secondary" onclick={applyScheduleInputAndClose}
-					>{m.common_done()}</Button
-				>
-				<Button
-					type="button"
-					onclick={scheduleWithSelectedTime}
-					disabled={isSubmitting || !hasContent || selectedAccountIds.length === 0}
-				>
-					{#if isSubmitting}<LoaderIcon class="mr-2 h-4 w-4 animate-spin" />{/if}
-					{m.compose_schedule()}
-				</Button>
-			</Dialog.Footer>
-		</Dialog.Content>
-	</Dialog.Root>
+	<ComposerScheduleDialog
+		bind:open={showScheduleDialog}
+		bind:selectedDate
+		bind:selectedTime
+		{timeSlots}
+		timezone={scheduleTimezoneLabel}
+		weekStartsOn={workspaceCtx.weekStartsOn}
+		selectedDisplay={formatScheduledDisplay()}
+		externalError={scheduleInputError}
+		suggesting={suggestingSlot}
+		submitting={isSubmitting}
+		canSchedule={canSubmitPublication}
+		bind:randomDelayOverride
+		randomDelayOptions={randomDelaySelectOptions}
+		defaultRandomDelayMinutes={workspaceCtx.settings.random_delay_minutes}
+		onSuggest={suggestNextSlot}
+		onSchedule={() => publish(false)}
+		onClear={() => (scheduleInputError = '')}
+	/>
 
 	<!-- ====================================================================== -->
 	<!-- Messages -->
@@ -3365,18 +3074,6 @@
 			onDismiss={() => (success = '')}
 			dismissLabel={m.common_dismiss()}
 		/>
-	{/if}
-	{#if mediaCapabilityWarnings.length > 0}
-		<div
-			class="mx-3 mt-2 rounded-md border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 md:mx-4 md:mt-3 dark:text-amber-300"
-		>
-			<div class="font-medium">{m.compose_media_compatibility_warning()}</div>
-			<ul class="mt-1 list-disc space-y-0.5 pl-4">
-				{#each mediaCapabilityWarnings as warning (warning)}
-					<li>{warning}</li>
-				{/each}
-			</ul>
-		</div>
 	{/if}
 	{#if showSampleCampaignEntry && !isEditMode && selectedWorkspaceId && !accountControlLoading && !accountLoadError && accounts.length === 0}
 		<InlineNotice

@@ -68,6 +68,9 @@ All notable changes to this project are documented in this file.
 
 ### Fixed
 
+- Prevented focused publication drafts from reusing client placeholder segment IDs, remapped destination segments to server-owned IDs, and stopped exposing raw database errors when creation fails.
+- Unified publish, delete, scheduling, and validation controls across both composer styles; restored deletion for Story and video drafts; and replaced the focused media prompt with a larger native drop zone.
+- Captured feedback screenshots without the feedback dialog's dark, blurred backdrop.
 - Updated `brace-expansion` to its patched release after a new production dependency advisory.
 - Stopped permanent validation, authentication, permission, billing, and duplicate-content failures from consuming generic job retries while preserving bounded retries and uploaded-media state for transient failures.
 - Updated SvelteKit, PostCSS, and node-tar to patched releases after new production dependency advisories.

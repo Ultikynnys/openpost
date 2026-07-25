@@ -97,7 +97,9 @@
 	async function captureScreenshot() {
 		screenshotLoading = true;
 		screenshotError = '';
+		document.documentElement.dataset.feedbackCapturing = 'true';
 		await tick();
+		await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 		try {
 			const { toCanvas } = await import('html-to-image');
 			const width = Math.min(window.innerWidth, 1600);
@@ -140,6 +142,7 @@
 			screenshotBytes = 0;
 			screenshotError = m.feedback_screenshot_failed();
 		} finally {
+			delete document.documentElement.dataset.feedbackCapturing;
 			screenshotLoading = false;
 		}
 	}
@@ -232,7 +235,11 @@
 </script>
 
 <Dialog.Root {open} onOpenChange={handleOpenChange}>
-	<Dialog.Content class="max-h-[min(90dvh,48rem)] overflow-y-auto sm:max-w-xl" data-feedback-ignore>
+	<Dialog.Content
+		class="max-h-[min(90dvh,48rem)] overflow-y-auto sm:max-w-xl"
+		data-feedback-ignore
+		overlayProps={{ 'data-feedback-ignore': '' }}
+	>
 		<Dialog.Header>
 			<Dialog.Title>{m.feedback_title()}</Dialog.Title>
 			<Dialog.Description>{m.feedback_description()}</Dialog.Description>
@@ -420,3 +427,11 @@
 		{/if}
 	</Dialog.Content>
 </Dialog.Root>
+
+<style>
+	:global(html[data-feedback-capturing='true'] [data-feedback-ignore]) {
+		visibility: hidden !important;
+		backdrop-filter: none !important;
+		animation: none !important;
+	}
+</style>

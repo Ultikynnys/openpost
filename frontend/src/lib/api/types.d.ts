@@ -1668,7 +1668,11 @@ export interface paths {
         /** Update a publication */
         put: operations["update-publication"];
         post?: never;
-        delete?: never;
+        /**
+         * Delete a publication
+         * @description Permanently deletes an editable publication, its destinations, and any linked draft post.
+         */
+        delete: operations["delete-publication"];
         options?: never;
         head?: never;
         patch?: never;
@@ -4540,7 +4544,7 @@ export interface components {
             body?: string;
             /** @description Canonical segment description */
             description?: string;
-            /** @description Stable segment ID */
+            /** @description Client segment reference on create, or an existing server segment ID on update */
             id?: string;
             /** @description Ordered canonical segment media */
             media?: components["schemas"]["PublicationMediaInput"][] | null;
@@ -4687,7 +4691,7 @@ export interface components {
             body?: string;
             /** @description Platform-specific description */
             description?: string;
-            /** @description Existing rendition ID for upsert */
+            /** @description Legacy client reference; replacement IDs are server-generated */
             id?: string;
             /** @description Rendition-specific ordered media */
             media?: components["schemas"]["PublicationMediaInput"][] | null;
@@ -4738,11 +4742,11 @@ export interface components {
             body?: string;
             /** @description Destination segment description override */
             description?: string;
-            /** @description Existing rendition segment ID */
+            /** @description Legacy client reference; replacement IDs are server-generated */
             id?: string;
             /** @description Destination segment ordered media */
             media?: components["schemas"]["PublicationMediaInput"][] | null;
-            /** @description Canonical segment ID */
+            /** @description Server canonical segment ID, or its matching client segment reference in the same request */
             publication_segment_id?: string;
             /** @description Segment-scoped destination settings */
             settings?: {
@@ -12413,6 +12417,88 @@ export interface operations {
             };
             /** @description Error */
             default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "delete-publication": {
+        parameters: {
+            query?: {
+                /** @description Explicit confirmation that the publication may be permanently deleted */
+                confirm?: boolean;
+                /** @description Revision loaded by the editor */
+                expected_revision?: number;
+            };
+            header?: never;
+            path: {
+                /** @description Publication ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActionOutputBody"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };

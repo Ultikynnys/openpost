@@ -22,6 +22,7 @@ test("composer renders account-specific renditions", async ({
   const unique = Date.now().toString(36);
   const email = `composer-preview-${unique}@example.com`;
   let publicationPayload: PostPayload | undefined;
+  let deleteRequested = false;
 
   const auth = await registerUser(request, email);
   await createWorkspace(request, auth.token, "Composer Preview E2E");
@@ -117,6 +118,7 @@ test("composer renders account-specific renditions", async ({
         json: {
           id: "publication-preview",
           workspace_id: publicationPayload.workspace_id,
+          revision: 1,
           title: "Launch update",
           content_profile: publicationPayload.content_profile,
           source_text: publicationPayload.source_text,
@@ -131,14 +133,25 @@ test("composer renders account-specific renditions", async ({
     await route.continue();
   });
   await page.route(
-    "**/api/v1/publications/publication-preview",
+    /\/api\/v1\/publications\/publication-preview(?:\?.*)?$/,
     async (route) => {
       if (route.request().method() === "PUT") {
         publicationPayload = {
           ...(publicationPayload ?? {}),
           ...(route.request().postDataJSON() as PostPayload),
         };
-        await route.fulfill({ contentType: "application/json", json: {} });
+        await route.fulfill({
+          contentType: "application/json",
+          json: { revision: 2 },
+        });
+        return;
+      }
+      if (route.request().method() === "DELETE") {
+        deleteRequested = true;
+        await route.fulfill({
+          contentType: "application/json",
+          json: { message: "publication deleted" },
+        });
         return;
       }
       await route.continue();
@@ -159,12 +172,23 @@ test("composer renders account-specific renditions", async ({
     },
   );
 
+  await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
   await page.getByTestId("composer-mode-select").click();
   await page.getByRole("option", { name: "Short video" }).click();
   await expect(
     page.getByRole("button", { name: "Target accounts" }),
   ).toBeVisible();
+  await expect(page.getByTestId("composer-action-controls")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Save draft" })).toHaveCount(0);
+  await expect(page.getByTestId("composer-media-dropzone")).toBeVisible();
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth,
+      ),
+    )
+    .toBe(true);
   await expect(page.getByLabel("Composer workspace")).toHaveCount(0);
   await page.getByLabel("Caption").fill("Launch update");
 
@@ -183,9 +207,8 @@ test("composer renders account-specific renditions", async ({
     page.getByText("@openpost_studio", { exact: true }),
   ).toBeVisible();
   await page.keyboard.press("Escape");
-  await page.getByRole("button", { name: "Save draft" }).click();
-  await expect(page.getByText("Draft saved")).toBeVisible();
   await expect.poll(() => publicationPayload).toBeTruthy();
+  await expect(page.getByTestId("composer-delete")).toBeVisible();
 
   expect(publicationPayload).toMatchObject({
     content_profile: "short_video",
@@ -208,4 +231,19 @@ test("composer renders account-specific renditions", async ({
     expect(rendition.settings).not.toHaveProperty("url");
     expect(rendition.settings?.link_url ?? "").toBe("");
   }
+
+  await accountControl.click();
+  await page.getByRole("button", { name: "Clear", exact: true }).click();
+  const validationControl = page.getByTestId("composer-validation-control");
+  await expect(validationControl).toBeVisible();
+  await validationControl.click();
+  await expect(page.getByText("Choose at least one account.")).toBeVisible();
+  await page.keyboard.press("Escape");
+
+  await page.getByTestId("composer-delete").click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Delete", exact: true })
+    .click();
+  await expect.poll(() => deleteRequested).toBe(true);
 });
