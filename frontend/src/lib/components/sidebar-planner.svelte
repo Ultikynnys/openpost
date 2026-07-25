@@ -249,14 +249,14 @@
 		<div class="mb-1 flex h-8 items-center justify-between px-2">
 			<button
 				type="button"
-				class="group inline-flex items-center gap-1.5 text-xs font-medium text-sidebar-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-none"
+				class="group/calendar-link inline-flex items-center gap-1.5 text-xs font-medium text-sidebar-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-none"
 				onclick={() => onNavigate('/calendar')}
 				aria-label={m.sidebar_calendar()}
 			>
 				<CalendarIcon class="size-3.5 text-primary" />
 				<span>{m.sidebar_calendar()}</span>
 				<MaximizeIcon
-					class="size-3 text-sidebar-foreground/42 transition-colors group-hover:text-sidebar-foreground"
+					class="size-3 text-sidebar-foreground/42 transition-colors group-hover/calendar-link:text-sidebar-foreground"
 				/>
 			</button>
 			<span class="text-xs text-sidebar-foreground/48 tabular-nums">
@@ -320,7 +320,7 @@
 		{:else}
 			<ul class="min-h-0 flex-1 space-y-0.5 overflow-y-auto" data-testid="sidebar-draft-list">
 				{#each drafts as draft (draft.id)}
-					<li class="group relative">
+					<li class="group/draft relative">
 						<button
 							type="button"
 							class="flex min-h-9 w-full items-center gap-2 rounded-md py-1.5 pr-10 pl-2 text-left hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-none"
@@ -328,7 +328,7 @@
 							aria-label={m.sidebar_resume_draft({ title: draft.title })}
 						>
 							<span
-								class="flex size-6 shrink-0 items-center justify-center rounded-md bg-sidebar-accent/70 text-sidebar-foreground/58 group-hover:text-sidebar-foreground"
+								class="flex size-6 shrink-0 items-center justify-center rounded-md bg-sidebar-accent/70 text-sidebar-foreground/58 group-hover/draft:text-sidebar-foreground"
 							>
 								<FileTextIcon class="size-3.5" />
 							</span>
@@ -351,7 +351,7 @@
 						</button>
 						<button
 							type="button"
-							class="absolute top-1/2 right-1 flex size-7 -translate-y-1/2 items-center justify-center rounded-md text-sidebar-foreground/48 opacity-0 transition-[color,background-color,opacity] group-focus-within:opacity-100 group-hover:opacity-100 hover:bg-destructive/12 hover:text-destructive focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-none"
+							class="absolute top-1/2 right-1 flex size-7 -translate-y-1/2 items-center justify-center rounded-md text-sidebar-foreground/48 opacity-0 transition-[color,background-color,opacity] group-focus-within/draft:opacity-100 group-hover/draft:opacity-100 hover:bg-destructive/12 hover:text-destructive focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-none"
 							disabled={deletingDraftId === draft.id}
 							onclick={() => requestDraftDelete(draft)}
 							aria-label={m.sidebar_delete_draft({ title: draft.title })}

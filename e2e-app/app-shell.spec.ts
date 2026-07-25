@@ -248,14 +248,52 @@ test("desktop planning sidebar resumes drafts and stays out of mobile navigation
     name: "Resume draft: Sidebar draft 2",
   });
   await draftToDelete.scrollIntoViewIfNeeded();
+  const calendarButton = planner.getByRole("button", {
+    name: "Calendar",
+    exact: true,
+  });
+  const calendarExpandIcon = calendarButton.locator(".lucide-maximize-2");
+  const draftDocumentIcons = draftList.locator(".lucide-file-text");
+  const calendarExpandColor = await calendarExpandIcon.evaluate(
+    (element) => getComputedStyle(element).color,
+  );
+  const draftDocumentColors = await draftDocumentIcons.evaluateAll((icons) =>
+    icons.map((icon) => getComputedStyle(icon).color),
+  );
+  const deleteDraftButtons = draftList.getByRole("button", {
+    name: /^Delete draft:/,
+  });
   const deleteDraftButton = page.getByRole("button", {
     name: "Delete draft: Sidebar draft 2",
   });
-  await expect(deleteDraftButton).toHaveCSS("opacity", "0");
+
+  await planner.getByRole("button", { name: "View all" }).hover();
+  for (const button of await deleteDraftButtons.all()) {
+    await expect(button).toHaveCSS("opacity", "0");
+  }
+  await expect(calendarExpandIcon).toHaveCSS("color", calendarExpandColor);
+  await expect
+    .poll(() =>
+      draftDocumentIcons.evaluateAll((icons) =>
+        icons.map((icon) => getComputedStyle(icon).color),
+      ),
+    )
+    .toEqual(draftDocumentColors);
+
   await draftToDelete.hover();
   await expect(deleteDraftButton).toHaveCSS("opacity", "1");
+  for (const button of await deleteDraftButtons.all()) {
+    if (
+      (await button.getAttribute("aria-label")) ===
+      "Delete draft: Sidebar draft 2"
+    )
+      continue;
+    await expect(button).toHaveCSS("opacity", "0");
+  }
   await deleteDraftButton.click();
-  await expect(page.getByText("Delete this draft?", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("Delete this draft?", { exact: true }),
+  ).toBeVisible();
   await page.getByRole("button", { name: "Delete", exact: true }).click();
   await expect(draftList.locator("li")).toHaveCount(7);
 

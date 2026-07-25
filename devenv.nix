@@ -18,6 +18,8 @@
 
   # Keep dependency/build caches with the checkout so a durable NAS clone can
   # be resumed after a Hermes reboot without relying on /tmp or global state.
+  # enterShell remaps linked worktrees to the primary checkout's same state
+  # directory so temporary worktrees do not duplicate multi-gigabyte caches.
   env.GOCACHE = "${config.git.root}/.devenv/state/go-build";
   env.GOMODCACHE = "${config.git.root}/.devenv/state/go-mod";
   # The module files pin the security-patched Go point release. Let the go
@@ -26,6 +28,11 @@
   env.npm_config_store_dir = "${config.git.root}/.devenv/state/pnpm-store";
 
   scripts = {
+    doctor.exec = ''
+      cd "${config.git.root}"
+      bash scripts/dev-doctor.sh
+    '';
+
     app.exec = ''
       cd "${config.git.root}"
       frontend-dev &
@@ -130,6 +137,7 @@
     install.exec = ''
       cd "${config.git.root}"
       pnpm install --frozen-lockfile
+      pnpm run browser:install
       (cd backend && go mod download)
       (cd cli && go mod download)
     '';
@@ -155,6 +163,17 @@
   };
 
   enterShell = ''
+    # Linked worktrees share the primary checkout's durable dependency caches.
+    # Standalone clones still use their own .devenv/state directory.
+    openpost_common_git_dir="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)"
+    if [ -n "$openpost_common_git_dir" ]; then
+      openpost_shared_root="$(dirname "$openpost_common_git_dir")"
+      export GOCACHE="$openpost_shared_root/.devenv/state/go-build"
+      export GOMODCACHE="$openpost_shared_root/.devenv/state/go-mod"
+      export GOPATH="$openpost_shared_root/.devenv/state/go"
+      export npm_config_store_dir="$openpost_shared_root/.devenv/state/pnpm-store"
+    fi
+
     echo ""
     echo "  OpenPost Development Environment"
     echo "  --------------------------------"
@@ -162,6 +181,7 @@
     echo "  pnpm:   $(pnpm --version 2>/dev/null || echo 'not installed')"
     echo ""
     echo "  Commands:"
+    echo "    doctor       - Check disk, worktrees, Git, browser, and tool readiness"
     echo "    install      - Install locked pnpm and Go dependencies"
     echo "    setup        - Frozen install and create backend/.env if missing"
     echo "    dev          - Start frontend and backend dev servers"

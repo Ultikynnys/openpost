@@ -17,7 +17,7 @@ type PostPayload = {
   [key: string]: unknown;
 };
 
-test("composer schedules a publication from the selected time", async ({
+test("composer quick-schedules a publication from the selected time", async ({
   page,
   request,
 }) => {
@@ -239,12 +239,15 @@ test("composer schedules a publication from the selected time", async ({
   await scheduleDialog
     .getByRole("button", { name: "10:30", exact: true })
     .click();
-  const confirmSchedule = scheduleDialog.getByRole("button", {
-    name: "Schedule",
-    exact: true,
+  await scheduleDialog.getByRole("button", { name: "Done" }).click();
+  await expect(scheduleDialog).toBeHidden();
+
+  const quickSchedule = page.getByRole("button", {
+    name: /^Schedule for .* 10:30$/,
   });
-  await expect(confirmSchedule).toBeEnabled();
-  await confirmSchedule.click();
+  await expect(quickSchedule).toBeEnabled();
+  await expect(quickSchedule.locator(".lucide-send")).toBeVisible();
+  await quickSchedule.click();
 
   await expect(page.getByText("Publication scheduled")).toBeVisible();
   await expect.poll(() => publicationPayload).toBeTruthy();

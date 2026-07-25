@@ -26,6 +26,7 @@ All notable changes to this project are documented in this file.
 
 ### Changed
 
+- Made linked worktrees share the primary checkout's Go and pnpm caches, added a development doctor, installed pinned Chromium during setup, and made local browser suites use that reproducible runtime by default.
 - Made every active composer save revision-aware and atomic across source content, thread parts, media, destinations, overrides, segments, and settings, with serialized autosave and explicit conflict recovery.
 - Named the restored default authoring surface the text-and-thread composer to reflect its role as the fast path for Post and Thread.
 - Simplified the Media hub and picker, replaced blank design cards with source previews, curated the starter templates, and rebuilt the mobile Brand editor.
@@ -70,6 +71,8 @@ All notable changes to this project are documented in this file.
 
 - Aligned the product platform declaration with the responsive web app and Capacitor Android wrapper already shipped from the shared frontend.
 - Rebuilt Studio editing around stable in-place canvas updates, serialized autosaves, reliable inline text persistence, current previews, correct Back navigation, resizable desktop panels, and an inspector that stays within the viewport.
+- Scoped sidebar planner hover states to the exact calendar link or draft row so unrelated icons keep their color and only the active draft reveals its delete action.
+- Restored the Schedule split button so its side action schedules the next free slot, or submits the selected date and time when one is already set.
 - Routed linked Post and Thread publications back to the text-and-thread composer, removed their duplicate sidebar entries, and added quick draft deletion from the draft list.
 - Resolved empty media-first drafts against their chosen Story or video format, and collapsed their shared media requirement into one clear composer warning instead of marking every destination as incompatible.
 - Let the desktop draft list use and scroll through all available space above the fixed Workspace actions.
@@ -77,6 +80,7 @@ All notable changes to this project are documented in this file.
 - Prevented focused publication drafts from reusing client placeholder segment IDs, remapped destination segments to server-owned IDs, and stopped exposing raw database errors when creation fails.
 - Unified publish, delete, scheduling, and validation controls across both composer styles; restored deletion for Story and video drafts; and replaced the focused media prompt with a larger native drop zone.
 - Captured feedback screenshots without the feedback dialog's dark, blurred backdrop.
+- Kept static frontend builds from changing the tracked embedded-public placeholder.
 - Updated `brace-expansion` to its patched release after a new production dependency advisory.
 - Stopped permanent validation, authentication, permission, billing, and duplicate-content failures from consuming generic job retries while preserving bounded retries and uploaded-media state for transient failures.
 - Updated SvelteKit, PostCSS, and node-tar to patched releases after new production dependency advisories.

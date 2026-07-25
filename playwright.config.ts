@@ -6,7 +6,7 @@ const baseURL = `http://${host}:${port}`;
 const chromiumExecutablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH;
 const chromiumUse = chromiumExecutablePath
   ? { launchOptions: { executablePath: chromiumExecutablePath } }
-  : { channel: "chrome" as const };
+  : {};
 
 export default defineConfig({
   testDir: "./e2e",

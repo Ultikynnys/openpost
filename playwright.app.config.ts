@@ -8,7 +8,7 @@ const reuseExistingServer = process.env.OPENPOST_APP_E2E_REUSE_SERVER === "1";
 const chromiumExecutablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH;
 const chromiumUse = chromiumExecutablePath
   ? { launchOptions: { executablePath: chromiumExecutablePath } }
-  : { channel: "chrome" as const };
+  : {};
 
 export default defineConfig({
   testDir: "./e2e-app",

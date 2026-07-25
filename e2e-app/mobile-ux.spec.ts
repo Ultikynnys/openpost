@@ -172,6 +172,12 @@ test("mobile shell and composer expose touch-first controls without overflow", a
   await expect(
     actions.getByRole("button", { name: "Schedule", exact: true }),
   ).toHaveCount(1);
+  await expect(
+    actions.getByRole("button", {
+      name: "Schedule to next free slot",
+      exact: true,
+    }),
+  ).toHaveCount(1);
 
   await expectMinimumTouchTarget(
     page.getByTestId("composer-mode-select"),
@@ -187,6 +193,13 @@ test("mobile shell and composer expose touch-first controls without overflow", a
   await expectMinimumTouchTarget(
     actions.getByRole("button", { name: "Schedule", exact: true }),
     "schedule button",
+  );
+  await expectMinimumTouchTarget(
+    actions.getByRole("button", {
+      name: "Schedule to next free slot",
+      exact: true,
+    }),
+    "quick schedule button",
   );
 
   await expect(
@@ -242,7 +255,7 @@ test("mobile shell and composer expose touch-first controls without overflow", a
       name: "Schedule to next free slot",
       exact: true,
     }),
-  ).toHaveCount(0);
+  ).toHaveCount(1);
 });
 
 test("attached media controls stay touch accessible on mobile and desktop", async ({

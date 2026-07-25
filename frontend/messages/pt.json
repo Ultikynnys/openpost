@@ -1615,6 +1615,7 @@
 	"settings_remove_time_body": "Isto remove o horário de todos os dias ativos nesta linha.",
 	"compose_publish": "Publicar",
 	"compose_schedule_next_slot": "Agendar na próxima hora livre",
+	"compose_schedule_selected_time": "Agendar para {schedule}",
 	"compose_schedule_time": "Hora do agendamento",
 	"compose_time": "Hora",
 	"compose_randomize_time": "Variar a hora de publicação",

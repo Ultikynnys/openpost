@@ -1615,6 +1615,7 @@
 	"settings_remove_time_body": "This removes the time from every active day in this row.",
 	"compose_publish": "Publish",
 	"compose_schedule_next_slot": "Schedule to next free slot",
+	"compose_schedule_selected_time": "Schedule for {schedule}",
 	"compose_schedule_time": "Schedule time",
 	"compose_time": "Time",
 	"compose_randomize_time": "Randomize publish time",

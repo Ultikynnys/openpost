@@ -4,6 +4,8 @@
   "type": "module",
   "packageManager": "pnpm@11.7.0",
   "scripts": {
+    "doctor": "bash scripts/dev-doctor.sh",
+    "browser:install": "playwright install chromium",
     "sync:assets": "node scripts/sync-assets.mjs",
     "sync:docs-external": "node scripts/sync-docs-external.mjs",
     "dev": "turbo run dev --parallel",

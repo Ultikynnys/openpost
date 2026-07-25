@@ -1314,8 +1314,14 @@
 		selectedDate = requestedDate;
 	}
 
-	async function fillNextSlot() {
-		if (!selectedWorkspaceId || !selectedWorkspaceSettingsReady) return;
+	async function fillNextSlot(showComposerError = false): Promise<boolean> {
+		if (!selectedWorkspaceId || !selectedWorkspaceSettingsReady) {
+			if (showComposerError) {
+				error = m.compose_load_workspace_settings_failed();
+				success = '';
+			}
+			return false;
+		}
 		const requestSequence = ++nextSlotRequestSequence;
 		const workspaceId = selectedWorkspaceId;
 		const timezone = scheduleTimezoneLabel;
@@ -1330,7 +1336,7 @@
 				selectedWorkspaceId !== workspaceId ||
 				scheduleTimezoneLabel !== timezone
 			) {
-				return;
+				return false;
 			}
 			if (nextSlotError) {
 				throw new Error(nextSlotError.detail || m.compose_next_free_slot_failed());
@@ -1340,21 +1346,48 @@
 				: null;
 			if (!schedule) {
 				scheduleError = m.compose_no_free_slot();
-				return;
+				if (showComposerError) {
+					error = scheduleError;
+					success = '';
+				}
+				return false;
 			}
 			selectedDate = schedule.date;
 			selectedTime = schedule.time;
+			return true;
 		} catch (nextSlotError) {
 			if (requestSequence !== nextSlotRequestSequence || selectedWorkspaceId !== workspaceId) {
-				return;
+				return false;
 			}
 			scheduleError =
 				nextSlotError instanceof Error ? nextSlotError.message : m.compose_next_free_slot_failed();
+			if (showComposerError) {
+				error = scheduleError;
+				success = '';
+			}
 		} finally {
 			if (requestSequence === nextSlotRequestSequence && selectedWorkspaceId === workspaceId) {
 				suggestingSlot = false;
 			}
 		}
+		return false;
+	}
+
+	async function suggestNextSlot() {
+		await fillNextSlot(false);
+	}
+
+	async function quickSchedule() {
+		if (selectedDate && selectedTime) {
+			showScheduleDialog = false;
+			await runAction('schedule');
+			return;
+		}
+
+		const didApplySlot = await fillNextSlot(true);
+		if (!didApplySlot) return;
+		showScheduleDialog = false;
+		await runAction('schedule');
 	}
 
 	function formBlockers(): string[] {
@@ -2198,13 +2231,20 @@
 				<ComposerPublishActions
 					class="w-full md:w-auto"
 					scheduleLabel={scheduleLabel()}
+					quickScheduleLabel={selectedDate && selectedTime
+						? m.compose_schedule_selected_time({ schedule: scheduleLabel() })
+						: m.compose_schedule_next_slot()}
 					publishLabel={m.compose_publish_now()}
 					deleteLabel={m.common_delete()}
 					busy={saving || autoSaving}
 					deleting={deletingPublication}
+					quickScheduleBusy={suggestingSlot}
+					scheduleSelected={Boolean(selectedDate && selectedTime)}
 					canOpenSchedule={selectedWorkspaceSettingsReady}
+					canQuickSchedule={canQueue && selectedWorkspaceSettingsReady}
 					canPublish={canQueue}
 					onSchedule={() => (showScheduleDialog = true)}
+					onQuickSchedule={quickSchedule}
 					onPublish={() => runAction('publish')}
 					onDelete={publicationId ? () => (deletePublicationDialogOpen = true) : undefined}
 				/>
@@ -2474,7 +2514,7 @@
 	suggesting={suggestingSlot}
 	submitting={saving}
 	{canSchedule}
-	onSuggest={fillNextSlot}
+	onSuggest={suggestNextSlot}
 	onSchedule={() => runAction('schedule')}
 	onClear={clearSchedule}
 />

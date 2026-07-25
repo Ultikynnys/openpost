@@ -2706,6 +2706,19 @@
 		await fillNextSlot(false);
 	}
 
+	async function quickSchedule() {
+		if (selectedDate && selectedTime) {
+			showScheduleDialog = false;
+			await publish(false);
+			return;
+		}
+
+		const didApplySlot = await fillNextSlot(true);
+		if (!didApplySlot) return;
+		showScheduleDialog = false;
+		await publish(false);
+	}
+
 	function formatScheduledDisplay(): string {
 		if (!selectedDate) return m.compose_schedule();
 		const now = workspaceClock(scheduleTimezoneLabel).date;
@@ -2846,13 +2859,20 @@
 					<ComposerPublishActions
 						class="w-full"
 						scheduleLabel={formatScheduledDisplay()}
+						quickScheduleLabel={selectedDate && selectedTime
+							? m.compose_schedule_selected_time({ schedule: formatScheduledDisplay() })
+							: m.compose_schedule_next_slot()}
 						publishLabel={m.compose_publish_now()}
 						deleteLabel={m.common_delete()}
 						busy={isSubmitting || isSaving}
 						deleting={isDeleting}
+						quickScheduleBusy={suggestingSlot}
+						scheduleSelected={Boolean(selectedDate && selectedTime)}
 						canOpenSchedule={selectedWorkspaceSettingsReady}
+						canQuickSchedule={canSubmitPublication && selectedWorkspaceSettingsReady}
 						canPublish={canSubmitPublication}
 						onSchedule={openScheduleDialog}
+						onQuickSchedule={quickSchedule}
 						onPublish={() => publish(true)}
 						onDelete={draftId ? () => (showDeleteConfirm = true) : undefined}
 					/>
@@ -2961,13 +2981,20 @@
 				{:else}
 					<ComposerPublishActions
 						scheduleLabel={formatScheduledDisplay()}
+						quickScheduleLabel={selectedDate && selectedTime
+							? m.compose_schedule_selected_time({ schedule: formatScheduledDisplay() })
+							: m.compose_schedule_next_slot()}
 						publishLabel={m.compose_publish_now()}
 						deleteLabel={m.common_delete()}
 						busy={isSubmitting || isSaving}
 						deleting={isDeleting}
+						quickScheduleBusy={suggestingSlot}
+						scheduleSelected={Boolean(selectedDate && selectedTime)}
 						canOpenSchedule={selectedWorkspaceSettingsReady}
+						canQuickSchedule={canSubmitPublication && selectedWorkspaceSettingsReady}
 						canPublish={canSubmitPublication}
 						onSchedule={openScheduleDialog}
+						onQuickSchedule={quickSchedule}
 						onPublish={() => publish(true)}
 						onDelete={draftId ? () => (showDeleteConfirm = true) : undefined}
 					/>
