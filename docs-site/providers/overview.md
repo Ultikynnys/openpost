@@ -6,17 +6,17 @@ OAuth and provider app setup are the most common source of deployment friction. 
 
 These providers have adapter code in OpenPost today. The Accounts page discovers them through `GET /api/v1/accounts/providers` and shows whether each one is ready to connect on the current server.
 
-| Provider | Auth method            | Server setup                                    | Status       | Notes                                                          |
-| -------- | ---------------------- | ----------------------------------------------- | ------------ | -------------------------------------------------------------- |
-| Bluesky  | App password           | None                                            | Built-in     | Users connect with handle + app password.                      |
-| X        | OAuth 1.0a             | Client ID + secret                              | Configurable | Requires an X developer app with OAuth 1.0a user auth enabled. |
-| Mastodon | OAuth 2.0 per instance | Dynamic registration or `MASTODON_SERVERS` JSON | Configurable | One app per instance, unless dynamic registration is enabled.  |
-| LinkedIn | OAuth 2.0              | Client ID + secret                              | Configurable | Replies may need extra approval.                               |
-| Threads  | Meta OAuth             | Client ID + secret + redirect URI               | Configurable | Public media URL required.                                     |
-| Facebook | Meta OAuth             | Provider app registry                           | Configurable | Pages only; public HTTPS media required.                       |
-| Instagram | Meta OAuth            | Provider app registry                           | Configurable | Business or Creator account; public media URL required.        |
-| TikTok   | OAuth 2.0              | Provider app registry                           | Configurable | Video and photo paths; provider approval and public media required. |
-| YouTube  | Google OAuth           | Provider app registry                           | Configurable | One-video upload with configurable privacy; live verification recommended. |
+| Provider  | Auth method            | Server setup                                    | Status       | Notes                                                                      |
+| --------- | ---------------------- | ----------------------------------------------- | ------------ | -------------------------------------------------------------------------- |
+| Bluesky   | App password           | None                                            | Built-in     | Users connect with handle + app password.                                  |
+| X         | OAuth 1.0a             | Client ID + secret                              | Configurable | Requires an X developer app with OAuth 1.0a user auth enabled.             |
+| Mastodon  | OAuth 2.0 per instance | Dynamic registration or `MASTODON_SERVERS` JSON | Configurable | One app per instance, unless dynamic registration is enabled.              |
+| LinkedIn  | OAuth 2.0              | Client ID + secret                              | Configurable | Replies may need extra approval.                                           |
+| Threads   | Meta OAuth             | Client ID + secret + redirect URI               | Configurable | Public media URL required.                                                 |
+| Facebook  | Meta OAuth             | Provider app registry                           | Configurable | Pages only; public HTTPS media required.                                   |
+| Instagram | Meta OAuth             | Provider app registry                           | Configurable | Business or Creator account; public media URL required.                    |
+| TikTok    | OAuth 2.0              | Provider app registry                           | Configurable | Video and photo paths; provider approval and public media required.        |
+| YouTube   | Google OAuth           | Provider app registry                           | Configurable | One-video upload with configurable privacy; live verification recommended. |
 
 Start with one provider, confirm the callback works, then expand.
 
@@ -34,17 +34,17 @@ If connection or publishing fails, use [Provider Troubleshooting](/providers/tro
 
 This matrix reflects current OpenPost support, not the full theoretical capability of each provider API.
 
-| Provider | Text posts | Image posts | Threads / replies                | Scheduled posts | Video posts                                                           | Platform-specific variants | Analytics |
-| -------- | ---------- | ----------- | -------------------------------- | --------------- | --------------------------------------------------------------------- | -------------------------- | --------- |
-| X        | Yes        | Yes         | Yes                              | Yes             | Partial, needs real-account verification                              | Yes                        | No        |
-| Mastodon | Yes        | Yes         | Yes                              | Yes             | Partial, needs real-account verification                              | Yes                        | No        |
-| Bluesky  | Yes        | Yes         | Yes                              | Yes             | Partial, one MP4 path implemented and needs real-account verification | Yes                        | No        |
-| LinkedIn | Yes        | Yes         | Partial, implemented as comments | Yes             | Partial, implementation exists and needs re-verification              | Yes                        | No        |
-| Threads  | Yes        | Yes         | Yes                              | Yes             | Partial, public-media deployment dependent                            | Yes                        | No        |
-| Facebook | Yes        | Yes         | Yes, via Page comments           | Yes             | Partial, public HTTPS video and Story paths implemented               | Yes                        | No        |
-| Instagram | No        | Yes         | Yes, via comments                | Yes             | Partial, public HTTPS carousel, Story, and Reel paths implemented     | Yes                        | No        |
-| TikTok   | No         | Yes         | No                               | Yes             | Partial, public HTTPS video and photo-post paths implemented          | Yes                        | No        |
-| YouTube  | No         | No          | No                               | Yes             | Partial, one video upload path with privacy settings implemented      | Yes                        | No        |
+| Provider  | Text posts | Image posts | Threads / replies                | Scheduled posts | Video posts                                                           | Platform-specific variants | Analytics                                 |
+| --------- | ---------- | ----------- | -------------------------------- | --------------- | --------------------------------------------------------------------- | -------------------------- | ----------------------------------------- |
+| X         | Yes        | Yes         | Yes                              | Yes             | Partial, needs real-account verification                              | Yes                        | Account and post counters                 |
+| Mastodon  | Yes        | Yes         | Yes                              | Yes             | Partial, needs real-account verification                              | Yes                        | Account and post counters                 |
+| Bluesky   | Yes        | Yes         | Yes                              | Yes             | Partial, one MP4 path implemented and needs real-account verification | Yes                        | Account and post counters                 |
+| LinkedIn  | Yes        | Yes         | Partial, implemented as comments | Yes             | Partial, implementation exists and needs re-verification              | Yes                        | Not for personal connections              |
+| Threads   | Yes        | Yes         | Yes                              | Yes             | Partial, public-media deployment dependent                            | Yes                        | Requires insights permission              |
+| Facebook  | Yes        | Yes         | Yes, via Page comments           | Yes             | Partial, public HTTPS video and Story paths implemented               | Yes                        | Page and post counters                    |
+| Instagram | No         | Yes         | Yes, via comments                | Yes             | Partial, public HTTPS carousel, Story, and Reel paths implemented     | Yes                        | Requires insights permission              |
+| TikTok    | No         | Yes         | No                               | Yes             | Partial, public HTTPS video and photo-post paths implemented          | Yes                        | Requires stats and video-list permissions |
+| YouTube   | No         | No          | No                               | Yes             | Partial, one video upload path with privacy settings implemented      | Yes                        | Channel and video counters                |
 
 ## Provider-specific caveats
 
@@ -59,3 +59,5 @@ This matrix reflects current OpenPost support, not the full theoretical capabili
 - **YouTube:** Configure through the provider app registry with provider `youtube`. The adapter connects a selected channel and uploads one video with privacy, metadata, thumbnail, and playlist settings. Live verification is still recommended.
 
 Provider API policies, scopes, rate limits, and review requirements can change. Re-check provider docs if a previously working flow starts failing.
+
+See [Analytics](/usage/analytics) for collection timing, metric definitions, reconnect requirements, and provider-specific coverage.

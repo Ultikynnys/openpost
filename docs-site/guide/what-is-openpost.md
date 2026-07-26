@@ -42,13 +42,13 @@ Preview means the code path exists but provider approval, app configuration, quo
 
 ## What OpenPost is not
 
-OpenPost focuses on drafting, adapting, scheduling, and publishing. It does not currently include enterprise social listening, ad management, or advanced engagement analytics. Media support varies by provider.
+OpenPost focuses on drafting, adapting, scheduling, publishing, and provider-reported account and publication analytics. It does not include enterprise social listening, ad management, benchmarking, or a unified social inbox. Media and metric support vary by provider.
 
 **Current limitations:**
 
 - **Video support is provider-dependent** — some provider video paths exist in the codebase, but support is not consistent across every platform and not every path is verified end to end
 - **No full feature parity guarantee** — each social network has different capabilities, and some provider-specific features may be unavailable in OpenPost
-- **Advanced analytics are not the current focus** — engagement tracking and reporting are not a launch feature
+- **Analytics follow provider truth** — OpenPost stores supported counters and trends, but does not invent cross-provider equivalents or offer enterprise benchmarking
 - **Enterprise approval workflows are not the current focus** — OpenPost is not positioning itself as an enterprise review-and-approval suite
 - **Provider APIs can be restrictive** — each platform has its own API limits, rate limits, and approval requirements that may affect publishing
 

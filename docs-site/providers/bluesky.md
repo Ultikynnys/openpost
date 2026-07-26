@@ -13,6 +13,10 @@ Bluesky is the simplest provider to enable.
 2. Create an app password.
 3. Connect the account in OpenPost using the handle and app password.
 
+## Analytics
+
+OpenPost collects follower, following, and post totals plus published-post likes, replies, reposts, and quotes. These counters come from Bluesky's public AppView endpoints and do not require another account permission.
+
 ## Notes
 
 - No server-side OAuth app is required.

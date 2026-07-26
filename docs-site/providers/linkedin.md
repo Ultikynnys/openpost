@@ -27,6 +27,10 @@ LinkedIn thread child posts are implemented as comments on the first post rather
 
 OpenPost uses LinkedIn's Images API for images and Videos API for videos. Video upload initializes with `fileSizeBytes`, uploads all returned byte ranges, and finalizes the upload before creating the post.
 
+## Analytics caveat
+
+OpenPost marks analytics unavailable for personal LinkedIn connections. Member-post reads require restricted access that OpenPost cannot request by default, and organization analytics need a different connection type.
+
 ## Common issues
 
 - Insufficient app approval for social actions

@@ -33,6 +33,10 @@ X documents the [`subscription_type` user field](https://docs.x.com/x-api/fundam
 
 OpenPost streams images and videos to X through the OAuth 1.0a media upload API. Videos use chunked upload, so large subscribed-account uploads are not buffered fully in application memory.
 
+## Analytics
+
+OpenPost stores account followers, following, and post totals, plus published-post likes, replies, reposts, quotes, bookmarks, and impressions. These reads use the same OAuth 1.0a user connection and remain subject to X API access and quotas.
+
 ## Local development callback
 
 ```txt

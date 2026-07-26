@@ -51,6 +51,10 @@ If `redirect_uri` is omitted, OpenPost derives it from `OPENPOST_APP_URL`.
 - Media URLs must be public HTTPS URLs.
 - Live-account verification is still recommended before relying on production Page publishing.
 
+## Analytics
+
+OpenPost collects Page follower totals and published-post reactions, comments, and shares. It uses `pages_read_engagement`, keeps missing counters distinct from measured zero, and does not use deprecated Page impression metrics.
+
 ## Troubleshooting
 
 - `facebook account has no manageable pages` usually means the authenticated user has no eligible Pages or the app lacks `pages_show_list`.

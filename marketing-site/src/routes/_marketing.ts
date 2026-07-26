@@ -786,7 +786,7 @@ export const comparisons = [
 		],
 		rows: [
 			{ area: 'Publishing', openpost: 'Base posts, account renditions, reusable media, queues, and visible job outcomes.', competitor: 'Multi-channel planning, queueing, ideas, and publishing in a mature hosted workflow.' },
-			{ area: 'Analytics and engagement', openpost: 'Advanced engagement analytics and a social inbox are not current product strengths.', competitor: 'Analytics and community workflows are part of Buffer’s product.' },
+			{ area: 'Analytics and engagement', openpost: 'Provider-reported account growth and publication counters, without a social inbox, listening, or enterprise benchmarks.', competitor: 'Analytics and community workflows are part of Buffer’s product.' },
 			{ area: 'Automation', openpost: 'HTTP API, CLI, MCP, scoped tokens, and assistant-facing operations.', competitor: 'Public GraphQL API, CLI, and MCP are available, including on the Free plan with plan-specific limits.' },
 			{ area: 'Hosting and source', openpost: 'AGPL-3.0-only source, managed app, or self-hosted deployment.', competitor: 'Hosted proprietary service.' }
 		],
@@ -988,7 +988,7 @@ export const faqs = [
 	{
 		question: 'Does OpenPost include analytics?',
 		answer:
-			'OpenPost tracks drafts, schedules, publishing jobs, outcomes, and failures. It does not currently provide advanced engagement analytics or a social inbox.'
+			'Yes. OpenPost stores supported account growth and publication engagement counters for 7, 30, or 90 days. Metric coverage depends on provider permissions. It does not include a social inbox, listening, or enterprise benchmarking.'
 	},
 	{
 		question: 'Does video publishing work everywhere?',

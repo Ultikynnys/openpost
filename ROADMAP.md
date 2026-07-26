@@ -13,6 +13,7 @@ OpenPost is a production self-hosted scheduler and managed service. The shared c
 - MCP and ChatGPT-style app foundation: remote `/mcp`, stdio proxy, OAuth PKCE account linking, Apps SDK widget metadata, scoped MCP tokens, tool-call auditing, prompts, and scheduling/media/provider tools.
 - Provider readiness work: provider app registry, database-backed provider credentials for operator tooling, account-provider discovery, and first slices for Facebook Pages, Instagram Business, TikTok, and YouTube.
 - Production diagnostics: `/ready`, CLI `instance health`, redacted `instance diagnostics`, provider catalog snapshots, and billing usage snapshots.
+- Provider-reported analytics: durable account and publication measurements, adaptive background collection, 7/30/90-day reporting, and explicit permission and support states.
 - E2E coverage for marketing, docs audience separation, auth/onboarding, settings/billing/MCP activity, provider discovery, workspace switching, composer scheduling, media library, and app smoke flows.
 
 ## Current Priorities
@@ -42,7 +43,7 @@ OpenPost is a production self-hosted scheduler and managed service. The shared c
 - Finish live-provider follow-through: better provider-specific error messages, retry notes, and launch-status updates after real verification.
 - Improve thread management for atomic updates to scheduled or failed thread chains.
 - Finish pagination metadata for any remaining large lists that still only return bare arrays.
-- Add analytics only after scheduling/provider reliability is boring; analytics is not a launch feature.
+- Verify analytics counters and permissions with live accounts, then expand coverage only where providers expose stable, approved reads.
 - Add optional writing assistance without making self-hosted OpenPost depend on one hosted AI provider.
 - Continue Android/mobile polish after the web and hosted flows are stable.
 

@@ -57,6 +57,10 @@ MASTODON_SERVERS='[
 ]'
 ```
 
+## Analytics
+
+OpenPost collects follower, following, and post totals from the connected instance. It also collects favourites, replies, and reblogs for published posts and thread segments. Instance software and policy determine which counters are returned.
+
 ## Notes
 
 - The current backend config default for `MASTODON_REDIRECT_URI` is `urn:ietf:wg:oauth:2.0:oob`.

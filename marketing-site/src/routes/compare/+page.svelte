@@ -16,8 +16,8 @@
 			icon: Feather
 		},
 		{
-			title: 'I need analytics, inbox, or listening',
-			detail: 'Start with Buffer or Hootsuite for analytics, engagement, and listening.',
+			title: 'I need an inbox, listening, or benchmarks',
+			detail: 'OpenPost includes provider metrics; start with Buffer or Hootsuite for social care, listening, or benchmarks.',
 			href: '/compare/hootsuite',
 			icon: Building2
 		},
@@ -56,7 +56,7 @@
 				<p class="mt-5 max-w-3xl text-lg leading-8 text-muted-foreground">
 					OpenPost sits between AI agents and social accounts with revocable workspace access,
 					destination renditions, human review, and a visible queue. Some alternatives are better
-					at writing, analytics, engagement, network breadth, or enterprise governance. These guides say so.
+					at writing, social care, listening, network breadth, or enterprise governance. These guides say so.
 				</p>
 				<div class="mt-8 flex flex-wrap gap-3">
 					<Button href={managedSignupUrl} size="lg">Try the managed app</Button>
@@ -65,7 +65,7 @@
 			</div>
 			<div class="rounded-xl border bg-card p-6">
 				<Waypoints class="size-5 text-primary" />
-				<p class="mt-4 font-semibold">Reviewed 22 July 2026</p>
+				<p class="mt-4 font-semibold">Reviewed 26 July 2026</p>
 				<p class="mt-2 text-sm leading-6 text-muted-foreground">
 					Competitor facts link to official pricing, product, API, or help pages. Plans and features can change after review.
 				</p>

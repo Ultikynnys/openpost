@@ -14,7 +14,8 @@ OpenPost exposes one backend through several purpose-built clients. “Supported
 | Upload and reuse media                            | Full                        | Full                                         | Upload-by-URL and reuse by ID  | Full                     |
 | Manage posting-slot definitions                   | Full                        | Full                                         | Reads next slot for scheduling | Full                     |
 | Review jobs and publication activity              | Full                        | Full                                         | Publication events only        | Full                     |
-| Reply to and moderate provider comments           | Full                        | Supported providers                          | Supported providers           | Full                     |
+| Review account and publication analytics          | Full                        | Not exposed                                  | Not exposed                    | Full                     |
+| Reply to and moderate provider comments           | Full                        | Supported providers                          | Supported providers            | Full                     |
 | Manage billing                                    | Full on hosted instances    | Status, checkout, and portal                 | Not exposed                    | Full on hosted instances |
 | Configure provider applications                   | Operator configuration only | Not exposed                                  | Readiness only                 | Instance-admin API       |
 

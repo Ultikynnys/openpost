@@ -48,6 +48,10 @@ If `redirect_uri` is omitted, OpenPost derives it from `OPENPOST_APP_URL`.
 - Comment/moderation workflows are not the focus of the YouTube slice.
 - Live-account verification is still recommended before relying on production YouTube publishing, especially for app-review-sensitive metadata and playlist/thumbnail behavior.
 
+## Analytics
+
+OpenPost collects channel subscribers, video count, and channel views plus published-video views, likes, and comments. Google may omit hidden subscriber counts. Accounts without `youtube.readonly` may need to reconnect.
+
 ## Troubleshooting
 
 - `google account has no YouTube channels` usually means the authenticated Google user has no YouTube channel available to the OAuth app.

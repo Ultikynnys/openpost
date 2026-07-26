@@ -65,7 +65,7 @@ Ask only people who have seen or used OpenPost. Send the direct launch URL and i
 
 ## Measure activation
 
-Define targets before launch, then collect the first fourteen days with [`metrics-plan.md`](./metrics-plan.md). OpenPost does not currently include a product-analytics vendor or launch dashboard, so assign an owner and evidence source for every value.
+Define targets before launch, then collect the first fourteen days with [`metrics-plan.md`](./metrics-plan.md). The social-provider Analytics page does not measure product activation, and OpenPost does not include a product-usage analytics vendor or launch KPI dashboard, so assign an owner and evidence source for every value.
 
 The recommended starting targets are planning values, not current results:
 

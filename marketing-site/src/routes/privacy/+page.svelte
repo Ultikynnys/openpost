@@ -51,6 +51,11 @@
 				values, prompts, schedules, publication status, and job history.
 			</li>
 			<li>
+				<strong>Analytics data:</strong> normalized account and publication counters, measurement
+				history, collection status, and safe provider error codes. Analytics records do not contain
+				raw provider responses, access tokens, post text, or direct messages.
+			</li>
+			<li>
 				<strong>Brand font records:</strong> custom WOFF2, TTF, or OTF files, family and style
 				metadata, and the account and time associated with the required font-license
 				acknowledgement.
@@ -90,7 +95,7 @@
 
 		<h2>4. Why we use data</h2>
 		<ul>
-			<li>Provide, secure, and support accounts, workspaces, publishing, and automation.</li>
+			<li>Provide, secure, and support accounts, workspaces, publishing, analytics, and automation.</li>
 			<li>Send content to the providers and accounts you select.</li>
 			<li>Process subscriptions, enforce plan limits, and keep billing records.</li>
 			<li>Detect abuse, investigate failures, and protect users and the service.</li>
@@ -129,8 +134,9 @@
 
 		<h2>6. Google and YouTube API data</h2>
 		<p>
-			If you connect YouTube, OpenPost uses Google API data only to provide the connection and
-			video-publishing features you request. That use and transfer comply with the
+			If you connect YouTube, OpenPost uses Google API data only to provide the connection,
+			video-publishing, and channel or video analytics features you request. That use and transfer
+			comply with the
 			<a href="https://developers.google.com/terms/api-services-user-data-policy"
 				>Google API Services User Data Policy</a
 			>, including its Limited Use requirements. OpenPost does not use Google user data for ads,
@@ -149,10 +155,10 @@
 
 		<h2>7. Retention and deletion</h2>
 		<p>
-			We keep account and publishing data while your account is active and as needed to provide
-			the service. Single-use reset tokens expire quickly and are invalidated after use. Operational
-			and security records are kept only as long as needed for reliability, abuse prevention, legal
-			obligations, and dispute handling.
+			We keep account, publishing, and normalized analytics data while your account is active and as
+			needed to provide the service. Single-use reset tokens expire quickly and are invalidated after
+			use. Operational and security records are kept only as long as needed for reliability, abuse
+			prevention, legal obligations, and dispute handling.
 		</p>
 		<p>
 			You can download an account export or request permanent deletion from account settings.

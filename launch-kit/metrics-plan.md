@@ -1,6 +1,6 @@
 # Fourteen-Day Activation and Guardrail Plan
 
-> **Measurement template — no live analytics are implied.** OpenPost does not currently include a product-analytics vendor or an automatic launch dashboard. Assign a human owner and a reproducible evidence source for every value.
+> **Product-usage measurement template — no automatic launch metrics are implied.** OpenPost's social-provider Analytics page measures connected accounts and publications; it does not include a product-usage analytics vendor or automatic launch KPI dashboard. Assign a human owner and a reproducible evidence source for every value.
 
 ## Window and definitions
 

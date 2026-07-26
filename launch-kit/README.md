@@ -34,7 +34,7 @@ This folder is a worked example of an agent-assisted, human-reviewed OpenPost ca
 7. Approve only the exact scheduling or publishing operation you inspected.
 8. Record actual provider URLs or failures from OpenPost lifecycle events in the results template.
 
-Before the public campaign, complete the release-freeze checklist and collect ten pilot records. During the first fourteen days, update the metrics plan from named manual evidence sources; this repository does not include a product-analytics vendor or an automatic launch dashboard.
+Before the public campaign, complete the release-freeze checklist and collect ten pilot records. During the first fourteen days, update the metrics plan from named manual evidence sources. The social-provider Analytics page does not measure product activation, and this repository does not include a product-usage analytics vendor or automatic launch KPI dashboard.
 
 The five sample rendition files are not a recommendation to include five providers in a real launch. Use only rows marked live-verified for the exact campaign account and format.
 

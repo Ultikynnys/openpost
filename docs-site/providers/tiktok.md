@@ -9,7 +9,7 @@ TikTok is a preview integration for video and photo publishing. It uses OAuth pl
 - Provider app registry entry with provider `tiktok`
 - Callback URL: `https://your-domain.com/api/v1/accounts/tiktok/callback`
 - Public `OPENPOST_MEDIA_URL` or S3/R2 public media URL for Direct Post media URLs
-- Scopes: `user.info.basic`, `user.info.profile`, `video.publish`, `video.upload`, and photo-post access when using image posts
+- Scopes: `user.info.basic`, `user.info.profile`, `user.info.stats`, `video.list`, `video.publish`, `video.upload`, and photo-post access when using image posts
 
 Example `OPENPOST_PROVIDER_APPS` entry:
 
@@ -33,6 +33,10 @@ Example `OPENPOST_PROVIDER_APPS` entry:
 - Text-only posts are not supported.
 - Pull-from-URL media must use public HTTPS URLs under a URL prefix or domain verified in the TikTok developer console.
 - Live-account and app-review behavior still needs deployment verification.
+
+## Analytics
+
+OpenPost uses `user.info.stats` for follower, following, likes, and video totals. It uses `video.list` for published-video likes, comments, shares, and views. Reconnect accounts created before these scopes were added.
 
 ## Common issues
 

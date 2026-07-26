@@ -15,9 +15,9 @@ https://your-domain.com/api/v1/accounts/instagram/callback
 - App permissions:
   - `instagram_basic`
   - `instagram_content_publish`
+  - `instagram_manage_insights`
   - `pages_show_list`
   - `pages_read_engagement`
-  - `business_management`
 - Public `OPENPOST_MEDIA_URL` or S3/R2 public media URL for image and Reel video posts
 
 ## Configuration
@@ -48,10 +48,13 @@ If `redirect_uri` is omitted, OpenPost derives it from `OPENPOST_APP_URL`.
 ## Current Limits
 
 - No text-only Instagram posts.
-- Insights/analytics are not a launch feature.
 - Media URLs must be public HTTPS URLs.
 - Account discovery currently uses Pages returned by the authenticated Meta user.
 - Live-account verification is still recommended before relying on production Instagram publishing.
+
+## Analytics
+
+OpenPost collects account followers and media count, plus post likes, comments, and the views, reach, saves, and shares that Meta returns for the media type. Reconnect accounts created before `instagram_manage_insights` was added.
 
 ## Troubleshooting
 
