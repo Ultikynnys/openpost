@@ -21,7 +21,7 @@ describe('media-upload-client', () => {
 		expect(headers.get('x-amz-meta-workspace')).toBe('ws-1');
 	});
 
-	it('uses multipart uploads only when the storage capability explicitly disables direct uploads', () => {
+	it('uses multipart uploads only when the storage capability explicitly disables upload sessions', () => {
 		expect(directUploadSupportedFromStorageResponse({ direct_upload_supported: false })).toBe(
 			false
 		);

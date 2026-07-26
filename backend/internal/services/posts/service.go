@@ -44,11 +44,11 @@ func (s *Service) ValidateScheduledProviderMedia(ctx context.Context, workspaceI
 		return nil
 	}
 
-	platforms, err := s.platformsForAccounts(ctx, workspaceID, accountIDs)
+	accounts, err := s.activeAccounts(ctx, workspaceID, accountIDs)
 	if err != nil {
 		return err
 	}
-	if len(platforms) == 0 {
+	if len(accounts) == 0 {
 		return nil
 	}
 
@@ -57,12 +57,15 @@ func (s *Service) ValidateScheduledProviderMedia(ctx context.Context, workspaceI
 		return err
 	}
 
-	for _, platformName := range platforms {
-		for _, issue := range platform.ValidateMedia(platformName, mediaItems) {
+	for _, account := range accounts {
+		for _, issue := range platform.ValidateMedia(account.Platform, mediaItems) {
 			if issue.Severity != severityError {
 				continue
 			}
 			return UserError{Message: ProviderMediaIssueMessage(issue)}
+		}
+		if err := validateStoredXMediaLimits(account, mediaItems, time.Now().UTC()); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -71,18 +74,88 @@ func (s *Service) ValidateScheduledProviderMedia(ctx context.Context, workspaceI
 // ValidateScheduledProviderOutput validates the effective content and media for
 // one destination through the same provider capability paths used elsewhere.
 func (s *Service) ValidateScheduledProviderOutput(ctx context.Context, workspaceID, accountID, content string, mediaIDs []string) error {
-	platforms, err := s.platformsForAccounts(ctx, workspaceID, []string{accountID})
+	account, err := s.activeAccount(ctx, workspaceID, accountID)
 	if err != nil {
 		return err
 	}
-	if len(platforms) == 0 {
+	if account == nil {
 		return nil
 	}
-	provider := platforms[0]
-	if limit, ok := capabilities.ProviderTextLimit(provider); ok && len([]rune(content)) > limit {
+	provider := account.Platform
+	limit, hasLimit := storedAccountTextLimit(*account, time.Now().UTC())
+	if hasLimit && capabilities.TextLength(provider, content) > limit {
 		return UserError{Message: fmt.Sprintf("Text is over the %d character limit", limit)}
 	}
 	return s.ValidateScheduledProviderMedia(ctx, workspaceID, []string{accountID}, mediaIDs)
+}
+
+func (s *Service) activeAccount(ctx context.Context, workspaceID, accountID string) (*models.SocialAccount, error) {
+	var account models.SocialAccount
+	if err := s.db.NewSelect().
+		Model(&account).
+		Column("id", "platform", "capability_state_json", "capability_checked_at").
+		Where("workspace_id = ?", workspaceID).
+		Where("id = ?", strings.TrimSpace(accountID)).
+		Where("is_active = ?", true).
+		Scan(ctx); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to load social account: %w", err)
+	}
+	return &account, nil
+}
+
+func storedAccountTextLimit(account models.SocialAccount, now time.Time) (int, bool) {
+	if account.Platform == capabilities.ProviderX &&
+		platform.XStoredCapabilityHasPremiumLimits(account.CapabilityState, account.CapabilityCheckedAt, now) {
+		return platform.XPremiumTextLimit, true
+	}
+	return capabilities.ProviderTextLimit(account.Platform)
+}
+
+func (s *Service) activeAccounts(ctx context.Context, workspaceID string, accountIDs []string) ([]models.SocialAccount, error) {
+	uniqueIDs := uniqueNonEmptyStrings(accountIDs)
+	if len(uniqueIDs) == 0 {
+		return nil, nil
+	}
+	var accounts []models.SocialAccount
+	if err := s.db.NewSelect().
+		Model(&accounts).
+		Column("id", "platform", "capability_state_json", "capability_checked_at").
+		Where("workspace_id = ?", workspaceID).
+		Where("is_active = ?", true).
+		Where("id IN (?)", bun.List(uniqueIDs)).
+		Scan(ctx); err != nil {
+		return nil, fmt.Errorf("failed to load social accounts: %w", err)
+	}
+	return accounts, nil
+}
+
+func validateStoredXMediaLimits(account models.SocialAccount, media []platform.MediaItem, now time.Time) error {
+	if account.Platform != capabilities.ProviderX {
+		return nil
+	}
+	maxSize := int64(platform.XStandardVideoSizeBytes)
+	maxDurationSeconds := platform.XStandardVideoDurationSeconds
+	sizeLabel := "512 MiB"
+	if platform.XStoredCapabilityHasPremiumLimits(account.CapabilityState, account.CapabilityCheckedAt, now) {
+		maxSize = platform.XPremiumVideoSizeBytes
+		maxDurationSeconds = platform.XPremiumVideoDurationSeconds
+		sizeLabel = "16 GiB"
+	}
+	for _, item := range media {
+		if !strings.HasPrefix(strings.ToLower(strings.TrimSpace(item.MimeType)), "video/") {
+			continue
+		}
+		if item.Size > maxSize {
+			return UserError{Message: "X video exceeds this account's " + sizeLabel + " size limit"}
+		}
+		if item.DurationMS > int64(maxDurationSeconds)*1000 {
+			return UserError{Message: fmt.Sprintf("X video exceeds this account's %d-second duration limit", maxDurationSeconds)}
+		}
+	}
+	return nil
 }
 
 func (s *Service) DestinationAccountIDs(ctx context.Context, postID string) ([]string, error) {
@@ -251,44 +324,6 @@ func ProviderMediaIssueMessage(issue platform.MediaValidationIssue) string {
 	return fmt.Sprintf("%s: %s", issue.Provider, message)
 }
 
-func (s *Service) platformsForAccounts(ctx context.Context, workspaceID string, accountIDs []string) ([]string, error) {
-	uniqueIDs := uniqueNonEmptyStrings(accountIDs)
-	if len(uniqueIDs) == 0 {
-		return nil, nil
-	}
-
-	var accounts []models.SocialAccount
-	if err := s.db.NewSelect().
-		Model(&accounts).
-		Column("id", "platform").
-		Where("workspace_id = ?", workspaceID).
-		Where("is_active = ?", true).
-		Where("id IN (?)", bun.List(uniqueIDs)).
-		Scan(ctx); err != nil {
-		return nil, fmt.Errorf("failed to load social account platforms: %w", err)
-	}
-
-	platformByID := make(map[string]string, len(accounts))
-	for _, account := range accounts {
-		platformByID[account.ID] = account.Platform
-	}
-
-	platforms := make([]string, 0, len(accounts))
-	seenPlatforms := make(map[string]struct{}, len(accounts))
-	for _, accountID := range uniqueIDs {
-		platformName := platformByID[accountID]
-		if platformName == "" {
-			continue
-		}
-		if _, seen := seenPlatforms[platformName]; seen {
-			continue
-		}
-		seenPlatforms[platformName] = struct{}{}
-		platforms = append(platforms, platformName)
-	}
-	return platforms, nil
-}
-
 func (s *Service) mediaItemsForIDs(ctx context.Context, workspaceID string, mediaIDs []string) ([]platform.MediaItem, error) {
 	uniqueIDs := uniqueNonEmptyStrings(mediaIDs)
 	if len(uniqueIDs) == 0 {
@@ -298,7 +333,7 @@ func (s *Service) mediaItemsForIDs(ctx context.Context, workspaceID string, medi
 	var media []models.MediaAttachment
 	if err := s.db.NewSelect().
 		Model(&media).
-		Column("id", "mime_type", "size", "original_filename").
+		Column("id", "mime_type", "size", "duration_ms", "original_filename").
 		Where("workspace_id = ?", workspaceID).
 		Where("id IN (?)", bun.List(uniqueIDs)).
 		Scan(ctx); err != nil {
@@ -320,6 +355,7 @@ func (s *Service) mediaItemsForIDs(ctx context.Context, workspaceID string, medi
 			ID:               item.ID,
 			MimeType:         item.MimeType,
 			Size:             item.Size,
+			DurationMS:       item.DurationMS,
 			OriginalFilename: item.OriginalFilename,
 		})
 	}

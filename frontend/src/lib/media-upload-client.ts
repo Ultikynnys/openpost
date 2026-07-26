@@ -171,16 +171,26 @@ async function uploadViaDirectSession(
 	const session =
 		(await sessionResp.json()) as components['schemas']['CreateMediaUploadSessionOutputBody'];
 	const uploadHeaders = directUploadHeadersForBrowser(session.upload.headers ?? {});
+	const isExternalUpload = /^https?:\/\//i.test(session.upload.url);
+	if (!isExternalUpload) {
+		for (const [key, value] of apiHeaders(false)) {
+			if (!uploadHeaders.has(key)) uploadHeaders.set(key, value);
+		}
+	}
 	if (!uploadHeaders.has('Content-Type') && file.type) {
 		uploadHeaders.set('Content-Type', file.type);
 	}
-	const uploadResp = await fetch(session.upload.url, {
-		method: session.upload.method || 'PUT',
-		headers: uploadHeaders,
-		body: file
-	});
+	const uploadResp = await fetch(
+		isExternalUpload ? session.upload.url : apiURL(session.upload.url),
+		{
+			method: session.upload.method || 'PUT',
+			credentials: isExternalUpload ? 'omit' : 'include',
+			headers: uploadHeaders,
+			body: file
+		}
+	);
 	if (!uploadResp.ok) {
-		throw await uploadErrorFromResponse(uploadResp, 'Direct media upload failed');
+		throw await uploadErrorFromResponse(uploadResp, 'Media upload failed');
 	}
 
 	const completeResp = await fetch(apiURL(session.complete_url), {

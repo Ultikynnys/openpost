@@ -3,6 +3,7 @@ package account_saver
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"log"
 	"regexp"
@@ -38,6 +39,7 @@ type SaveAccountInput struct {
 	AccountAvatarURL string
 	InstanceURL      string
 	Token            *platform.TokenResult
+	CapabilityState  map[string]string
 }
 
 // NewAccountSaver creates a new AccountSaver instance.
@@ -91,22 +93,28 @@ func (s *AccountSaver) SaveAccountFromInput(ctx context.Context, input SaveAccou
 		return nil, err
 	}
 	expiresAt := tokenExpiresAt(input.Token)
+	capabilityState, capabilityCheckedAt, err := encodeCapabilityState(input.CapabilityState)
+	if err != nil {
+		return nil, err
+	}
 
 	account := &models.SocialAccount{
-		ID:               uuid.New().String(),
-		WorkspaceID:      input.WorkspaceID,
-		Slug:             "",
-		Platform:         input.PlatformName,
-		AccountID:        input.AccountID,
-		AccountUsername:  input.AccountUsername,
-		AccountAvatarURL: input.AccountAvatarURL,
-		InstanceURL:      input.InstanceURL,
-		AccessTokenEnc:   encAccess,
-		RefreshTokenEnc:  encRefresh,
-		TokenExpiresAt:   expiresAt,
-		GrantedScopes:    grantedScopesFromToken(input.Token),
-		IsActive:         true,
-		CreatedAt:        time.Now().UTC(),
+		ID:                  uuid.New().String(),
+		WorkspaceID:         input.WorkspaceID,
+		Slug:                "",
+		Platform:            input.PlatformName,
+		AccountID:           input.AccountID,
+		AccountUsername:     input.AccountUsername,
+		AccountAvatarURL:    input.AccountAvatarURL,
+		InstanceURL:         input.InstanceURL,
+		AccessTokenEnc:      encAccess,
+		RefreshTokenEnc:     encRefresh,
+		TokenExpiresAt:      expiresAt,
+		GrantedScopes:       grantedScopesFromToken(input.Token),
+		CapabilityState:     capabilityState,
+		CapabilityCheckedAt: capabilityCheckedAt,
+		IsActive:            true,
+		CreatedAt:           time.Now().UTC(),
 	}
 	account.Slug = s.uniqueSlug(ctx, input.WorkspaceID, defaultSlug(input.PlatformName, input.AccountUsername, input.AccountID, input.InstanceURL))
 
@@ -119,6 +127,17 @@ func (s *AccountSaver) SaveAccountFromInput(ctx context.Context, input SaveAccou
 	}
 
 	return account, nil
+}
+
+func encodeCapabilityState(state map[string]string) (string, time.Time, error) {
+	if len(state) == 0 {
+		return "{}", time.Time{}, nil
+	}
+	encoded, err := json.Marshal(state)
+	if err != nil {
+		return "", time.Time{}, fmt.Errorf("encoding account capability state: %w", err)
+	}
+	return string(encoded), time.Now().UTC(), nil
 }
 
 func (s *AccountSaver) validateSaveAccountInput(ctx context.Context, input SaveAccountInput) error {

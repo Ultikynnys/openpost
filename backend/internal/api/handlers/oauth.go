@@ -168,15 +168,17 @@ type ListAccountsInput struct {
 }
 
 type AccountResponse struct {
-	ID                     string `json:"id" doc:"Account ID"`
-	Slug                   string `json:"slug" doc:"User-editable account slug for CLI selectors"`
-	Platform               string `json:"platform" doc:"Platform name"`
-	AccountID              string `json:"account_id" doc:"Platform-specific account ID"`
-	AccountUsername        string `json:"account_username" doc:"Account username"`
-	AccountAvatarURL       string `json:"account_avatar_url" doc:"Account avatar URL"`
-	InstanceURL            string `json:"instance_url" doc:"Instance URL (Mastodon/Bluesky)"`
-	IsActive               bool   `json:"is_active" doc:"Whether the account is active"`
-	ThreadRepliesSupported bool   `json:"thread_replies_supported" doc:"Whether this account supports thread replies in current server config"`
+	ID                     string     `json:"id" doc:"Account ID"`
+	Slug                   string     `json:"slug" doc:"User-editable account slug for CLI selectors"`
+	Platform               string     `json:"platform" doc:"Platform name"`
+	AccountID              string     `json:"account_id" doc:"Platform-specific account ID"`
+	AccountUsername        string     `json:"account_username" doc:"Account username"`
+	AccountAvatarURL       string     `json:"account_avatar_url" doc:"Account avatar URL"`
+	InstanceURL            string     `json:"instance_url" doc:"Instance URL (Mastodon/Bluesky)"`
+	IsActive               bool       `json:"is_active" doc:"Whether the account is active"`
+	LimitProfile           string     `json:"limit_profile,omitempty" enum:"standard,x-premium" doc:"Account-specific publishing limit profile"`
+	CapabilityCheckedAt    *time.Time `json:"capability_checked_at,omitempty" doc:"When account-specific publishing limits were last verified"`
+	ThreadRepliesSupported bool       `json:"thread_replies_supported" doc:"Whether this account supports thread replies in current server config"`
 }
 
 type ListAccountsOutput struct {
@@ -717,7 +719,7 @@ func (h *OAuthHandler) Callback(api huma.API) {
 			return h.redirectWithError("workspace access denied")
 		}
 
-		return h.saveAccountAndRedirect(ctx, userID, input.Platform, workspaceID, profile.ID, profile.Username, instanceRef, tokenResp)
+		return h.saveAccountAndRedirect(ctx, userID, input.Platform, workspaceID, profile.ID, profile.Username, instanceRef, profile.CapabilityState, tokenResp)
 	})
 }
 
@@ -830,7 +832,7 @@ func (h *OAuthHandler) createPendingAccountSelection(ctx context.Context, userID
 	return pending, nil
 }
 
-func (h *OAuthHandler) saveAccountAndRedirect(ctx context.Context, userID, platformName, workspaceID, accountID, accountUsername, instanceURL string, tokenResp *platform.TokenResult) (*huma.StreamResponse, error) {
+func (h *OAuthHandler) saveAccountAndRedirect(ctx context.Context, userID, platformName, workspaceID, accountID, accountUsername, instanceURL string, capabilityState map[string]string, tokenResp *platform.TokenResult) (*huma.StreamResponse, error) {
 	// For Threads, the account ID comes from the token response extra
 	if tokenResp.Extra != nil {
 		if uid, ok := tokenResp.Extra["user_id"]; ok && uid != "" {
@@ -838,7 +840,16 @@ func (h *OAuthHandler) saveAccountAndRedirect(ctx context.Context, userID, platf
 		}
 	}
 
-	account, err := h.accountSaver.SaveAccount(ctx, userID, platformName, workspaceID, accountID, accountUsername, instanceURL, tokenResp)
+	account, err := h.accountSaver.SaveAccountFromInput(ctx, account_saver.SaveAccountInput{
+		UserID:          userID,
+		PlatformName:    platformName,
+		WorkspaceID:     workspaceID,
+		AccountID:       accountID,
+		AccountUsername: accountUsername,
+		InstanceURL:     instanceURL,
+		Token:           tokenResp,
+		CapabilityState: capabilityState,
+	})
 	if err != nil {
 		log.Printf("[Callback] Failed to save account: %v", err)
 		return h.redirectWithError(accountConnectionErrorMessage(err))
@@ -1243,22 +1254,7 @@ func (h *OAuthHandler) ListAccounts(api huma.API) {
 
 		response := make([]AccountResponse, len(accounts))
 		for i, acc := range accounts {
-			threadRepliesSupported := true
-			if h.disableLinkedInThreadReplies && acc.Platform == "linkedin" {
-				threadRepliesSupported = false
-			}
-
-			response[i] = AccountResponse{
-				ID:                     acc.ID,
-				Slug:                   acc.Slug,
-				Platform:               acc.Platform,
-				AccountID:              acc.AccountID,
-				AccountUsername:        acc.AccountUsername,
-				AccountAvatarURL:       acc.AccountAvatarURL,
-				InstanceURL:            acc.InstanceURL,
-				IsActive:               acc.IsActive,
-				ThreadRepliesSupported: threadRepliesSupported,
-			}
+			response[i] = accountResponse(acc, h.disableLinkedInThreadReplies)
 		}
 
 		return &ListAccountsOutput{Body: response}, nil
@@ -1376,6 +1372,11 @@ func (h *OAuthHandler) getEditableAccount(ctx context.Context, accountID, userID
 
 func accountResponse(acc models.SocialAccount, disableLinkedInThreadReplies bool) AccountResponse {
 	threadRepliesSupported := !disableLinkedInThreadReplies || acc.Platform != "linkedin"
+	var capabilityCheckedAt *time.Time
+	if !acc.CapabilityCheckedAt.IsZero() {
+		checkedAt := acc.CapabilityCheckedAt
+		capabilityCheckedAt = &checkedAt
+	}
 
 	return AccountResponse{
 		ID:                     acc.ID,
@@ -1386,6 +1387,8 @@ func accountResponse(acc models.SocialAccount, disableLinkedInThreadReplies bool
 		AccountAvatarURL:       acc.AccountAvatarURL,
 		InstanceURL:            acc.InstanceURL,
 		IsActive:               acc.IsActive,
+		LimitProfile:           accountLimitProfile(acc),
+		CapabilityCheckedAt:    capabilityCheckedAt,
 		ThreadRepliesSupported: threadRepliesSupported,
 	}
 }

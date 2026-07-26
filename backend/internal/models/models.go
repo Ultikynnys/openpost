@@ -374,10 +374,12 @@ type SocialAccount struct {
 	AccountAvatarURL string `json:"account_avatar_url"`
 	InstanceURL      string `json:"instance_url"` // Used for Mastodon domains and Bluesky PDS
 
-	AccessTokenEnc  []byte    `bun:"access_token_encrypted,notnull" json:"-"`
-	RefreshTokenEnc []byte    `bun:"refresh_token_encrypted" json:"-"`
-	TokenExpiresAt  time.Time `json:"token_expires_at"`
-	GrantedScopes   string    `bun:"granted_scopes,notnull,default:''" json:"granted_scopes,omitempty"`
+	AccessTokenEnc      []byte    `bun:"access_token_encrypted,notnull" json:"-"`
+	RefreshTokenEnc     []byte    `bun:"refresh_token_encrypted" json:"-"`
+	TokenExpiresAt      time.Time `json:"token_expires_at"`
+	GrantedScopes       string    `bun:"granted_scopes,notnull,default:''" json:"granted_scopes,omitempty"`
+	CapabilityState     string    `bun:"capability_state_json,notnull,default:'{}'" json:"-"`
+	CapabilityCheckedAt time.Time `bun:"capability_checked_at,nullzero" json:"-"`
 
 	IsActive     bool      `bun:",default:true" json:"is_active"`
 	ErrorMessage string    `json:"error_message"`

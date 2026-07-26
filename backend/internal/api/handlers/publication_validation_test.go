@@ -2,10 +2,12 @@ package handlers
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/openpost/backend/internal/capabilities"
 	"github.com/openpost/backend/internal/models"
+	"github.com/openpost/backend/internal/platform"
 	"github.com/stretchr/testify/require"
 )
 
@@ -96,6 +98,43 @@ func TestValidatePublicationIncludesMissingScope(t *testing.T) {
 
 	require.NoError(t, err)
 	requirePublicationIssueCode(t, issues, "missing_scope")
+}
+
+func TestValidateDynamicXConstraintsUseTheResolvedAccountTier(t *testing.T) {
+	rendition := models.Rendition{
+		ID:       "x-rendition",
+		Platform: capabilities.ProviderX,
+		Profile:  models.ContentProfileShortText,
+	}
+	segment := RenditionSegmentResponse{
+		ID:   "x-segment",
+		Body: strings.Repeat("界", 141),
+		Media: []MediaSummary{{
+			MimeType:   "video/mp4",
+			DurationMS: int64(platform.XStandardVideoDurationSeconds+1) * 1000,
+			Size:       int64(platform.XStandardVideoSizeBytes) + 1,
+		}},
+	}
+
+	standardIssues := validateDynamicConstraints(
+		rendition,
+		segment,
+		0,
+		nil,
+		platform.XPublishingCapabilities(platform.XSubscriptionTypeUnknown).Constraints,
+	)
+	requirePublicationIssueCode(t, standardIssues, "dynamic_text_limit")
+	requirePublicationIssueCode(t, standardIssues, "dynamic_video_duration")
+	requirePublicationIssueCode(t, standardIssues, "dynamic_video_size")
+
+	premiumIssues := validateDynamicConstraints(
+		rendition,
+		segment,
+		0,
+		nil,
+		platform.XPublishingCapabilities(platform.XSubscriptionTypePremium).Constraints,
+	)
+	require.Empty(t, premiumIssues)
 }
 
 func requirePublicationIssueCode(t *testing.T, issues []capabilities.ValidationIssue, code string) {

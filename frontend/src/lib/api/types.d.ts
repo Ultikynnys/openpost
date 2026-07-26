@@ -1196,7 +1196,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Create a direct-to-storage media upload session */
+        /** Create a streaming media upload session */
         post: operations["create-media-upload-session"];
         delete?: never;
         options?: never;
@@ -1213,7 +1213,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Complete a direct-to-storage media upload session */
+        /** Complete a streaming media upload session */
         post: operations["complete-media-upload-session"];
         delete?: never;
         options?: never;
@@ -2420,12 +2420,22 @@ export interface components {
             account_id: string;
             /** @description Account username */
             account_username: string;
+            /**
+             * Format: date-time
+             * @description When account-specific publishing limits were last verified
+             */
+            capability_checked_at?: string;
             /** @description Account ID */
             id: string;
             /** @description Instance URL (Mastodon/Bluesky) */
             instance_url: string;
             /** @description Whether the account is active */
             is_active: boolean;
+            /**
+             * @description Account-specific publishing limit profile
+             * @enum {string}
+             */
+            limit_profile?: "standard" | "x-premium";
             /** @description Platform name */
             platform: string;
             /** @description User-editable account slug for CLI selectors */
@@ -2971,11 +2981,11 @@ export interface components {
              * @example https://example.com/schemas/CreateMediaUploadSessionOutputBody.json
              */
             readonly $schema?: string;
-            /** @description API path to call after the direct upload succeeds */
+            /** @description API path to call after the upload succeeds */
             complete_url: string;
             /** @description Pending media ID */
             media_id: string;
-            /** @description Direct upload request details */
+            /** @description Streaming upload request details */
             upload: components["schemas"]["DirectMediaUploadTarget"];
         };
         CreateOrganizationBillingCheckoutInputBody: {
@@ -3460,11 +3470,11 @@ export interface components {
             headers: {
                 [key: string]: string;
             };
-            /** @description HTTP method to use for the direct upload */
+            /** @description HTTP method to use for the upload */
             method: string;
             /** @description Storage object key reserved for the upload */
             object_key: string;
-            /** @description Presigned upload URL */
+            /** @description Presigned or authenticated upload target URL */
             url: string;
         };
         DisableTOTPInputBody: {
@@ -3610,7 +3620,7 @@ export interface components {
              * @description Quota-counted media assets
              */
             asset_count: number;
-            /** @description Whether this instance supports direct-to-storage uploads */
+            /** @description Whether this instance supports direct-to-storage or server-streamed upload sessions */
             direct_upload_supported: boolean;
             /**
              * Format: int64

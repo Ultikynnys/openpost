@@ -266,6 +266,16 @@ func All() []Capability {
 	}
 	longVideo := video
 	longVideo.MaxDurationSeconds = 43200
+	xVideo := video
+	xVideo.MaxDurationSeconds = 4 * 60 * 60
+	xVideo.MaxSizeBytes = 16 * 1024 * 1024 * 1024
+	xThreadMedia := MediaConstraint{
+		MinCount:           0,
+		MaxCount:           4,
+		AllowedMIMEs:       []string{"image/jpeg", "image/png", "image/webp", "image/gif", "video/mp4", "video/quicktime"},
+		MaxSizeBytes:       16 * 1024 * 1024 * 1024,
+		MaxDurationSeconds: 4 * 60 * 60,
+	}
 
 	defaultQueued := func(c Capability) Capability {
 		c.OpenPostQueued = true
@@ -281,11 +291,11 @@ func All() []Capability {
 	}
 
 	return []Capability{
-		defaultQueued(Capability{Provider: ProviderX, Profile: models.ContentProfileShortText, Label: "X post", TextLimit: 280, Media: text, Settings: xSettings()}),
-		defaultQueued(Capability{Provider: ProviderX, Profile: models.ContentProfileThread, Label: "X thread", TextLimit: 280, Media: MediaConstraint{MinCount: 0, MaxCount: 4, AllowedMIMEs: []string{"image/jpeg", "image/png", "image/webp", "image/gif", "video/mp4", "video/quicktime"}}, Settings: xSettings()}),
-		defaultQueued(Capability{Provider: ProviderX, Profile: models.ContentProfileLinkShare, Label: "X link", TextLimit: 280, Media: text, Settings: append(linkSettings(), xSettings()...)}),
-		defaultQueued(Capability{Provider: ProviderX, Profile: models.ContentProfileImagePost, Label: "X image post", TextLimit: 280, Media: MediaConstraint{MinCount: 1, MaxCount: 4, AllowedMIMEs: []string{"image/jpeg", "image/png", "image/webp", "image/gif"}}, Settings: xSettings()}),
-		defaultQueued(Capability{Provider: ProviderX, Profile: models.ContentProfileShortVideo, Label: "X video", TextLimit: 280, Media: shortVideo, Settings: xSettings()}),
+		defaultQueued(Capability{Provider: ProviderX, Profile: models.ContentProfileShortText, Label: "X post", TextLimit: 25_000, Media: text, Settings: xSettings(), Caveats: []string{"Text limits are reduced unless the connected account reports an active X subscription."}}),
+		defaultQueued(Capability{Provider: ProviderX, Profile: models.ContentProfileThread, Label: "X thread", TextLimit: 25_000, Media: xThreadMedia, Settings: xSettings(), Caveats: []string{"Text and video limits are reduced unless the connected account reports an active X subscription."}}),
+		defaultQueued(Capability{Provider: ProviderX, Profile: models.ContentProfileLinkShare, Label: "X link", TextLimit: 25_000, Media: text, Settings: append(linkSettings(), xSettings()...), Caveats: []string{"Text limits are reduced unless the connected account reports an active X subscription."}}),
+		defaultQueued(Capability{Provider: ProviderX, Profile: models.ContentProfileImagePost, Label: "X image post", TextLimit: 25_000, Media: MediaConstraint{MinCount: 1, MaxCount: 4, AllowedMIMEs: []string{"image/jpeg", "image/png", "image/webp", "image/gif"}}, Settings: xSettings(), Caveats: []string{"Text limits are reduced unless the connected account reports an active X subscription."}}),
+		defaultQueued(Capability{Provider: ProviderX, Profile: models.ContentProfileShortVideo, Label: "X video", TextLimit: 25_000, Media: xVideo, Settings: xSettings(), Caveats: []string{"Text and video limits are reduced unless the connected account reports an active X subscription."}}),
 
 		defaultQueued(Capability{Provider: ProviderBluesky, Profile: models.ContentProfileShortText, Label: "Bluesky post", TextLimit: 300, Media: text, Settings: blueskySettings()}),
 		defaultQueued(Capability{Provider: ProviderBluesky, Profile: models.ContentProfileThread, Label: "Bluesky thread", TextLimit: 300, Media: MediaConstraint{MinCount: 0, MaxCount: 4, AllowedMIMEs: []string{"image/jpeg", "image/png", "image/webp", "video/mp4"}}, Settings: blueskySettings()}),
@@ -642,6 +652,120 @@ func Resolve(provider string, input ResolveInput) ResolvedCapability {
 	}
 }
 
+// ApplyAccountConstraints replaces account-varying text and media limits, then
+// revalidates every segment against the effective connected-account capability.
+func ApplyAccountConstraints(resolved *ResolvedCapability, segments []ResolveSegment, constraints map[string]any) {
+	if resolved == nil {
+		return
+	}
+	applyResolvedConstraintValues(resolved, constraints)
+
+	issues := make([]ValidationIssue, 0, len(resolved.Issues))
+	for _, issue := range resolved.Issues {
+		if issue.Scope != SettingScopeSegment {
+			issues = append(issues, issue)
+		}
+	}
+	for _, segment := range segments {
+		issues = append(issues, validateAccountConstraintSegment(*resolved, segment, constraints)...)
+	}
+	resolved.Issues = issues
+	resolved.Compatible = !hasErrorIssues(issues)
+}
+
+func applyResolvedConstraintValues(resolved *ResolvedCapability, constraints map[string]any) {
+	if value, ok := constraintInt(constraints["text_limit"]); ok && value > 0 {
+		resolved.TextLimit = value
+	}
+	if value, ok := constraintInt(constraints["media_max_count"]); ok && value > 0 {
+		resolved.Media.MaxCount = value
+	}
+	if value, ok := constraintInt(constraints["max_video_duration_seconds"]); ok && value > 0 {
+		resolved.Media.MaxDurationSeconds = value
+	}
+}
+
+func validateAccountConstraintSegment(resolved ResolvedCapability, segment ResolveSegment, constraints map[string]any) []ValidationIssue {
+	segmentIssues := validateCapability(
+		resolved.Capability,
+		segment.Body,
+		segment.Title,
+		"",
+		segment.Media,
+		nil,
+	)
+	for index := range segmentIssues {
+		segmentIssues[index].SegmentID = segment.ID
+		segmentIssues[index].Scope = SettingScopeSegment
+		segmentIssues[index].ScopeID = segment.ID
+		segmentIssues[index].OutputProfile = resolved.OutputProfile
+	}
+	if maxVideoSizeBytes, ok := constraintInt64(constraints["max_video_size_bytes"]); ok && maxVideoSizeBytes > 0 {
+		for _, media := range segment.Media {
+			if strings.HasPrefix(strings.ToLower(media.MimeType), "video/") &&
+				media.Size > maxVideoSizeBytes &&
+				!hasMediaValidationIssue(segmentIssues, media.ID, "media_size") {
+				segmentIssues = append(segmentIssues, ValidationIssue{
+					Severity:        "error",
+					Code:            "media_size",
+					Message:         "Video file is too large for this account",
+					FallbackMessage: "Video file is too large for this account",
+					Provider:        resolved.Provider,
+					Profile:         resolved.Profile,
+					OutputProfile:   resolved.OutputProfile,
+					SegmentID:       segment.ID,
+					Scope:           SettingScopeSegment,
+					ScopeID:         segment.ID,
+					MediaID:         media.ID,
+					Field:           "media",
+				})
+			}
+		}
+	}
+	return segmentIssues
+}
+
+func hasMediaValidationIssue(issues []ValidationIssue, mediaID, code string) bool {
+	for _, issue := range issues {
+		if issue.MediaID == mediaID && issue.Code == code {
+			return true
+		}
+	}
+	return false
+}
+
+func constraintInt(value any) (int, bool) {
+	switch typed := value.(type) {
+	case int:
+		return typed, true
+	case int64:
+		return int(typed), true
+	case float64:
+		return int(typed), true
+	case json.Number:
+		parsed, err := typed.Int64()
+		return int(parsed), err == nil
+	default:
+		return 0, false
+	}
+}
+
+func constraintInt64(value any) (int64, bool) {
+	switch typed := value.(type) {
+	case int:
+		return int64(typed), true
+	case int64:
+		return typed, true
+	case float64:
+		return int64(typed), true
+	case json.Number:
+		parsed, err := typed.Int64()
+		return parsed, err == nil
+	default:
+		return 0, false
+	}
+}
+
 func intendedMediaShape(intent, inputShape string) string {
 	if inputShape != MediaShapeText {
 		return inputShape
@@ -751,6 +875,11 @@ func validationIssue(code, message, provider, profile, field string) ValidationI
 // supported, otherwise the conservative limit across its publication profiles.
 func ProviderTextLimit(provider string) (int, bool) {
 	provider = strings.ToLower(strings.TrimSpace(provider))
+	if provider == ProviderX {
+		// Legacy post validation has no connected-account context, so it must
+		// keep X's standard limit. Account-aware publications use the resolver.
+		return 280, true
+	}
 	limit := 0
 	for _, capability := range All() {
 		if capability.Provider != provider || capability.TextLimit <= 0 {
@@ -875,7 +1004,7 @@ func validateCapability(capability Capability, body, title, description string, 
 	provider := capability.Provider
 	profile := capability.Profile
 	issues := []ValidationIssue{}
-	if capability.TextLimit > 0 && len([]rune(body)) > capability.TextLimit {
+	if capability.TextLimit > 0 && TextLength(provider, body) > capability.TextLimit {
 		issues = append(issues, ValidationIssue{Severity: "error", Code: "text_too_long", Message: fmt.Sprintf("Text is over the %d character limit", capability.TextLimit), Provider: provider, Profile: profile, Field: "body"})
 	}
 	if capability.TitleRequired && strings.TrimSpace(title) == "" {

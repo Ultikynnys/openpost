@@ -826,6 +826,16 @@ func (h *PublicationHandler) updatePublication(api huma.API) {
 				if err := h.replacePublicationSegments(txCtx, tx, publication, input.Body.Segments); err != nil {
 					return err
 				}
+			} else if input.Body.SourceText != nil {
+				if err := syncPublicationFirstSegmentBodyTx(
+					txCtx,
+					tx,
+					publication.ID,
+					*input.Body.SourceText,
+					publication.UpdatedAt,
+				); err != nil {
+					return err
+				}
 			}
 			if input.Body.Renditions != nil {
 				if err := h.replaceAllPublicationRenditions(
@@ -1624,6 +1634,35 @@ func (h *PublicationHandler) replacePublicationSegments(
 		}
 	}
 	return nil
+}
+
+func syncPublicationFirstSegmentBodyTx(
+	ctx context.Context,
+	tx bun.Tx,
+	publicationID string,
+	body string,
+	updatedAt time.Time,
+) error {
+	var segment models.PublicationSegment
+	if err := tx.NewSelect().
+		Model(&segment).
+		Where("publication_id = ?", publicationID).
+		Order("position ASC", "id ASC").
+		Limit(1).
+		Scan(ctx); err != nil {
+		if errors.Is(err, sql.ErrNoRows) || isMissingPublicationSegmentTable(err) {
+			return nil
+		}
+		return err
+	}
+	segment.Body = body
+	segment.UpdatedAt = updatedAt
+	_, err := tx.NewUpdate().
+		Model(&segment).
+		Column("body", "updated_at").
+		Where("id = ?", segment.ID).
+		Exec(ctx)
+	return err
 }
 
 //nolint:gocyclo
@@ -2450,9 +2489,6 @@ func (h *PublicationHandler) validatePublicationByID(ctx context.Context, public
 
 //nolint:gocyclo
 func (h *PublicationHandler) validateDynamicPublicationCapabilities(ctx context.Context, publicationID string) ([]capabilities.ValidationIssue, error) {
-	if len(h.providers) == 0 || h.tokenSource == nil {
-		return nil, nil
-	}
 	var publication models.Publication
 	if err := h.db.NewSelect().Model(&publication).Where("id = ?", publicationID).Scan(ctx); err != nil {
 		return nil, huma.Error500InternalServerError("failed to load publication capabilities")
@@ -2475,35 +2511,78 @@ func (h *PublicationHandler) validateDynamicPublicationCapabilities(ctx context.
 		if account.Platform == capabilities.ProviderMastodon {
 			adapter = h.providers[capabilities.ProviderMastodon+":"+account.InstanceURL]
 		}
+		result := platform.AccountCapabilityResult{}
+		hasResult := false
+		if account.Platform == capabilities.ProviderX {
+			result = standardXPublishingCapabilities()
+			hasResult = true
+		}
 		provider, ok := adapter.(platform.AccountCapabilityProvider)
-		if !ok {
-			continue
-		}
-		token, tokenErr := h.tokenSource.GetValidAccessToken(ctx, account.ID)
-		if tokenErr != nil {
-			issues = append(issues, dynamicPublicationIssue(
-				rendition,
-				"account_capability_authorization_failed",
-				"Account authorization could not be refreshed.",
-				"authorization",
-			))
-			continue
-		}
 		destinationSettings := map[string]interface{}{}
 		_ = json.Unmarshal([]byte(rendition.SettingsJSON), &destinationSettings)
-		result, resolveErr := provider.ResolveAccountPublishingCapabilities(ctx, token, platform.AccountCapabilityInput{
-			Intent:        publication.Intent,
-			OutputProfile: rendition.OutputProfile,
-			Settings:      destinationSettings,
-		})
-		if resolveErr != nil {
-			issues = append(issues, dynamicPublicationIssue(
+		switch {
+		case ok && h.tokenSource != nil:
+			token, tokenErr := h.tokenSource.GetValidAccessToken(ctx, account.ID)
+			if tokenErr != nil {
+				issue := dynamicPublicationIssue(
+					rendition,
+					"account_capability_authorization_failed",
+					"Account authorization could not be refreshed.",
+					"authorization",
+				)
+				if account.Platform == capabilities.ProviderX {
+					issue.Severity = "warning"
+					issues = append(issues, issue)
+				} else {
+					issues = append(issues, issue)
+					continue
+				}
+			} else {
+				resolved, resolveErr := provider.ResolveAccountPublishingCapabilities(ctx, token, platform.AccountCapabilityInput{
+					Intent:        publication.Intent,
+					OutputProfile: rendition.OutputProfile,
+					Settings:      destinationSettings,
+				})
+				if resolveErr != nil {
+					issue := dynamicPublicationIssue(
+						rendition,
+						"account_capability_refresh_failed",
+						resolveErr.Error(),
+						"capabilities",
+					)
+					if account.Platform == capabilities.ProviderX {
+						issue.Severity = "warning"
+						issues = append(issues, issue)
+					} else {
+						issues = append(issues, issue)
+						continue
+					}
+				} else {
+					result = resolved
+					hasResult = true
+					if persistErr := persistAccountCapabilityState(ctx, h.db, account.ID, result); persistErr != nil {
+						issue := dynamicPublicationIssue(
+							rendition,
+							"account_capability_cache_failed",
+							"Account limits were verified but could not be cached.",
+							"capabilities",
+						)
+						issue.Severity = "warning"
+						issues = append(issues, issue)
+					}
+				}
+			}
+		case !hasResult:
+			continue
+		default:
+			issue := dynamicPublicationIssue(
 				rendition,
 				"account_capability_refresh_failed",
-				resolveErr.Error(),
+				"Account limits could not be refreshed; standard X limits were applied.",
 				"capabilities",
-			))
-			continue
+			)
+			issue.Severity = "warning"
+			issues = append(issues, issue)
 		}
 		segments, loadErr := h.loadRenditionSegmentResponsesWithDB(ctx, h.db, rendition)
 		if loadErr != nil {
@@ -2568,23 +2647,45 @@ func validateDynamicConstraints(rendition models.Rendition, segment RenditionSeg
 		issue.Parameters = map[string]any{"segment_position": position}
 		issues = append(issues, issue)
 	}
-	if limit, ok := dynamicInt(constraints["text_limit"]); ok && limit > 0 && len([]rune(segment.Body)) > limit {
+	if limit, ok := dynamicInt(constraints["text_limit"]); ok && limit > 0 && capabilities.TextLength(rendition.Platform, segment.Body) > limit {
 		appendIssue("dynamic_text_limit", fmt.Sprintf("Text is over the current %d character limit.", limit), "body")
 	}
 	if limit, ok := dynamicInt(constraints["media_max_count"]); ok && limit > 0 && len(segment.Media) > limit {
 		appendIssue("dynamic_media_limit", fmt.Sprintf("This account currently supports at most %d media items.", limit), "media")
 	}
+	issues = append(issues, validateDynamicVideoConstraints(rendition, segment, position, constraints)...)
+	if limit, ok := dynamicInt(constraints["poll_max_options"]); ok && limit > 0 {
+		if count := len(separatedCapabilityValues(strings.TrimSpace(fmt.Sprint(settings["poll_options"])))); count > limit {
+			appendIssue("dynamic_poll_limit", fmt.Sprintf("This account currently supports at most %d poll options.", limit), "poll_options")
+		}
+	}
+	return issues
+}
+
+func validateDynamicVideoConstraints(rendition models.Rendition, segment RenditionSegmentResponse, position int, constraints map[string]interface{}) []capabilities.ValidationIssue {
+	issues := []capabilities.ValidationIssue{}
+	appendIssue := func(code, message string) {
+		issue := dynamicPublicationIssue(rendition, code, message, "media")
+		issue.SegmentID = segment.ID
+		issue.Scope = capabilities.SettingScopeSegment
+		issue.ScopeID = segment.ID
+		issue.Parameters = map[string]any{"segment_position": position}
+		issues = append(issues, issue)
+	}
 	if limit, ok := dynamicInt(constraints["max_video_duration_seconds"]); ok && limit > 0 {
 		for _, media := range segment.Media {
-			if media.DurationMS > int64(limit)*1000 {
-				appendIssue("dynamic_video_duration", fmt.Sprintf("Video must be %d seconds or less for this account.", limit), "media")
+			if strings.HasPrefix(strings.ToLower(media.MimeType), "video/") && media.DurationMS > int64(limit)*1000 {
+				appendIssue("dynamic_video_duration", fmt.Sprintf("Video must be %d seconds or less for this account.", limit))
 				break
 			}
 		}
 	}
-	if limit, ok := dynamicInt(constraints["poll_max_options"]); ok && limit > 0 {
-		if count := len(separatedCapabilityValues(strings.TrimSpace(fmt.Sprint(settings["poll_options"])))); count > limit {
-			appendIssue("dynamic_poll_limit", fmt.Sprintf("This account currently supports at most %d poll options.", limit), "poll_options")
+	if limit, ok := dynamicInt64(constraints["max_video_size_bytes"]); ok && limit > 0 {
+		for _, media := range segment.Media {
+			if strings.HasPrefix(strings.ToLower(media.MimeType), "video/") && media.Size > limit {
+				appendIssue("dynamic_video_size", "Video file is too large for this account.")
+				break
+			}
 		}
 	}
 	return issues

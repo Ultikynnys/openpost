@@ -2,6 +2,8 @@ package mediastore
 
 import (
 	"context"
+	"io"
+	"strings"
 	"time"
 )
 
@@ -23,4 +25,16 @@ type DirectUploadSession struct {
 type DirectUploadStorage interface {
 	BlobStorage
 	CreateDirectUploadSession(context.Context, DirectUploadInput) (*DirectUploadSession, error)
+}
+
+type ContentTypeStorage interface {
+	BlobStorage
+	SaveWithContentType(id string, reader io.Reader, contentType string) (string, error)
+}
+
+func SaveWithContentType(storage BlobStorage, id string, reader io.Reader, contentType string) (string, error) {
+	if typedStorage, ok := storage.(ContentTypeStorage); ok && strings.TrimSpace(contentType) != "" {
+		return typedStorage.SaveWithContentType(id, reader, contentType)
+	}
+	return storage.Save(id, reader)
 }

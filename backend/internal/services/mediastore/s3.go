@@ -1,6 +1,7 @@
 package mediastore
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -12,7 +13,10 @@ import (
 	v4 "github.com/aws/aws-sdk-go-v2/aws/signer/v4"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 )
+
+const s3MultipartPartSize = 8 * 1024 * 1024
 
 type S3Config struct {
 	Endpoint        string
@@ -34,11 +38,19 @@ type s3PresignClient interface {
 	PresignPutObject(context.Context, *s3.PutObjectInput, ...func(*s3.PresignOptions)) (*v4.PresignedHTTPRequest, error)
 }
 
+type s3MultipartClient interface {
+	CreateMultipartUpload(context.Context, *s3.CreateMultipartUploadInput, ...func(*s3.Options)) (*s3.CreateMultipartUploadOutput, error)
+	UploadPart(context.Context, *s3.UploadPartInput, ...func(*s3.Options)) (*s3.UploadPartOutput, error)
+	CompleteMultipartUpload(context.Context, *s3.CompleteMultipartUploadInput, ...func(*s3.Options)) (*s3.CompleteMultipartUploadOutput, error)
+	AbortMultipartUpload(context.Context, *s3.AbortMultipartUploadInput, ...func(*s3.Options)) (*s3.AbortMultipartUploadOutput, error)
+}
+
 type S3Storage struct {
-	client        s3ObjectClient
-	presignClient s3PresignClient
-	bucket        string
-	publicBaseURL string
+	client          s3ObjectClient
+	presignClient   s3PresignClient
+	multipartClient s3MultipartClient
+	bucket          string
+	publicBaseURL   string
 }
 
 func NewS3Storage(ctx context.Context, cfg S3Config) (*S3Storage, error) {
@@ -80,12 +92,16 @@ func newS3StorageWithClient(client s3ObjectClient, cfg S3Config) *S3Storage {
 }
 
 func newS3StorageWithClients(client s3ObjectClient, presignClient s3PresignClient, cfg S3Config) *S3Storage {
-	return &S3Storage{
+	storage := &S3Storage{
 		client:        client,
 		presignClient: presignClient,
 		bucket:        cfg.Bucket,
 		publicBaseURL: strings.TrimRight(cfg.PublicBaseURL, "/"),
 	}
+	if multipartClient, ok := client.(s3MultipartClient); ok {
+		storage.multipartClient = multipartClient
+	}
+	return storage
 }
 
 func (s *S3Storage) Driver() string {
@@ -93,15 +109,119 @@ func (s *S3Storage) Driver() string {
 }
 
 func (s *S3Storage) Save(id string, reader io.Reader) (string, error) {
+	return s.save(id, reader, "")
+}
+
+func (s *S3Storage) SaveWithContentType(id string, reader io.Reader, contentType string) (string, error) {
+	return s.save(id, reader, strings.TrimSpace(contentType))
+}
+
+func (s *S3Storage) save(id string, reader io.Reader, contentType string) (string, error) {
 	key := cleanObjectKey(id)
-	if _, err := s.client.PutObject(context.Background(), &s3.PutObjectInput{
-		Bucket: aws.String(s.bucket),
-		Key:    aws.String(key),
-		Body:   reader,
-	}); err != nil {
+	prefix := make([]byte, s3MultipartPartSize)
+	read, readErr := io.ReadFull(reader, prefix)
+	if readErr != nil && readErr != io.EOF && readErr != io.ErrUnexpectedEOF {
+		return "", readErr
+	}
+	if read < s3MultipartPartSize || s.multipartClient == nil {
+		body := io.MultiReader(bytes.NewReader(prefix[:read]), reader)
+		input := &s3.PutObjectInput{
+			Bucket: aws.String(s.bucket),
+			Key:    aws.String(key),
+			Body:   body,
+		}
+		if contentType != "" {
+			input.ContentType = aws.String(contentType)
+		}
+		if _, err := s.client.PutObject(context.Background(), input); err != nil {
+			return "", err
+		}
+		return key, nil
+	}
+
+	if err := s.saveMultipart(context.Background(), key, contentType, prefix, reader); err != nil {
 		return "", err
 	}
 	return key, nil
+}
+
+func (s *S3Storage) saveMultipart(ctx context.Context, key, contentType string, firstPart []byte, reader io.Reader) error {
+	createInput := &s3.CreateMultipartUploadInput{
+		Bucket: aws.String(s.bucket),
+		Key:    aws.String(key),
+	}
+	if contentType != "" {
+		createInput.ContentType = aws.String(contentType)
+	}
+	created, err := s.multipartClient.CreateMultipartUpload(ctx, createInput)
+	if err != nil {
+		return err
+	}
+	uploadID := aws.ToString(created.UploadId)
+	if uploadID == "" {
+		return fmt.Errorf("S3 multipart upload did not return an upload ID")
+	}
+
+	completed := false
+	defer func() {
+		if completed {
+			return
+		}
+		_, _ = s.multipartClient.AbortMultipartUpload(context.Background(), &s3.AbortMultipartUploadInput{
+			Bucket:   aws.String(s.bucket),
+			Key:      aws.String(key),
+			UploadId: aws.String(uploadID),
+		})
+	}()
+
+	buffer := firstPart
+	parts := make([]s3types.CompletedPart, 0, 8)
+	for partNumber := int32(1); ; partNumber++ {
+		uploaded, uploadErr := s.multipartClient.UploadPart(ctx, &s3.UploadPartInput{
+			Bucket:        aws.String(s.bucket),
+			Key:           aws.String(key),
+			UploadId:      aws.String(uploadID),
+			PartNumber:    aws.Int32(partNumber),
+			ContentLength: aws.Int64(int64(len(buffer))),
+			Body:          bytes.NewReader(buffer),
+		})
+		if uploadErr != nil {
+			return uploadErr
+		}
+		parts = append(parts, s3types.CompletedPart{
+			ETag:       uploaded.ETag,
+			PartNumber: aws.Int32(partNumber),
+		})
+
+		next := buffer[:s3MultipartPartSize]
+		read, readErr := io.ReadFull(reader, next)
+		switch readErr {
+		case nil:
+			buffer = next
+		case io.EOF:
+			buffer = nil
+		case io.ErrUnexpectedEOF:
+			buffer = next[:read]
+		default:
+			return readErr
+		}
+		if len(buffer) == 0 {
+			break
+		}
+	}
+
+	if _, err := s.multipartClient.CompleteMultipartUpload(ctx, &s3.CompleteMultipartUploadInput{
+		Bucket:   aws.String(s.bucket),
+		Key:      aws.String(key),
+		UploadId: aws.String(uploadID),
+		MultipartUpload: &s3types.CompletedMultipartUpload{
+			Parts: parts,
+		},
+	}); err != nil {
+		return err
+	}
+	completed = true
+	return nil
 }
 
 func (s *S3Storage) Delete(id string) error {

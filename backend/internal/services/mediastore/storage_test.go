@@ -3,6 +3,7 @@ package mediastore
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"path/filepath"
@@ -12,18 +13,26 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	v4 "github.com/aws/aws-sdk-go-v2/aws/signer/v4"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/stretchr/testify/require"
 )
 
 type fakeS3Client struct {
-	putBucket    string
-	putKey       string
-	putBody      string
-	deleteBucket string
-	deleteKey    string
-	getBucket    string
-	getKey       string
-	getBody      string
+	putBucket     string
+	putKey        string
+	putBody       string
+	putType       string
+	deleteBucket  string
+	deleteKey     string
+	getBucket     string
+	getKey        string
+	getBody       string
+	multipartID   string
+	multipartType string
+	uploadParts   [][]byte
+	completed     []s3types.CompletedPart
+	aborted       bool
+	uploadErrAt   int
 }
 
 func (f *fakeS3Client) PutObject(_ context.Context, input *s3.PutObjectInput, _ ...func(*s3.Options)) (*s3.PutObjectOutput, error) {
@@ -34,6 +43,7 @@ func (f *fakeS3Client) PutObject(_ context.Context, input *s3.PutObjectInput, _ 
 	f.putBucket = aws.ToString(input.Bucket)
 	f.putKey = aws.ToString(input.Key)
 	f.putBody = string(body)
+	f.putType = aws.ToString(input.ContentType)
 	return &s3.PutObjectOutput{}, nil
 }
 
@@ -47,6 +57,34 @@ func (f *fakeS3Client) GetObject(_ context.Context, input *s3.GetObjectInput, _ 
 	f.getBucket = aws.ToString(input.Bucket)
 	f.getKey = aws.ToString(input.Key)
 	return &s3.GetObjectOutput{Body: io.NopCloser(bytes.NewBufferString(f.getBody))}, nil
+}
+
+func (f *fakeS3Client) CreateMultipartUpload(_ context.Context, input *s3.CreateMultipartUploadInput, _ ...func(*s3.Options)) (*s3.CreateMultipartUploadOutput, error) {
+	f.multipartID = "multipart-1"
+	f.multipartType = aws.ToString(input.ContentType)
+	return &s3.CreateMultipartUploadOutput{UploadId: aws.String(f.multipartID)}, nil
+}
+
+func (f *fakeS3Client) UploadPart(_ context.Context, input *s3.UploadPartInput, _ ...func(*s3.Options)) (*s3.UploadPartOutput, error) {
+	if f.uploadErrAt > 0 && int(aws.ToInt32(input.PartNumber)) == f.uploadErrAt {
+		return nil, errors.New("upload part failed")
+	}
+	body, err := io.ReadAll(input.Body)
+	if err != nil {
+		return nil, err
+	}
+	f.uploadParts = append(f.uploadParts, body)
+	return &s3.UploadPartOutput{ETag: aws.String("etag")}, nil
+}
+
+func (f *fakeS3Client) CompleteMultipartUpload(_ context.Context, input *s3.CompleteMultipartUploadInput, _ ...func(*s3.Options)) (*s3.CompleteMultipartUploadOutput, error) {
+	f.completed = append([]s3types.CompletedPart(nil), input.MultipartUpload.Parts...)
+	return &s3.CompleteMultipartUploadOutput{}, nil
+}
+
+func (f *fakeS3Client) AbortMultipartUpload(_ context.Context, _ *s3.AbortMultipartUploadInput, _ ...func(*s3.Options)) (*s3.AbortMultipartUploadOutput, error) {
+	f.aborted = true
+	return &s3.AbortMultipartUploadOutput{}, nil
 }
 
 type fakeS3PresignClient struct {
@@ -171,4 +209,36 @@ func TestS3StorageCreatesDirectUploadSession(t *testing.T) {
 	require.Equal(t, "media/direct.png", session.Key)
 	require.Equal(t, map[string]string{"Content-Type": "image/png"}, session.Headers)
 	require.True(t, session.ExpiresAt.After(time.Now().UTC()))
+}
+
+func TestS3StorageUsesMultipartUploadsForLargeStreams(t *testing.T) {
+	client := &fakeS3Client{}
+	storage := newS3StorageWithClient(client, S3Config{Bucket: "openpost-media"})
+	content := bytes.Repeat([]byte("a"), s3MultipartPartSize+17)
+
+	savedPath, err := storage.SaveWithContentType("media/launch.mp4", bytes.NewReader(content), "video/mp4")
+
+	require.NoError(t, err)
+	require.Equal(t, "media/launch.mp4", savedPath)
+	require.Empty(t, client.putBody)
+	require.Equal(t, "multipart-1", client.multipartID)
+	require.Equal(t, "video/mp4", client.multipartType)
+	require.Len(t, client.uploadParts, 2)
+	require.Len(t, client.uploadParts[0], s3MultipartPartSize)
+	require.Len(t, client.uploadParts[1], 17)
+	require.Equal(t, content, append(client.uploadParts[0], client.uploadParts[1]...))
+	require.Len(t, client.completed, 2)
+	require.False(t, client.aborted)
+}
+
+func TestS3StorageAbortsFailedMultipartUploads(t *testing.T) {
+	client := &fakeS3Client{uploadErrAt: 2}
+	storage := newS3StorageWithClient(client, S3Config{Bucket: "openpost-media"})
+	content := bytes.Repeat([]byte("a"), s3MultipartPartSize+17)
+
+	_, err := storage.Save("media/launch.mp4", bytes.NewReader(content))
+
+	require.ErrorContains(t, err, "upload part failed")
+	require.True(t, client.aborted)
+	require.Empty(t, client.completed)
 }

@@ -54,7 +54,11 @@
 		hasAnyContent,
 		type VariantPost
 	} from './compose/draft-utils';
-	import { minimumAccountCharacterLimit, uniquePlatformLimits } from './compose/platform-limits';
+	import {
+		minimumAccountCharacterLimit,
+		platformTextLength,
+		uniquePlatformLimits
+	} from './compose/platform-limits';
 	import { editorAccountIdAfterVariantLoad } from './compose/editor-target';
 	import {
 		accountCapabilityNeedsAttention,
@@ -151,6 +155,7 @@
 	interface Props {
 		initialPost?: InitialPost;
 		initialScheduleDate?: string | null;
+		initialScheduleTime?: string | null;
 		initialWorkspaceId?: string | null;
 		onSuccess?: () => void;
 		onDeleted?: () => void;
@@ -165,6 +170,7 @@
 	let {
 		initialPost,
 		initialScheduleDate = null,
+		initialScheduleTime = null,
 		initialWorkspaceId = null,
 		onSuccess,
 		onDeleted,
@@ -344,6 +350,7 @@
 	);
 	const localBlockers = $derived(globalFormBlockers());
 	const globalIssues = $derived(composerIssues(localBlockers, validationIssues));
+	const visibleGlobalIssues = $derived(hasContent ? globalIssues : []);
 	const accountIssues = $derived.by(() =>
 		Object.fromEntries(
 			selectedAccounts
@@ -407,12 +414,29 @@
 	const editorLimitAccounts = $derived(editorTargetAccounts);
 
 	const editorPlatformLimits = $derived.by(() => {
-		return uniquePlatformLimits(editorLimitAccounts);
+		return uniquePlatformLimits(editorLimitAccounts, resolvedCapabilities);
 	});
 
 	const editorMaxChars = $derived.by(() => {
-		return minimumAccountCharacterLimit(editorLimitAccounts);
+		return minimumAccountCharacterLimit(editorLimitAccounts, resolvedCapabilities);
 	});
+
+	function editorCharacterUsage(value: string): { count: number; limit: number } {
+		let usage = {
+			count: platformTextLength('', value),
+			limit: editorMaxChars
+		};
+		let highestRatio = usage.count / usage.limit;
+		for (const platformLimit of editorPlatformLimits) {
+			const count = platformTextLength(platformLimit.key, value);
+			const ratio = count / platformLimit.limit;
+			if (ratio > highestRatio || (ratio === highestRatio && platformLimit.limit < usage.limit)) {
+				usage = { count, limit: platformLimit.limit };
+				highestRatio = ratio;
+			}
+		}
+		return usage;
+	}
 	const effectiveRandomDelayMinutes = $derived.by(() => {
 		if (randomDelayOverride === 'default') return workspaceCtx.settings.random_delay_minutes;
 		const value = Number(randomDelayOverride);
@@ -470,7 +494,7 @@
 		return new CalendarDate(year, month, day);
 	}
 
-	function applyInitialScheduleDate(dateParam: string | null) {
+	function applyInitialScheduleDate(dateParam: string | null, timeParam: string | null) {
 		const date = parseScheduleDateParam(dateParam);
 		if (!date) return;
 		if (date.compare(workspaceClock(scheduleTimezoneLabel).date) < 0) {
@@ -478,7 +502,10 @@
 			return;
 		}
 		selectedDate = date;
-		selectedTime = slotsForDate(date)[0] ?? allTimeSlots[0] ?? '09:00';
+		selectedTime =
+			timeParam && /^([01]\d|2[0-3]):[0-5]\d$/.test(timeParam)
+				? timeParam
+				: (slotsForDate(date)[0] ?? allTimeSlots[0] ?? '09:00');
 		scheduleInputError = '';
 	}
 
@@ -509,14 +536,15 @@
 
 	async function applyInitialComposerContext(
 		dateParam: string | null,
+		timeParam: string | null,
 		workspaceParam: string | null
 	) {
-		if (!dateParam && !workspaceParam) {
+		if (!dateParam && !timeParam && !workspaceParam) {
 			appliedInitialContextKey = '';
 			return;
 		}
 
-		const contextKey = `${dateParam ?? ''}|${workspaceParam ?? ''}`;
+		const contextKey = `${dateParam ?? ''}|${timeParam ?? ''}|${workspaceParam ?? ''}`;
 		if (contextKey === appliedInitialContextKey) return;
 		appliedInitialContextKey = contextKey;
 
@@ -548,7 +576,7 @@
 			}
 		}
 
-		applyInitialScheduleDate(dateParam);
+		applyInitialScheduleDate(dateParam, timeParam);
 	}
 
 	function arraysEqual(left: string[], right: string[]): boolean {
@@ -1614,9 +1642,10 @@
 
 	$effect(() => {
 		const dateParam = initialScheduleDate;
+		const timeParam = initialScheduleTime;
 		const workspaceParam = initialWorkspaceId;
 		if (!loadingWorkspaces && !isEditMode) {
-			void applyInitialComposerContext(dateParam, workspaceParam);
+			void applyInitialComposerContext(dateParam, timeParam, workspaceParam);
 		}
 	});
 
@@ -2806,7 +2835,7 @@
 						onReset={(account) => resyncAccount(account.id)}
 						onSettings={openDestinationSettings}
 					/>
-					<ComposerValidationMenu issues={globalIssues} />
+					<ComposerValidationMenu issues={visibleGlobalIssues} />
 				{/if}
 				<DropdownMenu.Root>
 					<DropdownMenu.Trigger>
@@ -2923,7 +2952,7 @@
 						onReset={(account) => resyncAccount(account.id)}
 						onSettings={openDestinationSettings}
 					/>
-					<ComposerValidationMenu issues={globalIssues} class="size-8" />
+					<ComposerValidationMenu issues={visibleGlobalIssues} class="size-8" />
 				{/if}
 			</div>
 
@@ -3466,11 +3495,14 @@
 											<Tooltip.Root>
 												<Tooltip.Trigger>
 													{#snippet child({ props })}
+														{@const editorUsage = editorCharacterUsage(
+															getEditorContentForPost(post)
+														)}
 														<div {...props} class="flex cursor-default items-center gap-1.5">
 															<svg
 																class="h-4 w-4 {getCharCounterColor(
-																	getEditorContentForPost(post).length,
-																	editorMaxChars
+																	editorUsage.count,
+																	editorUsage.limit
 																)}"
 																viewBox="0 0 20 20"
 															>
@@ -3489,22 +3521,19 @@
 																	r="8"
 																	fill="none"
 																	stroke={getCharCounterStrokeColor(
-																		getEditorContentForPost(post).length,
-																		editorMaxChars
+																		editorUsage.count,
+																		editorUsage.limit
 																	)}
 																	stroke-width="2.5"
 																	stroke-linecap="round"
 																	stroke-dasharray={50.27}
 																	stroke-dashoffset={50.27 *
-																		Math.max(
-																			0,
-																			1 - getEditorContentForPost(post).length / editorMaxChars
-																		)}
+																		Math.max(0, 1 - editorUsage.count / editorUsage.limit)}
 																	transform="rotate(-90 10 10)"
 																/>
 															</svg>
 															<span class="text-xs text-muted-foreground/60 tabular-nums"
-																>{getEditorContentForPost(post).length}/{editorMaxChars}</span
+																>{editorUsage.count}/{editorUsage.limit}</span
 															>
 														</div>
 													{/snippet}
@@ -3515,6 +3544,10 @@
 															{m.compose_character_limits()}
 														</p>
 														{#each editorPlatformLimits as pl (pl.key)}
+															{@const platformCount = platformTextLength(
+																pl.key,
+																getEditorContentForPost(post)
+															)}
 															<div class="flex items-center justify-between gap-2 text-xs">
 																<div class="flex items-center gap-1.5">
 																	<PlatformIcon platform={pl.key} class="h-3 w-3" /><span
@@ -3522,11 +3555,9 @@
 																	>
 																</div>
 																<span
-																	class="tabular-nums {getEditorContentForPost(post).length >
-																	pl.limit
+																	class="tabular-nums {platformCount > pl.limit
 																		? 'text-red-500'
-																		: 'text-muted-foreground'}"
-																	>{getEditorContentForPost(post).length}/{pl.limit}</span
+																		: 'text-muted-foreground'}">{platformCount}/{pl.limit}</span
 																>
 															</div>
 														{/each}

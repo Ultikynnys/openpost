@@ -1,6 +1,7 @@
 package capabilities
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/openpost/backend/internal/models"
@@ -114,6 +115,14 @@ func issueMessage(issues []ValidationIssue, code string) string {
 	return ""
 }
 
+func issueCodes(issues []ValidationIssue) []string {
+	codes := make([]string, 0, len(issues))
+	for _, issue := range issues {
+		codes = append(codes, issue.Code)
+	}
+	return codes
+}
+
 func TestYouTubeCapabilitiesExposeStructuredPublishingSettings(t *testing.T) {
 	capability, ok := Find(ProviderYouTube, models.ContentProfileLongVideo)
 
@@ -132,6 +141,7 @@ func TestXCapabilitiesExposePostSettings(t *testing.T) {
 	capability, ok := Find(ProviderX, models.ContentProfileShortText)
 
 	require.True(t, ok)
+	require.Equal(t, 25_000, capability.TextLimit)
 	keys := make([]string, 0, len(capability.Settings))
 	for _, setting := range capability.Settings {
 		keys = append(keys, setting.Key)
@@ -143,6 +153,47 @@ func TestXCapabilitiesExposePostSettings(t *testing.T) {
 	require.Contains(t, keys, "reply_settings")
 	require.Contains(t, keys, "paid_partnership")
 	require.Contains(t, keys, "made_with_ai")
+}
+
+func TestApplyAccountConstraintsRevalidatesXTextAndVideo(t *testing.T) {
+	segments := []ResolveSegment{{
+		ID:   "segment-1",
+		Body: strings.Repeat("x", 500),
+		Media: []MediaItem{{
+			ID:             "video-1",
+			MimeType:       "video/mp4",
+			Size:           600 * 1024 * 1024,
+			DurationMS:     180_000,
+			AnalysisStatus: "ready",
+		}},
+	}}
+	resolved := Resolve(ProviderX, ResolveInput{
+		Intent:   IntentShortVideo,
+		Segments: segments,
+	})
+	require.NotContains(t, issueCodes(resolved.Issues), "text_too_long")
+	require.NotContains(t, issueCodes(resolved.Issues), "media_duration")
+
+	ApplyAccountConstraints(&resolved, segments, map[string]any{
+		"text_limit":                 280,
+		"max_video_duration_seconds": 140,
+		"max_video_size_bytes":       int64(512 * 1024 * 1024),
+	})
+
+	require.Contains(t, issueCodes(resolved.Issues), "text_too_long")
+	require.Contains(t, issueCodes(resolved.Issues), "media_duration")
+	require.Contains(t, issueCodes(resolved.Issues), "media_size")
+	require.False(t, resolved.Compatible)
+
+	ApplyAccountConstraints(&resolved, segments, map[string]any{
+		"text_limit":                 25_000,
+		"max_video_duration_seconds": 4 * 60 * 60,
+		"max_video_size_bytes":       int64(16 * 1024 * 1024 * 1024),
+	})
+	require.NotContains(t, issueCodes(resolved.Issues), "text_too_long")
+	require.NotContains(t, issueCodes(resolved.Issues), "media_duration")
+	require.NotContains(t, issueCodes(resolved.Issues), "media_size")
+	require.True(t, resolved.Compatible)
 }
 
 func TestValidateBlocksXMutuallyExclusiveSettings(t *testing.T) {

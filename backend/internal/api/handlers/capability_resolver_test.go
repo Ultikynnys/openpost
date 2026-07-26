@@ -1,13 +1,31 @@
 package handlers
 
 import (
+	"context"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/openpost/backend/internal/capabilities"
+	"github.com/openpost/backend/internal/models"
 	"github.com/openpost/backend/internal/platform"
 	"github.com/stretchr/testify/require"
 )
+
+type capabilityResolverTokenSource struct{}
+
+func (capabilityResolverTokenSource) GetValidAccessToken(context.Context, string) (string, error) {
+	return "access-token|access-secret", nil
+}
+
+type xCapabilityResolverAdapter struct {
+	platform.Adapter
+	result platform.AccountCapabilityResult
+}
+
+func (a xCapabilityResolverAdapter) ResolveAccountPublishingCapabilities(context.Context, string, platform.AccountCapabilityInput) (platform.AccountCapabilityResult, error) {
+	return a.result, nil
+}
 
 func TestAccountCapabilityTTLAndExpiry(t *testing.T) {
 	require.Equal(t, 5*time.Minute, accountCapabilityTTL(capabilities.ProviderTikTok))
@@ -60,4 +78,44 @@ func TestDynamicCapabilityFailureOnlyBlocksRequiredActiveChoice(t *testing.T) {
 
 	require.Equal(t, "upload", accountCapabilitySettingsKey(map[string]any{"content_posting_method": "UPLOAD"}))
 	require.Equal(t, "direct", accountCapabilitySettingsKey(map[string]any{"content_posting_method": "DIRECT_POST"}))
+}
+
+func TestXAccountCapabilityResolutionFailsClosedAndUpgradesVerifiedPremium(t *testing.T) {
+	segments := []capabilities.ResolveSegment{{
+		ID:   "segment-1",
+		Body: strings.Repeat("x", 500),
+	}}
+	account := models.SocialAccount{ID: "x-account", Platform: capabilities.ProviderX}
+
+	standard := capabilities.Resolve(capabilities.ProviderX, capabilities.ResolveInput{
+		Intent:   capabilities.IntentPost,
+		Segments: segments,
+	})
+	handler := NewCapabilityResolverHandler(nil, nil, nil, nil)
+	handler.mergeAccountCapability(t.Context(), account, "", "", nil, segments, &standard)
+	require.Equal(t, platform.XStandardTextLimit, standard.TextLimit)
+	require.False(t, standard.Compatible)
+	require.Contains(t, capabilityIssueCodes(standard.Issues), "text_too_long")
+
+	premium := capabilities.Resolve(capabilities.ProviderX, capabilities.ResolveInput{
+		Intent:   capabilities.IntentPost,
+		Segments: segments,
+	})
+	handler = NewCapabilityResolverHandler(nil, nil, map[string]platform.Adapter{
+		capabilities.ProviderX: xCapabilityResolverAdapter{
+			result: platform.XPublishingCapabilities(platform.XSubscriptionTypePremium),
+		},
+	}, capabilityResolverTokenSource{})
+	handler.mergeAccountCapability(t.Context(), account, "", "", nil, segments, &premium)
+	require.Equal(t, platform.XPremiumTextLimit, premium.TextLimit)
+	require.True(t, premium.Compatible)
+	require.NotContains(t, capabilityIssueCodes(premium.Issues), "text_too_long")
+}
+
+func capabilityIssueCodes(issues []capabilities.ValidationIssue) []string {
+	codes := make([]string, 0, len(issues))
+	for _, issue := range issues {
+		codes = append(codes, issue.Code)
+	}
+	return codes
 }

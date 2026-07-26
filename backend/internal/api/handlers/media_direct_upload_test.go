@@ -117,6 +117,7 @@ func newMediaDirectUploadTestServer(t *testing.T, storage mediastore.BlobStorage
 	handler.SetUsage(usageSvc)
 	handler.SetEntitlement(entitlement)
 	handler.RegisterRoutes(api)
+	handler.RegisterLegacyRoutes(e)
 
 	fakeStorage, _ := storage.(*fakeDirectUploadStorage)
 	return &mediaDirectUploadTestServer{echo: e, db: db, storage: fakeStorage, usage: usageSvc}
@@ -135,7 +136,7 @@ func (s *mediaDirectUploadTestServer) postJSON(t *testing.T, path string, body a
 	return rec
 }
 
-func TestCreateMediaUploadSessionRequiresDirectStorage(t *testing.T) {
+func TestCreateMediaUploadSessionSupportsLocalStreaming(t *testing.T) {
 	t.Parallel()
 
 	srv := newMediaDirectUploadTestServer(t, mediastore.NewLocalStorage(t.TempDir(), "/media"), entitlements.NewSelfHostedService())
@@ -147,15 +148,77 @@ func TestCreateMediaUploadSessionRequiresDirectStorage(t *testing.T) {
 		"size":         12,
 	})
 
-	require.Equal(t, http.StatusBadRequest, resp.Code, resp.Body.String())
-	require.Contains(t, resp.Body.String(), "direct media upload sessions require s3 storage")
+	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
+	var out map[string]any
+	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &out))
+	mediaID := out["media_id"].(string)
+	upload := out["upload"].(map[string]any)
+	require.Equal(t, http.MethodPut, upload["method"])
+	require.Equal(t, "/api/v1/media/upload-session/"+mediaID+"/content", upload["url"])
+}
+
+type zeroMediaReader struct{}
+
+func (zeroMediaReader) Read(buffer []byte) (int, error) {
+	clear(buffer)
+	return len(buffer), nil
+}
+
+func TestLocalMediaUploadSessionStreamsVideoPastBufferedLimit(t *testing.T) {
+	mediaPath := t.TempDir()
+	srv := newMediaDirectUploadTestServer(t, mediastore.NewLocalStorage(mediaPath, "/media"), entitlements.NewSelfHostedService())
+	size := MaxBufferedMediaUploadBytes + 1
+
+	createResp := srv.postJSON(t, "/api/v1/media/upload-session", map[string]any{
+		"workspace_id": "ws-1",
+		"filename":     "launch.mp4",
+		"mime_type":    "video/mp4",
+		"size":         size,
+	})
+	require.Equal(t, http.StatusOK, createResp.Code, createResp.Body.String())
+	var created map[string]any
+	require.NoError(t, json.Unmarshal(createResp.Body.Bytes(), &created))
+	mediaID := created["media_id"].(string)
+	uploadPath := created["upload"].(map[string]any)["url"].(string)
+
+	uploadReq := httptest.NewRequestWithContext(
+		t.Context(),
+		http.MethodPut,
+		uploadPath,
+		io.LimitReader(zeroMediaReader{}, size),
+	)
+	uploadReq.ContentLength = size
+	uploadReq.Header.Set("Content-Type", "video/mp4")
+	uploadReq.Header.Set("Authorization", "Bearer web-token")
+	uploadResp := httptest.NewRecorder()
+	srv.echo.ServeHTTP(uploadResp, uploadReq)
+	require.Equal(t, http.StatusNoContent, uploadResp.Code, uploadResp.Body.String())
+
+	completeResp := srv.postJSON(t, "/api/v1/media/upload-session/"+mediaID+"/complete", map[string]any{
+		"workspace_id": "ws-1",
+	})
+	require.Equal(t, http.StatusOK, completeResp.Code, completeResp.Body.String())
+	var completed MediaUploadResult
+	require.NoError(t, json.Unmarshal(completeResp.Body.Bytes(), &completed))
+	require.Equal(t, size, completed.Size)
+
+	var media models.MediaAttachment
+	require.NoError(t, srv.db.NewSelect().Model(&media).Where("id = ?", mediaID).Scan(t.Context()))
+	require.Equal(t, mediaReadyStatus, media.ProcessingStatus)
+	require.Equal(t, size, media.Size)
+	require.Equal(t, "video/mp4", media.MimeType)
+	require.FileExists(t, media.FilePath)
 }
 
 func TestValidateBrandFontContent(t *testing.T) {
 	t.Parallel()
 
-	valid := append([]byte{'w', 'O', 'F', '2'}, make([]byte, 24)...)
-	require.NoError(t, validateMediaAssetContent("brand_font", "brand.woff2", "font/woff2", valid))
+	validWOFF2 := append([]byte{'w', 'O', 'F', '2'}, make([]byte, 24)...)
+	validTTF := append([]byte{0x00, 0x01, 0x00, 0x00}, make([]byte, 24)...)
+	validOTF := append([]byte{'O', 'T', 'T', 'O'}, make([]byte, 24)...)
+	require.NoError(t, validateMediaAssetContent("brand_font", "brand.woff2", "font/woff2", validWOFF2))
+	require.NoError(t, validateMediaAssetContent("brand_font", "brand.ttf", "font/ttf", validTTF))
+	require.NoError(t, validateMediaAssetContent("brand_font", "brand.otf", "font/otf", validOTF))
 	require.ErrorContains(
 		t,
 		validateMediaAssetContent("brand_font", "brand.woff2", "font/woff2", []byte("not-a-font")),
@@ -163,8 +226,13 @@ func TestValidateBrandFontContent(t *testing.T) {
 	)
 	require.ErrorContains(
 		t,
-		validateMediaAssetContent("brand_font", "brand.ttf", "font/woff2", valid),
-		".woff2 extension",
+		validateMediaAssetContent("brand_font", "brand.ttf", "font/woff2", validTTF),
+		"MIME type",
+	)
+	require.ErrorContains(
+		t,
+		validateMediaAssetContent("brand_font", "brand.woff", "font/woff", validWOFF2),
+		".woff2, .ttf, or .otf",
 	)
 	require.NoError(t, validateMediaAssetContent("library", "notes.txt", "text/plain", []byte("notes")))
 }
@@ -205,6 +273,54 @@ func TestCreateMediaUploadSessionReservesPendingMedia(t *testing.T) {
 	require.Equal(t, "launch.png", media.OriginalFilename)
 	require.Equal(t, "pending:"+mediaID, media.FileHash)
 	require.Equal(t, "Launch card", media.AltText)
+}
+
+func TestCreateMediaUploadSessionAppliesTypeSpecificSizeLimits(t *testing.T) {
+	t.Parallel()
+
+	storage := newFakeDirectUploadStorage()
+	srv := newMediaDirectUploadTestServer(t, storage, entitlements.NewSelfHostedService())
+
+	videoResp := srv.postJSON(t, "/api/v1/media/upload-session", map[string]any{
+		"workspace_id": "ws-1",
+		"filename":     "launch.mp4",
+		"mime_type":    "video/mp4",
+		"size":         MaxMediaUploadBytes,
+	})
+	require.Equal(t, http.StatusOK, videoResp.Code, videoResp.Body.String())
+	var videoSession map[string]any
+	require.NoError(t, json.Unmarshal(videoResp.Body.Bytes(), &videoSession))
+	videoID := videoSession["media_id"].(string)
+	require.Equal(
+		t,
+		"/api/v1/media/upload-session/"+videoID+"/content",
+		videoSession["upload"].(map[string]any)["url"],
+	)
+
+	oversizeVideoResp := srv.postJSON(t, "/api/v1/media/upload-session", map[string]any{
+		"workspace_id": "ws-1",
+		"filename":     "launch.mp4",
+		"mime_type":    "video/mp4",
+		"size":         MaxMediaUploadBytes + 1,
+	})
+	require.Equal(t, http.StatusBadRequest, oversizeVideoResp.Code, oversizeVideoResp.Body.String())
+	require.Contains(t, oversizeVideoResp.Body.String(), "16 GiB")
+
+	oversizeImageResp := srv.postJSON(t, "/api/v1/media/upload-session", map[string]any{
+		"workspace_id": "ws-1",
+		"filename":     "launch.png",
+		"mime_type":    "image/png",
+		"size":         MaxBufferedMediaUploadBytes + 1,
+	})
+	require.Equal(t, http.StatusBadRequest, oversizeImageResp.Code, oversizeImageResp.Body.String())
+	require.Contains(t, oversizeImageResp.Body.String(), "50MB")
+}
+
+func TestMediaUploadSessionTTLScalesForLargeVideos(t *testing.T) {
+	require.Equal(t, MediaUploadSessionTTL, mediaUploadSessionTTL(12))
+	require.Greater(t, mediaUploadSessionTTL(MaxDirectMediaUploadBytes), time.Hour)
+	require.Greater(t, mediaUploadSessionTTL(MaxMediaUploadBytes), 4*time.Hour)
+	require.LessOrEqual(t, mediaUploadSessionTTL(MaxMediaUploadBytes), maxMediaUploadSessionTTL)
 }
 
 func TestCompleteMediaUploadSessionFinalizesUploadedObject(t *testing.T) {

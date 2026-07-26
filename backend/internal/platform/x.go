@@ -9,6 +9,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -21,10 +22,32 @@ type XAdapter struct {
 	consumerKey    string
 	consumerSecret string
 	redirectURI    string
+	apiBaseURL     string
+	uploadBaseURL  string
 	requestStore   XRequestStore
 	requestMeta    sync.Map
 	cleanupDone    chan struct{}
 }
+
+const (
+	xDefaultAPIBaseURL               = "https://api.twitter.com"
+	xDefaultUploadBaseURL            = "https://upload.twitter.com"
+	XCapabilityStateSubscriptionType = "x_subscription_type"
+	XSubscriptionTypeUnknown         = "Unknown"
+	XSubscriptionTypeNone            = "None"
+	XSubscriptionTypeBasic           = "Basic"
+	XSubscriptionTypePremium         = "Premium"
+	XSubscriptionTypePremiumPlus     = "PremiumPlus"
+	XStandardTextLimit               = 280
+	XPremiumTextLimit                = 25_000
+	XStandardVideoDurationSeconds    = 140
+	XPremiumVideoDurationSeconds     = 4 * 60 * 60
+	XStandardVideoSizeBytes          = 512 * 1024 * 1024
+	XPremiumVideoSizeBytes           = 16 * 1024 * 1024 * 1024
+	XCapabilityStateFreshness        = 24 * time.Hour
+	xAccountCapabilityRevision       = "x-subscription-type.2026-07-26"
+	xMediaUploadChunkSize            = 5 * 1024 * 1024
+)
 
 type XRequestStore interface {
 	Save(requestToken, requestSecret, workspaceID, userID string, createdAt time.Time) error
@@ -43,6 +66,8 @@ func NewXAdapter(clientID, clientSecret, redirectURI string) *XAdapter {
 		consumerKey:    clientID,
 		consumerSecret: clientSecret,
 		redirectURI:    redirectURI,
+		apiBaseURL:     xDefaultAPIBaseURL,
+		uploadBaseURL:  xDefaultUploadBaseURL,
 		cleanupDone:    make(chan struct{}),
 	}
 	go x.cleanupLoop()
@@ -232,38 +257,176 @@ func (x *XAdapter) RefreshToken(_ context.Context, _ RefreshTokenInput) (*TokenR
 }
 
 func (x *XAdapter) GetProfile(ctx context.Context, accessToken string) (*UserProfile, error) {
-	respBody, err := x.doSignedRequest(ctx, accessToken, "GET", "https://api.twitter.com/2/users/me?user.fields=id,name,username", nil, nil)
+	user, err := x.getAuthenticatedUser(ctx, accessToken, true)
+	if err != nil {
+		// Keep account connection compatible with X API plans that do not
+		// return subscription_type. Capability resolution will fail closed.
+		user, err = x.getAuthenticatedUser(ctx, accessToken, false)
+	}
 	if err != nil {
 		return nil, err
 	}
 
-	var userResp struct {
-		Data struct {
-			ID       string `json:"id"`
-			Name     string `json:"name"`
-			Username string `json:"username"`
-		} `json:"data"`
-	}
-	if err := json.Unmarshal(respBody, &userResp); err != nil {
-		return nil, fmt.Errorf("decoding X profile: %w", err)
-	}
-
 	return &UserProfile{
-		ID:          userResp.Data.ID,
-		Username:    userResp.Data.Username,
-		DisplayName: userResp.Data.Name,
+		ID:          user.ID,
+		Username:    user.Username,
+		DisplayName: user.Name,
+		CapabilityState: map[string]string{
+			XCapabilityStateSubscriptionType: normalizeXSubscriptionType(user.SubscriptionType),
+		},
 	}, nil
 }
 
-func (x *XAdapter) UploadMedia(ctx context.Context, accessToken, _ string, mimeType string, reader io.Reader) (string, error) {
-	data, err := io.ReadAll(reader)
+type xAuthenticatedUser struct {
+	ID               string `json:"id"`
+	Name             string `json:"name"`
+	Username         string `json:"username"`
+	SubscriptionType string `json:"subscription_type"`
+}
+
+func (x *XAdapter) getAuthenticatedUser(ctx context.Context, accessToken string, includeSubscription bool) (xAuthenticatedUser, error) {
+	fields := "id,name,username"
+	if includeSubscription {
+		fields += ",subscription_type"
+	}
+	endpoint := x.apiURL("/2/users/me") + "?user.fields=" + url.QueryEscape(fields)
+	respBody, err := x.doSignedRequest(ctx, accessToken, http.MethodGet, endpoint, nil, nil)
 	if err != nil {
-		return "", fmt.Errorf("reading media: %w", err)
+		return xAuthenticatedUser{}, err
 	}
 
-	totalBytes := len(data)
-	isVideo := strings.Contains(mimeType, "video")
-	isGIF := strings.Contains(mimeType, "gif")
+	var userResp struct {
+		Data xAuthenticatedUser `json:"data"`
+	}
+	if err := json.Unmarshal(respBody, &userResp); err != nil {
+		return xAuthenticatedUser{}, fmt.Errorf("decoding X profile: %w", err)
+	}
+	if strings.TrimSpace(userResp.Data.ID) == "" {
+		return xAuthenticatedUser{}, fmt.Errorf("x profile response did not include an account id")
+	}
+	return userResp.Data, nil
+}
+
+func (x *XAdapter) ResolveAccountPublishingCapabilities(ctx context.Context, accessToken string, _ AccountCapabilityInput) (AccountCapabilityResult, error) {
+	user, err := x.getAuthenticatedUser(ctx, accessToken, true)
+	if err != nil {
+		return AccountCapabilityResult{}, fmt.Errorf("checking X subscription: %w", err)
+	}
+	return XPublishingCapabilities(user.SubscriptionType), nil
+}
+
+func XPublishingCapabilities(subscriptionType string) AccountCapabilityResult {
+	subscriptionType = normalizeXSubscriptionType(subscriptionType)
+	textLimit := XStandardTextLimit
+	videoDurationSeconds := XStandardVideoDurationSeconds
+	videoSizeBytes := int64(XStandardVideoSizeBytes)
+	if XSubscriptionHasPremiumLimits(subscriptionType) {
+		textLimit = XPremiumTextLimit
+		videoDurationSeconds = XPremiumVideoDurationSeconds
+		videoSizeBytes = XPremiumVideoSizeBytes
+	}
+	return AccountCapabilityResult{
+		Revision: xAccountCapabilityRevision,
+		Constraints: map[string]interface{}{
+			"text_limit":                 textLimit,
+			"max_video_duration_seconds": videoDurationSeconds,
+			"max_video_size_bytes":       videoSizeBytes,
+		},
+		State: map[string]string{
+			XCapabilityStateSubscriptionType: subscriptionType,
+		},
+	}
+}
+
+func XSubscriptionHasPremiumLimits(subscriptionType string) bool {
+	switch normalizeXSubscriptionType(subscriptionType) {
+	case XSubscriptionTypeBasic, XSubscriptionTypePremium, XSubscriptionTypePremiumPlus:
+		return true
+	default:
+		return false
+	}
+}
+
+func XStoredCapabilityHasPremiumLimits(stateJSON string, checkedAt, now time.Time) bool {
+	age := now.Sub(checkedAt)
+	if checkedAt.IsZero() || age < -5*time.Minute || age > XCapabilityStateFreshness {
+		return false
+	}
+	state := map[string]string{}
+	if err := json.Unmarshal([]byte(stateJSON), &state); err != nil {
+		return false
+	}
+	return XSubscriptionHasPremiumLimits(state[XCapabilityStateSubscriptionType])
+}
+
+func normalizeXSubscriptionType(subscriptionType string) string {
+	switch strings.ToLower(strings.TrimSpace(subscriptionType)) {
+	case "none":
+		return XSubscriptionTypeNone
+	case "basic":
+		return XSubscriptionTypeBasic
+	case "premium":
+		return XSubscriptionTypePremium
+	case "premiumplus", "premium_plus", "premium+":
+		return XSubscriptionTypePremiumPlus
+	default:
+		return XSubscriptionTypeUnknown
+	}
+}
+
+func (x *XAdapter) apiURL(path string) string {
+	baseURL := strings.TrimRight(strings.TrimSpace(x.apiBaseURL), "/")
+	if baseURL == "" {
+		baseURL = xDefaultAPIBaseURL
+	}
+	return baseURL + "/" + strings.TrimLeft(path, "/")
+}
+
+func (x *XAdapter) uploadURL(path string) string {
+	baseURL := strings.TrimRight(strings.TrimSpace(x.uploadBaseURL), "/")
+	if baseURL == "" {
+		baseURL = xDefaultUploadBaseURL
+	}
+	return baseURL + "/" + strings.TrimLeft(path, "/")
+}
+
+func (x *XAdapter) UploadMedia(ctx context.Context, accessToken, _ string, mimeType string, reader io.Reader) (string, error) {
+	tempFile, err := os.CreateTemp("", "openpost-x-media-*")
+	if err != nil {
+		return "", fmt.Errorf("creating temporary X media file: %w", err)
+	}
+	tempPath := tempFile.Name()
+	defer func() {
+		_ = tempFile.Close()
+		_ = os.Remove(tempPath)
+	}()
+
+	totalBytes, err := io.Copy(tempFile, reader)
+	if err != nil {
+		return "", fmt.Errorf("buffering X media upload: %w", err)
+	}
+	if _, err := tempFile.Seek(0, io.SeekStart); err != nil {
+		return "", fmt.Errorf("rewinding X media upload: %w", err)
+	}
+	return x.UploadMediaWithMetadata(ctx, accessToken, "", UploadMediaRequest{
+		MimeType: mimeType,
+		Size:     totalBytes,
+		Reader:   tempFile,
+	})
+}
+
+func (x *XAdapter) UploadMediaWithMetadata(ctx context.Context, accessToken, _ string, req UploadMediaRequest) (string, error) {
+	if req.Reader == nil {
+		return "", fmt.Errorf("x media reader is required")
+	}
+	if req.Size <= 0 {
+		return "", fmt.Errorf("x media size must be known before upload")
+	}
+
+	mimeType := strings.TrimSpace(req.MimeType)
+	normalizedMIMEType := strings.ToLower(mimeType)
+	isVideo := strings.Contains(normalizedMIMEType, "video")
+	isGIF := strings.Contains(normalizedMIMEType, "gif")
 
 	mediaCategory := "tweet_image"
 	if isVideo {
@@ -272,11 +435,18 @@ func (x *XAdapter) UploadMedia(ctx context.Context, accessToken, _ string, mimeT
 		mediaCategory = "tweet_gif"
 	}
 
-	if totalBytes <= 5*1024*1024 && !isVideo && !isGIF {
+	if req.Size <= xMediaUploadChunkSize && !isVideo && !isGIF {
+		data, err := io.ReadAll(io.LimitReader(req.Reader, req.Size+1))
+		if err != nil {
+			return "", fmt.Errorf("reading X image: %w", err)
+		}
+		if int64(len(data)) != req.Size {
+			return "", fmt.Errorf("x image size changed before upload")
+		}
 		return x.uploadMediaSimple(ctx, accessToken, data, mediaCategory)
 	}
 
-	return x.uploadMediaChunked(ctx, accessToken, mimeType, mediaCategory, data, totalBytes)
+	return x.uploadMediaChunked(ctx, accessToken, mimeType, mediaCategory, req.Reader, req.Size)
 }
 
 func (x *XAdapter) uploadMediaSimple(ctx context.Context, accessToken string, data []byte, mediaCategory string) (string, error) {
@@ -296,7 +466,7 @@ func (x *XAdapter) uploadMediaSimple(ctx context.Context, accessToken string, da
 		return "", fmt.Errorf("closing multipart writer: %w", closeErr)
 	}
 
-	respBody, err := x.doSignedRequest(ctx, accessToken, "POST", "https://upload.twitter.com/1.1/media/upload.json", &body, map[string]string{
+	respBody, err := x.doSignedRequest(ctx, accessToken, "POST", x.uploadURL("/1.1/media/upload.json"), &body, map[string]string{
 		headerContentType: writer.FormDataContentType(),
 	})
 	if err != nil {
@@ -315,14 +485,14 @@ func (x *XAdapter) uploadMediaSimple(ctx context.Context, accessToken string, da
 	return result.MediaIDString, nil
 }
 
-func (x *XAdapter) uploadMediaChunked(ctx context.Context, accessToken, mimeType, mediaCategory string, data []byte, totalBytes int) (string, error) {
+func (x *XAdapter) uploadMediaChunked(ctx context.Context, accessToken, mimeType, mediaCategory string, reader io.Reader, totalBytes int64) (string, error) {
 	initValues := url.Values{}
 	initValues.Set("command", "INIT")
-	initValues.Set("total_bytes", strconv.Itoa(totalBytes))
+	initValues.Set("total_bytes", strconv.FormatInt(totalBytes, 10))
 	initValues.Set("media_type", mimeType)
 	initValues.Set("media_category", mediaCategory)
 
-	respBody, err := x.doSignedRequest(ctx, accessToken, "POST", "https://upload.twitter.com/1.1/media/upload.json", strings.NewReader(initValues.Encode()), map[string]string{
+	respBody, err := x.doSignedRequest(ctx, accessToken, "POST", x.uploadURL("/1.1/media/upload.json"), strings.NewReader(initValues.Encode()), map[string]string{
 		headerContentType: contentTypeForm,
 	})
 	if err != nil {
@@ -341,12 +511,17 @@ func (x *XAdapter) uploadMediaChunked(ctx context.Context, accessToken, mimeType
 	}
 	mediaID := initResp.MediaIDString
 
-	chunkSize := 5 * 1024 * 1024
 	segmentIndex := 0
-	for offset := 0; offset < totalBytes; offset += chunkSize {
-		end := offset + chunkSize
-		if end > totalBytes {
-			end = totalBytes
+	remaining := totalBytes
+	chunk := make([]byte, xMediaUploadChunkSize)
+	for remaining > 0 {
+		chunkBytes := int64(len(chunk))
+		if remaining < chunkBytes {
+			chunkBytes = remaining
+		}
+		n, readErr := io.ReadFull(reader, chunk[:chunkBytes])
+		if readErr != nil {
+			return "", fmt.Errorf("reading X media segment %d: %w", segmentIndex, readErr)
 		}
 
 		var body bytes.Buffer
@@ -358,27 +533,28 @@ func (x *XAdapter) uploadMediaChunked(ctx context.Context, accessToken, mimeType
 		if createErr != nil {
 			return "", fmt.Errorf("x APPEND create form file: %w", createErr)
 		}
-		if _, writeErr := part.Write(data[offset:end]); writeErr != nil {
+		if _, writeErr := part.Write(chunk[:n]); writeErr != nil {
 			return "", fmt.Errorf("x APPEND write segment %d: %w", segmentIndex, writeErr)
 		}
 		if closeErr := writer.Close(); closeErr != nil {
 			return "", fmt.Errorf("x APPEND close writer: %w", closeErr)
 		}
 
-		_, err = x.doSignedRequest(ctx, accessToken, "POST", "https://upload.twitter.com/1.1/media/upload.json", &body, map[string]string{
+		_, err = x.doSignedRequest(ctx, accessToken, "POST", x.uploadURL("/1.1/media/upload.json"), &body, map[string]string{
 			headerContentType: writer.FormDataContentType(),
 		})
 		if err != nil {
 			return "", fmt.Errorf("x APPEND segment %d: %w", segmentIndex, err)
 		}
 		segmentIndex++
+		remaining -= int64(n)
 	}
 
 	finalizeValues := url.Values{}
 	finalizeValues.Set("command", "FINALIZE")
 	finalizeValues.Set("media_id", mediaID)
 
-	respBody, err = x.doSignedRequest(ctx, accessToken, "POST", "https://upload.twitter.com/1.1/media/upload.json", strings.NewReader(finalizeValues.Encode()), map[string]string{
+	respBody, err = x.doSignedRequest(ctx, accessToken, "POST", x.uploadURL("/1.1/media/upload.json"), strings.NewReader(finalizeValues.Encode()), map[string]string{
 		headerContentType: contentTypeForm,
 	})
 	if err != nil {
@@ -417,7 +593,7 @@ func (x *XAdapter) waitForMediaProcessing(ctx context.Context, accessToken, medi
 			}
 		}
 
-		statusURL := "https://upload.twitter.com/1.1/media/upload.json?command=STATUS&media_id=" + url.QueryEscape(mediaID)
+		statusURL := x.uploadURL("/1.1/media/upload.json") + "?command=STATUS&media_id=" + url.QueryEscape(mediaID)
 		respBody, err := x.doSignedRequest(ctx, accessToken, "GET", statusURL, nil, nil)
 		if err != nil {
 			return fmt.Errorf("x STATUS check: %w", err)
@@ -464,7 +640,7 @@ func (x *XAdapter) Publish(ctx context.Context, accessToken, _ string, req *Publ
 			if err != nil {
 				return "", fmt.Errorf("marshaling X media metadata: %w", err)
 			}
-			_, err = x.doSignedRequest(ctx, accessToken, "POST", "https://upload.twitter.com/1.1/media/metadata/create.json", bytes.NewReader(metaBody), map[string]string{
+			_, err = x.doSignedRequest(ctx, accessToken, "POST", x.uploadURL("/1.1/media/metadata/create.json"), bytes.NewReader(metaBody), map[string]string{
 				headerContentType: contentTypeJSON,
 			})
 			if err != nil {
@@ -482,7 +658,7 @@ func (x *XAdapter) Publish(ctx context.Context, accessToken, _ string, req *Publ
 		return "", fmt.Errorf("marshaling X tweet payload: %w", err)
 	}
 
-	respBody, err := x.doSignedRequest(ctx, accessToken, "POST", "https://api.twitter.com/2/tweets", bytes.NewReader(body), map[string]string{
+	respBody, err := x.doSignedRequest(ctx, accessToken, "POST", x.apiURL("/2/tweets"), bytes.NewReader(body), map[string]string{
 		headerContentType: contentTypeJSON,
 	})
 	if err != nil {

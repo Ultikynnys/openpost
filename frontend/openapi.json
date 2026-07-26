@@ -582,6 +582,11 @@
 						"description": "Account username",
 						"type": "string"
 					},
+					"capability_checked_at": {
+						"description": "When account-specific publishing limits were last verified",
+						"format": "date-time",
+						"type": "string"
+					},
 					"id": {
 						"description": "Account ID",
 						"type": "string"
@@ -593,6 +598,11 @@
 					"is_active": {
 						"description": "Whether the account is active",
 						"type": "boolean"
+					},
+					"limit_profile": {
+						"description": "Account-specific publishing limit profile",
+						"enum": ["standard", "x-premium"],
+						"type": "string"
 					},
 					"platform": {
 						"description": "Platform name",
@@ -1766,7 +1776,7 @@
 						"type": "string"
 					},
 					"complete_url": {
-						"description": "API path to call after the direct upload succeeds",
+						"description": "API path to call after the upload succeeds",
 						"type": "string"
 					},
 					"media_id": {
@@ -1775,7 +1785,7 @@
 					},
 					"upload": {
 						"$ref": "#/components/schemas/DirectMediaUploadTarget",
-						"description": "Direct upload request details"
+						"description": "Streaming upload request details"
 					}
 				},
 				"required": ["media_id", "upload", "complete_url"],
@@ -2738,7 +2748,7 @@
 						"type": "object"
 					},
 					"method": {
-						"description": "HTTP method to use for the direct upload",
+						"description": "HTTP method to use for the upload",
 						"type": "string"
 					},
 					"object_key": {
@@ -2746,7 +2756,7 @@
 						"type": "string"
 					},
 					"url": {
-						"description": "Presigned upload URL",
+						"description": "Presigned or authenticated upload target URL",
 						"type": "string"
 					}
 				},
@@ -3006,7 +3016,7 @@
 						"type": "integer"
 					},
 					"direct_upload_supported": {
-						"description": "Whether this instance supports direct-to-storage uploads",
+						"description": "Whether this instance supports direct-to-storage or server-streamed upload sessions",
 						"type": "boolean"
 					},
 					"internal_bytes": {
@@ -14241,7 +14251,7 @@
 						"description": "Internal Server Error"
 					}
 				},
-				"summary": "Create a direct-to-storage media upload session",
+				"summary": "Create a streaming media upload session",
 				"tags": ["Media"]
 			}
 		},
@@ -14332,7 +14342,7 @@
 						"description": "Internal Server Error"
 					}
 				},
-				"summary": "Complete a direct-to-storage media upload session",
+				"summary": "Complete a streaming media upload session",
 				"tags": ["Media"]
 			}
 		},

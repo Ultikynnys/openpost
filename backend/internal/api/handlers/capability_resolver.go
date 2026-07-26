@@ -117,6 +117,7 @@ func (h *CapabilityResolverHandler) RegisterRoutes(api huma.API) {
 				input.Body.Locale,
 				input.Body.Region,
 				input.Body.Settings[account.ID],
+				segments,
 				&resolved,
 			)
 			output.Body.Accounts = append(output.Body.Accounts, ResolvedAccountCapability{
@@ -229,8 +230,12 @@ func (h *CapabilityResolverHandler) mergeAccountCapability(
 	locale string,
 	region string,
 	settings map[string]any,
+	segments []capabilities.ResolveSegment,
 	resolved *capabilities.ResolvedCapability,
 ) {
+	if account.Platform == capabilities.ProviderX {
+		applyDynamicCapabilityConstraints(resolved, standardXPublishingCapabilities().Constraints, segments)
+	}
 	adapter := h.adapterForResolveAccount(account)
 	provider, ok := adapter.(platform.AccountCapabilityProvider)
 	if !ok || h.tokenSource == nil {
@@ -256,6 +261,9 @@ func (h *CapabilityResolverHandler) mergeAccountCapability(
 			h.addDynamicCapabilityFailure(resolved, settings, err.Error())
 			return
 		}
+		if persistErr := persistAccountCapabilityState(ctx, h.db, account.ID, result); persistErr != nil {
+			h.addDynamicCapabilityFailure(resolved, settings, "Account limits were verified but could not be cached.")
+		}
 		expiresAt = time.Now().UTC().Add(accountCapabilityTTL(account.Platform))
 		h.storeAccountCapability(cacheKey, result, expiresAt)
 	}
@@ -279,7 +287,7 @@ func (h *CapabilityResolverHandler) mergeAccountCapability(
 	for key, value := range result.Constraints {
 		resolved.ActiveConstraints[key] = value
 	}
-	applyDynamicCapabilityConstraints(resolved, result.Constraints)
+	applyDynamicCapabilityConstraints(resolved, result.Constraints, segments)
 	for settingIndex := range resolved.Settings {
 		setting := &resolved.Settings[settingIndex]
 		if available, exists := result.AvailableFeatures[setting.Key]; exists {
@@ -313,16 +321,8 @@ func (h *CapabilityResolverHandler) mergeAccountCapability(
 	}
 }
 
-func applyDynamicCapabilityConstraints(resolved *capabilities.ResolvedCapability, constraints map[string]interface{}) {
-	if value, ok := dynamicInt(constraints["text_limit"]); ok && value > 0 {
-		resolved.TextLimit = value
-	}
-	if value, ok := dynamicInt(constraints["media_max_count"]); ok && value > 0 {
-		resolved.Media.MaxCount = value
-	}
-	if value, ok := dynamicInt(constraints["max_video_duration_seconds"]); ok && value > 0 {
-		resolved.Media.MaxDurationSeconds = value
-	}
+func applyDynamicCapabilityConstraints(resolved *capabilities.ResolvedCapability, constraints map[string]interface{}, segments []capabilities.ResolveSegment) {
+	capabilities.ApplyAccountConstraints(resolved, segments, constraints)
 	resolved.ActiveConstraints["text_limit"] = resolved.TextLimit
 	resolved.ActiveConstraints["media"] = resolved.Media
 	for index := range resolved.Settings {
@@ -364,6 +364,19 @@ func dynamicInt(value interface{}) (int, bool) {
 		return int(typed), true
 	case float64:
 		return int(typed), true
+	default:
+		return 0, false
+	}
+}
+
+func dynamicInt64(value interface{}) (int64, bool) {
+	switch typed := value.(type) {
+	case int:
+		return int64(typed), true
+	case int64:
+		return typed, true
+	case float64:
+		return int64(typed), true
 	default:
 		return 0, false
 	}

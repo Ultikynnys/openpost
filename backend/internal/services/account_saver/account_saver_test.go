@@ -232,6 +232,32 @@ func TestSaveAccountPersistsGrantedScopesFromTokenExtra(t *testing.T) {
 	require.Equal(t, "https://www.googleapis.com/auth/youtube https://www.googleapis.com/auth/youtube.upload", account.GrantedScopes)
 }
 
+func TestSaveAccountPersistsCapabilityState(t *testing.T) {
+	t.Parallel()
+
+	db := createTestDB(t)
+	encryptor := crypto.NewTokenEncryptor("test-secret-key-for-testing-only")
+	saver := NewAccountSaver(db, encryptor)
+	ctx := context.Background()
+	seedWorkspaceMember(t, db, "workspace-capabilities", "user-capabilities")
+
+	account, err := saver.SaveAccountFromInput(ctx, SaveAccountInput{
+		UserID:          "user-capabilities",
+		PlatformName:    "x",
+		WorkspaceID:     "workspace-capabilities",
+		AccountID:       "x-user",
+		AccountUsername: "premium-user",
+		Token:           &platform.TokenResult{AccessToken: "token"},
+		CapabilityState: map[string]string{
+			platform.XCapabilityStateSubscriptionType: platform.XSubscriptionTypePremium,
+		},
+	})
+
+	require.NoError(t, err)
+	require.JSONEq(t, `{"x_subscription_type":"Premium"}`, account.CapabilityState)
+	require.NotZero(t, account.CapabilityCheckedAt)
+}
+
 func TestSaveAccountGeneratesUniqueSlugs(t *testing.T) {
 	t.Parallel()
 

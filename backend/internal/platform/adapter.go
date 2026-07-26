@@ -28,6 +28,7 @@ type MediaItem struct {
 	ID               string
 	MimeType         string
 	Size             int64
+	DurationMS       int64
 	OriginalFilename string
 }
 
@@ -90,9 +91,10 @@ func isVideoMime(mimeType string) bool {
 
 // UserProfile is a platform-agnostic user identity returned by GetProfile.
 type UserProfile struct {
-	ID          string
-	Username    string
-	DisplayName string
+	ID              string
+	Username        string
+	DisplayName     string
+	CapabilityState map[string]string
 }
 
 // AccountSelectionOption is a user-visible account, page, or channel that can
@@ -168,6 +170,7 @@ type AccountCapabilityResult struct {
 	Constraints       map[string]interface{}
 	AvailableFeatures map[string]bool
 	UnavailableReason string
+	State             map[string]string
 }
 
 // AccountCapabilityProvider resolves provider state that varies per connected
