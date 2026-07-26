@@ -4,7 +4,7 @@
 
 ## Platform
 
-Web and Android (Capacitor)
+adaptive
 
 ## Users
 

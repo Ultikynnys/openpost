@@ -131,13 +131,14 @@ export const platforms = [
 		tag: 'Posts, threads, media',
 		status: 'Available',
 		statusDetail: 'Publishing path implemented',
-		description: 'Draft, preview, and schedule standard X posts, media posts, links, and reply threads.',
-		heroTitle: 'Build an X reply chain without losing the 280-character boundary.',
+		description:
+			'Draft, preview, and schedule X posts, media posts, links, and reply threads with limits resolved for each connected account.',
+		heroTitle: 'Build an X reply chain with the right limit for each account.',
 		preview: {
 			label: 'Reply chain',
 			headline: 'Three connected posts',
 			body: 'Each part is reviewed and scheduled as its own X post.',
-			detail: '280 characters per post',
+			detail: '280 standard · up to 25,000 subscribed',
 			chips: ['Post 1', 'Reply 2', 'Reply 3']
 		},
 		accountRequirement: 'An X developer app with OAuth 1.0a user authentication enabled.',
@@ -148,18 +149,31 @@ export const platforms = [
 			'Connect the X account from Social accounts, then publish a small test post.'
 		],
 		formats: [
-			{ name: 'Post, thread, or link', text: '280 characters', media: 'Text only' },
-			{ name: 'Image post', text: '280 characters', media: '1-4 JPEG, PNG, WebP, or GIF images' },
-			{ name: 'Video', text: '280 characters', media: '1 MP4 or QuickTime video' }
+			{
+				name: 'Post, thread, or link',
+				text: '280 standard · up to 25,000 subscribed',
+				media: 'Text only'
+			},
+			{
+				name: 'Image post',
+				text: '280 standard · up to 25,000 subscribed',
+				media: '1-4 JPEG, PNG, WebP, or GIF images'
+			},
+			{
+				name: 'Video',
+				text: '280 standard · up to 25,000 subscribed',
+				media: '1 MP4 or QuickTime video'
+			}
 		],
 		limits: [
-			`${PLATFORM_LIMITS.x.charLimit} characters`,
+			`${PLATFORM_LIMITS.x.charLimit} weighted characters for standard accounts`,
+			'Up to 25,000 weighted characters for verified Basic, Premium, or Premium+ accounts',
+			'Video: 140 seconds and 512 MiB standard; up to 4 hours and 16 GiB subscribed',
 			PLATFORM_LIMITS.x.media,
-			'OpenPost does not assume X Premium long-post access',
 			'Your X API tier and quota still apply'
 		],
 		limitations: [
-			'Connected accounts do not expose a verified long-post entitlement, so OpenPost enforces 280 characters.',
+			'OpenPost uses standard limits when X cannot verify a connected account subscription tier.',
 			'Media publishing needs OAuth 1.0a access-token and secret pairs.',
 			'Polls, quote posts, and other format settings remain subject to the account API tier.'
 		],
@@ -519,8 +533,8 @@ export const launchProviderMatrix = [
 		name: 'X',
 		short: 'x',
 		state: 'Available',
-		text: 'Posts and links · 280 characters',
-		media: '1-4 images or 1 video',
+		text: 'Posts and links · 280 standard, up to 25,000 subscribed',
+		media: '1-4 images or 1 account-tier-aware video',
 		threads: 'Reply chains',
 		schedule: 'Supported',
 		verify: 'OAuth 1.0a, API tier, quota, and each planned format'

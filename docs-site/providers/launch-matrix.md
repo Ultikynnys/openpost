@@ -28,7 +28,7 @@ The running instance is the source of truth for configuration. Inspect **Account
 
 | Provider | Current OpenPost paths | Main caveat before a launch claim |
 | --- | --- | --- |
-| X | Text, links, up to four images, one short video, replies, scheduling | Video, quota, and account tier need exact live verification |
+| X | Tier-aware text, links, up to four images, one video, replies, scheduling | Video, quota, and account tier need exact live verification |
 | Mastodon | Text, links, up to four attachments, replies, scheduling | Limits vary by instance; verify media processing and reply behavior |
 | Bluesky | Text, links, up to four images, one MP4 video, AT Protocol replies, scheduling | Verify video and reply refs against the target account |
 | LinkedIn | Text, links, image, document, video, comment-based child posts, scheduling | Permissions, app review, and video behavior can block the path |

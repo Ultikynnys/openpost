@@ -14,6 +14,10 @@ All notable changes to this project are documented in this file.
 
 ### Changed
 
+- Added TTF and OTF brand-font uploads alongside WOFF2, simplified brand-asset editing, and reused Studio font and color selectors for brand text styles.
+- Applied X text, video-duration, and video-size limits per connected account by reading the authenticated account's subscription tier, with standard limits used when the tier cannot be verified.
+- Streamed large local and S3-compatible video uploads with bounded memory and multipart object writes so account-specific X video limits are reachable through the media library.
+- Rebuilt Calendar and Activity from the canonical publication inventory, added month and week planning, workspace, platform, and status filters, published history, and scheduled-item rescheduling, and carried selected dates and times into every composer.
 - Merged uploads and editable designs into one Media library, moved the workspace Brand kit into Settings, polished Media details with a stable thumbnail-led layout, and removed the product demo link from the profile menu.
 - Kept the Settings navigation available while managing social accounts so moving between workspace settings no longer opens a disconnected page.
 - Moved CLI and MCP text-post and publication mutations onto the current revision-aware authoring contract, kept linked publications and publish jobs synchronized, and reserved `--profile` for CLI profiles by naming content filters `--content-profile`.
@@ -34,6 +38,7 @@ All notable changes to this project are documented in this file.
 - Kept resized Studio images flush with their frames by preserving source-pixel geometry during Fabric transforms, and kept canvas selection synchronized after document updates.
 - Applied hidden and locked Studio group state to every descendant during incremental canvas updates, and recomputed cover/contain image geometry after frame aspect-ratio changes so the editor matches saved previews and exports.
 - Kept the text-and-thread composer's compatibility draft in sync when normalized publications are created or edited through REST and MCP, including an upgrade backfill for existing publications.
+- Kept MCP source-text updates synchronized with the linked text-and-thread editor row so agent edits reopen with the current content and revision.
 - Routed uploads through the storage mode advertised by the server instead of probing an unsupported direct-upload endpoint, and raised the bounded frontend build heap to the verified bundle minimum.
 
 ## [1.27.9] - 2026-07-25

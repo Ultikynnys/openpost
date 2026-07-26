@@ -2,7 +2,7 @@
 	import PageHero from '../_components/PageHero.svelte';
 	import { siteUrl } from '../_marketing';
 
-	const effectiveDate = '24 July 2026';
+	const effectiveDate = '26 July 2026';
 </script>
 
 <svelte:head>
@@ -51,13 +51,14 @@
 				values, prompts, schedules, publication status, and job history.
 			</li>
 			<li>
-				<strong>Brand font records:</strong> custom WOFF2 files, family and style metadata, and
-				the account and time associated with the required font-license acknowledgement.
+				<strong>Brand font records:</strong> custom WOFF2, TTF, or OTF files, family and style
+				metadata, and the account and time associated with the required font-license
+				acknowledgement.
 			</li>
 			<li>
 				<strong>Connected-account data:</strong> social provider, account identifier, username,
-				profile metadata, granted permissions, and encrypted access or refresh tokens. OpenPost
-				does not ask for your social-network password.
+				profile and capability metadata such as an X subscription tier, granted permissions, and
+				encrypted access or refresh tokens. OpenPost does not ask for your social-network password.
 			</li>
 			<li>
 				<strong>Security data:</strong> password hashes, session identifiers, passkey public-key

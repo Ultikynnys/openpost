@@ -8,7 +8,7 @@ Provider-native API capabilities are not the same as production-ready OpenPost s
 
 | Provider  | Text      | Images                                     | Video                                                                                          | Threading                                                | Scheduling | Variants  |
 | --------- | --------- | ------------------------------------------ | ---------------------------------------------------------------------------------------------- | -------------------------------------------------------- | ---------- | --------- |
-| X         | Supported | Up to 4 images                             | Implemented, real-account verification still required                                          | Replies                                                  | Supported  | Supported |
+| X         | 280 standard or 25,000 subscribed weighted characters | Up to 4 images                             | One video; 140 seconds/512 MiB standard or 4 hours/16 GiB subscribed; real-account verification still required | Replies                                                  | Supported  | Supported |
 | Mastodon  | Supported | Up to 4 attachments                        | Implemented through media upload + publish flow, real-account verification still required      | Replies                                                  | Supported  | Supported |
 | Bluesky   | Supported | Up to 4 images                             | Implemented for one MP4 video via `app.bsky.video.*`, real-account verification still required | AT Protocol reply refs                                   | Supported  | Supported |
 | LinkedIn  | Supported | One image, 2-20 images, or a document      | Implemented, with live-account verification still recommended                                  | Thread children are posted as comments                   | Supported  | Supported |
@@ -27,6 +27,7 @@ No planned provider adapter is exposed as connectable today. Future provider roa
 - **Video support is uneven** — implementation exists across multiple providers, but support is still provider-dependent and some paths need end-to-end verification with real accounts.
 - **TikTok and YouTube remain preview integrations** — both publishing paths exist. TikTok Direct Post requires app audit approval, while unaudited Google projects can force YouTube uploads to private. Verify each production account and format before relying on either integration.
 - **Capability gates are deliberate** — account-, permission-, review-, partner-, or provider-search-gated controls remain unavailable with a reason until OpenPost can verify access.
+- **X limits are resolved per account** — Basic, Premium, and Premium+ accounts use subscribed text and video limits when X verifies the tier. Unknown or stale tiers use standard limits.
 - **Planned providers are discovery-only** — adding a future provider to provider app config fails until its adapter is implemented.
 - **Provider APIs can change** — social platforms may change their APIs, rate limits, or app review requirements at any time.
 - **OAuth tokens require HTTPS** — callbacks need a valid domain with TLS for OAuth to work.

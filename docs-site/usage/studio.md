@@ -18,9 +18,9 @@ Editors can save a design as a new workspace template or deliberately replace an
 
 ## Brand assets
 
-Manage the workspace brand kit from **Media → Brand**. It can hold named colors, default page backgrounds, logos and marks, whole-layer text styles, and custom WOFF2 fonts.
+Manage the workspace brand kit from **Settings → Brand**. It can hold named colors, default page backgrounds, logos and marks, whole-layer text styles, and custom WOFF2, TTF, or OTF fonts.
 
-Custom font upload requires a license acknowledgement. OpenPost validates the WOFF2 file in the browser and on the server. A font cannot be removed while a design or template still refers to it. Applying a brand style copies its current values into the selected layer.
+Custom font upload requires a license acknowledgement. OpenPost checks the selected file in the browser, previews it with the browser font engine, and validates its WOFF2, TrueType, or OpenType signature and size on the server. A font cannot be removed while a design or template still refers to it. Applying a brand style copies its current font, color, and text settings into the selected layer.
 
 ## Background removal
 

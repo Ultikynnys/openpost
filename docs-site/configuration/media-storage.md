@@ -51,7 +51,7 @@ When `OPENPOST_EDITION=cloud`, OpenPost refuses to start unless:
 
 `OPENPOST_S3_PUBLIC_BASE_URL` is required in cloud mode because provider APIs need stable, publicly reachable media URLs.
 
-The S3-compatible storage driver supports server-side uploads and direct browser-to-S3 upload sessions.
+The S3-compatible storage driver supports direct browser-to-S3 upload sessions and bounded-memory multipart storage for large files.
 
 For direct browser uploads, the bucket must allow CORS requests from the OpenPost app origin. For Cloudflare R2, apply a bucket CORS rule like this, replacing the origin with your `OPENPOST_APP_URL`:
 
@@ -73,15 +73,17 @@ For direct browser uploads, the bucket must allow CORS requests from the OpenPos
 
 Save the policy as `cors.json`, apply it with `wrangler r2 bucket cors set <bucket> --file cors.json`, and verify it with `wrangler r2 bucket cors list <bucket>`. Without this bucket policy, the browser rejects the presigned `PUT` during its preflight request and reports `Failed to fetch`.
 
-Direct upload flow:
+Streaming upload flow:
 
 1. Call `POST /api/v1/media/upload-session` with `workspace_id`, `filename`, `mime_type`, and `size`.
-2. Upload the file to the returned presigned `PUT` target with the returned headers.
+2. Upload the file to the returned `PUT` target with the returned headers.
 3. Call `POST /api/v1/media/upload-session/{media_id}/complete` with the same `workspace_id`.
 
-OpenPost reserves a pending media record before issuing the presigned URL, then finalizes the upload by reading the stored object, computing metadata and the SHA-256 dedupe hash, creating thumbnails when possible, recording media-upload usage, and marking the media ready. Local filesystem deployments should keep using the existing multipart upload endpoint.
+S3-compatible storage returns a presigned browser-to-bucket target for files within the provider's single-request limit. Larger files use an authenticated OpenPost target and are written to the bucket as 8 MiB multipart parts. Local storage uses the same authenticated streaming target and writes directly to disk. Configure the reverse proxy in front of OpenPost to accept the largest video size you intend to support; X subscribed accounts can upload videos as large as 16 GiB.
 
-The web app uses the direct upload session flow automatically when the server supports it. Local filesystem deployments and older servers fall back to multipart uploads.
+OpenPost reserves a pending media record before issuing the target, then finalizes the upload by streaming the stored object through metadata checks and the SHA-256 dedupe hash, creating thumbnails when possible, recording media-upload usage, and marking the media ready. Large files are not retained in application memory.
+
+The web app uses upload sessions automatically for current local and S3-compatible deployments. It falls back to the legacy multipart endpoint only when the server does not advertise upload-session support.
 
 OpenPost stores destination-scoped provider media state for uploaded media IDs
 so failed destination retries can reuse an existing provider upload. Providers

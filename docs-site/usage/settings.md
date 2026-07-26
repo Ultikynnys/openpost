@@ -11,6 +11,7 @@ Workspace settings belong to the selected workspace.
 - Media cleanup policy
 - Posting schedule and default slot behavior
 - Natural posting delay
+- Brand colors, marks, text styles, and custom WOFF2, TTF, or OTF fonts
 
 Use this tab when the setting should differ between brands, clients, or projects.
 

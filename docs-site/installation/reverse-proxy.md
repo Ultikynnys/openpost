@@ -29,9 +29,11 @@ openpost.example.com {
 server {
   listen 443 ssl http2;
   server_name openpost.example.com;
+  client_max_body_size 16G;
 
   location / {
     proxy_pass http://127.0.0.1:8080;
+    proxy_request_buffering off;
     proxy_set_header Host $host;
     proxy_set_header X-Forwarded-Host $host;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -39,6 +41,12 @@ server {
   }
 }
 ```
+
+## Large video uploads
+
+Set the proxy and any upstream CDN request-body limit to the largest video size you plan to accept. X subscribed accounts can use up to 16 GiB. Keep request buffering disabled so the proxy does not write a complete multi-gigabyte upload to temporary storage before OpenPost receives it. The Nginx example above shows both settings; Caddy does not impose a request-body limit unless you configure one.
+
+S3-compatible deployments send files up to 5 GB directly to the bucket. Larger files and local-storage uploads pass through the reverse proxy as an authenticated stream. See [Media Storage](/configuration/media-storage) for the full flow.
 
 ## Callback URLs
 
