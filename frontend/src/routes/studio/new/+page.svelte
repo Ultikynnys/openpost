@@ -148,7 +148,7 @@
 
 	function goBack(): void {
 		if (history.length > 1) history.back();
-		else void goto(resolve('/media?view=designs' as '/'));
+		else void goto(resolve('/media' as '/'));
 	}
 
 	function presetName(preset: StudioPreset): string {

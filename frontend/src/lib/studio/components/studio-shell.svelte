@@ -71,6 +71,9 @@
 	import PanelLeftIcon from 'lucide-svelte/icons/panel-left';
 	import LoaderIcon from 'lucide-svelte/icons/loader-2';
 	import WandIcon from 'lucide-svelte/icons/wand-sparkles';
+	import CircleDashedIcon from 'lucide-svelte/icons/circle-dashed';
+	import PencilIcon from 'lucide-svelte/icons/pencil';
+	import PaintBucketIcon from 'lucide-svelte/icons/paint-bucket';
 	import GroupIcon from 'lucide-svelte/icons/group';
 	import UngroupIcon from 'lucide-svelte/icons/ungroup';
 	import MoreIcon from 'lucide-svelte/icons/ellipsis';
@@ -606,7 +609,7 @@
 			if (saved && previewPending) await runPreview('close');
 		}
 		if (history.length > 1) history.back();
-		else void goto(resolve('/media?view=designs' as '/'));
+		else void goto(resolve('/media' as '/'));
 	}
 
 	async function openHistory(): Promise<void> {
@@ -809,7 +812,8 @@
 		}
 		if (modifier && key === 'd') {
 			event.preventDefault();
-			editor.selectLayer('');
+			if (editor.pixelSelection) editor.clearPixelSelection();
+			else editor.selectLayer('');
 			return;
 		}
 		if (modifier && key === 'c') {
@@ -846,15 +850,17 @@
 		}
 		const tools: Record<string, StudioTool> = {
 			v: 'select',
-			m: 'marquee',
 			l: 'lasso',
 			w: 'magic_wand',
+			p: 'pencil',
+			g: 'bucket',
 			t: 'text',
 			u: 'shape',
 			h: 'hand',
 			z: 'zoom'
 		};
-		if (tools[key]) setTool(tools[key]);
+		if (key === 'm') setTool(event.shiftKey ? 'ellipse_marquee' : 'marquee');
+		else if (tools[key]) setTool(tools[key]);
 		if (key === 'f') focusedCanvas = !focusedCanvas;
 		if (key === 'tab') {
 			event.preventDefault();
@@ -1110,16 +1116,19 @@
 		{ key: 'select', label: m.studio_select(), icon: MousePointerIcon },
 		{ key: 'text', label: m.studio_text(), icon: TypeIcon },
 		{ key: 'shape', label: m.studio_shape(), icon: SquareIcon },
+		{ key: 'pencil', label: m.studio_pencil(), icon: PencilIcon },
+		{ key: 'bucket', label: m.studio_paint_bucket(), icon: PaintBucketIcon },
 		{ key: 'hand', label: m.studio_hand(), icon: HandIcon },
 		{ key: 'zoom', label: m.studio_zoom(), icon: ZoomInIcon }
 	];
 
 	function isSelectionTool(tool: StudioTool): tool is StudioSelectionTool {
-		return ['select', 'marquee', 'lasso', 'magic_wand'].includes(tool);
+		return ['select', 'marquee', 'ellipse_marquee', 'lasso', 'magic_wand'].includes(tool);
 	}
 
 	function selectionToolLabel(tool: StudioTool): string {
 		if (tool === 'marquee') return m.studio_rectangle_select();
+		if (tool === 'ellipse_marquee') return m.studio_ellipse_select();
 		if (tool === 'lasso') return m.studio_lasso_select();
 		if (tool === 'magic_wand') return m.studio_magic_select();
 		return m.studio_select();
@@ -1135,7 +1144,8 @@
 />
 
 <div
-	class="studio-theme flex h-dvh min-h-0 flex-col overflow-hidden bg-background text-foreground"
+	class="studio-theme fixed inset-0 flex min-h-0 flex-col overflow-hidden bg-background text-foreground"
+	data-testid="studio-shell"
 	{@attach initializeShell}
 >
 	<div class="sr-only" aria-live="polite">{statusAnnouncement}</div>
@@ -1439,6 +1449,8 @@
 											>
 												{#if editor.activeTool === 'marquee'}
 													<RectangleSelectIcon />
+												{:else if editor.activeTool === 'ellipse_marquee'}
+													<CircleDashedIcon />
 												{:else if editor.activeTool === 'lasso'}
 													<LassoSelectIcon />
 												{:else if editor.activeTool === 'magic_wand'}
@@ -1465,6 +1477,11 @@
 								<RectangleSelectIcon />
 								{m.studio_rectangle_select()}
 								<span class="ml-auto text-xs text-muted-foreground">M</span>
+							</DropdownMenu.Item>
+							<DropdownMenu.Item onclick={() => setTool('ellipse_marquee')}>
+								<CircleDashedIcon />
+								{m.studio_ellipse_select()}
+								<span class="ml-auto text-xs text-muted-foreground">⇧M</span>
 							</DropdownMenu.Item>
 							<DropdownMenu.Item onclick={() => setTool('lasso')}>
 								<LassoSelectIcon />
@@ -1635,18 +1652,18 @@
 	</div>
 
 	<nav
-		class="grid h-[calc(4rem+env(safe-area-inset-bottom))] shrink-0 grid-cols-7 border-t bg-background px-1 pt-1 pb-[env(safe-area-inset-bottom)] lg:hidden"
+		class="flex h-[calc(4rem+env(safe-area-inset-bottom))] shrink-0 snap-x overflow-x-auto border-t bg-background px-1 pt-1 pb-[env(safe-area-inset-bottom)] lg:hidden"
 		aria-label={m.studio_tools()}
 	>
 		<Button
 			variant="ghost"
-			class="h-12 min-w-0 flex-col gap-0 px-0 text-[11px] md:h-12"
+			class="h-12 w-16 shrink-0 snap-start flex-col gap-0 px-0 text-[11px] md:h-12"
 			onclick={() => (mobileSheet = 'assets')}
 		>
 			<PanelLeftIcon />
 			{m.studio_add()}
 		</Button>
-		{#each tools.filter( (tool) => ['select', 'text', 'shape', 'hand'].includes(tool.key) ) as tool (tool.key)}
+		{#each tools.filter( (tool) => ['select', 'text', 'shape', 'pencil', 'hand'].includes(tool.key) ) as tool (tool.key)}
 			{@const Icon = tool.icon}
 			{#if tool.key === 'select'}
 				<DropdownMenu.Root>
@@ -1655,11 +1672,13 @@
 							<Button
 								{...props}
 								variant={isSelectionTool(editor.activeTool) ? 'secondary' : 'ghost'}
-								class="h-12 min-w-0 flex-col gap-0 px-0 text-[11px] md:h-12"
-								aria-label={selectionToolLabel(editor.activeTool)}
+								class="h-12 w-16 shrink-0 snap-start flex-col gap-0 px-0 text-[11px] md:h-12"
+								aria-label={m.studio_select()}
 							>
 								{#if editor.activeTool === 'marquee'}
 									<RectangleSelectIcon />
+								{:else if editor.activeTool === 'ellipse_marquee'}
+									<CircleDashedIcon />
 								{:else if editor.activeTool === 'lasso'}
 									<LassoSelectIcon />
 								{:else if editor.activeTool === 'magic_wand'}
@@ -1680,6 +1699,10 @@
 							<RectangleSelectIcon />
 							{m.studio_rectangle_select()}
 						</DropdownMenu.Item>
+						<DropdownMenu.Item onclick={() => setTool('ellipse_marquee')}>
+							<CircleDashedIcon />
+							{m.studio_ellipse_select()}
+						</DropdownMenu.Item>
 						<DropdownMenu.Item onclick={() => setTool('lasso')}>
 							<LassoSelectIcon />
 							{m.studio_lasso_select()}
@@ -1697,7 +1720,7 @@
 							<Button
 								{...props}
 								variant={editor.activeTool === 'shape' ? 'secondary' : 'ghost'}
-								class="h-12 min-w-0 flex-col gap-0 px-0 text-[11px] md:h-12"
+								class="h-12 w-16 shrink-0 snap-start flex-col gap-0 px-0 text-[11px] md:h-12"
 								disabled={!editor.canEdit}
 							>
 								<SquareIcon />
@@ -1724,10 +1747,43 @@
 						</DropdownMenu.Item>
 					</DropdownMenu.Content>
 				</DropdownMenu.Root>
+			{:else if tool.key === 'pencil'}
+				<DropdownMenu.Root>
+					<DropdownMenu.Trigger>
+						{#snippet child({ props })}
+							<Button
+								{...props}
+								variant={['pencil', 'bucket'].includes(editor.activeTool) ? 'secondary' : 'ghost'}
+								class="h-12 w-16 shrink-0 snap-start flex-col gap-0 px-0 text-[11px] md:h-12"
+								disabled={!editor.canEdit}
+								aria-label={editor.activeTool === 'bucket'
+									? m.studio_paint_bucket()
+									: m.studio_pencil()}
+							>
+								{#if editor.activeTool === 'bucket'}
+									<PaintBucketIcon />
+								{:else}
+									<PencilIcon />
+								{/if}
+								{m.studio_paint()}
+							</Button>
+						{/snippet}
+					</DropdownMenu.Trigger>
+					<DropdownMenu.Content side="top" align="start" class="min-w-44">
+						<DropdownMenu.Item onclick={() => setTool('pencil')}>
+							<PencilIcon />
+							{m.studio_pencil()}
+						</DropdownMenu.Item>
+						<DropdownMenu.Item onclick={() => setTool('bucket')}>
+							<PaintBucketIcon />
+							{m.studio_paint_bucket()}
+						</DropdownMenu.Item>
+					</DropdownMenu.Content>
+				</DropdownMenu.Root>
 			{:else}
 				<Button
 					variant={editor.activeTool === tool.key ? 'secondary' : 'ghost'}
-					class="h-12 min-w-0 flex-col gap-0 px-0 text-[11px] md:h-12"
+					class="h-12 w-16 shrink-0 snap-start flex-col gap-0 px-0 text-[11px] md:h-12"
 					onclick={() => setTool(tool.key)}
 					disabled={!editor.canEdit && !['select', 'hand'].includes(tool.key)}
 				>
@@ -1738,7 +1794,7 @@
 		{/each}
 		<Button
 			variant="ghost"
-			class="h-12 min-w-0 flex-col gap-0 px-0 text-[11px] md:h-12"
+			class="h-12 w-16 shrink-0 snap-start flex-col gap-0 px-0 text-[11px] md:h-12"
 			onclick={() => (mobileSheet = 'layers')}
 		>
 			<LayersIcon />
@@ -1746,7 +1802,7 @@
 		</Button>
 		<Button
 			variant="ghost"
-			class="h-12 min-w-0 flex-col gap-0 px-0 text-[11px] md:h-12"
+			class="h-12 w-16 shrink-0 snap-start flex-col gap-0 px-0 text-[11px] md:h-12"
 			onclick={() => (mobileSheet = 'properties')}
 		>
 			<SlidersIcon />

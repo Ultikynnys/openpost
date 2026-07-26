@@ -19,14 +19,11 @@
 	import ServerIcon from 'lucide-svelte/icons/server';
 	import CheckIcon from 'lucide-svelte/icons/check';
 	import Volume2Icon from 'lucide-svelte/icons/volume-2';
-	import CirclePlayIcon from 'lucide-svelte/icons/circle-play';
 	import MessageSquareIcon from 'lucide-svelte/icons/message-square-text';
 	import BuildingIcon from 'lucide-svelte/icons/building-2';
 	import ChevronDownIcon from 'lucide-svelte/icons/chevron-down';
 	import { setMode, userPrefersMode } from 'mode-watcher';
 	import { ui } from '$lib/stores/ui.svelte';
-
-	const productDemoUrl = 'https://youtu.be/_mZf3HzQaN8';
 
 	type AppearanceMode = 'system' | 'light' | 'dark';
 
@@ -174,21 +171,6 @@
 	{m.sidebar_interface_sounds()}
 </DropdownMenu.CheckboxItem>
 <LanguageSwitcher variant="menu" touchSize={showDestinations} />
-<DropdownMenu.Item>
-	{#snippet child({ props })}
-		<a
-			{...props}
-			class={[props.class, menuItemClass, 'gap-3']}
-			href={productDemoUrl}
-			target="_blank"
-			rel="noreferrer"
-			onclick={onNavigate}
-		>
-			<CirclePlayIcon class="size-4 text-muted-foreground" />
-			{m.sidebar_watch_demo()}
-		</a>
-	{/snippet}
-</DropdownMenu.Item>
 <DropdownMenu.Item
 	class={[menuItemClass, 'gap-3']}
 	onclick={() => {

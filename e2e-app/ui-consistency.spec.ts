@@ -223,7 +223,28 @@ for (const viewport of viewports) {
     if (viewport.width < 1024) {
       await expect(mobileSettingsSelector).toBeVisible();
       await mobileSettingsSelector.click();
+      const settingsMenuViewport = page.locator(
+        '[data-slot="select-content"] [data-slot="select-viewport"]',
+      );
+      await expect(settingsMenuViewport).toBeVisible();
+      await page.setViewportSize({ width: viewport.width, height: 320 });
+      await expect
+        .poll(() =>
+          settingsMenuViewport.evaluate(
+            (element) => element.scrollHeight > element.clientHeight,
+          ),
+        )
+        .toBe(true);
+      await settingsMenuViewport.evaluate((element) => {
+        element.scrollTop = element.scrollHeight;
+      });
+      await expect
+        .poll(() =>
+          settingsMenuViewport.evaluate((element) => element.scrollTop),
+        )
+        .toBeGreaterThan(0);
       await page.getByRole("option", { name: "Posting schedule" }).click();
+      await page.setViewportSize(viewport);
     } else {
       await expect(mobileSettingsSelector).toBeHidden();
       await page.locator('[data-settings-tab="schedule"]').click();
@@ -251,6 +272,10 @@ for (const viewport of viewports) {
     await expect(page).toHaveURL(/\/accounts$/);
     await expect(page.getByTestId("settings-navigation")).toBeVisible();
     await expectNoDocumentOverflow(page);
+
+    await page.goto("/settings?tab=accounts");
+    await expect(page).toHaveURL(/\/accounts$/);
+    await expect(page.getByTestId("settings-navigation")).toBeVisible();
   });
 }
 

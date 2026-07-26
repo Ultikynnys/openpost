@@ -77,7 +77,7 @@
 			<h1 class="text-lg font-semibold">{m.studio_open_failed_title()}</h1>
 			<p class="mt-2 text-sm text-muted-foreground">{error}</p>
 			<a
-				href={resolve('/media?view=designs' as '/')}
+				href={resolve('/media' as '/')}
 				class="mt-5 inline-flex text-sm font-medium text-primary hover:underline"
 			>
 				{m.studio_return_media()}

@@ -98,6 +98,33 @@ func TestStudioDesignSaveUsesOptimisticConcurrencyAndTracksMedia(t *testing.T) {
 		},
 		Mask: &StudioLayerMask{Shape: "circle", Inset: 4},
 	})
+	payload.Pages[0].Layers = append(payload.Pages[0].Layers, StudioLayer{
+		ID:      "paint-layer-1",
+		Type:    "paint",
+		Name:    "Pencil",
+		Visible: true,
+		Opacity: 1,
+		Transform: StudioTransform{
+			X:      10,
+			Y:      12,
+			Width:  120,
+			Height: 32,
+		},
+		Paint: &StudioPaintValue{
+			Kind:         "stroke",
+			Color:        "#f97316",
+			Size:         12,
+			Opacity:      1,
+			SourceWidth:  120,
+			SourceHeight: 32,
+			Points: []StudioPaintPoint{
+				{X: 2, Y: 4},
+				{X: 110, Y: 24},
+			},
+			Spans: []StudioPaintSpan{},
+		},
+		Effects: &StudioLayerEffects{BlendMode: "normal"},
+	})
 	update := &UpdateStudioDesignInput{PathID: created.Body.ID}
 	update.Body.ExpectedRevision = 1
 	update.Body.Document = payload
@@ -107,6 +134,8 @@ func TestStudioDesignSaveUsesOptimisticConcurrencyAndTracksMedia(t *testing.T) {
 	require.Equal(t, "Launch updated", saved.Body.Document.Title)
 	require.Equal(t, "overlay", saved.Body.Document.Pages[0].Layers[0].Effects.BlendMode)
 	require.Equal(t, "circle", saved.Body.Document.Pages[0].Layers[0].Mask.Shape)
+	require.Equal(t, "paint", saved.Body.Document.Pages[0].Layers[1].Type)
+	require.Equal(t, "stroke", saved.Body.Document.Pages[0].Layers[1].Paint.Kind)
 
 	count, err := handler.db.NewSelect().Model((*models.DesignMediaReference)(nil)).
 		Where("design_document_id = ? AND media_id = ?", created.Body.ID, "media-1").

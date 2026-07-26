@@ -5452,12 +5452,13 @@ export interface components {
             name: string;
             /** Format: double */
             opacity: number;
+            paint?: components["schemas"]["StudioPaintValue"];
             parent_id?: string;
             shape?: components["schemas"]["StudioShapeValue"];
             text?: components["schemas"]["StudioTextValue"];
             transform: components["schemas"]["StudioTransform"];
             /** @enum {string} */
-            type: "text" | "image" | "shape" | "group";
+            type: "text" | "image" | "shape" | "paint" | "group";
             visible: boolean;
         };
         StudioLayerEffects: {
@@ -5481,6 +5482,35 @@ export interface components {
             layers: components["schemas"]["StudioLayer"][] | null;
             name: string;
             preview_media_id?: string;
+        };
+        StudioPaintPoint: {
+            /** Format: double */
+            x: number;
+            /** Format: double */
+            y: number;
+        };
+        StudioPaintSpan: {
+            /** Format: double */
+            width: number;
+            /** Format: double */
+            x: number;
+            /** Format: double */
+            y: number;
+        };
+        StudioPaintValue: {
+            color: string;
+            /** @enum {string} */
+            kind: "stroke" | "fill";
+            /** Format: double */
+            opacity: number;
+            points: components["schemas"]["StudioPaintPoint"][] | null;
+            /** Format: double */
+            size: number;
+            /** Format: double */
+            source_height: number;
+            /** Format: double */
+            source_width: number;
+            spans: components["schemas"]["StudioPaintSpan"][] | null;
         };
         StudioPreset: {
             /**

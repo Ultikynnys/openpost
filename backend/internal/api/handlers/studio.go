@@ -134,6 +134,28 @@ type StudioShapeValue struct {
 	Radius      float64 `json:"radius"`
 }
 
+type StudioPaintPoint struct {
+	X float64 `json:"x"`
+	Y float64 `json:"y"`
+}
+
+type StudioPaintSpan struct {
+	Y     float64 `json:"y"`
+	X     float64 `json:"x"`
+	Width float64 `json:"width"`
+}
+
+type StudioPaintValue struct {
+	Kind         string             `json:"kind" enum:"stroke,fill"`
+	Color        string             `json:"color"`
+	Size         float64            `json:"size" minimum:"0" maximum:"512"`
+	Opacity      float64            `json:"opacity" minimum:"0" maximum:"1"`
+	SourceWidth  float64            `json:"source_width" minimum:"0"`
+	SourceHeight float64            `json:"source_height" minimum:"0"`
+	Points       []StudioPaintPoint `json:"points"`
+	Spans        []StudioPaintSpan  `json:"spans"`
+}
+
 type StudioShadowEffect struct {
 	Color    string  `json:"color"`
 	Opacity  float64 `json:"opacity" minimum:"0" maximum:"1"`
@@ -156,7 +178,7 @@ type StudioLayerMask struct {
 
 type StudioLayer struct {
 	ID        string              `json:"id"`
-	Type      string              `json:"type" enum:"text,image,shape,group"`
+	Type      string              `json:"type" enum:"text,image,shape,paint,group"`
 	Name      string              `json:"name"`
 	ParentID  string              `json:"parent_id,omitempty"`
 	Visible   bool                `json:"visible"`
@@ -166,6 +188,7 @@ type StudioLayer struct {
 	Text      *StudioTextValue    `json:"text,omitempty"`
 	Image     *StudioImageValue   `json:"image,omitempty"`
 	Shape     *StudioShapeValue   `json:"shape,omitempty"`
+	Paint     *StudioPaintValue   `json:"paint,omitempty"`
 	Effects   *StudioLayerEffects `json:"effects,omitempty"`
 	Mask      *StudioLayerMask    `json:"mask,omitempty"`
 }
@@ -1485,7 +1508,7 @@ func validateStudioLayer(layer StudioLayer) error {
 	}
 	switch layer.Type {
 	case "text":
-		if layer.Text == nil || layer.Image != nil || layer.Shape != nil {
+		if layer.Text == nil || layer.Image != nil || layer.Shape != nil || layer.Paint != nil {
 			return fmt.Errorf("text layers require only text properties")
 		}
 		if layer.Text.FontSize <= 0 ||
@@ -1526,7 +1549,7 @@ func validateStudioLayer(layer StudioLayer) error {
 			return fmt.Errorf("text curve is invalid")
 		}
 	case "image":
-		if layer.Image == nil || layer.Text != nil || layer.Shape != nil || strings.TrimSpace(layer.Image.MediaID) == "" {
+		if layer.Image == nil || layer.Text != nil || layer.Shape != nil || layer.Paint != nil || strings.TrimSpace(layer.Image.MediaID) == "" {
 			return fmt.Errorf("image layers require only image properties and a media ID")
 		}
 		crop := layer.Image.Crop
@@ -1561,7 +1584,7 @@ func validateStudioLayer(layer StudioLayer) error {
 			return fmt.Errorf("image blur must be between 0 and 1")
 		}
 	case "shape":
-		if layer.Shape == nil || layer.Text != nil || layer.Image != nil {
+		if layer.Shape == nil || layer.Text != nil || layer.Image != nil || layer.Paint != nil {
 			return fmt.Errorf("shape layers require only shape properties")
 		}
 		if !oneOfStudioString(layer.Shape.Kind, "rectangle", "rounded_rectangle", "ellipse", "line") ||
@@ -1574,8 +1597,41 @@ func validateStudioLayer(layer StudioLayer) error {
 		if !studioHexColor.MatchString(layer.Shape.Fill) || !studioHexColor.MatchString(layer.Shape.Stroke) {
 			return fmt.Errorf("shape colors must use hexadecimal values")
 		}
+	case "paint":
+		if layer.Paint == nil || layer.Text != nil || layer.Image != nil || layer.Shape != nil {
+			return fmt.Errorf("paint layers require only paint properties")
+		}
+		if !oneOfStudioString(layer.Paint.Kind, "stroke", "fill") ||
+			!studioHexColor.MatchString(layer.Paint.Color) ||
+			!finiteStudioNumber(layer.Paint.Size) ||
+			layer.Paint.Size <= 0 ||
+			layer.Paint.Size > 512 ||
+			!finiteStudioNumber(layer.Paint.Opacity) ||
+			layer.Paint.Opacity < 0 ||
+			layer.Paint.Opacity > 1 ||
+			!finiteStudioNumber(layer.Paint.SourceWidth) ||
+			!finiteStudioNumber(layer.Paint.SourceHeight) ||
+			layer.Paint.SourceWidth <= 0 ||
+			layer.Paint.SourceHeight <= 0 ||
+			len(layer.Paint.Points) > 100_000 ||
+			len(layer.Paint.Spans) > 250_000 {
+			return fmt.Errorf("paint layer properties are invalid")
+		}
+		for _, point := range layer.Paint.Points {
+			if !finiteStudioNumber(point.X) || !finiteStudioNumber(point.Y) {
+				return fmt.Errorf("paint layer points must be finite")
+			}
+		}
+		for _, span := range layer.Paint.Spans {
+			if !finiteStudioNumber(span.X) ||
+				!finiteStudioNumber(span.Y) ||
+				!finiteStudioNumber(span.Width) ||
+				span.Width <= 0 {
+				return fmt.Errorf("paint layer spans are invalid")
+			}
+		}
 	case "group":
-		if layer.Text != nil || layer.Image != nil || layer.Shape != nil || layer.Effects != nil || layer.Mask != nil {
+		if layer.Text != nil || layer.Image != nil || layer.Shape != nil || layer.Paint != nil || layer.Effects != nil || layer.Mask != nil {
 			return fmt.Errorf("group layers cannot contain visual properties")
 		}
 	default:

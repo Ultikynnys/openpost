@@ -183,6 +183,36 @@ export function validateStudioDocument(document: StudioDocument): string[] {
 				}
 			}
 			if (layer.type === 'shape' && !layer.shape) errors.push(`${layer.name} has no shape data.`);
+			if (layer.type === 'paint' && !layer.paint) errors.push(`${layer.name} has no paint data.`);
+			if (
+				layer.paint &&
+				(!['stroke', 'fill'].includes(layer.paint.kind) ||
+					!HEX_COLOR.test(layer.paint.color) ||
+					!Number.isFinite(layer.paint.size) ||
+					layer.paint.size <= 0 ||
+					layer.paint.size > 512 ||
+					!Number.isFinite(layer.paint.opacity) ||
+					layer.paint.opacity < 0 ||
+					layer.paint.opacity > 1 ||
+					!Number.isFinite(layer.paint.source_width) ||
+					!Number.isFinite(layer.paint.source_height) ||
+					layer.paint.source_width <= 0 ||
+					layer.paint.source_height <= 0 ||
+					layer.paint.points.length > 100_000 ||
+					layer.paint.spans.length > 250_000 ||
+					layer.paint.points.some(
+						(point) => !Number.isFinite(point.x) || !Number.isFinite(point.y)
+					) ||
+					layer.paint.spans.some(
+						(span) =>
+							!Number.isFinite(span.x) ||
+							!Number.isFinite(span.y) ||
+							!Number.isFinite(span.width) ||
+							span.width <= 0
+					))
+			) {
+				errors.push(`${layer.name} has invalid paint data.`);
+			}
 			if (
 				layer.mask &&
 				(!['rectangle', 'rounded_rectangle', 'circle', 'ellipse', 'diamond'].includes(

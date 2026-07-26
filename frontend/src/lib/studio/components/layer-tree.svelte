@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { ContextMenu } from 'bits-ui';
-	import { SvelteSet } from 'svelte/reactivity';
+	import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 	import { useStudioEditor } from '../editor.svelte';
 	import { Button } from '$lib/components/ui/button';
 	import EyeIcon from 'lucide-svelte/icons/eye';
@@ -40,9 +40,11 @@
 			? TypeIcon
 			: type === 'image'
 				? ImageIcon
-				: type === 'group'
-					? GroupIcon
-					: SquareIcon;
+				: type === 'paint'
+					? PencilIcon
+					: type === 'group'
+						? GroupIcon
+						: SquareIcon;
 	}
 
 	function reorder(droppedID: string, targetID: string): void {
@@ -95,7 +97,7 @@
 
 	function flattenLayers(page: StudioPage | null, collapsed: Set<string>): LayerTreeItem[] {
 		if (!page) return [];
-		const byParent = new Map<string, StudioLayer[]>();
+		const byParent = new SvelteMap<string, StudioLayer[]>();
 		for (const layer of page.layers) {
 			const parentID = layer.parent_id ?? '';
 			const children = byParent.get(parentID) ?? [];

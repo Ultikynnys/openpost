@@ -21,6 +21,9 @@ type FabricObject = InstanceType<FabricModule['FabricObject']> & {
 type FabricTextObject = FabricObject & {
 	text?: string;
 	initDimensions?: () => void;
+	enterEditing?: () => void;
+	selectAll?: () => void;
+	isEditing?: boolean;
 	path?: InstanceType<FabricModule['Path']>;
 	pathStartOffset?: number;
 	pathSide?: 'left' | 'right';
@@ -50,6 +53,7 @@ interface FabricAdapterOptions {
 	onSelection(ids: string[]): void;
 	onTransform(id: string, updates: Partial<StudioLayer['transform']>): void;
 	onTextChange(id: string, text: string): void;
+	onTextEditingChange?(editing: boolean): void;
 }
 
 const SNAP_SCREEN_PX = 7;
@@ -63,6 +67,7 @@ export class OpenPostFabricAdapter {
 	private decorationsByLayerID = new Map<string, FabricObject[]>();
 	private layerSnapshots = new Map<string, StudioLayer>();
 	private desiredSelectionIDs: string[] = [];
+	private pendingTextEditingID = '';
 	private guideObjects: FabricObject[] = [];
 	private syncing = false;
 	private renderSequence = 0;
@@ -75,6 +80,7 @@ export class OpenPostFabricAdapter {
 	private onSelection: FabricAdapterOptions['onSelection'];
 	private onTransform: FabricAdapterOptions['onTransform'];
 	private onTextChange: FabricAdapterOptions['onTextChange'];
+	private onTextEditingChange: NonNullable<FabricAdapterOptions['onTextEditingChange']>;
 
 	constructor(options: FabricAdapterOptions) {
 		this.element = options.canvas;
@@ -86,6 +92,7 @@ export class OpenPostFabricAdapter {
 		this.onSelection = options.onSelection;
 		this.onTransform = options.onTransform;
 		this.onTextChange = options.onTextChange;
+		this.onTextEditingChange = options.onTextEditingChange ?? (() => undefined);
 	}
 
 	async mount(): Promise<void> {
@@ -144,6 +151,7 @@ export class OpenPostFabricAdapter {
 			this.refreshDecorations(layer, object);
 		}
 		if (!this.staticMode) this.restoreSelection(this.desiredSelectionIDs);
+		this.flushPendingTextEditing();
 		if (this.staticMode) this.canvas.renderAll();
 		else this.canvas.requestRenderAll();
 		this.syncing = false;
@@ -205,6 +213,7 @@ export class OpenPostFabricAdapter {
 			);
 			this.syncObjectOrder();
 			if (!this.staticMode) this.restoreSelection(this.desiredSelectionIDs);
+			this.flushPendingTextEditing();
 			if (this.staticMode) this.canvas.renderAll();
 			else this.canvas.requestRenderAll();
 		} finally {
@@ -286,6 +295,43 @@ export class OpenPostFabricAdapter {
 		return [...new Set(matches)];
 	}
 
+	rasterizeLayerIDs(ids: string[]): ImageData | null {
+		if (!this.canvas || this.staticMode || ids.length === 0) return null;
+		const expanded = new Set(ids);
+		let changed = true;
+		while (changed) {
+			changed = false;
+			for (const layer of this.page.layers) {
+				if (!layer.parent_id || !expanded.has(layer.parent_id) || expanded.has(layer.id)) continue;
+				expanded.add(layer.id);
+				changed = true;
+			}
+		}
+		const visibleObjects = new Set<FabricObject>();
+		for (const id of expanded) {
+			const object = this.objectByLayerID.get(id);
+			if (object) visibleObjects.add(object);
+			for (const decoration of this.decorationsByLayerID.get(id) ?? []) {
+				visibleObjects.add(decoration);
+			}
+		}
+		const objects = this.canvas.getObjects() as FabricObject[];
+		const visibility = objects.map((object) => object.visible);
+		const background = this.canvas.backgroundColor;
+		try {
+			this.canvas.backgroundColor = 'rgba(0,0,0,0)';
+			for (const object of objects) object.visible = visibleObjects.has(object);
+			this.canvas.renderAll();
+			return this.canvas
+				.getContext()
+				.getImageData(0, 0, this.document.width_px, this.document.height_px);
+		} finally {
+			this.canvas.backgroundColor = background;
+			objects.forEach((object, index) => (object.visible = visibility[index]));
+			this.canvas.renderAll();
+		}
+	}
+
 	private refreshInteractivity(): void {
 		const canvas = this.interactiveCanvas();
 		if (!canvas) return;
@@ -312,6 +358,12 @@ export class OpenPostFabricAdapter {
 		this.desiredSelectionIDs = [...ids];
 		if (this.syncing) return;
 		this.restoreSelection(ids);
+	}
+
+	enterTextEditing(id: string): void {
+		if (this.readOnly || this.staticMode) return;
+		this.pendingTextEditingID = id;
+		this.flushPendingTextEditing();
 	}
 
 	dispose(): void {
@@ -347,6 +399,22 @@ export class OpenPostFabricAdapter {
 			this.emitTransform(event.target as FabricObject);
 		});
 		canvas.on('text:changed', (event) => this.emitTextChange(event.target as FabricTextObject));
+		canvas.on('text:editing:entered', () => this.onTextEditingChange(true));
+		canvas.on('text:editing:exited', () => this.onTextEditingChange(false));
+	}
+
+	private flushPendingTextEditing(): void {
+		const id = this.pendingTextEditingID;
+		const canvas = this.interactiveCanvas();
+		const object = id ? (this.objectByLayerID.get(id) as FabricTextObject | undefined) : undefined;
+		if (!canvas || !object?.enterEditing) return;
+		this.pendingTextEditingID = '';
+		canvas.setActiveObject(object);
+		if (!object.isEditing) {
+			object.enterEditing();
+			object.selectAll?.();
+		}
+		canvas.requestRenderAll();
 	}
 
 	private emitSelection(): void {
@@ -554,6 +622,47 @@ export class OpenPostFabricAdapter {
 				}) as FabricObject;
 			}
 		}
+		if (layer.type === 'paint' && layer.paint) {
+			const paint = structuredClone(layer.paint);
+			const width = Math.max(1, layer.transform.width);
+			const height = Math.max(1, layer.transform.height);
+			object = new this.fabric.FabricObject({
+				...options,
+				width,
+				height,
+				objectCaching: false
+			}) as FabricCustomObject;
+			object._render = (context: CanvasRenderingContext2D) => {
+				context.save();
+				context.translate(-width / 2, -height / 2);
+				context.scale(
+					width / Math.max(1, paint.source_width),
+					height / Math.max(1, paint.source_height)
+				);
+				context.fillStyle = paint.color;
+				context.strokeStyle = paint.color;
+				context.globalAlpha = paint.opacity;
+				if (paint.kind === 'fill') {
+					for (const span of paint.spans) {
+						context.fillRect(span.x, span.y, span.width, 1);
+					}
+				} else if (paint.points.length === 1) {
+					const point = paint.points[0];
+					context.beginPath();
+					context.arc(point.x, point.y, paint.size / 2, 0, Math.PI * 2);
+					context.fill();
+				} else if (paint.points.length > 1) {
+					context.lineWidth = paint.size;
+					context.lineCap = 'round';
+					context.lineJoin = 'round';
+					context.beginPath();
+					context.moveTo(paint.points[0].x, paint.points[0].y);
+					for (const point of paint.points.slice(1)) context.lineTo(point.x, point.y);
+					context.stroke();
+				}
+				context.restore();
+			};
+		}
 		if (layer.type === 'image' && layer.image) {
 			const response = await fetch(getAuthenticatedMediaURL(`/media/${layer.image.media_id}`), {
 				credentials: 'include'
@@ -602,6 +711,7 @@ export class OpenPostFabricAdapter {
 	private requiresObjectRebuild(previous: StudioLayer, next: StudioLayer): boolean {
 		if (previous.type !== next.type) return true;
 		if (next.type === 'shape') return previous.shape?.kind !== next.shape?.kind;
+		if (next.type === 'paint') return JSON.stringify(previous.paint) !== JSON.stringify(next.paint);
 		if (next.type === 'text') {
 			return JSON.stringify(previous.text?.curve) !== JSON.stringify(next.text?.curve);
 		}
@@ -909,7 +1019,9 @@ export class OpenPostFabricAdapter {
 	}
 
 	private usesAreaSelection(): boolean {
-		return ['marquee', 'lasso', 'magic_wand'].includes(this.interactionTool);
+		return ['marquee', 'ellipse_marquee', 'lasso', 'magic_wand', 'pencil', 'bucket'].includes(
+			this.interactionTool
+		);
 	}
 
 	private layerCanBeSelected(layer: StudioLayer): boolean {
@@ -935,6 +1047,7 @@ export class OpenPostFabricAdapter {
 	private layerFlatColor(layer: StudioLayer): string | null {
 		if (layer.type === 'shape') return layer.shape?.fill ?? null;
 		if (layer.type === 'text') return layer.text?.color ?? null;
+		if (layer.type === 'paint') return layer.paint?.color ?? null;
 		return null;
 	}
 

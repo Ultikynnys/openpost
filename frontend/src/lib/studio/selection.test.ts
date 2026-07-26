@@ -1,11 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import {
 	boundsIntersect,
+	combinePixelMasks,
 	colorsWithinTolerance,
+	ellipsePixelMask,
+	magicPixelMask,
 	mergeSelectionIDs,
 	normalizeSelectionBounds,
+	pixelMaskBounds,
+	pixelMaskToSpans,
 	pointInPolygon,
-	polygonIntersectsBounds
+	polygonIntersectsBounds,
+	rectanglePixelMask,
+	strokePixelMask
 } from './selection';
 
 describe('Studio area selection geometry', () => {
@@ -46,6 +53,50 @@ describe('Studio selection composition', () => {
 		expect(mergeSelectionIDs(['a'], ['a', 'b'], 'add')).toEqual(['a', 'b']);
 		expect(mergeSelectionIDs(['a', 'b'], ['b'], 'subtract')).toEqual(['a']);
 		expect(mergeSelectionIDs(['a', 'b'], ['b', 'c'], 'toggle')).toEqual(['a', 'c']);
+	});
+
+	it('creates and composes real pixel masks for rectangle and ellipse selections', () => {
+		const rectangle = rectanglePixelMask(8, 8, { x: 1, y: 1, width: 5, height: 4 });
+		const ellipse = ellipsePixelMask(8, 8, { x: 2, y: 2, width: 4, height: 4 });
+		const subtracted = combinePixelMasks(rectangle, ellipse, 'subtract');
+
+		expect(rectangle.reduce((total, value) => total + value, 0)).toBe(20);
+		expect(ellipse.reduce((total, value) => total + value, 0)).toBeGreaterThan(8);
+		expect(subtracted.reduce((total, value) => total + value, 0)).toBeLessThan(20);
+		expect(pixelMaskBounds(ellipse, 8, 8)).toEqual({ x: 2, y: 2, width: 4, height: 4 });
+	});
+
+	it('flood-selects contiguous pixels using 0-255 tolerance', () => {
+		const pixels = new Uint8ClampedArray([
+			10, 10, 10, 255, 12, 12, 12, 255, 220, 220, 220, 255, 10, 10, 10, 255, 200, 200, 200, 255, 10,
+			10, 10, 255
+		]);
+		const contiguous = magicPixelMask(
+			{ width: 3, height: 2, data: pixels },
+			{ x: 0, y: 0 },
+			4,
+			true
+		);
+		const global = magicPixelMask({ width: 3, height: 2, data: pixels }, { x: 0, y: 0 }, 4, false);
+
+		expect([...contiguous]).toEqual([1, 1, 0, 1, 0, 0]);
+		expect([...global]).toEqual([1, 1, 0, 1, 0, 1]);
+	});
+
+	it('rasterizes hard pencil strokes into compact scanline spans', () => {
+		const mask = strokePixelMask(
+			12,
+			8,
+			[
+				{ x: 2, y: 4 },
+				{ x: 9, y: 4 }
+			],
+			3
+		);
+		const spans = pixelMaskToSpans(mask, 12, 8);
+
+		expect(spans.length).toBeGreaterThan(0);
+		expect(spans.some((span) => span.width >= 7)).toBe(true);
 	});
 
 	it('matches flat colors using a normalized tolerance', () => {

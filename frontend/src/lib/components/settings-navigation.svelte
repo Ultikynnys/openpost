@@ -23,6 +23,7 @@
 	]);
 	const workspaceDestinations = $derived<SettingsDestination[]>([
 		{ id: 'general', label: m.settings_general() },
+		{ id: 'brand', label: m.media_brand() },
 		{ id: 'schedule', label: m.settings_schedule() },
 		{ id: 'media', label: m.settings_media() },
 		{ id: 'accounts', label: m.accounts_heading() }

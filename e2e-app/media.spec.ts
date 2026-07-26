@@ -24,6 +24,9 @@ test("media library uploads and lists a local media file", async ({
   await page.goto("/media");
 
   await expect(page.getByRole("heading", { name: "Media" })).toBeVisible();
+  await expect(
+    page.getByRole("navigation", { name: "Media sections" }),
+  ).toHaveCount(0);
   await expect(page.getByText("No media found")).toBeVisible();
 
   await page.getByRole("button", { name: "Create" }).click();
@@ -46,9 +49,22 @@ test("media library uploads and lists a local media file", async ({
   ).toBeVisible();
   await expect(page.getByText("launch-card.png")).toBeVisible();
   await expect(
-    page.getByTestId("page-header").getByText("1 file", { exact: true }),
+    page
+      .getByTestId("page-header")
+      .getByText("1 assets · 0 designs", { exact: true }),
   ).toBeVisible();
   await expect(page.getByText("Studio edits")).toHaveCount(0);
+
+  await page
+    .getByRole("button", { name: "Open details for launch-card.png" })
+    .click();
+  const detailsDialog = page.getByRole("dialog", { name: "launch-card.png" });
+  await expect(detailsDialog).toBeVisible();
+  await expect(
+    detailsDialog.getByRole("img", { name: "launch-card.png" }),
+  ).toHaveAttribute("src", /\/media\//);
+  await expect(detailsDialog.getByLabel("Alt text")).toBeVisible();
+  await detailsDialog.getByRole("button", { name: "Close" }).last().click();
 
   await page.getByRole("button", { name: "Select", exact: true }).click();
   await page.getByRole("button", { name: "Select launch-card.png" }).click();
@@ -83,6 +99,11 @@ test("brand kit inputs keep focus while editing", async ({ page, request }) => {
 
   await authenticatePage(page, auth.token);
   await page.goto("/media?view=brand");
+  await expect(page).toHaveURL(/\/settings\?tab=brand$/);
+  await expect(page.locator('[data-settings-tab="brand"]')).toHaveAttribute(
+    "aria-current",
+    "page",
+  );
 
   const kitName = page.getByLabel("Brand kit name");
   await expect(kitName).toBeVisible();

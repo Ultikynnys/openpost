@@ -230,3 +230,9 @@
 		min-width: 44px;
 	}
 }
+textarea[data-fabric='textarea'] {
+	position: fixed !important;
+	top: max(1px, env(safe-area-inset-top)) !important;
+	left: 1px !important;
+	padding-top: 0 !important;
+}

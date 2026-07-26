@@ -15,10 +15,14 @@
 	import DestructiveConfirmDialog from '$lib/components/destructive-confirm-dialog.svelte';
 	import ProfileAvatarUploader from '$lib/components/profile-avatar-uploader.svelte';
 	import AccountDataCard from '$lib/components/account-data-card.svelte';
+	import BrandKitEditor from '$lib/studio/components/brand-kit-editor.svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { auth } from '$lib/stores/auth';
 	import { getApiBase } from '$lib/stores/instance.svelte';
+	import { getAuthenticatedMediaURL } from '$lib/media-url';
+	import { loadStudioBrandKit } from '$lib/studio/api';
+	import type { StudioBrandKit } from '$lib/studio/types';
 	import { createPasskeyCredential } from '$lib/auth/webauthn';
 	import LoaderIcon from 'lucide-svelte/icons/loader-2';
 	import SettingsIcon from 'lucide-svelte/icons/settings';
@@ -43,6 +47,7 @@
 	import LogOutIcon from 'lucide-svelte/icons/log-out';
 	import CameraIcon from 'lucide-svelte/icons/camera';
 	import AlertCircleIcon from 'lucide-svelte/icons/alert-circle';
+	import PaletteIcon from 'lucide-svelte/icons/palette';
 	import { client } from '$lib/api/client';
 	import { getLocaleTag } from '$lib/i18n';
 	import { hostedPlanFromSearchParams } from '$lib/billing';
@@ -127,12 +132,16 @@
 	let teamError = $state('');
 	let teamLoadError = $state('');
 	let workspaceTeam = $state<WorkspaceTeam | null>(null);
+	let brandKit = $state.raw<StudioBrandKit | null>(null);
+	let brandLoading = $state(false);
+	let brandError = $state('');
 	let inviteEmail = $state('');
 	let inviteRole = $state<'viewer' | 'editor' | 'admin'>('editor');
 	let createdInviteURL = $state('');
 	let loadedBillingWorkspaceID = '';
 	let loadedTeamWorkspaceID = '';
 	let loadedScheduleWorkspaceID = '';
+	let loadedBrandWorkspaceID = '';
 	let loadedSecurityUserID = '';
 	let loadedAPITokensUserID = '';
 	let apiTokensRequestUserID = '';
@@ -140,6 +149,7 @@
 	let billingRequestSequence = 0;
 	let teamRequestSequence = 0;
 	let scheduleRequestSequence = 0;
+	let brandRequestSequence = 0;
 	let apiTokensRequestSequence = 0;
 	let destructiveDialogOpen = $state(false);
 	let destructiveAction = $state.raw<SettingsDestructiveAction | null>(null);
@@ -391,6 +401,7 @@
 		{ id: 'security', label: m.settings_security() },
 		{ id: 'developer', label: m.settings_developer() },
 		{ id: 'general', label: m.settings_general() },
+		{ id: 'brand', label: m.media_brand() },
 		{ id: 'schedule', label: m.settings_schedule() },
 		{ id: 'media', label: m.settings_media() },
 		{ id: 'members', label: m.settings_members() },
@@ -433,6 +444,7 @@
 		if (activeSettingsTab === 'members') return m.settings_team_members();
 		if (activeSettingsTab === 'plan') return m.settings_plan();
 		if (activeSettingsTab === 'schedule') return m.settings_schedule();
+		if (activeSettingsTab === 'brand') return m.media_brand();
 		if (activeSettingsTab === 'media') return m.settings_media();
 		return m.settings_general();
 	});
@@ -443,6 +455,7 @@
 		if (activeSettingsTab === 'members') return m.settings_members_description();
 		if (activeSettingsTab === 'plan') return m.settings_plan_description();
 		if (activeSettingsTab === 'schedule') return m.settings_schedule_description();
+		if (activeSettingsTab === 'brand') return m.media_brand_description();
 		if (activeSettingsTab === 'media') return m.settings_media_description();
 		return m.settings_general_description({
 			workspace: workspaceCtx.currentWorkspace?.name || m.settings_workspace()
@@ -1092,6 +1105,26 @@
 		}
 	}
 
+	async function loadBrandKit(workspaceID = workspaceCtx.currentWorkspace?.id ?? '') {
+		if (!workspaceID) return;
+		const requestSequence = ++brandRequestSequence;
+		loadedBrandWorkspaceID = workspaceID;
+		brandLoading = true;
+		brandError = '';
+		brandKit = null;
+		try {
+			const kit = await loadStudioBrandKit(workspaceID);
+			if (requestSequence !== brandRequestSequence || !isCurrentWorkspace(workspaceID)) return;
+			brandKit = kit;
+		} catch (cause) {
+			if (requestSequence !== brandRequestSequence || !isCurrentWorkspace(workspaceID)) return;
+			loadedBrandWorkspaceID = '';
+			brandError = cause instanceof Error ? cause.message : m.media_hub_load_failed();
+		} finally {
+			if (requestSequence === brandRequestSequence) brandLoading = false;
+		}
+	}
+
 	function parseClockInput(value: string): { hour: number; minute: number } | null {
 		const match = value.trim().match(/^(\d{1,2}):(\d{2})$/);
 		if (!match) return null;
@@ -1325,6 +1358,13 @@
 
 	let lastProfileUserID = $state('');
 	$effect(() => {
+		const requestedTab = page.url.searchParams.get('tab');
+		if (requestedTab === 'accounts' || requestedTab === 'social-accounts') {
+			void goto(resolve('/accounts'), { replaceState: true });
+		}
+	});
+
+	$effect(() => {
 		const user = authState.user;
 		if (user?.id && user.id !== lastProfileUserID) {
 			lastProfileUserID = user.id;
@@ -1346,6 +1386,9 @@
 		}
 		if (tab === 'schedule' && loadedScheduleWorkspaceID !== workspaceID) {
 			void loadSchedules(workspaceID);
+		}
+		if (tab === 'brand' && loadedBrandWorkspaceID !== workspaceID) {
+			void loadBrandKit(workspaceID);
 		}
 	});
 
@@ -2520,6 +2563,102 @@
 							</p>
 						</div>
 					</div>
+				</section>
+
+				<section id="brand" class:hidden={activeSettingsTab !== 'brand'} class="scroll-mt-24">
+					{#if brandLoading}
+						<PageLoading layout="sections" label={m.media_loading_brand()} />
+					{:else if brandError}
+						<InlineNotice tone="error" message={brandError}>
+							{#snippet actions()}
+								<Button variant="outline" size="sm" onclick={() => void loadBrandKit()}>
+									{m.common_retry()}
+								</Button>
+							{/snippet}
+						</InlineNotice>
+					{:else if brandKit}
+						{#if brandKit.can_edit}
+							<BrandKitEditor kit={brandKit} onSaved={(saved) => (brandKit = saved)} />
+						{:else}
+							<div class="space-y-8">
+								<InlineNotice tone="info" message={m.brand_read_only()} />
+								<div class="grid gap-8 lg:grid-cols-2">
+									<section class="space-y-4">
+										<div class="flex items-center gap-2">
+											<PaletteIcon class="size-4 text-primary" />
+											<h2 class="font-semibold">
+												{brandKit.name || m.brand_default_name()}
+											</h2>
+										</div>
+										<div class="grid grid-cols-2 gap-3 sm:grid-cols-3">
+											{#each brandKit.colors as color (color.id || color.name)}
+												<div class="overflow-hidden rounded-xl border">
+													<div class="h-16" style:background={color.value}></div>
+													<div class="px-3 py-2 text-xs">
+														<p class="font-medium">{color.name}</p>
+														<p class="text-muted-foreground">{color.value}</p>
+													</div>
+												</div>
+											{/each}
+										</div>
+										<div>
+											<h3 class="mb-2 text-sm font-medium">{m.brand_page_backgrounds()}</h3>
+											<div class="flex flex-wrap gap-2">
+												{#each brandKit.backgrounds as background (background)}
+													<span
+														class="size-11 rounded-lg border"
+														style:background
+														title={background}
+													></span>
+												{/each}
+											</div>
+										</div>
+									</section>
+									<section class="space-y-4">
+										<div>
+											<h2 class="font-semibold">{m.media_logos_fonts()}</h2>
+											<p class="mt-1 text-sm text-muted-foreground">
+												{m.media_brand_assets_body()}
+											</p>
+										</div>
+										<div class="grid grid-cols-2 gap-3 sm:grid-cols-3">
+											{#each brandKit.assets as asset (asset.id)}
+												<div class="overflow-hidden rounded-xl border">
+													<div
+														class="flex aspect-square items-center justify-center bg-muted/20 p-3"
+													>
+														<img
+															src={getAuthenticatedMediaURL(`/media/${asset.media_id}/thumb/md`)}
+															alt={asset.name || asset.role}
+															class="max-h-full max-w-full object-contain"
+														/>
+													</div>
+													<p class="truncate border-t px-3 py-2 text-xs">
+														{asset.name || asset.role}
+													</p>
+												</div>
+											{/each}
+										</div>
+										<div class="divide-y rounded-xl border">
+											{#each brandKit.fonts as font (font.id)}
+												<div class="px-3 py-3">
+													<p class="text-sm font-medium">{font.family}</p>
+													<p class="text-xs text-muted-foreground">
+														{font.weight} · {font.style}
+													</p>
+												</div>
+											{/each}
+										</div>
+										{#if brandKit.assets.length === 0 && brandKit.fonts.length === 0}
+											<p class="rounded-xl border border-dashed p-6 text-sm text-muted-foreground">
+												{m.studio_brand_empty()}
+											</p>
+										{/if}
+									</section>
+								</div>
+							</div>
+						{/if}
+					{/if}
 				</section>
 
 				<section

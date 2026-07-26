@@ -5,6 +5,7 @@ test("Studio creates from an original template, adapts to mobile, and exports to
   page,
   request,
 }) => {
+  test.setTimeout(60_000);
   const browserErrors: string[] = [];
   const failedResponses: string[] = [];
   page.on("pageerror", (error) => browserErrors.push(error.message));
@@ -108,19 +109,144 @@ test("Studio creates from an original template, adapts to mobile, and exports to
   await page.getByRole("button", { name: "Select", exact: true }).click();
   await page.getByRole("menuitem", { name: /Magic select/ }).click();
   await expect(
-    page.getByTestId("studio-selection-options").getByText("Tolerance 12%"),
+    page.getByTestId("studio-selection-options").getByText("Tolerance 32"),
   ).toBeVisible();
   const selectionSurface = page.getByTestId("studio-selection-surface");
-  await selectionSurface.click();
-  await expect(page.locator(".studio-magic-pulse")).toBeVisible();
-  await expect(page.getByText("2 selected", { exact: true })).toBeVisible();
+  const selectedPixelCount = () =>
+    page.getByTestId("studio-pixel-selection").evaluate((canvas) => {
+      if (!(canvas instanceof HTMLCanvasElement)) return 0;
+      const context = canvas.getContext("2d", { willReadFrequently: true });
+      if (!context) return 0;
+      const pixels = context.getImageData(
+        0,
+        0,
+        canvas.width,
+        canvas.height,
+      ).data;
+      let selected = 0;
+      for (let index = 3; index < pixels.length; index += 4) {
+        if (pixels[index] > 0) selected++;
+      }
+      return selected;
+    });
+  const selectionBounds = () =>
+    page.getByTestId("studio-pixel-selection").evaluate((canvas) => {
+      if (!(canvas instanceof HTMLCanvasElement)) return null;
+      const context = canvas.getContext("2d", { willReadFrequently: true });
+      if (!context) return null;
+      const pixels = context.getImageData(
+        0,
+        0,
+        canvas.width,
+        canvas.height,
+      ).data;
+      let minX = canvas.width;
+      let minY = canvas.height;
+      let maxX = -1;
+      let maxY = -1;
+      for (let index = 3; index < pixels.length; index += 4) {
+        if (pixels[index] === 0) continue;
+        const pixel = (index - 3) / 4;
+        const x = pixel % canvas.width;
+        const y = Math.floor(pixel / canvas.width);
+        minX = Math.min(minX, x);
+        minY = Math.min(minY, y);
+        maxX = Math.max(maxX, x);
+        maxY = Math.max(maxY, y);
+      }
+      return maxX < 0
+        ? null
+        : { width: maxX - minX + 1, height: maxY - minY + 1 };
+    });
+  const selectionBox = await selectionSurface.boundingBox();
+  if (!selectionBox)
+    throw new Error("Studio selection surface did not produce layout bounds");
+  const magicPoint = await selectionSurface.evaluate((surface) => {
+    const bounds = surface.getBoundingClientRect();
+    const left = Math.max(0, bounds.left);
+    const right = Math.min(window.innerWidth, bounds.right);
+    const top = Math.max(0, bounds.top);
+    const bottom = Math.min(window.innerHeight, bounds.bottom);
+    const targets: Array<{
+      x: number;
+      y: number;
+      tag: string;
+      testid: string | null;
+      classes: string | null;
+    }> = [];
+    for (let y = top + 16; y < bottom - 16; y += 24) {
+      for (let x = left + 16; x < right - 16; x += 24) {
+        const target = document.elementFromPoint(x, y);
+        if (target === surface) return { x, y };
+        if (targets.length < 8 && target) {
+          targets.push({
+            x,
+            y,
+            tag: target.tagName,
+            testid: target.getAttribute("data-testid"),
+            classes: target.getAttribute("class"),
+          });
+        }
+      }
+    }
+    throw new Error(
+      `No unobstructed point was available on the Studio canvas: ${JSON.stringify(
+        {
+          bounds: { left, right, top, bottom },
+          surface: {
+            pointerEvents: getComputedStyle(surface).pointerEvents,
+            display: getComputedStyle(surface).display,
+            visibility: getComputedStyle(surface).visibility,
+            zIndex: getComputedStyle(surface).zIndex,
+            connected: surface.isConnected,
+          },
+          ancestors: (() => {
+            const values: Array<{
+              tag: string;
+              testid: string | null;
+              pointerEvents: string;
+              classes: string | null;
+            }> = [];
+            let current: Element | null = surface;
+            while (current && values.length < 8) {
+              values.push({
+                tag: current.tagName,
+                testid: current.getAttribute("data-testid"),
+                pointerEvents: getComputedStyle(current).pointerEvents,
+                classes: current.getAttribute("class"),
+              });
+              current = current.parentElement;
+            }
+            return values;
+          })(),
+          stack: document
+            .elementsFromPoint((left + right) / 2, (top + bottom) / 2)
+            .map((element) => ({
+              tag: element.tagName,
+              testid: element.getAttribute("data-testid"),
+              classes: element.getAttribute("class"),
+            }))
+            .slice(0, 8),
+          targets,
+        },
+      )}`,
+    );
+  });
+  await page.mouse.click(magicPoint.x, magicPoint.y);
+  await expect(page.getByTestId("studio-pixel-selection")).toHaveAttribute(
+    "data-active",
+    "true",
+  );
+  await expect.poll(selectedPixelCount).toBeGreaterThan(0);
+  await expect(page.getByRole("treeitem", { selected: true })).toHaveCount(1);
 
   await page
     .getByTestId("studio-selection-options")
     .getByRole("button", { name: "Subtract" })
     .click();
-  await selectionSurface.click();
-  await expect(page.getByRole("treeitem", { selected: true })).toHaveCount(0);
+  await page.mouse.click(magicPoint.x, magicPoint.y);
+  await expect.poll(selectedPixelCount).toBe(0);
+  await expect(page.getByRole("treeitem", { selected: true })).toHaveCount(1);
 
   await page.keyboard.press("m");
   await expect(
@@ -144,10 +270,33 @@ test("Studio creates from an original template, adapts to mobile, and exports to
     { steps: 5 },
   );
   await page.mouse.up();
-  await expect(
-    page.getByRole("treeitem", { name: /Accent, shape/, selected: true }),
-  ).toBeVisible();
+  await expect.poll(selectedPixelCount).toBeGreaterThan(0);
   await expect(page.getByRole("treeitem", { selected: true })).toHaveCount(1);
+
+  await page.keyboard.press("Shift+m");
+  await expect(
+    page.getByRole("button", { name: "Ellipse select" }),
+  ).toBeVisible();
+  await page.keyboard.down("Shift");
+  await page.mouse.move(
+    marqueeBounds.x + marqueeBounds.width * 0.34,
+    marqueeBounds.y + marqueeBounds.height * 0.22,
+  );
+  await page.mouse.down();
+  await page.mouse.move(
+    marqueeBounds.x + marqueeBounds.width * 0.54,
+    marqueeBounds.y + marqueeBounds.height * 0.42,
+    { steps: 5 },
+  );
+  await page.mouse.up();
+  await page.keyboard.up("Shift");
+  await expect
+    .poll(selectionBounds)
+    .toMatchObject({ width: expect.any(Number), height: expect.any(Number) });
+  const ellipseBounds = await selectionBounds();
+  expect(
+    Math.abs((ellipseBounds?.width ?? 0) - (ellipseBounds?.height ?? 0)),
+  ).toBeLessThanOrEqual(2);
 
   await page.keyboard.press("l");
   await expect(
@@ -176,16 +325,88 @@ test("Studio creates from an original template, adapts to mobile, and exports to
     );
   }
   await page.mouse.up();
-  await expect(page.getByText("4 selected", { exact: true })).toBeVisible();
+  await expect.poll(selectedPixelCount).toBeGreaterThan(1000);
+
+  await page
+    .getByTestId("studio-selection-options")
+    .getByRole("button", { name: "Deselect" })
+    .click();
+  await page.keyboard.press("p");
+  await page.mouse.move(
+    lassoBounds.x + lassoBounds.width * 0.25,
+    lassoBounds.y + lassoBounds.height * 0.3,
+  );
+  await page.mouse.down();
+  await page.mouse.move(
+    lassoBounds.x + lassoBounds.width * 0.65,
+    lassoBounds.y + lassoBounds.height * 0.55,
+    { steps: 8 },
+  );
+  await page.mouse.up();
+  await expect(
+    page.getByRole("treeitem", { name: /Pencil, paint/ }),
+  ).toBeVisible();
+
+  await page.getByRole("treeitem", { name: /Accent, shape/ }).click();
+  await page.keyboard.press("g");
+  await page.mouse.click(
+    lassoBounds.x + lassoBounds.width * 0.15,
+    lassoBounds.y + lassoBounds.height * 0.18,
+  );
+  await expect(
+    page.getByRole("treeitem", { name: /Paint bucket, paint/ }),
+  ).toBeVisible();
 
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(page.getByRole("button", { name: "Export" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Text" })).toBeVisible();
-  await page.getByRole("button", { name: "Lasso select" }).click();
+  await page.getByRole("button", { name: "Select", exact: true }).click();
   await expect(
     page.getByRole("menuitem", { name: "Magic select" }),
   ).toBeVisible();
   await page.keyboard.press("Escape");
+
+  await page.getByRole("button", { name: "Text", exact: true }).click();
+  const fabricTextarea = page.locator('textarea[data-fabric="textarea"]');
+  await expect(fabricTextarea).toBeFocused();
+  await page.setViewportSize({ width: 390, height: 560 });
+  await fabricTextarea.pressSequentially(" on mobile", { delay: 15 });
+  await expect(fabricTextarea).toBeFocused();
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const shell = document.querySelector('[data-testid="studio-shell"]');
+        const textarea = document.querySelector(
+          'textarea[data-fabric="textarea"]',
+        );
+        if (
+          !(shell instanceof HTMLElement) ||
+          !(textarea instanceof HTMLElement)
+        )
+          return null;
+        const shellBounds = shell.getBoundingClientRect();
+        const textareaBounds = textarea.getBoundingClientRect();
+        return {
+          scrollY: window.scrollY,
+          shellTop: Math.round(shellBounds.top),
+          shellBottom: Math.round(shellBounds.bottom),
+          viewportHeight: window.innerHeight,
+          textareaPosition: getComputedStyle(textarea).position,
+          textareaTop: Math.round(textareaBounds.top),
+        };
+      }),
+    )
+    .toEqual({
+      scrollY: 0,
+      shellTop: 0,
+      shellBottom: 560,
+      viewportHeight: 560,
+      textareaPosition: "fixed",
+      textareaTop: 1,
+    });
+  await page.keyboard.press("Escape");
+  await page.setViewportSize({ width: 390, height: 844 });
+
   expect(
     await page.evaluate(
       () =>
@@ -235,7 +456,32 @@ test("Studio creates from an original template, adapts to mobile, and exports to
     .click();
 
   await expect(page.getByText("1 exported page saved to Media.")).toBeVisible();
+  const designID = new URL(page.url()).pathname.split("/").at(-1);
+  if (!designID) throw new Error("Studio URL did not contain a design ID");
+  const savedDesign = await request.get(`/api/v1/studio/designs/${designID}`, {
+    headers: { Authorization: `Bearer ${auth.token}` },
+  });
+  expect(savedDesign.ok()).toBeTruthy();
+  const savedDocument = await savedDesign.json();
+  const paintLayers = savedDocument.document.pages[0].layers.filter(
+    (layer: { type: string }) => layer.type === "paint",
+  );
+  expect(paintLayers).toHaveLength(2);
+  expect(
+    paintLayers.every(
+      (layer: { paint?: { spans?: unknown[] } }) =>
+        (layer.paint?.spans?.length ?? 0) > 0,
+    ),
+  ).toBeTruthy();
+
   await page.goto("/media");
+  const libraryGrid = page.getByTestId("media-library-grid");
+  await expect(libraryGrid.locator('[data-library-kind="design"]')).toHaveCount(
+    1,
+  );
+  await expect(libraryGrid.locator('[data-library-kind="asset"]')).toHaveCount(
+    1,
+  );
   await expect(page.getByText("quick-announcement-page-01.png")).toBeVisible();
   const exportedImage = page.getByRole("img", {
     name: "quick-announcement-page-01.png",

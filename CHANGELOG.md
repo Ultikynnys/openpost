@@ -9,16 +9,18 @@ All notable changes to this project are documented in this file.
 - Added an installable `openpost-cli` agent skill with safe CLI workflows for setup, authoring, media, scheduling, publishing, recovery, and moderation.
 - Added CLI commands for provider readiness and capabilities, reusable posting slots, media storage and usage, alt-text updates and deletion, and publication retry and deletion.
 - Added reusable image and shape masks, drop and inner shadows, glow presets, curved text paths, and layer blend modes to Studio, with the same rendering in the canvas, saved previews, and exports.
-- Added rectangle, lasso, and color-aware magic selection to Studio, including add, subtract, toggle, touch controls, keyboard shortcuts, and group-aware layer picking.
+- Added pixel-based rectangle, ellipse, lasso, and color-aware magic selections to Studio, plus persistent hard-edge Pencil and tolerance-aware Paint Bucket tools with selection clipping, brand colors, touch controls, and keyboard shortcuts.
 
 ### Changed
 
+- Merged uploads and editable designs into one Media library, moved the workspace Brand kit into Settings, polished Media details with a stable thumbnail-led layout, and removed the product demo link from the profile menu.
 - Kept the Settings navigation available while managing social accounts so moving between workspace settings no longer opens a disconnected page.
 - Moved CLI and MCP text-post and publication mutations onto the current revision-aware authoring contract, kept linked publications and publish jobs synchronized, and reserved `--profile` for CLI profiles by naming content filters `--content-profile`.
 - Reworked Studio around a media-first asset panel, brand-aware color and font pickers, custom sliders, richer shape and crop controls, transient save feedback, native range selection, inline layer naming, hierarchical groups, and contextual layer and design actions.
 
 ### Fixed
 
+- Kept Android Studio text editing anchored above the keyboard without refitting the canvas or panning the document, and made long mobile Settings menus scroll within the visible viewport.
 - Kept release artifact packaging on the pinned Node, pnpm, and Go toolchains after Devenv preflight so transient Nix store references cannot strand frontend, server, or CLI release assets.
 - Kept Brand kit text fields and color controls mounted while their values change so keyboard focus, selection, and color-picker state no longer reset during editing.
 - Kept resized Studio images flush with their frames by preserving source-pixel geometry during Fabric transforms, and kept canvas selection synchronized after document updates.

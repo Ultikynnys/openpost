@@ -5,18 +5,25 @@
 	import { Slider } from '$lib/components/ui/slider';
 	import { OpenPostFabricAdapter } from '../fabric-adapter';
 	import { useStudioEditor } from '../editor.svelte';
+	import StudioColorPicker from './studio-color-picker.svelte';
 	import { m } from '$lib/paraglide/messages';
 	import { startStudioMetric } from '../telemetry';
 	import {
+		ellipsePixelMask,
+		intersectPixelMasks,
+		magicPixelMask,
 		normalizeSelectionBounds,
+		polygonPixelMask,
+		rectanglePixelMask,
 		type SelectionBounds,
 		type SelectionPoint
 	} from '../selection';
 	import type { StudioSelectionMode, StudioSelectionTool } from '../types';
 
-	type AreaSelectionTool = Extract<StudioSelectionTool, 'marquee' | 'lasso'>;
+	type AreaSelectionTool = Extract<StudioSelectionTool, 'marquee' | 'ellipse_marquee' | 'lasso'>;
+	type CanvasGestureTool = AreaSelectionTool | 'pencil';
 	interface SelectionGesture {
-		tool: AreaSelectionTool;
+		tool: CanvasGestureTool;
 		pointerID: number;
 		start: SelectionPoint;
 		current: SelectionPoint;
@@ -33,9 +40,12 @@
 	let ready = $state(false);
 	let canvasError = $state('');
 	let canvasAttempt = $state(0);
+	let textEditing = false;
+	let lastAutoEditingLayerID = '';
 	let panning = $state(false);
 	let selectionGesture = $state<SelectionGesture | null>(null);
 	let magicPulse = $state<SelectionPoint | null>(null);
+	let selectionOverlay = $state<HTMLCanvasElement>();
 	let magicPulseTimer: ReturnType<typeof setTimeout> | undefined;
 	let panStart = { x: 0, y: 0, panX: 0, panY: 0 };
 	const touchPointers = new SvelteMap<number, { x: number; y: number }>();
@@ -68,6 +78,9 @@
 					if (!layer?.text || layer.text.text === text) return;
 					editor.updateLayer(id, { text: { ...layer.text, text } }, `text:${id}`);
 					canvasOriginDocument = editor.document;
+				},
+				onTextEditingChange(editing) {
+					textEditing = editing;
 				}
 			});
 			mountedAdapter = next;
@@ -83,6 +96,7 @@
 				let viewportWidth = viewportElement.clientWidth;
 				let viewportHeight = viewportElement.clientHeight;
 				resize = new ResizeObserver(() => {
+					if (textEditing) return;
 					const nextWidth = viewportElement.clientWidth;
 					const nextHeight = viewportElement.clientHeight;
 					if (
@@ -128,6 +142,13 @@
 		};
 	}
 
+	function attachSelectionOverlay(node: HTMLCanvasElement) {
+		selectionOverlay = node;
+		return () => {
+			if (selectionOverlay === node) selectionOverlay = undefined;
+		};
+	}
+
 	onDestroy(() => {
 		if (magicPulseTimer) clearTimeout(magicPulseTimer);
 	});
@@ -149,6 +170,18 @@
 	});
 
 	$effect(() => {
+		const id = editor.activeTool === 'text' ? editor.selectedLayerIDs.at(-1) : '';
+		const layer = editor.activePage?.layers.find((item) => item.id === id);
+		if (!id || layer?.type !== 'text') {
+			lastAutoEditingLayerID = '';
+			return;
+		}
+		if (id === lastAutoEditingLayerID) return;
+		lastAutoEditingLayerID = id;
+		adapter?.enterTextEditing(id);
+	});
+
+	$effect(() => {
 		adapter?.setReadOnly(!editor.canEdit);
 	});
 
@@ -156,14 +189,56 @@
 		adapter?.setInteractionTool(editor.activeTool);
 	});
 
+	$effect(() => {
+		const selection = editor.pixelSelection;
+		const canvas = selectionOverlay;
+		if (!canvas || !editor.document) return;
+		const context = canvas.getContext('2d');
+		if (!context) return;
+		context.clearRect(0, 0, canvas.width, canvas.height);
+		if (!selection) return;
+		const image = context.createImageData(selection.width, selection.height);
+		for (let index = 0; index < selection.data.length; index++) {
+			if (!selection.data[index]) continue;
+			const x = index % selection.width;
+			const y = Math.floor(index / selection.width);
+			const edge =
+				x === 0 ||
+				y === 0 ||
+				x + 1 === selection.width ||
+				y + 1 === selection.height ||
+				!selection.data[index - 1] ||
+				!selection.data[index + 1] ||
+				!selection.data[index - selection.width] ||
+				!selection.data[index + selection.width];
+			const offset = index * 4;
+			image.data[offset] = 249;
+			image.data[offset + 1] = 115;
+			image.data[offset + 2] = 22;
+			image.data[offset + 3] = edge ? 220 : 30;
+		}
+		context.putImageData(image, 0, 0);
+	});
+
 	function isAreaSelectionTool(tool = editor.activeTool): tool is AreaSelectionTool | 'magic_wand' {
-		return tool === 'marquee' || tool === 'lasso' || tool === 'magic_wand';
+		return (
+			tool === 'marquee' || tool === 'ellipse_marquee' || tool === 'lasso' || tool === 'magic_wand'
+		);
 	}
 
-	function selectionModeForEvent(event: PointerEvent): StudioSelectionMode {
+	function usesCanvasSurface(): boolean {
+		return (
+			isAreaSelectionTool() || editor.activeTool === 'pencil' || editor.activeTool === 'bucket'
+		);
+	}
+
+	function selectionModeForEvent(
+		event: PointerEvent,
+		tool: StudioSelectionTool
+	): StudioSelectionMode {
 		if (event.metaKey || event.ctrlKey) return 'toggle';
 		if (event.altKey) return 'subtract';
-		if (event.shiftKey) return 'add';
+		if (event.shiftKey && !['marquee', 'ellipse_marquee'].includes(tool)) return 'add';
 		return editor.selectionMode;
 	}
 
@@ -192,17 +267,82 @@
 		}, 420);
 	}
 
+	function selectionTargetIDs(point: SelectionPoint): string[] {
+		if (editor.selectedLayerIDs.length > 0) return editor.selectedLayerIDs;
+		const hitID = adapter?.topmostLayerIDAtPoint(point);
+		if (!hitID) return [];
+		editor.selectLayer(hitID);
+		return [hitID];
+	}
+
+	function sampledPixels(point: SelectionPoint): {
+		image: ImageData;
+		targetLayerIDs: string[];
+	} | null {
+		const targetLayerIDs = selectionTargetIDs(point);
+		const image = adapter?.rasterizeLayerIDs(targetLayerIDs);
+		return image ? { image, targetLayerIDs } : null;
+	}
+
+	function constrainMarqueePoint(
+		start: SelectionPoint,
+		point: SelectionPoint,
+		event: PointerEvent
+	): SelectionPoint {
+		if (!event.shiftKey) return point;
+		const size = Math.max(Math.abs(point.x - start.x), Math.abs(point.y - start.y));
+		return {
+			x: start.x + Math.sign(point.x - start.x || 1) * size,
+			y: start.y + Math.sign(point.y - start.y || 1) * size
+		};
+	}
+
 	function startAreaSelection(event: PointerEvent): boolean {
 		const tool = editor.activeTool;
-		if (!isAreaSelectionTool(tool) || !adapter || event.button !== 0) return false;
+		if (!(event.target instanceof Node) || !stageElement?.contains(event.target)) return false;
+		if (
+			(!isAreaSelectionTool(tool) && tool !== 'pencil' && tool !== 'bucket') ||
+			!adapter ||
+			event.button !== 0
+		)
+			return false;
 		const point = documentPoint(event);
 		if (!point) return false;
-		const mode = selectionModeForEvent(event);
+		const mode = isAreaSelectionTool(tool)
+			? selectionModeForEvent(event, tool)
+			: editor.selectionMode;
 		if (tool === 'magic_wand') {
-			editor.applyLayerSelection(
-				adapter.magicLayerIDsAtPoint(point, editor.magicSelectTolerance),
-				mode
-			);
+			const sampled = sampledPixels(point);
+			if (sampled) {
+				editor.applyPixelSelection(
+					magicPixelMask(
+						sampled.image,
+						point,
+						editor.magicSelectTolerance,
+						editor.magicSelectContiguous
+					),
+					sampled.targetLayerIDs,
+					mode
+				);
+			}
+			showMagicPulse(point);
+			event.preventDefault();
+			return true;
+		}
+		if (tool === 'bucket') {
+			const sampled = sampledPixels(point);
+			if (sampled) {
+				let mask = magicPixelMask(
+					sampled.image,
+					point,
+					editor.bucketTolerance,
+					editor.bucketContiguous
+				);
+				if (editor.pixelSelection) {
+					mask = intersectPixelMasks(mask, editor.pixelSelection.data);
+				}
+				editor.addPaintFill(mask);
+			}
 			showMagicPulse(point);
 			event.preventDefault();
 			return true;
@@ -225,10 +365,13 @@
 	function moveAreaSelection(event: PointerEvent): boolean {
 		const gesture = selectionGesture;
 		if (!gesture || gesture.pointerID !== event.pointerId) return false;
-		const point = documentPoint(event, true);
+		let point = documentPoint(event, true);
 		if (!point) return false;
+		if (['marquee', 'ellipse_marquee'].includes(gesture.tool)) {
+			point = constrainMarqueePoint(gesture.start, point, event);
+		}
 		const points =
-			gesture.tool === 'lasso' &&
+			(gesture.tool === 'lasso' || gesture.tool === 'pencil') &&
 			Math.hypot(
 				point.x - (gesture.points.at(-1)?.x ?? point.x),
 				point.y - (gesture.points.at(-1)?.y ?? point.y)
@@ -244,7 +387,10 @@
 	function finishAreaSelection(event: PointerEvent): boolean {
 		const gesture = selectionGesture;
 		if (!gesture || gesture.pointerID !== event.pointerId) return false;
-		const point = documentPoint(event, true) ?? gesture.current;
+		let point = documentPoint(event, true) ?? gesture.current;
+		if (['marquee', 'ellipse_marquee'].includes(gesture.tool)) {
+			point = constrainMarqueePoint(gesture.start, point, event);
+		}
 		const distance =
 			gesture.tool === 'lasso'
 				? Math.max(
@@ -254,17 +400,47 @@
 						Math.hypot(point.x - gesture.start.x, point.y - gesture.start.y)
 					)
 				: Math.hypot(point.x - gesture.start.x, point.y - gesture.start.y);
-		let ids: string[];
+		if (gesture.tool === 'pencil') {
+			editor.addPencilStroke([...gesture.points, point]);
+			selectionGesture = null;
+			if (
+				event.currentTarget instanceof HTMLDivElement &&
+				event.currentTarget.hasPointerCapture(event.pointerId)
+			) {
+				event.currentTarget.releasePointerCapture(event.pointerId);
+			}
+			event.preventDefault();
+			return true;
+		}
+		const targetLayerIDs = selectionTargetIDs(gesture.start);
+		let mask: Uint8Array | null = null;
 		if (distance < 5 / Math.max(editor.zoom, 0.1)) {
-			const hitID = adapter?.topmostLayerIDAtPoint(point);
-			ids = hitID ? [hitID] : [];
+			if (gesture.mode === 'replace') editor.clearPixelSelection();
 		} else if (gesture.tool === 'marquee') {
-			ids = adapter?.layerIDsInRectangle(normalizeSelectionBounds(gesture.start, point)) ?? [];
+			mask = rectanglePixelMask(
+				editor.document?.width_px ?? 1,
+				editor.document?.height_px ?? 1,
+				normalizeSelectionBounds(gesture.start, point)
+			);
+		} else if (gesture.tool === 'ellipse_marquee') {
+			mask = ellipsePixelMask(
+				editor.document?.width_px ?? 1,
+				editor.document?.height_px ?? 1,
+				normalizeSelectionBounds(gesture.start, point)
+			);
 		} else {
 			const points = [...gesture.points, point];
-			ids = points.length >= 3 ? (adapter?.layerIDsInPolygon(points) ?? []) : [];
+			if (points.length >= 3) {
+				mask = polygonPixelMask(
+					editor.document?.width_px ?? 1,
+					editor.document?.height_px ?? 1,
+					points
+				);
+			}
 		}
-		editor.applyLayerSelection(ids, gesture.mode);
+		if (mask && targetLayerIDs.length > 0) {
+			editor.applyPixelSelection(mask, targetLayerIDs, gesture.mode);
+		}
 		selectionGesture = null;
 		if (
 			event.currentTarget instanceof HTMLDivElement &&
@@ -332,6 +508,29 @@
 		}
 	}
 
+	function targetsToolSurface(event: PointerEvent): boolean {
+		return (
+			event.target instanceof Element &&
+			Boolean(event.target.closest('[data-testid="studio-selection-surface"]'))
+		);
+	}
+
+	function startPasteboardPointer(event: PointerEvent): void {
+		if (!targetsToolSurface(event)) startPan(event);
+	}
+
+	function movePasteboardPointer(event: PointerEvent): void {
+		if (!targetsToolSurface(event)) movePan(event);
+	}
+
+	function stopPasteboardPointer(event: PointerEvent): void {
+		if (!targetsToolSurface(event)) stopPan(event);
+	}
+
+	function cancelPasteboardPointer(event: PointerEvent): void {
+		if (!targetsToolSurface(event)) cancelPointer(event);
+	}
+
 	function movePan(event: PointerEvent): void {
 		if (event.pointerType === 'touch' && touchPointers.has(event.pointerId)) {
 			touchPointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
@@ -389,17 +588,17 @@
 	class="studio-pasteboard relative size-full min-h-0 touch-none overflow-hidden bg-neutral-800 dark:bg-neutral-950"
 	class:cursor-grab={editor.activeTool === 'hand' && !panning}
 	class:cursor-grabbing={panning}
-	class:cursor-crosshair={isAreaSelectionTool() && !panning}
+	class:cursor-crosshair={usesCanvasSurface() && !panning}
 	onwheel={handleWheel}
-	onpointerdowncapture={startPan}
-	onpointermovecapture={movePan}
-	onpointerupcapture={stopPan}
-	onpointercancelcapture={cancelPointer}
+	onpointerdowncapture={startPasteboardPointer}
+	onpointermovecapture={movePasteboardPointer}
+	onpointerupcapture={stopPasteboardPointer}
+	onpointercancelcapture={cancelPasteboardPointer}
 	role="application"
 	aria-label={m.studio_design_canvas()}
 >
 	{#if editor.document}
-		{#if isAreaSelectionTool()}
+		{#if isAreaSelectionTool() || editor.activeTool === 'pencil' || editor.activeTool === 'bucket'}
 			<div
 				class="absolute top-3 left-1/2 z-30 flex max-w-[calc(100%-1.5rem)] -translate-x-1/2 flex-wrap items-center justify-center gap-1 rounded-lg border border-white/10 bg-neutral-950/88 p-1.5 text-neutral-100 shadow-lg backdrop-blur"
 				data-testid="studio-selection-options"
@@ -407,38 +606,144 @@
 				<span class="hidden px-1 text-xs font-medium sm:inline">
 					{editor.activeTool === 'marquee'
 						? m.studio_rectangle_select()
-						: editor.activeTool === 'lasso'
-							? m.studio_lasso_select()
-							: m.studio_magic_select()}
+						: editor.activeTool === 'ellipse_marquee'
+							? m.studio_ellipse_select()
+							: editor.activeTool === 'lasso'
+								? m.studio_lasso_select()
+								: editor.activeTool === 'magic_wand'
+									? m.studio_magic_select()
+									: editor.activeTool === 'pencil'
+										? m.studio_pencil()
+										: m.studio_paint_bucket()}
 				</span>
-				<div class="flex items-center gap-0.5" role="group" aria-label={m.studio_selection_mode()}>
-					{#each [{ value: 'replace', label: m.studio_selection_replace() }, { value: 'add', label: m.studio_selection_add() }, { value: 'subtract', label: m.studio_selection_subtract() }] as mode (mode.value)}
-						<Button
-							variant={editor.selectionMode === mode.value ? 'secondary' : 'ghost'}
-							size="sm"
-							class="h-8 px-2 text-xs text-neutral-100 hover:text-foreground [@media(pointer:coarse)]:h-11 [@media(pointer:coarse)]:min-w-11"
-							aria-pressed={editor.selectionMode === mode.value}
-							onclick={() => (editor.selectionMode = mode.value as StudioSelectionMode)}
-						>
-							{mode.label}
-						</Button>
-					{/each}
-				</div>
-				{#if editor.activeTool === 'magic_wand'}
+				{#if isAreaSelectionTool()}
+					<div
+						class="flex items-center gap-0.5"
+						role="group"
+						aria-label={m.studio_selection_mode()}
+					>
+						{#each [{ value: 'replace', label: m.studio_selection_replace() }, { value: 'add', label: m.studio_selection_add() }, { value: 'subtract', label: m.studio_selection_subtract() }] as mode (mode.value)}
+							<Button
+								variant={editor.selectionMode === mode.value ? 'secondary' : 'ghost'}
+								size="sm"
+								class="h-8 px-2 text-xs text-neutral-100 hover:text-foreground [@media(pointer:coarse)]:h-11 [@media(pointer:coarse)]:min-w-11"
+								aria-pressed={editor.selectionMode === mode.value}
+								onclick={() => (editor.selectionMode = mode.value as StudioSelectionMode)}
+							>
+								{mode.label}
+							</Button>
+						{/each}
+					</div>
+				{/if}
+				{#if editor.activeTool === 'magic_wand' || editor.activeTool === 'bucket'}
 					<label class="flex min-w-40 items-center gap-2 px-1 text-xs">
 						<span class="whitespace-nowrap">
-							{m.studio_magic_tolerance({ value: editor.magicSelectTolerance })}
+							{m.studio_magic_tolerance({
+								value:
+									editor.activeTool === 'bucket'
+										? editor.bucketTolerance
+										: editor.magicSelectTolerance
+							})}
 						</span>
 						<Slider
-							value={editor.magicSelectTolerance}
+							value={editor.activeTool === 'bucket'
+								? editor.bucketTolerance
+								: editor.magicSelectTolerance}
 							min={0}
-							max={50}
+							max={255}
 							step={1}
 							class="w-24"
-							ariaLabel={m.studio_magic_tolerance({ value: editor.magicSelectTolerance })}
-							onValueChange={(value) => (editor.magicSelectTolerance = value)}
+							ariaLabel={m.studio_magic_tolerance({
+								value:
+									editor.activeTool === 'bucket'
+										? editor.bucketTolerance
+										: editor.magicSelectTolerance
+							})}
+							onValueChange={(value) => {
+								if (editor.activeTool === 'bucket') editor.bucketTolerance = value;
+								else editor.magicSelectTolerance = value;
+							}}
 						/>
 					</label>
+					<Button
+						variant={(
+							editor.activeTool === 'bucket'
+								? editor.bucketContiguous
+								: editor.magicSelectContiguous
+						)
+							? 'secondary'
+							: 'ghost'}
+						size="sm"
+						class="h-8 px-2 text-xs text-neutral-100 hover:text-foreground"
+						aria-pressed={editor.activeTool === 'bucket'
+							? editor.bucketContiguous
+							: editor.magicSelectContiguous}
+						onclick={() => {
+							if (editor.activeTool === 'bucket') {
+								editor.bucketContiguous = !editor.bucketContiguous;
+							} else {
+								editor.magicSelectContiguous = !editor.magicSelectContiguous;
+							}
+						}}
+					>
+						{m.studio_contiguous()}
+					</Button>
+				{/if}
+				{#if editor.activeTool === 'pencil' || editor.activeTool === 'bucket'}
+					<div class="w-34">
+						<StudioColorPicker
+							label={m.studio_foreground_color()}
+							value={editor.paintColor}
+							brandColors={editor.brandKit?.colors ?? []}
+							recentColors={editor.recentColors}
+							onChange={(value) => (editor.paintColor = value)}
+							onCommit={(value) => editor.rememberColor(value)}
+						/>
+					</div>
+				{/if}
+				{#if editor.activeTool === 'pencil'}
+					<label class="flex min-w-36 items-center gap-2 px-1 text-xs">
+						<span class="whitespace-nowrap"
+							>{m.studio_brush_size({ value: editor.pencilSize })}</span
+						>
+						<Slider
+							value={editor.pencilSize}
+							min={1}
+							max={256}
+							step={1}
+							class="w-20"
+							ariaLabel={m.studio_brush_size({ value: editor.pencilSize })}
+							onValueChange={(value) => (editor.pencilSize = value)}
+						/>
+					</label>
+				{/if}
+				{#if editor.activeTool === 'pencil' || editor.activeTool === 'bucket'}
+					<label class="flex min-w-34 items-center gap-2 px-1 text-xs">
+						<span class="whitespace-nowrap">
+							{m.studio_opacity({ value: Math.round(editor.paintOpacity * 100) })}
+						</span>
+						<Slider
+							value={Math.round(editor.paintOpacity * 100)}
+							min={1}
+							max={100}
+							step={1}
+							class="w-18"
+							ariaLabel={m.studio_opacity({
+								value: Math.round(editor.paintOpacity * 100)
+							})}
+							onValueChange={(value) => (editor.paintOpacity = value / 100)}
+						/>
+					</label>
+				{/if}
+				{#if editor.pixelSelection}
+					<Button
+						variant="ghost"
+						size="sm"
+						class="h-8 px-2 text-xs text-neutral-100 hover:text-foreground"
+						onclick={() => editor.clearPixelSelection()}
+					>
+						{m.studio_deselect_pixels()}
+					</Button>
 				{/if}
 			</div>
 		{/if}
@@ -449,20 +754,35 @@
 			<div
 				{@attach attachStage}
 				class="fabric-stage relative shadow-2xl ring-1 ring-black/30"
+				data-testid="studio-stage"
 				style:width={`${editor.document.width_px * editor.zoom}px`}
 				style:height={`${editor.document.height_px * editor.zoom}px`}
 				style:--studio-zoom={editor.zoom}
+				style:--studio-pencil-color={editor.paintColor}
 			>
 				{#key canvasAttempt}
 					<canvas {@attach attachCanvas} aria-hidden="true"></canvas>
 				{/key}
-				{#if isAreaSelectionTool()}
+				{#if usesCanvasSurface()}
 					<div
 						class="absolute inset-0 z-10 cursor-crosshair touch-none"
 						data-testid="studio-selection-surface"
 						aria-hidden="true"
+						onpointerdown={startPan}
+						onpointermove={movePan}
+						onpointerup={stopPan}
+						onpointercancel={cancelPointer}
 					></div>
 				{/if}
+				<canvas
+					{@attach attachSelectionOverlay}
+					width={editor.document.width_px}
+					height={editor.document.height_px}
+					class="pointer-events-none absolute inset-0 z-15 size-full"
+					data-testid="studio-pixel-selection"
+					data-active={editor.pixelSelection ? 'true' : 'false'}
+					aria-hidden="true"
+				></canvas>
 				{#if selectionGesture}
 					<svg
 						class="pointer-events-none absolute inset-0 z-20 size-full overflow-visible"
@@ -477,6 +797,21 @@
 								y={bounds.y}
 								width={bounds.width}
 								height={bounds.height}
+							/>
+						{:else if selectionGesture.tool === 'ellipse_marquee'}
+							{@const bounds = marqueeBounds(selectionGesture)}
+							<ellipse
+								class="studio-selection-outline"
+								cx={bounds.x + bounds.width / 2}
+								cy={bounds.y + bounds.height / 2}
+								rx={bounds.width / 2}
+								ry={bounds.height / 2}
+							/>
+						{:else if selectionGesture.tool === 'pencil'}
+							<polyline
+								class="studio-pencil-preview"
+								points={lassoPoints(selectionGesture)}
+								stroke-width={editor.pencilSize}
 							/>
 						{:else}
 							<polygon class="studio-selection-outline" points={lassoPoints(selectionGesture)} />
@@ -543,6 +878,14 @@
 		stroke-width: 2;
 		vector-effect: non-scaling-stroke;
 		animation: studio-magic-pulse 0.42s ease-out forwards;
+	}
+
+	.studio-pencil-preview {
+		fill: none;
+		stroke: var(--studio-pencil-color, #f97316);
+		stroke-linecap: round;
+		stroke-linejoin: round;
+		opacity: 0.86;
 	}
 
 	@keyframes studio-selection-march {

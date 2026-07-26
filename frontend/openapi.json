@@ -7286,6 +7286,9 @@
 						"format": "double",
 						"type": "number"
 					},
+					"paint": {
+						"$ref": "#/components/schemas/StudioPaintValue"
+					},
 					"parent_id": {
 						"type": "string"
 					},
@@ -7299,7 +7302,7 @@
 						"$ref": "#/components/schemas/StudioTransform"
 					},
 					"type": {
-						"enum": ["text", "image", "shape", "group"],
+						"enum": ["text", "image", "shape", "paint", "group"],
 						"type": "string"
 					},
 					"visible": {
@@ -7373,6 +7376,97 @@
 					}
 				},
 				"required": ["id", "name", "background_color", "layers"],
+				"type": "object"
+			},
+			"StudioPaintPoint": {
+				"additionalProperties": false,
+				"properties": {
+					"x": {
+						"format": "double",
+						"type": "number"
+					},
+					"y": {
+						"format": "double",
+						"type": "number"
+					}
+				},
+				"required": ["x", "y"],
+				"type": "object"
+			},
+			"StudioPaintSpan": {
+				"additionalProperties": false,
+				"properties": {
+					"width": {
+						"format": "double",
+						"type": "number"
+					},
+					"x": {
+						"format": "double",
+						"type": "number"
+					},
+					"y": {
+						"format": "double",
+						"type": "number"
+					}
+				},
+				"required": ["y", "x", "width"],
+				"type": "object"
+			},
+			"StudioPaintValue": {
+				"additionalProperties": false,
+				"properties": {
+					"color": {
+						"type": "string"
+					},
+					"kind": {
+						"enum": ["stroke", "fill"],
+						"type": "string"
+					},
+					"opacity": {
+						"format": "double",
+						"maximum": 1,
+						"minimum": 0,
+						"type": "number"
+					},
+					"points": {
+						"items": {
+							"$ref": "#/components/schemas/StudioPaintPoint"
+						},
+						"type": ["array", "null"]
+					},
+					"size": {
+						"format": "double",
+						"maximum": 512,
+						"minimum": 0,
+						"type": "number"
+					},
+					"source_height": {
+						"format": "double",
+						"minimum": 0,
+						"type": "number"
+					},
+					"source_width": {
+						"format": "double",
+						"minimum": 0,
+						"type": "number"
+					},
+					"spans": {
+						"items": {
+							"$ref": "#/components/schemas/StudioPaintSpan"
+						},
+						"type": ["array", "null"]
+					}
+				},
+				"required": [
+					"kind",
+					"color",
+					"size",
+					"opacity",
+					"source_width",
+					"source_height",
+					"points",
+					"spans"
+				],
 				"type": "object"
 			},
 			"StudioPreset": {

@@ -35,6 +35,22 @@
 		if (layer.image?.fit === 'stretch') return 'none';
 		return layer.image?.fit === 'contain' ? 'xMidYMid meet' : 'xMidYMid slice';
 	}
+
+	function paintX(layer: StudioLayer, value: number): number {
+		return (
+			layer.transform.x +
+			(value / Math.max(1, layer.paint?.source_width ?? layer.transform.width)) *
+				layer.transform.width
+		);
+	}
+
+	function paintY(layer: StudioLayer, value: number): number {
+		return (
+			layer.transform.y +
+			(value / Math.max(1, layer.paint?.source_height ?? layer.transform.height)) *
+				layer.transform.height
+		);
+	}
 </script>
 
 <div
@@ -95,6 +111,34 @@
 								height={layer.transform.height}
 								preserveAspectRatio={imageFit(layer)}
 							/>
+						{:else if layer.paint?.kind === 'stroke'}
+							<polyline
+								points={layer.paint.points
+									.map((point) => `${paintX(layer, point.x)},${paintY(layer, point.y)}`)
+									.join(' ')}
+								fill="none"
+								stroke={layer.paint.color}
+								stroke-width={layer.paint.size *
+									Math.min(
+										layer.transform.width / Math.max(1, layer.paint.source_width),
+										layer.transform.height / Math.max(1, layer.paint.source_height)
+									)}
+								stroke-opacity={layer.paint.opacity}
+								stroke-linecap="round"
+								stroke-linejoin="round"
+							/>
+						{:else if layer.paint?.kind === 'fill'}
+							<g fill={layer.paint.color} fill-opacity={layer.paint.opacity}>
+								{#each layer.paint.spans as span, index (`${span.y}:${span.x}:${index}`)}
+									<rect
+										x={paintX(layer, span.x)}
+										y={paintY(layer, span.y)}
+										width={(span.width / Math.max(1, layer.paint.source_width)) *
+											layer.transform.width}
+										height={layer.transform.height / Math.max(1, layer.paint.source_height)}
+									/>
+								{/each}
+							</g>
 						{:else if layer.text}
 							<foreignObject
 								x={layer.transform.x}

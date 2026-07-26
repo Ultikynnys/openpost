@@ -8,8 +8,8 @@ export const STUDIO_LIMITS = {
 	maxDocumentBytes: 10 * 1024 * 1024
 } as const;
 
-export type StudioLayerType = 'text' | 'image' | 'shape' | 'group';
-export type StudioSelectionTool = 'select' | 'marquee' | 'lasso' | 'magic_wand';
+export type StudioLayerType = 'text' | 'image' | 'shape' | 'paint' | 'group';
+export type StudioSelectionTool = 'select' | 'marquee' | 'ellipse_marquee' | 'lasso' | 'magic_wand';
 export type StudioSelectionMode = 'replace' | 'add' | 'subtract' | 'toggle';
 export type StudioTool =
 	| StudioSelectionTool
@@ -19,6 +19,8 @@ export type StudioTool =
 	| 'image'
 	| 'camera'
 	| 'eyedropper'
+	| 'pencil'
+	| 'bucket'
 	| 'hand'
 	| 'zoom';
 export type StudioSaveState =
@@ -103,6 +105,28 @@ export interface StudioShapeValue {
 	radius: number;
 }
 
+export interface StudioPaintPoint {
+	x: number;
+	y: number;
+}
+
+export interface StudioPaintSpan {
+	y: number;
+	x: number;
+	width: number;
+}
+
+export interface StudioPaintValue {
+	kind: 'stroke' | 'fill';
+	color: string;
+	size: number;
+	opacity: number;
+	source_width: number;
+	source_height: number;
+	points: StudioPaintPoint[];
+	spans: StudioPaintSpan[];
+}
+
 export type StudioBlendMode =
 	'normal' | 'multiply' | 'screen' | 'overlay' | 'darken' | 'lighten' | 'soft_light';
 
@@ -138,6 +162,7 @@ export interface StudioLayer {
 	text?: StudioTextValue;
 	image?: StudioImageValue;
 	shape?: StudioShapeValue;
+	paint?: StudioPaintValue;
 	effects?: StudioLayerEffects;
 	mask?: StudioLayerMask;
 }

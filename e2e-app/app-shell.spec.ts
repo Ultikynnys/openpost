@@ -17,7 +17,7 @@ test("authenticated navigation keeps the app shell mounted", async ({
   await page.getByTestId("profile-menu-trigger").click();
   await expect(
     page.getByRole("menuitem", { name: "Watch product demo" }),
-  ).toHaveAttribute("href", "https://youtu.be/_mZf3HzQaN8");
+  ).toHaveCount(0);
   await page.keyboard.press("Escape");
 
   await page.evaluate(() => {

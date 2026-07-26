@@ -11,7 +11,16 @@ import {
 } from './document';
 import { defaultLayerEffects, defaultTextCurve } from './effects';
 import { StudioHistory } from './history';
-import { mergeSelectionIDs } from './selection';
+import {
+	combinePixelMasks,
+	intersectPixelMasks,
+	pixelMaskBounds,
+	pixelMaskToSpans,
+	strokePixelMask,
+	mergeSelectionIDs,
+	type SelectionPoint,
+	type StudioPixelSelection
+} from './selection';
 import type {
 	StudioDocument,
 	StudioDocumentResponse,
@@ -35,7 +44,14 @@ export class StudioEditor {
 	selectedLayerIDs = $state.raw<string[]>([]);
 	activeTool = $state<StudioTool>('select');
 	selectionMode = $state<StudioSelectionMode>('replace');
-	magicSelectTolerance = $state(12);
+	magicSelectTolerance = $state(32);
+	magicSelectContiguous = $state(true);
+	pixelSelection = $state.raw<StudioPixelSelection | null>(null);
+	paintColor = $state('#f97316');
+	pencilSize = $state(12);
+	paintOpacity = $state(1);
+	bucketTolerance = $state(32);
+	bucketContiguous = $state(true);
 	saveState = $state<StudioSaveState>('idle');
 	saveMessage = $state('');
 	zoom = $state(1);
@@ -77,6 +93,7 @@ export class StudioEditor {
 		this.document = cloneStudioDocument(response.document);
 		this.activePageID = response.document.pages[0]?.id ?? '';
 		this.selectedLayerIDs = [];
+		this.pixelSelection = null;
 		this.selectionAnchorID = '';
 		this.saveState = 'saved';
 		this.saveMessage = m.studio_saved();
@@ -169,6 +186,33 @@ export class StudioEditor {
 		this.selectionAnchorID = this.selectedLayerIDs.at(-1) ?? '';
 	}
 
+	applyPixelSelection(
+		data: Uint8Array,
+		targetLayerIDs: string[],
+		mode: StudioSelectionMode = 'replace'
+	): void {
+		if (!this.document) return;
+		const current =
+			this.pixelSelection?.width === this.document.width_px &&
+			this.pixelSelection.height === this.document.height_px &&
+			sameStringSet(this.pixelSelection.targetLayerIDs, targetLayerIDs)
+				? this.pixelSelection.data
+				: null;
+		const combined = combinePixelMasks(current, data, mode);
+		this.pixelSelection = pixelMaskBounds(combined, this.document.width_px, this.document.height_px)
+			? {
+					width: this.document.width_px,
+					height: this.document.height_px,
+					data: combined,
+					targetLayerIDs: [...targetLayerIDs]
+				}
+			: null;
+	}
+
+	clearPixelSelection(): void {
+		this.pixelSelection = null;
+	}
+
 	selectAll(): void {
 		this.selectedLayerIDs = this.layerSelectionOrder().filter(
 			(id) => !this.activePage?.layers.find((layer) => layer.id === id)?.locked
@@ -243,6 +287,77 @@ export class StudioEditor {
 			effects: defaultLayerEffects()
 		};
 		this.addLayer(layer);
+	}
+
+	addPencilStroke(points: SelectionPoint[]): void {
+		if (!this.document || points.length === 0) return;
+		const stroke = strokePixelMask(
+			this.document.width_px,
+			this.document.height_px,
+			points,
+			this.pencilSize
+		);
+		this.addPaintFill(
+			this.pixelSelection ? intersectPixelMasks(stroke, this.pixelSelection.data) : stroke,
+			m.studio_pencil()
+		);
+	}
+
+	addPaintFill(mask: Uint8Array, name = m.studio_paint_bucket()): void {
+		if (!this.document) return;
+		const bounds = pixelMaskBounds(mask, this.document.width_px, this.document.height_px);
+		if (!bounds) return;
+		const spans = pixelMaskToSpans(
+			mask,
+			this.document.width_px,
+			this.document.height_px,
+			bounds.x,
+			bounds.y
+		);
+		this.addPaintLayer({
+			name,
+			transform: defaultTransform(bounds.width, bounds.height, bounds.x, bounds.y),
+			paint: {
+				kind: 'fill',
+				color: this.paintColor,
+				size: 1,
+				opacity: this.paintOpacity,
+				source_width: bounds.width,
+				source_height: bounds.height,
+				points: [],
+				spans
+			}
+		});
+	}
+
+	private addPaintLayer({
+		name,
+		transform,
+		paint
+	}: Pick<StudioLayer, 'name' | 'transform'> & {
+		paint: NonNullable<StudioLayer['paint']>;
+	}): void {
+		const selectedID = this.selectedLayerIDs.at(-1);
+		const layer: StudioLayer = {
+			id: studioID('layer'),
+			type: 'paint',
+			name,
+			visible: true,
+			locked: false,
+			opacity: 1,
+			transform,
+			paint,
+			effects: defaultLayerEffects()
+		};
+		this.mutate(`Add ${name}`, (document) => {
+			const page = document.pages.find((item) => item.id === this.activePageID);
+			if (!page) return;
+			const selectedIndex = selectedID
+				? page.layers.findIndex((candidate) => candidate.id === selectedID)
+				: -1;
+			page.layers.splice(selectedIndex >= 0 ? selectedIndex + 1 : page.layers.length, 0, layer);
+		});
+		this.selectedLayerIDs = [layer.id];
 	}
 
 	addImage(media: { id: string; width?: number; height?: number; name?: string }): void {
@@ -744,4 +859,10 @@ export function useStudioEditor(): StudioEditor {
 	const editor = getContext<StudioEditor>(STUDIO_EDITOR_CONTEXT);
 	if (!editor) throw new Error('Studio editor context is missing.');
 	return editor;
+}
+
+function sameStringSet(left: string[], right: string[]): boolean {
+	if (left.length !== right.length) return false;
+	const values = new Set(left);
+	return right.every((value) => values.has(value));
 }

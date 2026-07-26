@@ -89,4 +89,31 @@ describe('Studio editor layer interactions', () => {
 
 		expect(editor.activePage?.layers.map((candidate) => candidate.id)).toEqual(['back']);
 	});
+
+	it('adds persistent pencil and bucket paint layers above the active layer', () => {
+		const editor = new StudioEditor();
+		editor.load(response());
+		editor.selectLayer('front');
+		editor.paintColor = '#0ea5e9';
+		editor.pencilSize = 8;
+
+		editor.addPencilStroke([
+			{ x: 220, y: 30 },
+			{ x: 280, y: 70 }
+		]);
+
+		const pencil = editor.activePage?.layers.at(-1);
+		expect(pencil?.type).toBe('paint');
+		expect(pencil?.paint?.kind).toBe('fill');
+		expect(pencil?.paint?.color).toBe('#0ea5e9');
+
+		const mask = new Uint8Array(1080 * 1080);
+		mask.fill(1, 10 * 1080 + 20, 10 * 1080 + 40);
+		editor.addPaintFill(mask);
+
+		const bucket = editor.activePage?.layers.at(-1);
+		expect(bucket?.type).toBe('paint');
+		expect(bucket?.paint?.kind).toBe('fill');
+		expect(bucket?.paint?.spans).toEqual([{ x: 0, y: 0, width: 20 }]);
+	});
 });

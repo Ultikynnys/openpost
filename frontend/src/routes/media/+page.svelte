@@ -9,15 +9,8 @@
 	import { getAuthenticatedMediaURL } from '$lib/media-url';
 	import { isSupportedMediaFile, uploadMediaFiles } from '$lib/media-upload-client';
 	import { uploadMediaFile } from '$lib/media-upload-client';
-	import {
-		deleteStudioTemplate,
-		duplicateStudioDesign,
-		listStudioDesigns,
-		listStudioTemplates,
-		loadStudioBrandKit,
-		loadStudioConfig
-	} from '$lib/studio/api';
-	import type { StudioBrandKit, StudioDesignSummary, StudioTemplate } from '$lib/studio/types';
+	import { duplicateStudioDesign, listStudioDesigns, loadStudioConfig } from '$lib/studio/api';
+	import type { StudioDesignSummary } from '$lib/studio/types';
 	import { clampMediaPage } from '$lib/media-pagination';
 	import { workspaceCtx } from '$lib/stores/workspace.svelte';
 	import { Button } from '$lib/components/ui/button';
@@ -32,8 +25,6 @@
 	import DestructiveConfirmDialog from '$lib/components/destructive-confirm-dialog.svelte';
 	import CameraCapture from '$lib/components/camera-capture.svelte';
 	import MediaOrganizationDialog from '$lib/components/media-organization-dialog.svelte';
-	import BrandKitEditor from '$lib/studio/components/brand-kit-editor.svelte';
-	import TemplatePreview from '$lib/studio/components/template-preview.svelte';
 	import LoaderIcon from 'lucide-svelte/icons/loader-2';
 	import ImageIcon from 'lucide-svelte/icons/image';
 	import VideoIcon from 'lucide-svelte/icons/video';
@@ -147,10 +138,7 @@
 	let dateFrom = $state('');
 	let dateTo = $state('');
 	let layoutMode = $state<'grid' | 'list'>('grid');
-	let hubView = $state<'assets' | 'designs' | 'brand'>('assets');
 	let designs = $state<StudioDesignSummary[]>([]);
-	let templates = $state<StudioTemplate[]>([]);
-	let brandKit = $state<StudioBrandKit | null>(null);
 	let collections = $state<MediaCollection[]>([]);
 	let tags = $state<MediaTag[]>([]);
 	let hubLoading = $state(false);
@@ -162,8 +150,6 @@
 	let batchCollectionID = $state('');
 	let batchTagID = $state('');
 	let organizationSaving = $state(false);
-	let templateToDelete = $state<StudioTemplate | null>(null);
-	let templateDeleteDialogOpen = $state(false);
 	let storageUsage = $state({ used_bytes: 0, asset_count: 0, internal_bytes: 0, limit_bytes: 0 });
 	let studioEnabled = $state(true);
 	let mediaCanEdit = $state(false);
@@ -203,10 +189,6 @@
 
 	function uploadedCountLabel(count: number) {
 		return count === 1 ? m.media_uploaded_one() : m.media_uploaded_many({ count });
-	}
-
-	function filesCountLabel(count: number) {
-		return count === 1 ? m.media_files_one() : m.media_files_many({ count });
 	}
 
 	function usageSummaryLabel(count: number) {
@@ -331,34 +313,16 @@
 			mediaCanEdit = Boolean(collectionResult.data?.can_edit);
 			if (storageResult.data) storageUsage = storageResult.data;
 			if (studioEnabled) {
-				const [designResult, templateResult, brandResult] = await Promise.all([
-					listStudioDesigns(workspaceID),
-					listStudioTemplates(workspaceID),
-					loadStudioBrandKit(workspaceID)
-				]);
+				const designResult = await listStudioDesigns(workspaceID);
 				designs = designResult.designs;
-				templates = templateResult;
-				brandKit = brandResult;
 			} else {
 				designs = [];
-				templates = [];
-				brandKit = null;
-				if (hubView !== 'assets') changeHubView('assets');
 			}
 		} catch (cause) {
 			notify(cause instanceof Error ? cause.message : m.media_hub_load_failed(), 'error');
 		} finally {
 			hubLoading = false;
 		}
-	}
-
-	function changeHubView(view: 'assets' | 'designs' | 'brand') {
-		if (hubView === view) return;
-		hubView = view;
-		const next = new URL($page.url);
-		if (view === 'assets') next.searchParams.delete('view');
-		else next.searchParams.set('view', view);
-		replaceState(resolve(`${next.pathname}${next.search}` as '/'), {});
 	}
 
 	function resetAssetFilters() {
@@ -380,26 +344,6 @@
 	function showAllAssets() {
 		search = '';
 		resetAssetFilters();
-	}
-
-	function requestTemplateDeletion(template: StudioTemplate): void {
-		if (template.built_in) return;
-		templateToDelete = template;
-		templateDeleteDialogOpen = true;
-	}
-
-	async function confirmTemplateDeletion(): Promise<void> {
-		if (!templateToDelete) return;
-		try {
-			await deleteStudioTemplate(templateToDelete.id);
-			templates = templates.filter((template) => template.id !== templateToDelete?.id);
-			notify(m.media_template_deleted(), 'success');
-		} catch (cause) {
-			notify(cause instanceof Error ? cause.message : m.media_template_delete_failed(), 'error');
-			throw cause;
-		} finally {
-			templateToDelete = null;
-		}
 	}
 
 	function applyAssetFilters() {
@@ -873,15 +817,13 @@
 
 	onMount(() => {
 		const requestedView = $page.url.searchParams.get('view');
-		hubView =
-			requestedView === 'brand'
-				? 'brand'
-				: requestedView === 'designs' || requestedView === 'templates'
-					? 'designs'
-					: 'assets';
-		if (requestedView === 'templates') {
+		if (requestedView === 'brand') {
+			void goto(resolve('/settings?tab=brand' as '/'), { replaceState: true });
+			return;
+		}
+		if (requestedView) {
 			const next = new URL($page.url);
-			next.searchParams.set('view', 'designs');
+			next.searchParams.delete('view');
 			replaceState(resolve(`${next.pathname}${next.search}` as '/'), {});
 		}
 		void loadWorkspaces();
@@ -917,6 +859,15 @@
 			Boolean(dateTo)
 		].filter(Boolean).length
 	);
+	const visibleDesigns = $derived(
+		studioEnabled && !isSelectionMode && currentPage === 0 && activeFilterCount === 0
+			? designs.filter((design) =>
+					designDisplayTitle(design.title)
+						.toLocaleLowerCase()
+						.includes(search.trim().toLocaleLowerCase())
+				)
+			: []
+	);
 
 	const totalPages = $derived(Math.ceil(totalCount / pageSize));
 	const allMediaSelected = $derived(
@@ -929,10 +880,11 @@
 	);
 
 	const descriptionText = $derived.by(() => {
-		if (hubView === 'designs') return m.media_designs_body();
-		if (hubView === 'brand') return m.media_brand_description();
-		if (totalCount > 0) {
-			let text: string = filesCountLabel(totalCount);
+		if (totalCount > 0 || designs.length > 0) {
+			let text: string = m.media_library_count({
+				assets: totalCount,
+				designs: designs.length
+			});
 			if (filter === 'unused') {
 				text += ` (${m.media_unused_suffix({ count: totalCount })})`;
 			}
@@ -976,7 +928,7 @@
 				</Select.Content>
 			</Select.Root>
 		{/if}
-		{#if mediaCanEdit && hubView === 'assets'}
+		{#if mediaCanEdit}
 			<DropdownMenu.Root>
 				<DropdownMenu.Trigger>
 					{#snippet child({ props })}
@@ -1008,681 +960,472 @@
 					{/if}
 				</DropdownMenu.Content>
 			</DropdownMenu.Root>
-		{:else if mediaCanEdit && hubView === 'designs' && studioEnabled}
-			<Button
-				class="gap-2"
-				onclick={() =>
-					goto(resolve(`/studio/new?workspace=${encodeURIComponent(selectedWorkspaceId)}` as '/'))}
-			>
-				<PlusIcon class="size-4" />
-				{m.media_new_design()}
-			</Button>
 		{/if}
 	{/snippet}
 
-	<nav
-		aria-label={m.media_hub_views()}
-		class="grid min-h-12 grid-cols-3 gap-1 rounded-xl bg-muted p-1 sm:w-fit sm:min-w-[28rem]"
-	>
-		<button
-			type="button"
-			class="flex min-h-11 items-center justify-center gap-2 rounded-lg px-3 text-sm font-medium transition-colors {hubView ===
-			'assets'
-				? 'bg-background text-foreground shadow-xs'
-				: 'text-muted-foreground hover:text-foreground'}"
-			aria-current={hubView === 'assets' ? 'page' : undefined}
-			onclick={() => changeHubView('assets')}
-		>
-			<ImageIcon class="size-4" />
-			{m.media_assets()}
-		</button>
-		{#if studioEnabled}
-			<button
-				type="button"
-				class="flex min-h-11 items-center justify-center gap-2 rounded-lg px-3 text-sm font-medium transition-colors {hubView ===
-				'designs'
-					? 'bg-background text-foreground shadow-xs'
-					: 'text-muted-foreground hover:text-foreground'}"
-				aria-current={hubView === 'designs' ? 'page' : undefined}
-				onclick={() => changeHubView('designs')}
-			>
-				<PaletteIcon class="size-4" />
-				{m.media_designs()}
-			</button>
-			<button
-				type="button"
-				class="flex min-h-11 items-center justify-center gap-2 rounded-lg px-3 text-sm font-medium transition-colors {hubView ===
-				'brand'
-					? 'bg-background text-foreground shadow-xs'
-					: 'text-muted-foreground hover:text-foreground'}"
-				aria-current={hubView === 'brand' ? 'page' : undefined}
-				onclick={() => changeHubView('brand')}
-			>
-				<HeartIcon class="size-4" />
-				{m.media_brand()}
-			</button>
+	<div class="flex items-center justify-between gap-3 text-xs text-muted-foreground">
+		<p>
+			{m.media_storage_summary({
+				count: storageUsage.asset_count,
+				size: formatSize(storageUsage.used_bytes)
+			})}
+		</p>
+		{#if mediaLoading && mediaItems.length > 0}
+			<span class="inline-flex items-center gap-1.5" role="status">
+				<LoaderIcon class="size-3.5 animate-spin" />
+				{m.common_loading()}
+			</span>
 		{/if}
-	</nav>
+	</div>
+	{#if error && mediaItems.length > 0}
+		<InlineNotice
+			tone="error"
+			message={error}
+			dismissLabel={m.common_close()}
+			onDismiss={() => (error = '')}
+		/>
+	{/if}
 
-	{#if hubView === 'assets'}
-		<div class="flex items-center justify-between gap-3 text-xs text-muted-foreground">
-			<p>
-				{m.media_storage_summary({
-					count: storageUsage.asset_count,
-					size: formatSize(storageUsage.used_bytes)
-				})}
-			</p>
-			{#if mediaLoading && mediaItems.length > 0}
-				<span class="inline-flex items-center gap-1.5" role="status">
-					<LoaderIcon class="size-3.5 animate-spin" />
-					{m.common_loading()}
+	<form
+		class="flex gap-2"
+		onsubmit={(event) => {
+			event.preventDefault();
+			applyAssetFilters();
+		}}
+	>
+		<div class="relative min-w-0 flex-1">
+			<SearchIcon
+				class="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
+			/>
+			<input
+				class="h-11 w-full rounded-lg border border-input bg-background pr-3 pl-9 text-sm"
+				bind:value={search}
+				placeholder={m.media_search_filename_alt()}
+			/>
+		</div>
+		<Button
+			type="button"
+			variant={activeFilterCount > 0 ? 'secondary' : 'outline'}
+			class="h-11 min-w-11 shrink-0 sm:w-auto"
+			aria-label={m.media_filters()}
+			onclick={() => (filterDialogOpen = true)}
+		>
+			<SlidersHorizontalIcon />
+			<span class="hidden sm:inline">{m.media_filters()}</span>
+			{#if activeFilterCount > 0}
+				<span
+					class="flex size-5 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground"
+				>
+					{activeFilterCount}
 				</span>
 			{/if}
+		</Button>
+	</form>
+
+	<div class="flex flex-col gap-2 border-b pb-4 sm:flex-row sm:items-center">
+		<div class="flex min-w-0 gap-1 overflow-x-auto">
+			{#each quickFilters as quickFilter (quickFilter.value)}
+				<Button
+					variant={filter === quickFilter.value ? 'secondary' : 'ghost'}
+					size="sm"
+					class="min-w-11 shrink-0"
+					onclick={() => changeFilter(quickFilter.value)}
+				>
+					{quickFilter.label}
+				</Button>
+			{/each}
 		</div>
-		{#if error && mediaItems.length > 0}
-			<InlineNotice
-				tone="error"
-				message={error}
-				dismissLabel={m.common_close()}
-				onDismiss={() => (error = '')}
+		<div class="flex shrink-0 items-center justify-between gap-1.5 sm:ml-auto sm:justify-start">
+			<Select.Root type="single" value={sort} onValueChange={changeSort}>
+				<Select.Trigger class="h-10 w-[7.75rem] text-sm">
+					{sort === 'newest'
+						? m.media_sort_newest()
+						: sort === 'oldest'
+							? m.media_sort_oldest()
+							: sort === 'name'
+								? m.media_sort_name()
+								: sort === 'recently_used'
+									? m.media_recently_used()
+									: m.media_sort_size()}
+				</Select.Trigger>
+				<Select.Content>
+					<Select.Item value="newest">{m.media_sort_newest()}</Select.Item>
+					<Select.Item value="oldest">{m.media_sort_oldest()}</Select.Item>
+					<Select.Item value="name">{m.media_sort_name()}</Select.Item>
+					<Select.Item value="size">{m.media_sort_size()}</Select.Item>
+					<Select.Item value="recently_used">{m.media_recently_used()}</Select.Item>
+				</Select.Content>
+			</Select.Root>
+			<div class="hidden rounded-lg border p-0.5 sm:flex">
+				<Button
+					variant={layoutMode === 'grid' ? 'secondary' : 'ghost'}
+					size="icon-sm"
+					onclick={() => (layoutMode = 'grid')}
+					aria-label={m.media_grid_view()}><Grid2X2Icon /></Button
+				>
+				<Button
+					variant={layoutMode === 'list' ? 'secondary' : 'ghost'}
+					size="icon-sm"
+					onclick={() => (layoutMode = 'list')}
+					aria-label={m.media_compact_view()}><ListIcon /></Button
+				>
+			</div>
+			{#if mediaCanEdit && mediaItems.length > 0 && !isSelectionMode}
+				<Button variant="outline" size="sm" class="h-11" onclick={() => (isSelectionMode = true)}>
+					{m.media_select()}
+				</Button>
+			{/if}
+		</div>
+	</div>
+
+	{#if isSelectionMode}
+		<div
+			class="fixed right-3 bottom-[calc(5.75rem+env(safe-area-inset-bottom))] left-3 z-40 rounded-2xl bg-popover p-2 text-popover-foreground shadow-lg ring-1 ring-border md:sticky md:right-auto md:bottom-4 md:left-auto"
+			role="toolbar"
+			aria-label={m.media_selection_actions()}
+		>
+			<div class="flex items-center gap-1">
+				<span class="min-w-0 flex-1 truncate px-2 text-sm font-semibold">
+					{selectedCountLabel(selectedMediaIds.size)}
+				</span>
+				<Button variant="ghost" size="sm" onclick={selectAll}>
+					{allMediaSelected ? m.media_deselect_all() : m.media_select_all()}
+				</Button>
+				<Button
+					variant="ghost"
+					size="icon-sm"
+					onclick={cancelSelection}
+					aria-label={m.common_cancel()}
+				>
+					<XIcon />
+				</Button>
+			</div>
+			<div class="flex gap-1 overflow-x-auto">
+				<Button
+					variant="ghost"
+					size="sm"
+					class="shrink-0"
+					disabled={selectedMediaIds.size === 0}
+					onclick={() => (selectionOrganizationDialogOpen = true)}
+				>
+					<FolderPlusIcon />
+					{m.media_organize()}
+				</Button>
+				<Button
+					variant="ghost"
+					size="sm"
+					class="shrink-0"
+					disabled={selectedMediaIds.size === 0}
+					onclick={toggleFavoriteBatch}
+				>
+					<HeartIcon />
+					{m.media_favorite()}
+				</Button>
+				{#if selectedDeletableIds.length > 0}
+					<Button
+						variant="ghost"
+						size="sm"
+						class="shrink-0 text-destructive hover:text-destructive"
+						onclick={requestDeleteSelectedBatch}
+					>
+						<TrashIcon />
+						{m.common_delete()}
+					</Button>
+				{/if}
+			</div>
+		</div>
+	{/if}
+
+	{#if (mediaLoading || hubLoading) && mediaItems.length === 0 && visibleDesigns.length === 0}
+		<PageLoading layout="gallery" label={m.common_loading()} items={10} />
+	{:else if error && mediaItems.length === 0 && visibleDesigns.length === 0}
+		<InlineNotice tone="error" message={error} class="my-2">
+			{#snippet actions()}
+				<Button variant="outline" size="sm" onclick={() => loadMedia()}>
+					{m.common_retry()}
+				</Button>
+			{/snippet}
+		</InlineNotice>
+	{:else if mediaItems.length === 0 && visibleDesigns.length === 0}
+		{#if activeFilterCount > 0 || search.trim()}
+			<EmptyState
+				icon={ImageIcon}
+				title={m.media_empty_title()}
+				description={m.media_empty_filtered_body()}
+				actionLabel={m.media_show_all()}
+				onAction={showAllAssets}
+				variant="dashed"
+				size="lg"
+			/>
+		{:else}
+			<EmptyState
+				icon={ImageIcon}
+				title={m.media_empty_title()}
+				description={m.media_empty_library_body()}
+				actionLabel={mediaCanEdit ? m.media_upload_action() : undefined}
+				onAction={() => (uploadDialogOpen = true)}
+				variant="dashed"
+				size="lg"
 			/>
 		{/if}
-
-		<form
-			class="flex gap-2"
-			onsubmit={(event) => {
-				event.preventDefault();
-				applyAssetFilters();
-			}}
+	{:else}
+		<div
+			data-testid="media-library-grid"
+			class={layoutMode === 'grid'
+				? 'grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5'
+				: 'grid grid-cols-1 gap-2'}
 		>
-			<div class="relative min-w-0 flex-1">
-				<SearchIcon
-					class="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
-				/>
-				<input
-					class="h-11 w-full rounded-lg border border-input bg-background pr-3 pl-9 text-sm"
-					bind:value={search}
-					placeholder={m.media_search_filename_alt()}
-				/>
-			</div>
-			<Button
-				type="button"
-				variant={activeFilterCount > 0 ? 'secondary' : 'outline'}
-				class="h-11 min-w-11 shrink-0 sm:w-auto"
-				aria-label={m.media_filters()}
-				onclick={() => (filterDialogOpen = true)}
-			>
-				<SlidersHorizontalIcon />
-				<span class="hidden sm:inline">{m.media_filters()}</span>
-				{#if activeFilterCount > 0}
-					<span
-						class="flex size-5 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground"
+			{#each visibleDesigns as design (design.id)}
+				<ContextMenu.Root>
+					<ContextMenu.Trigger>
+						{#snippet child({ props })}
+							<a
+								{...props}
+								href={resolve(`/studio/${design.id}` as '/')}
+								data-library-kind="design"
+								class="group min-w-0 overflow-hidden rounded-xl border bg-card transition-colors hover:border-foreground/25 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none {layoutMode ===
+								'list'
+									? 'grid grid-cols-[6rem_minmax(0,1fr)]'
+									: ''}"
+							>
+								<div
+									class="relative flex items-center justify-center overflow-hidden bg-neutral-900 p-3 {layoutMode ===
+									'grid'
+										? 'aspect-square'
+										: 'aspect-square h-24'}"
+								>
+									{#if design.cover_preview_media_id}
+										<img
+											src={getAuthenticatedMediaURL(`/media/${design.cover_preview_media_id}`)}
+											alt=""
+											class="max-h-full max-w-full object-contain shadow-md"
+										/>
+									{:else}
+										<div class="flex flex-col items-center gap-2 text-center text-neutral-400">
+											<PaletteIcon class="size-6" />
+											<span class="line-clamp-2 text-xs">{m.media_preview_unavailable()}</span>
+										</div>
+									{/if}
+									<span
+										class="absolute top-2 left-2 rounded-md bg-background/90 px-2 py-1 text-[11px] font-medium text-foreground shadow-sm"
+									>
+										{m.media_design()}
+									</span>
+								</div>
+								<div class="min-w-0 p-2.5">
+									<p class="truncate text-sm font-medium">{designDisplayTitle(design.title)}</p>
+									<p class="mt-0.5 truncate text-xs text-muted-foreground">
+										{m.media_design_pages({
+											count: design.page_count,
+											suffix: design.page_count === 1 ? '' : 's'
+										})}
+										· {formatDate(design.updated_at)}
+									</p>
+								</div>
+							</a>
+						{/snippet}
+					</ContextMenu.Trigger>
+					<ContextMenu.Portal>
+						<ContextMenu.Content
+							class="z-50 min-w-44 rounded-lg bg-popover/95 p-1 text-sm text-popover-foreground shadow-md ring-1 ring-foreground/10 backdrop-blur outline-none"
+						>
+							<ContextMenu.Item
+								class="flex min-h-9 cursor-default items-center rounded-md px-2 outline-none data-highlighted:bg-muted"
+								onclick={() => goto(resolve(`/studio/${design.id}` as '/'))}
+							>
+								{m.studio_open_design()}
+							</ContextMenu.Item>
+							<ContextMenu.Item
+								class="flex min-h-9 cursor-default items-center rounded-md px-2 outline-none data-highlighted:bg-muted"
+								disabled={!mediaCanEdit}
+								onclick={() => duplicateDesign(design.id)}
+							>
+								{m.studio_duplicate_design()}
+							</ContextMenu.Item>
+						</ContextMenu.Content>
+					</ContextMenu.Portal>
+				</ContextMenu.Root>
+			{/each}
+			{#each mediaItems as media (media.id)}
+				<div
+					data-library-kind="asset"
+					class="group relative overflow-hidden rounded-xl border bg-card transition-colors hover:border-foreground/20 {layoutMode ===
+					'list'
+						? 'grid grid-cols-[6rem_minmax(0,1fr)]'
+						: ''} {selectedMediaIds.has(media.id) ? 'ring-2 ring-primary' : ''}"
+				>
+					<div
+						class="relative overflow-hidden bg-muted/30 {layoutMode === 'grid'
+							? 'aspect-square'
+							: 'aspect-square h-24'}"
 					>
-						{activeFilterCount}
-					</span>
-				{/if}
-			</Button>
-		</form>
+						{#if isVideo(media.mime_type)}
+							<video
+								src={getAuthenticatedMediaURL(media.url)}
+								class="size-full object-cover"
+								muted
+								playsinline
+								preload="metadata"
+							></video>
+							<div class="pointer-events-none absolute inset-0 flex items-center justify-center">
+								<div
+									class="flex size-10 items-center justify-center rounded-full bg-background/80 backdrop-blur-sm"
+								>
+									<VideoIcon class="size-5 text-foreground" />
+								</div>
+							</div>
+						{:else if isImage(media.mime_type)}
+							<img
+								src={getAuthenticatedMediaURL(media.thumbnail_url || media.url)}
+								alt={media.alt_text || media.original_filename || m.media_library_title()}
+								loading="lazy"
+								class="size-full object-cover transition-transform duration-200 group-hover:scale-[1.02]"
+							/>
+						{:else}
+							<div class="flex size-full items-center justify-center">
+								<VideoIcon class="size-10 text-muted-foreground/40" />
+							</div>
+						{/if}
 
-		<div class="flex flex-col gap-2 border-b pb-4 sm:flex-row sm:items-center">
-			<div class="flex min-w-0 gap-1 overflow-x-auto">
-				{#each quickFilters as quickFilter (quickFilter.value)}
-					<Button
-						variant={filter === quickFilter.value ? 'secondary' : 'ghost'}
-						size="sm"
-						class="min-w-11 shrink-0"
-						onclick={() => changeFilter(quickFilter.value)}
-					>
-						{quickFilter.label}
-					</Button>
-				{/each}
-			</div>
-			<div class="flex shrink-0 items-center justify-between gap-1.5 sm:ml-auto sm:justify-start">
-				<Select.Root type="single" value={sort} onValueChange={changeSort}>
-					<Select.Trigger class="h-10 w-[7.75rem] text-sm">
-						{sort === 'newest'
-							? m.media_sort_newest()
-							: sort === 'oldest'
-								? m.media_sort_oldest()
-								: sort === 'name'
-									? m.media_sort_name()
-									: sort === 'recently_used'
-										? m.media_recently_used()
-										: m.media_sort_size()}
-					</Select.Trigger>
-					<Select.Content>
-						<Select.Item value="newest">{m.media_sort_newest()}</Select.Item>
-						<Select.Item value="oldest">{m.media_sort_oldest()}</Select.Item>
-						<Select.Item value="name">{m.media_sort_name()}</Select.Item>
-						<Select.Item value="size">{m.media_sort_size()}</Select.Item>
-						<Select.Item value="recently_used">{m.media_recently_used()}</Select.Item>
-					</Select.Content>
-				</Select.Root>
-				<div class="hidden rounded-lg border p-0.5 sm:flex">
-					<Button
-						variant={layoutMode === 'grid' ? 'secondary' : 'ghost'}
-						size="icon-sm"
-						onclick={() => (layoutMode = 'grid')}
-						aria-label={m.media_grid_view()}><Grid2X2Icon /></Button
-					>
-					<Button
-						variant={layoutMode === 'list' ? 'secondary' : 'ghost'}
-						size="icon-sm"
-						onclick={() => (layoutMode = 'list')}
-						aria-label={m.media_compact_view()}><ListIcon /></Button
-					>
+						<button
+							type="button"
+							class="absolute inset-0 z-[1]"
+							onclick={() => (isSelectionMode ? toggleSelection(media.id) : showUsage(media))}
+							aria-label={isSelectionMode
+								? selectedMediaIds.has(media.id)
+									? m.media_deselect_item({ name: media.original_filename || media.id })
+									: m.media_select_item({ name: media.original_filename || media.id })
+								: m.media_open_details({ name: media.original_filename || media.id })}
+							aria-pressed={isSelectionMode ? selectedMediaIds.has(media.id) : undefined}
+						></button>
+
+						{#if isSelectionMode}
+							<span
+								class="media-card-control absolute top-2 left-2 z-10 flex items-center justify-center rounded-lg bg-background/95 shadow-sm"
+							>
+								{#if selectedMediaIds.has(media.id)}
+									<CheckIcon class="size-4 text-primary" />
+								{:else}
+									<div class="size-4 rounded-sm border-2 border-muted-foreground"></div>
+								{/if}
+							</span>
+						{/if}
+
+						{#if !isSelectionMode}
+							<div class="absolute top-2 right-2 z-10">
+								<DropdownMenu.Root>
+									<DropdownMenu.Trigger>
+										{#snippet child({ props })}
+											<Button
+												{...props}
+												variant="outline"
+												size="icon-sm"
+												class="media-card-control bg-background/90 shadow-sm backdrop-blur-sm"
+												aria-label={m.media_actions_for({
+													name: media.original_filename || media.id
+												})}
+											>
+												<MoreHorizontalIcon class="size-4" />
+											</Button>
+										{/snippet}
+									</DropdownMenu.Trigger>
+									<DropdownMenu.Content align="end" class="w-48">
+										<DropdownMenu.Item onclick={() => showUsage(media)} class="gap-2">
+											<ExternalLinkIcon class="size-4" />
+											{m.media_details()}
+										</DropdownMenu.Item>
+										{#if isImage(media.mime_type) && mediaCanEdit && studioEnabled}
+											<DropdownMenu.Item onclick={() => openMediaInStudio(media)} class="gap-2">
+												<PaletteIcon class="size-4" />
+												{m.media_edit_studio()}
+											</DropdownMenu.Item>
+											<DropdownMenu.Item
+												onclick={() => openMediaInStudio(media, 'remove-background')}
+												class="gap-2"
+											>
+												<ImageIcon class="size-4" />
+												{m.studio_remove_background()}
+											</DropdownMenu.Item>
+										{/if}
+										{#if mediaCanEdit}
+											<DropdownMenu.Item onclick={() => duplicateMedia(media)} class="gap-2">
+												<Grid2X2Icon class="size-4" />
+												{m.studio_duplicate()}
+											</DropdownMenu.Item>
+										{/if}
+										<DropdownMenu.Item onclick={() => downloadMedia(media)} class="gap-2">
+											<DownloadIcon class="size-4" />
+											{m.media_download()}
+										</DropdownMenu.Item>
+										{#if mediaCanEdit}
+											<DropdownMenu.Item onclick={() => toggleFavorite(media.id)} class="gap-2">
+												<HeartIcon
+													class="size-4"
+													fill={media.is_favorite ? 'currentColor' : 'none'}
+												/>
+												{media.is_favorite ? m.media_unfavorite() : m.media_favorite()}
+											</DropdownMenu.Item>
+										{/if}
+										{#if mediaCanEdit && canDeleteMedia(media)}
+											<DropdownMenu.Separator />
+											<DropdownMenu.Item
+												class="gap-2 text-destructive"
+												onclick={() => requestDeleteMedia(media)}
+											>
+												<TrashIcon class="size-4" />
+												{m.common_delete()}
+											</DropdownMenu.Item>
+										{/if}
+									</DropdownMenu.Content>
+								</DropdownMenu.Root>
+							</div>
+						{/if}
+
+						{#if media.is_favorite}
+							<div class="absolute bottom-2 left-2 rounded-full bg-background/90 p-1.5 shadow-sm">
+								<HeartIcon class="size-3.5 fill-red-500 text-red-500" />
+							</div>
+						{/if}
+					</div>
+
+					<div class="p-2.5">
+						{#if media.original_filename}
+							<p class="truncate text-sm font-medium" title={media.original_filename}>
+								{media.original_filename}
+							</p>
+						{/if}
+						<p class="mt-0.5 truncate text-xs text-muted-foreground">
+							{formatSize(media.size)} · {formatDate(media.created_at)}
+						</p>
+					</div>
 				</div>
-				{#if mediaCanEdit && mediaItems.length > 0 && !isSelectionMode}
-					<Button variant="outline" size="sm" class="h-11" onclick={() => (isSelectionMode = true)}>
-						{m.media_select()}
-					</Button>
-				{/if}
-			</div>
+			{/each}
 		</div>
 
-		{#if isSelectionMode}
-			<div
-				class="fixed right-3 bottom-[calc(5.75rem+env(safe-area-inset-bottom))] left-3 z-40 rounded-2xl bg-popover p-2 text-popover-foreground shadow-lg ring-1 ring-border md:sticky md:right-auto md:bottom-4 md:left-auto"
-				role="toolbar"
-				aria-label={m.media_selection_actions()}
-			>
-				<div class="flex items-center gap-1">
-					<span class="min-w-0 flex-1 truncate px-2 text-sm font-semibold">
-						{selectedCountLabel(selectedMediaIds.size)}
-					</span>
-					<Button variant="ghost" size="sm" onclick={selectAll}>
-						{allMediaSelected ? m.media_deselect_all() : m.media_select_all()}
-					</Button>
-					<Button
-						variant="ghost"
-						size="icon-sm"
-						onclick={cancelSelection}
-						aria-label={m.common_cancel()}
-					>
-						<XIcon />
-					</Button>
-				</div>
-				<div class="flex gap-1 overflow-x-auto">
-					<Button
-						variant="ghost"
-						size="sm"
-						class="shrink-0"
-						disabled={selectedMediaIds.size === 0}
-						onclick={() => (selectionOrganizationDialogOpen = true)}
-					>
-						<FolderPlusIcon />
-						{m.media_organize()}
-					</Button>
-					<Button
-						variant="ghost"
-						size="sm"
-						class="shrink-0"
-						disabled={selectedMediaIds.size === 0}
-						onclick={toggleFavoriteBatch}
-					>
-						<HeartIcon />
-						{m.media_favorite()}
-					</Button>
-					{#if selectedDeletableIds.length > 0}
-						<Button
-							variant="ghost"
-							size="sm"
-							class="shrink-0 text-destructive hover:text-destructive"
-							onclick={requestDeleteSelectedBatch}
-						>
-							<TrashIcon />
-							{m.common_delete()}
-						</Button>
-					{/if}
-				</div>
+		<!-- Pagination -->
+		{#if totalPages > 1}
+			<div class="mt-6 flex flex-wrap items-center justify-center gap-2 sm:gap-4">
+				<Button variant="outline" size="sm" onclick={prevPage} disabled={currentPage === 0}>
+					<ChevronLeftIcon class="mr-1 h-4 w-4" />
+					{m.media_previous_page()}
+				</Button>
+				<span
+					class="order-first w-full text-center text-sm text-muted-foreground sm:order-none sm:w-auto"
+				>
+					{m.media_page_count({ current: currentPage + 1, total: totalPages })}
+				</span>
+				<Button
+					variant="outline"
+					size="sm"
+					onclick={nextPage}
+					disabled={currentPage >= totalPages - 1}
+				>
+					{m.media_next_page()}
+					<ChevronRightIcon class="ml-1 h-4 w-4" />
+				</Button>
 			</div>
 		{/if}
-
-		{#if mediaLoading && mediaItems.length === 0}
-			<PageLoading layout="gallery" label={m.common_loading()} items={10} />
-		{:else if error && mediaItems.length === 0}
-			<InlineNotice tone="error" message={error} class="my-2">
-				{#snippet actions()}
-					<Button variant="outline" size="sm" onclick={() => loadMedia()}>
-						{m.common_retry()}
-					</Button>
-				{/snippet}
-			</InlineNotice>
-		{:else if mediaItems.length === 0}
-			{#if activeFilterCount > 0 || search.trim()}
-				<EmptyState
-					icon={ImageIcon}
-					title={m.media_empty_title()}
-					description={m.media_empty_filtered_body()}
-					actionLabel={m.media_show_all()}
-					onAction={showAllAssets}
-					variant="dashed"
-					size="lg"
-				/>
-			{:else}
-				<EmptyState
-					icon={ImageIcon}
-					title={m.media_empty_title()}
-					description={m.media_empty_library_body()}
-					actionLabel={mediaCanEdit ? m.media_upload_action() : undefined}
-					onAction={() => (uploadDialogOpen = true)}
-					variant="dashed"
-					size="lg"
-				/>
-			{/if}
-		{:else}
-			<div
-				class={layoutMode === 'grid'
-					? 'grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5'
-					: 'grid grid-cols-1 gap-2'}
-			>
-				{#each mediaItems as media (media.id)}
-					<div
-						class="group relative overflow-hidden rounded-xl border bg-card transition-colors hover:border-foreground/20 {layoutMode ===
-						'list'
-							? 'grid grid-cols-[6rem_minmax(0,1fr)]'
-							: ''} {selectedMediaIds.has(media.id) ? 'ring-2 ring-primary' : ''}"
-					>
-						<div
-							class="relative overflow-hidden bg-muted/30 {layoutMode === 'grid'
-								? 'aspect-square'
-								: 'aspect-square h-24'}"
-						>
-							{#if isVideo(media.mime_type)}
-								<video
-									src={getAuthenticatedMediaURL(media.url)}
-									class="size-full object-cover"
-									muted
-									playsinline
-									preload="metadata"
-								></video>
-								<div class="pointer-events-none absolute inset-0 flex items-center justify-center">
-									<div
-										class="flex size-10 items-center justify-center rounded-full bg-background/80 backdrop-blur-sm"
-									>
-										<VideoIcon class="size-5 text-foreground" />
-									</div>
-								</div>
-							{:else if isImage(media.mime_type)}
-								<img
-									src={getAuthenticatedMediaURL(media.thumbnail_url || media.url)}
-									alt={media.alt_text || media.original_filename || m.media_library_title()}
-									loading="lazy"
-									class="size-full object-cover transition-transform duration-200 group-hover:scale-[1.02]"
-								/>
-							{:else}
-								<div class="flex size-full items-center justify-center">
-									<VideoIcon class="size-10 text-muted-foreground/40" />
-								</div>
-							{/if}
-
-							<button
-								type="button"
-								class="absolute inset-0 z-[1]"
-								onclick={() => (isSelectionMode ? toggleSelection(media.id) : showUsage(media))}
-								aria-label={isSelectionMode
-									? selectedMediaIds.has(media.id)
-										? m.media_deselect_item({ name: media.original_filename || media.id })
-										: m.media_select_item({ name: media.original_filename || media.id })
-									: m.media_open_details({ name: media.original_filename || media.id })}
-								aria-pressed={isSelectionMode ? selectedMediaIds.has(media.id) : undefined}
-							></button>
-
-							{#if isSelectionMode}
-								<span
-									class="media-card-control absolute top-2 left-2 z-10 flex items-center justify-center rounded-lg bg-background/95 shadow-sm"
-								>
-									{#if selectedMediaIds.has(media.id)}
-										<CheckIcon class="size-4 text-primary" />
-									{:else}
-										<div class="size-4 rounded-sm border-2 border-muted-foreground"></div>
-									{/if}
-								</span>
-							{/if}
-
-							{#if !isSelectionMode}
-								<div class="absolute top-2 right-2 z-10">
-									<DropdownMenu.Root>
-										<DropdownMenu.Trigger>
-											{#snippet child({ props })}
-												<Button
-													{...props}
-													variant="outline"
-													size="icon-sm"
-													class="media-card-control bg-background/90 shadow-sm backdrop-blur-sm"
-													aria-label={m.media_actions_for({
-														name: media.original_filename || media.id
-													})}
-												>
-													<MoreHorizontalIcon class="size-4" />
-												</Button>
-											{/snippet}
-										</DropdownMenu.Trigger>
-										<DropdownMenu.Content align="end" class="w-48">
-											<DropdownMenu.Item onclick={() => showUsage(media)} class="gap-2">
-												<ExternalLinkIcon class="size-4" />
-												{m.media_details()}
-											</DropdownMenu.Item>
-											{#if isImage(media.mime_type) && mediaCanEdit && studioEnabled}
-												<DropdownMenu.Item onclick={() => openMediaInStudio(media)} class="gap-2">
-													<PaletteIcon class="size-4" />
-													{m.media_edit_studio()}
-												</DropdownMenu.Item>
-												<DropdownMenu.Item
-													onclick={() => openMediaInStudio(media, 'remove-background')}
-													class="gap-2"
-												>
-													<ImageIcon class="size-4" />
-													{m.studio_remove_background()}
-												</DropdownMenu.Item>
-											{/if}
-											{#if mediaCanEdit}
-												<DropdownMenu.Item onclick={() => duplicateMedia(media)} class="gap-2">
-													<Grid2X2Icon class="size-4" />
-													{m.studio_duplicate()}
-												</DropdownMenu.Item>
-											{/if}
-											<DropdownMenu.Item onclick={() => downloadMedia(media)} class="gap-2">
-												<DownloadIcon class="size-4" />
-												{m.media_download()}
-											</DropdownMenu.Item>
-											{#if mediaCanEdit}
-												<DropdownMenu.Item onclick={() => toggleFavorite(media.id)} class="gap-2">
-													<HeartIcon
-														class="size-4"
-														fill={media.is_favorite ? 'currentColor' : 'none'}
-													/>
-													{media.is_favorite ? m.media_unfavorite() : m.media_favorite()}
-												</DropdownMenu.Item>
-											{/if}
-											{#if mediaCanEdit && canDeleteMedia(media)}
-												<DropdownMenu.Separator />
-												<DropdownMenu.Item
-													class="gap-2 text-destructive"
-													onclick={() => requestDeleteMedia(media)}
-												>
-													<TrashIcon class="size-4" />
-													{m.common_delete()}
-												</DropdownMenu.Item>
-											{/if}
-										</DropdownMenu.Content>
-									</DropdownMenu.Root>
-								</div>
-							{/if}
-
-							{#if media.is_favorite}
-								<div class="absolute bottom-2 left-2 rounded-full bg-background/90 p-1.5 shadow-sm">
-									<HeartIcon class="size-3.5 fill-red-500 text-red-500" />
-								</div>
-							{/if}
-						</div>
-
-						<div class="p-2.5">
-							{#if media.original_filename}
-								<p class="truncate text-sm font-medium" title={media.original_filename}>
-									{media.original_filename}
-								</p>
-							{/if}
-							<p class="mt-0.5 truncate text-xs text-muted-foreground">
-								{formatSize(media.size)} · {formatDate(media.created_at)}
-							</p>
-						</div>
-					</div>
-				{/each}
-			</div>
-
-			<!-- Pagination -->
-			{#if totalPages > 1}
-				<div class="mt-6 flex flex-wrap items-center justify-center gap-2 sm:gap-4">
-					<Button variant="outline" size="sm" onclick={prevPage} disabled={currentPage === 0}>
-						<ChevronLeftIcon class="mr-1 h-4 w-4" />
-						{m.media_previous_page()}
-					</Button>
-					<span
-						class="order-first w-full text-center text-sm text-muted-foreground sm:order-none sm:w-auto"
-					>
-						{m.media_page_count({ current: currentPage + 1, total: totalPages })}
-					</span>
-					<Button
-						variant="outline"
-						size="sm"
-						onclick={nextPage}
-						disabled={currentPage >= totalPages - 1}
-					>
-						{m.media_next_page()}
-						<ChevronRightIcon class="ml-1 h-4 w-4" />
-					</Button>
-				</div>
-			{/if}
-			{#if isSelectionMode}<div class="h-24 md:hidden"></div>{/if}
-		{/if}
-	{:else if hubView === 'designs'}
-		{#if hubLoading && designs.length === 0 && templates.length === 0}
-			<PageLoading layout="gallery" label={m.media_loading_designs()} items={8} />
-		{:else}
-			<div class="space-y-9">
-				{#if templates.length > 0 && mediaCanEdit}
-					<section aria-labelledby="media-template-heading">
-						<div class="mb-3">
-							<h2 id="media-template-heading" class="text-base font-semibold">
-								{m.media_starting_points()}
-							</h2>
-							<p class="mt-1 text-sm text-muted-foreground">
-								{m.media_starting_points_body()}
-							</p>
-						</div>
-						<div
-							class="-mx-4 flex snap-x gap-3 overflow-x-auto px-4 pb-1 sm:mx-0 sm:grid sm:grid-cols-3 sm:px-0 lg:grid-cols-5"
-						>
-							{#each templates as template (template.id)}
-								<div class="relative w-[10rem] shrink-0 snap-start sm:w-auto">
-									<a
-										href={resolve(
-											`/studio/new?workspace=${encodeURIComponent(selectedWorkspaceId)}&template=${encodeURIComponent(template.id)}` as '/'
-										)}
-										class="group block"
-									>
-										<div
-											class="aspect-[4/3] overflow-hidden rounded-xl border bg-muted transition-colors group-hover:border-foreground/30"
-										>
-											<TemplatePreview document={template.document} label={template.name} />
-										</div>
-										<p class="mt-2 truncate text-sm font-medium">{template.name}</p>
-										<p class="truncate text-xs text-muted-foreground">{template.category}</p>
-									</a>
-									{#if !template.built_in && brandKit?.can_edit}
-										<Button
-											variant="outline"
-											size="icon-sm"
-											class="absolute top-2 right-2 bg-background/95"
-											onclick={() => requestTemplateDeletion(template)}
-											aria-label={m.media_delete_named({ name: template.name })}
-										>
-											<TrashIcon />
-										</Button>
-									{/if}
-								</div>
-							{/each}
-						</div>
-					</section>
-				{/if}
-
-				<section aria-labelledby="media-design-heading">
-					<div class="mb-3">
-						<div>
-							<h2 id="media-design-heading" class="text-base font-semibold">
-								{m.media_your_designs()}
-							</h2>
-							<p class="mt-1 text-sm text-muted-foreground">{m.media_designs_body()}</p>
-						</div>
-					</div>
-					{#if designs.length === 0}
-						<EmptyState
-							icon={PaletteIcon}
-							title={m.media_no_designs()}
-							description={m.media_design_empty_body()}
-							actionLabel={mediaCanEdit ? m.media_create_design() : undefined}
-							onAction={() =>
-								goto(
-									resolve(`/studio/new?workspace=${encodeURIComponent(selectedWorkspaceId)}` as '/')
-								)}
-							variant="dashed"
-							size="lg"
-						/>
-					{:else}
-						<div class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-							{#each designs as design (design.id)}
-								<ContextMenu.Root>
-									<ContextMenu.Trigger>
-										{#snippet child({ props })}
-											<a
-												{...props}
-												href={resolve(`/studio/${design.id}` as '/')}
-												class="group min-w-0 overflow-hidden rounded-xl border bg-card transition-colors hover:border-foreground/25 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-											>
-												<div
-													class="flex aspect-[4/3] items-center justify-center bg-neutral-900 p-3"
-												>
-													{#if design.cover_preview_media_id}
-														<img
-															src={getAuthenticatedMediaURL(
-																`/media/${design.cover_preview_media_id}`
-															)}
-															alt=""
-															class="max-h-full max-w-full object-contain shadow-md"
-														/>
-													{:else}
-														<div
-															class="flex flex-col items-center gap-2 text-center text-neutral-400"
-														>
-															<PaletteIcon class="size-6" />
-															<span class="line-clamp-2 text-xs"
-																>{m.media_preview_unavailable()}</span
-															>
-														</div>
-													{/if}
-												</div>
-												<div class="p-2.5">
-													<p class="truncate text-sm font-medium">
-														{designDisplayTitle(design.title)}
-													</p>
-													<p class="mt-0.5 truncate text-xs text-muted-foreground">
-														{m.media_design_pages({
-															count: design.page_count,
-															suffix: design.page_count === 1 ? '' : 's'
-														})}
-														· {formatDate(design.updated_at)}
-													</p>
-												</div>
-											</a>
-										{/snippet}
-									</ContextMenu.Trigger>
-									<ContextMenu.Portal>
-										<ContextMenu.Content
-											class="z-50 min-w-44 rounded-lg bg-popover/95 p-1 text-sm text-popover-foreground shadow-md ring-1 ring-foreground/10 backdrop-blur outline-none"
-										>
-											<ContextMenu.Item
-												class="flex min-h-9 cursor-default items-center rounded-md px-2 outline-none data-highlighted:bg-muted"
-												onclick={() => goto(resolve(`/studio/${design.id}` as '/'))}
-											>
-												{m.studio_open_design()}
-											</ContextMenu.Item>
-											<ContextMenu.Item
-												class="flex min-h-9 cursor-default items-center rounded-md px-2 outline-none data-highlighted:bg-muted"
-												disabled={!mediaCanEdit}
-												onclick={() => duplicateDesign(design.id)}
-											>
-												{m.studio_duplicate_design()}
-											</ContextMenu.Item>
-										</ContextMenu.Content>
-									</ContextMenu.Portal>
-								</ContextMenu.Root>
-							{/each}
-						</div>
-					{/if}
-				</section>
-			</div>
-		{/if}
-	{:else if hubView === 'brand'}
-		{#if hubLoading}
-			<PageLoading layout="sections" label={m.media_loading_brand()} />
-		{:else if brandKit}
-			{#if brandKit.can_edit}
-				{#key brandKit.revision}
-					<BrandKitEditor kit={brandKit} onSaved={(saved) => (brandKit = saved)} />
-				{/key}
-			{:else}
-				<div class="grid gap-5 lg:grid-cols-2">
-					<section class="rounded-xl border bg-card p-4">
-						<div class="mb-4 flex items-center gap-2">
-							<PaletteIcon class="size-4 text-primary" />
-							<div>
-								<h2 class="font-semibold">{brandKit.name || m.brand_default_name()}</h2>
-								<p class="text-xs text-muted-foreground">
-									{m.media_brand_revision({ revision: brandKit.revision })}
-								</p>
-							</div>
-						</div>
-						<h3 class="mb-2 text-sm font-medium">{m.studio_colors()}</h3>
-						{#if brandKit.colors.length}
-							<div class="grid grid-cols-2 gap-2 sm:grid-cols-3">
-								{#each brandKit.colors as color (color.name)}
-									<div class="overflow-hidden rounded-lg border">
-										<div class="h-16" style:background={color.value}></div>
-										<div class="px-2 py-1.5 text-xs">
-											<p class="font-medium">{color.name}</p>
-											<p class="text-muted-foreground">{color.value}</p>
-										</div>
-									</div>
-								{/each}
-							</div>
-						{:else}
-							<p class="text-sm text-muted-foreground">{m.media_no_workspace_colors()}</p>
-						{/if}
-						<h3 class="mt-5 mb-2 text-sm font-medium">{m.brand_page_backgrounds()}</h3>
-						<div class="flex flex-wrap gap-2">
-							{#each brandKit.backgrounds as background (background)}
-								<span class="size-10 rounded-md border" style:background></span>
-							{/each}
-						</div>
-					</section>
-					<section class="rounded-xl border bg-card p-4">
-						<h2 class="font-semibold">{m.media_logos_fonts()}</h2>
-						<p class="mt-1 text-sm text-muted-foreground">{m.media_brand_assets_body()}</p>
-						<div class="mt-4 grid grid-cols-3 gap-3">
-							{#each brandKit.assets as asset (asset.id)}
-								<div class="rounded-lg border p-2">
-									<img
-										src={getAuthenticatedMediaURL(`/media/${asset.media_id}/thumb/md`)}
-										alt={asset.name || asset.role}
-										class="aspect-square w-full object-contain"
-									/>
-									<p class="mt-1 truncate text-xs">{asset.name || asset.role}</p>
-								</div>
-							{/each}
-						</div>
-						<div class="mt-5 space-y-2">
-							{#each brandKit.fonts as font (font.id)}
-								<div class="flex items-center justify-between rounded-lg border px-3 py-2">
-									<div>
-										<p class="text-sm font-medium">{font.family}</p>
-										<p class="text-xs text-muted-foreground">{font.weight} · {font.style}</p>
-									</div>
-									<TagIcon class="size-4 text-muted-foreground" />
-								</div>
-							{/each}
-						</div>
-						{#if brandKit.assets.length === 0 && brandKit.fonts.length === 0}
-							<div
-								class="mt-5 rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground"
-							>
-								{m.studio_brand_empty()}
-							</div>
-						{/if}
-					</section>
-				</div>
-			{/if}
-		{/if}
+		{#if isSelectionMode}<div class="h-24 md:hidden"></div>{/if}
 	{/if}
 </PageContainer>
 
@@ -1932,16 +1675,6 @@
 	onConfirm={confirmMediaDeletion}
 />
 
-<DestructiveConfirmDialog
-	bind:open={templateDeleteDialogOpen}
-	title={m.media_delete_template_title()}
-	description={m.media_delete_template_body({
-		name: templateToDelete?.name ?? m.media_workspace_template()
-	})}
-	confirmLabel={m.media_delete_template()}
-	onConfirm={confirmTemplateDeletion}
-/>
-
 <MediaOrganizationDialog
 	bind:open={organizationDialogOpen}
 	workspaceId={selectedWorkspaceId}
@@ -2012,8 +1745,8 @@
 
 <!-- Usage Dialog -->
 <Dialog.Root open={usageDialogOpen} onOpenChange={handleUsageDialogOpenChange}>
-	<Dialog.Content class="max-h-[min(820px,calc(100dvh-2rem))] overflow-y-auto sm:max-w-2xl">
-		<Dialog.Header>
+	<Dialog.Content class="max-h-[min(860px,calc(100dvh-2rem))] overflow-y-auto sm:max-w-3xl sm:p-6">
+		<Dialog.Header class="border-b pr-10 pb-4">
 			<Dialog.Title>{selectedMedia?.original_filename || m.media_details()}</Dialog.Title>
 			<Dialog.Description>
 				{#if selectedMedia}
@@ -2023,39 +1756,93 @@
 		</Dialog.Header>
 
 		{#if selectedMedia}
-			<div class="grid gap-4 py-4 sm:grid-cols-[14rem_1fr]">
-				<div class="overflow-hidden rounded-xl border bg-muted/20">
+			<div class="grid items-start gap-6 py-2 md:grid-cols-[18rem_minmax(0,1fr)]">
+				<figure
+					class="overflow-hidden rounded-xl bg-muted/20 ring-1 ring-foreground/10 md:sticky md:top-0"
+				>
 					{#if isImage(selectedMedia.mime_type)}
 						<img
-							src={getAuthenticatedMediaURL(selectedMedia.url)}
+							src={getAuthenticatedMediaURL(selectedMedia.thumbnail_url || selectedMedia.url)}
 							alt={selectedMedia.alt_text || selectedMedia.original_filename}
-							class="aspect-square size-full object-contain"
+							class="aspect-[4/3] size-full object-contain"
 						/>
 					{:else if isVideo(selectedMedia.mime_type)}
 						<video
 							src={getAuthenticatedMediaURL(selectedMedia.url)}
-							class="aspect-square size-full object-contain"
+							class="aspect-[4/3] size-full object-contain"
 							controls
 							muted
 							playsinline
 						></video>
 					{/if}
-				</div>
-				<dl class="grid grid-cols-[7rem_1fr] content-start gap-x-3 gap-y-2 text-sm">
-					<dt class="text-muted-foreground">{m.media_type()}</dt>
-					<dd>{selectedMedia.mime_type}</dd>
-					<dt class="text-muted-foreground">{m.media_sort_size()}</dt>
-					<dd>{formatSize(selectedMedia.size)}</dd>
-					<dt class="text-muted-foreground">{m.media_dimensions()}</dt>
-					<dd>{selectedMedia.width || '—'} × {selectedMedia.height || '—'}</dd>
-					<dt class="text-muted-foreground">{m.media_source()}</dt>
-					<dd>{mediaSourceLabel(selectedMedia.source)}</dd>
-					<dt class="text-muted-foreground">{m.media_created()}</dt>
-					<dd>{formatDate(selectedMedia.created_at)}</dd>
-					<dt class="text-muted-foreground">{m.media_alt_text()}</dt>
-					<dd class="space-y-2">
+					<figcaption class="border-t px-3 py-2 text-xs text-muted-foreground">
+						{selectedMedia.width || '—'} × {selectedMedia.height || '—'} ·
+						{formatSize(selectedMedia.size)}
+					</figcaption>
+				</figure>
+				<div class="min-w-0 space-y-5">
+					<dl class="grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
+						<div>
+							<dt class="text-xs text-muted-foreground">{m.media_type()}</dt>
+							<dd class="mt-0.5 break-words">{selectedMedia.mime_type}</dd>
+						</div>
+						<div>
+							<dt class="text-xs text-muted-foreground">{m.media_source()}</dt>
+							<dd class="mt-0.5">{mediaSourceLabel(selectedMedia.source)}</dd>
+						</div>
+						<div>
+							<dt class="text-xs text-muted-foreground">{m.media_created()}</dt>
+							<dd class="mt-0.5">{formatDate(selectedMedia.created_at)}</dd>
+						</div>
+						{#if selectedMedia.design_document_id}
+							<div>
+								<dt class="text-xs text-muted-foreground">{m.media_design()}</dt>
+								<dd class="mt-0.5">
+									<a
+										href={resolve(`/studio/${selectedMedia.design_document_id}` as '/')}
+										class="font-medium text-primary hover:underline"
+									>
+										{m.media_open_design()}
+									</a>
+								</dd>
+							</div>
+						{/if}
+						{#if selectedMedia.parent_media_id}
+							<div class="sm:col-span-2">
+								<dt class="text-xs text-muted-foreground">{m.media_original()}</dt>
+								<dd class="mt-0.5 font-mono text-xs break-all">
+									{selectedMedia.parent_media_id}
+								</dd>
+							</div>
+						{/if}
+						{#if selectedMedia.collections.length}
+							<div>
+								<dt class="text-xs text-muted-foreground">{m.media_collections()}</dt>
+								<dd class="mt-0.5">
+									{selectedMedia.collections
+										.map((id) => collections.find((item) => item.id === id)?.name || id)
+										.join(', ')}
+								</dd>
+							</div>
+						{/if}
+						{#if selectedMedia.tags.length}
+							<div>
+								<dt class="text-xs text-muted-foreground">{m.media_tags()}</dt>
+								<dd class="mt-0.5">
+									{selectedMedia.tags
+										.map((id) => tags.find((item) => item.id === id)?.name || id)
+										.join(', ')}
+								</dd>
+							</div>
+						{/if}
+					</dl>
+					<div class="space-y-2">
+						<label for="media-detail-alt-text" class="block text-sm font-medium">
+							{m.media_alt_text()}
+						</label>
 						<textarea
-							class="min-h-20 w-full rounded-md border border-input bg-background p-2 text-sm"
+							id="media-detail-alt-text"
+							class="min-h-24 w-full resize-y rounded-lg border border-input bg-background p-3 text-sm font-normal"
 							bind:value={detailAltText}
 							placeholder={m.media_alt_placeholder()}
 							disabled={!mediaCanEdit || detailSaving}
@@ -2071,39 +1858,8 @@
 								{m.media_save_alt()}
 							</Button>
 						{/if}
-					</dd>
-					{#if selectedMedia.parent_media_id}
-						<dt class="text-muted-foreground">{m.media_original()}</dt>
-						<dd class="font-mono text-xs break-all">{selectedMedia.parent_media_id}</dd>
-					{/if}
-					{#if selectedMedia.design_document_id}
-						<dt class="text-muted-foreground">{m.media_design()}</dt>
-						<dd>
-							<a
-								href={resolve(`/studio/${selectedMedia.design_document_id}` as '/')}
-								class="font-medium text-primary hover:underline"
-							>
-								{m.media_open_design()}
-							</a>
-						</dd>
-					{/if}
-					{#if selectedMedia.collections.length}
-						<dt class="text-muted-foreground">{m.media_collections()}</dt>
-						<dd>
-							{selectedMedia.collections
-								.map((id) => collections.find((item) => item.id === id)?.name || id)
-								.join(', ')}
-						</dd>
-					{/if}
-					{#if selectedMedia.tags.length}
-						<dt class="text-muted-foreground">{m.media_tags()}</dt>
-						<dd>
-							{selectedMedia.tags
-								.map((id) => tags.find((item) => item.id === id)?.name || id)
-								.join(', ')}
-						</dd>
-					{/if}
-				</dl>
+					</div>
+				</div>
 			</div>
 			<div class="flex flex-wrap gap-2 border-y py-3">
 				{#if isImage(selectedMedia.mime_type) && mediaCanEdit && studioEnabled}
