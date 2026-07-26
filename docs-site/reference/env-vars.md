@@ -67,6 +67,7 @@ Most variables loaded through the main backend config loader can also be loaded 
 | `LINKEDIN_CLIENT_SECRET`              | LinkedIn client secret                                                                                      |
 | `LINKEDIN_REDIRECT_URI`               | LinkedIn callback override                                                                                  |
 | `LINKEDIN_DISABLE_THREAD_REPLIES`     | Disable LinkedIn thread replies                                                                             |
+| `OPENPOST_LINKEDIN_ORGANIZATIONS_ENABLED` | Request approved LinkedIn organization permissions and offer administered Pages during connection      |
 | `LINKEDIN_API_VERSION`                | Optional LinkedIn REST API version override; direct adapter variable without `_FILE` support               |
 | `THREADS_CLIENT_ID`                   | Threads client ID                                                                                           |
 | `THREADS_CLIENT_SECRET`               | Threads client secret                                                                                       |

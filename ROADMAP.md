@@ -25,8 +25,8 @@ OpenPost is a production self-hosted scheduler and managed service. The shared c
 
 2. **Provider live-account verification**
    - Re-test OAuth, refresh, media validation, publish, retry, and quota behavior with real accounts for every enabled provider.
-   - Keep Facebook, Instagram, TikTok, and YouTube labeled Preview until current live-account tests pass.
-   - Keep public docs conservative when provider APIs, permissions, or review requirements are uncertain.
+   - Keep factual review, quota, permission, and live-verification notes attached to each provider and format.
+   - Do not use maturity labels as a substitute for current account-specific readiness.
 
 3. **Release reliability**
    - Keep Docker, binary, CLI, Android, frontend, docs, and marketing release paths reproducible.

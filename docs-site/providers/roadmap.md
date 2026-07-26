@@ -14,7 +14,7 @@ The provider discovery API returns current and planned providers so clients can 
 
 No planned adapter is exposed as connectable right now. New provider roadmap items should stay in `planned` status until backend publish behavior, provider discovery, UI states, docs, and tests land together.
 
-## Preview adapters
+## Supported adapters with provider gates
 
 | Provider | Current product focus                                                                                   |
 | -------- | ------------------------------------------------------------------------------------------------------- |

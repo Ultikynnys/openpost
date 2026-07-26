@@ -1,7 +1,14 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import { error } from '@sveltejs/kit';
-	import { ArrowLeft, ArrowRight, CheckCircle2, ExternalLink, FlaskConical, Info, ShieldAlert } from 'lucide-svelte';
+	import {
+		ArrowLeft,
+		ArrowRight,
+		CheckCircle2,
+		ExternalLink,
+		Info,
+		ShieldAlert
+	} from 'lucide-svelte';
 	import { Button } from '$lib/components/ui/button';
 	import PlatformIcon from '$lib/components/platform-icon.svelte';
 	import PlatformPreview from '../_components/PlatformPreview.svelte';
@@ -13,18 +20,24 @@
 		if (!found) error(404, 'Platform not found');
 		return found;
 	});
-	const isPreview = $derived(platform.status === 'Preview');
+	const requiresProviderApproval = $derived(platform.status === 'Supported');
 </script>
 
 <svelte:head>
 	<title>{platform.name} publishing support - OpenPost</title>
-	<meta name="description" content={`${platform.description} See formats, setup requirements, limits, and readiness.`} />
+	<meta
+		name="description"
+		content={`${platform.description} See formats, setup requirements, limits, and readiness.`}
+	/>
 	<link rel="canonical" href={`${siteUrl}/platforms/${platform.slug}`} />
 </svelte:head>
 
 <section class="border-b py-14 sm:py-18 lg:py-24">
 	<div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-		<a href="/platforms" class="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
+		<a
+			href="/platforms"
+			class="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
+		>
 			<ArrowLeft class="size-4" />
 			All platforms
 		</a>
@@ -36,27 +49,31 @@
 					</div>
 					<div>
 						<p class="eyebrow">{platform.name}</p>
-						<p class="mt-1 text-sm text-muted-foreground">{platform.statusDetail}</p>
+						<p class="mt-1 text-sm text-muted-foreground">
+							{platform.statusDetail}
+						</p>
 					</div>
 				</div>
 				<h1 class="mt-7 max-w-4xl text-4xl leading-[1.03] font-semibold text-balance sm:text-6xl">
 					{platform.heroTitle}
 				</h1>
-				<p class="mt-5 max-w-3xl text-lg leading-8 text-muted-foreground">{platform.description}</p>
+				<p class="mt-5 max-w-3xl text-lg leading-8 text-muted-foreground">
+					{platform.description}
+				</p>
 				<div class="mt-8 flex flex-wrap gap-3">
-					{#if isPreview}
-						<Button href={platform.docsUrl} size="lg">
-							Review setup requirements
-							<ExternalLink data-icon="inline-end" />
-						</Button>
-					{:else}
 					<Button href={managedSignupUrl} size="lg">
 						Try the managed app
-							<ArrowRight data-icon="inline-end" />
-						</Button>
-					{/if}
-					<Button href={platform.docsUrl} target="_blank" rel="noreferrer" variant="outline" size="lg">
+						<ArrowRight data-icon="inline-end" />
+					</Button>
+					<Button
+						href={platform.docsUrl}
+						target="_blank"
+						rel="noreferrer"
+						variant="outline"
+						size="lg"
+					>
 						Provider guide
+						<ExternalLink data-icon="inline-end" />
 					</Button>
 				</div>
 			</div>
@@ -64,13 +81,21 @@
 				<PlatformPreview {platform} />
 				<aside class="rounded-xl border bg-card p-4">
 					<div class="flex items-center justify-between gap-4">
-						<div class="flex items-center gap-2 {isPreview ? 'text-amber-400' : 'text-primary'}">
-							{#if isPreview}<FlaskConical class="size-4" />{:else}<CheckCircle2 class="size-4" />{/if}
+						<div
+							class="flex items-center gap-2 {requiresProviderApproval
+								? 'text-amber-400'
+								: 'text-primary'}"
+						>
+							{#if requiresProviderApproval}<ShieldAlert class="size-4" />{:else}<CheckCircle2
+									class="size-4"
+								/>{/if}
 							<span class="text-sm font-semibold">{platform.status}</span>
 						</div>
 						<span class="text-xs text-muted-foreground">{platform.auth}</span>
 					</div>
-					<p class="mt-3 text-xs leading-5 text-muted-foreground">{platform.verification}</p>
+					<p class="mt-3 text-xs leading-5 text-muted-foreground">
+						{platform.verification}
+					</p>
 				</aside>
 			</div>
 		</div>
@@ -115,11 +140,15 @@
 	<div class="mx-auto grid max-w-7xl gap-12 px-4 sm:px-6 lg:grid-cols-2 lg:px-8">
 		<div>
 			<p class="eyebrow">Connect and verify</p>
-			<h2 class="mt-4 text-3xl font-semibold text-balance">Set up {platform.name} in three checks.</h2>
+			<h2 class="mt-4 text-3xl font-semibold text-balance">
+				Set up {platform.name} in three checks.
+			</h2>
 			<ol class="mt-8 space-y-6">
 				{#each platform.setup as step, index (step)}
 					<li class="grid grid-cols-[2rem_1fr] gap-4">
-						<span class="flex size-8 items-center justify-center rounded-full border bg-card font-mono text-xs text-primary">
+						<span
+							class="flex size-8 items-center justify-center rounded-full border bg-card font-mono text-xs text-primary"
+						>
 							{index + 1}
 						</span>
 						<p class="pt-1 text-sm leading-6 text-muted-foreground">{step}</p>
@@ -152,7 +181,8 @@
 			Use the exact callback, scope, and media setup for {platform.name}.
 		</h2>
 		<p class="mx-auto mt-5 max-w-2xl text-lg leading-8 text-muted-foreground">
-			Provider consoles change. The OpenPost guide records the configuration and troubleshooting checks the adapter expects.
+			Provider consoles change. The OpenPost guide records the configuration and troubleshooting
+			checks the adapter expects.
 		</p>
 		<Button href={platform.docsUrl} target="_blank" rel="noreferrer" class="mt-8" size="lg">
 			Read the {platform.name} guide

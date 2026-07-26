@@ -6,6 +6,9 @@ All notable changes to this project are documented in this file.
 
 ### Added
 
+- Added LinkedIn Organization Page selection with one-grant multi-account connection, encrypted shared credentials, organization author URNs, and an explicit operator permission gate.
+- Added verified Discord webhook accounts with scheduled text, streamed multipart attachments, safe mention defaults, reply references, and deletion.
+- Added a durable Engagement workspace, per-user in-app notifications, and an opt-in unified inbox for X, Bluesky, Facebook Pages, Instagram Professional accounts, and Mastodon direct posts.
 - Added durable account and publication analytics for X, Mastodon, Bluesky, Threads, Facebook, Instagram, TikTok, and YouTube, with adaptive background collection, explicit permission and support states, provider-specific metrics, history, and a responsive Analytics workspace.
 - Added an installable `openpost-cli` agent skill with safe CLI workflows for setup, authoring, media, scheduling, publishing, recovery, and moderation.
 - Added CLI commands for provider readiness and capabilities, reusable posting slots, media storage and usage, alt-text updates and deletion, and publication retry and deletion.
@@ -15,6 +18,7 @@ All notable changes to this project are documented in this file.
 
 ### Changed
 
+- Described Instagram Business and Creator, Facebook Pages, TikTok, and YouTube as implemented integrations while keeping live-account verification separate from repository support.
 - Added TTF and OTF brand-font uploads alongside WOFF2, simplified brand-asset editing, and reused Studio font and color selectors for brand text styles.
 - Applied X text, video-duration, and video-size limits per connected account by reading the authenticated account's subscription tier, with standard limits used when the tier cannot be verified.
 - Streamed large local and S3-compatible video uploads with bounded memory and multipart object writes so account-specific X video limits are reachable through the media library.

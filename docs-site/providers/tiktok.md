@@ -1,6 +1,6 @@
 # TikTok
 
-TikTok is a preview integration for video and photo publishing. It uses OAuth plus the Content Posting API Direct Post and upload flows.
+TikTok supports video and photo publishing through OAuth plus the Content Posting API Direct Post and upload flows.
 
 ## What you need
 

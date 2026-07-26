@@ -17,10 +17,11 @@ Implementation does not prove configuration. Configuration does not prove public
 | Bluesky | Implemented launch adapter | Connected handle and app password; no server provider app required | None | Exclude until the exact account and format pass rehearsal |
 | LinkedIn | Implemented launch adapter | OAuth app, approved permissions, connected account, and provider access | None | Exclude until the exact account and format pass rehearsal |
 | Threads | Implemented launch adapter | Meta app, approved scopes, connected account, and public HTTPS media when needed | None | Exclude until the exact account and format pass rehearsal |
-| Facebook Pages | Preview adapter | Meta app review, Page permissions, connected Page, and public HTTPS media | None | Keep out of the main launch demo |
-| Instagram Professional | Preview adapter | Meta app review, Page-backed professional account, scopes, and public HTTPS media | None | Keep out of the main launch demo |
-| TikTok | Preview adapter | Content Posting API access, Direct Post audit approval, connected account, and public HTTPS media | None | Keep out of the main launch demo |
-| YouTube | Preview adapter | Google app, channel access, quota, upload privacy, and connected account | None | Keep out of the main launch demo |
+| Facebook Pages | Implemented launch adapter | Meta app review, Page permissions, connected Page, and public HTTPS media | None | Exclude until the exact Page and format pass rehearsal |
+| Instagram Professional | Implemented launch adapter | Meta app review, Page-backed Business or Creator account, scopes, and public HTTPS media | None | Exclude until the exact account and placement pass rehearsal |
+| TikTok | Implemented launch adapter | Content Posting API access, Direct Post audit approval, connected account, and public HTTPS media | None | Exclude until the exact account and format pass rehearsal |
+| YouTube | Implemented launch adapter | Google app, channel access, quota, upload privacy, and connected account | None | Exclude until the exact channel and format pass rehearsal |
+| Discord Webhooks | Implemented launch adapter | Verified channel webhook and its server upload limit | None | Exclude until the exact webhook and attachment set pass rehearsal |
 
 The running instance is the source of truth for configuration. Inspect **Accounts**, call `GET /api/v1/accounts/providers`, or use MCP `get_provider_readiness`. A provider shown as available or configured still needs a live rehearsal for the launch account and format.
 
@@ -33,10 +34,11 @@ The running instance is the source of truth for configuration. Inspect **Account
 | Bluesky | Text, links, up to four images, one MP4 video, AT Protocol replies, scheduling | Verify video and reply refs against the target account |
 | LinkedIn | Text, links, image, document, video, comment-based child posts, scheduling | Permissions, app review, and video behavior can block the path |
 | Threads | Text, image, video, 2–10 item mixed carousels, replies, scheduling | Media must be publicly reachable and Meta access must be approved |
-| Facebook Pages | Text, links, image, 2–10 image multi-photo, Story, video, comments, scheduling | Preview only; permissions, review, Page identity, and public media apply |
-| Instagram Professional | Image, carousel, Story, Reel, comments, scheduling | Preview only; no text-only posts and public media is required |
-| TikTok | One video or 1–35 JPEG/WebP photo posts, scheduling | Preview only; Direct Post audit approval and public media apply |
-| YouTube | One Short or long-form video with metadata, thumbnail, playlist, privacy, and scheduling | Preview only; unaudited projects can force private uploads, and quota applies |
+| Facebook Pages | Text, links, image, 2–10 image multi-photo, Story, video, comments, scheduling | Permissions, review, Page identity, and public media apply |
+| Instagram Professional | Image, carousel, Story, Reel, comments, scheduling | No text-only posts; Business or Creator account and public media are required |
+| TikTok | One video or 1–35 JPEG/WebP photo posts, scheduling | Direct Post audit approval and public media apply |
+| YouTube | One Short or long-form video with metadata, thumbnail, playlist, privacy, and scheduling | Unaudited projects can force private uploads, and quota applies |
+| Discord Webhooks | Text, up to 10 streamed attachments, reply references, scheduling, and deletion | The webhook URL is a credential; Discord controls upload byte limits |
 
 See [Supported Platforms & Limitations](/providers/platform-limits) for detailed limits and [Provider Troubleshooting](/providers/troubleshooting) for diagnostics.
 

@@ -1,6 +1,6 @@
 # Instagram
 
-Instagram professional publishing is a preview integration. It uses Meta OAuth, asks the user to choose a Business or Creator account connected to a Facebook Page, and stores the selected Page access token.
+Instagram professional publishing uses Meta OAuth, asks the user to choose a Business or Creator account connected to a Facebook Page, and stores the selected Page access token.
 
 ## Requirements
 

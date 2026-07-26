@@ -107,6 +107,7 @@ The backend exposes this registry through the instance-admin API. The current we
 | `LINKEDIN_CLIENT_SECRET`          | Yes for LinkedIn | empty                           | LinkedIn OAuth client secret.                                  |
 | `LINKEDIN_REDIRECT_URI`           |               No | derived from `OPENPOST_APP_URL` | LinkedIn callback URL override.                                |
 | `LINKEDIN_DISABLE_THREAD_REPLIES` |               No | `false`                         | Disable LinkedIn comment-style child replies for thread posts. |
+| `OPENPOST_LINKEDIN_ORGANIZATIONS_ENABLED` | No | `false` | Request approved LinkedIn organization permissions and offer administered Pages during connection. |
 | `LINKEDIN_API_VERSION`            |               No | previous calendar month         | Override the LinkedIn REST API version. Read directly by the adapter; `_FILE` is not supported. |
 
 ## Threads

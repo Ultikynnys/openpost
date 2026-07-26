@@ -42,6 +42,7 @@ All social platform integrations follow the unified `platform.Adapter` interface
 | `instagram.go` | Instagram Business | Meta OAuth 2.0 |
 | `tiktok.go` | TikTok | OAuth 2.0 |
 | `youtube.go` | YouTube | Google OAuth 2.0 |
+| `discord.go` | Discord Webhooks | Incoming webhook URL |
 
 Adapters are registered in `main.go` via a `map[string]platform.Adapter` and passed to the token manager, publisher, and OAuth handler. Provider selection uses adapter-map and capability-catalog lookups; switches internal to a single adapter may still dispatch that provider's content modes.
 
@@ -52,6 +53,8 @@ Shared HTTP helpers are in `internal/platform/http.go`:
 - `DoFormURLEncoded` — form-encoded request
 
 Analytics is an optional provider capability defined by `platform.AnalyticsAdapter`; do not add reporting methods to the core publishing `Adapter`. The analytics service stores normalized immutable account and rendition snapshots plus the latest safe sync state, and never retains raw provider responses or tokens. `GET /api/v1/analytics` reads stored data only. The worker runs a unique pending sweep every 15 minutes, checks accounts on an adaptive daily cadence, and checks published renditions at 1/3/12/24-hour bands through day 7; manual refresh covers the last 90 days. Preserve the separate meanings of views, impressions, and reach. Permission, unsupported, rate-limit, not-found, and failed states must keep the last successful counters. Existing Instagram, Threads, and TikTok accounts may need reconnection when analytics scopes change.
+
+Engagement and inbox reads use the optional `CommentAdapter`/`EngagementAdapter` and `MessagingAdapter` capabilities. Keep them separate from publishing. The communications worker persists normalized records and separate safe sync state; page requests never call provider APIs. Inbox collection is opt-in per account. Provider writes use one-attempt durable jobs because an ambiguous timeout cannot be retried safely without a portable provider idempotency key.
 
 ## 3. Agent Guidelines & Coding Mandates
 
@@ -131,6 +134,7 @@ When an AI agent is invoked to assist with this repository, it MUST adhere to th
 | Instagram Business | Public HTTPS URL for feed, carousel, Story, and Reel media | Comment replies |
 | TikTok | Public URL for Direct Post; binary upload for Inbox mode | No |
 | YouTube | Resumable video upload | No |
+| Discord Webhooks | Multipart files sent with the webhook message | Reply references |
 
 ## 6. Provider Key Convention
 
@@ -147,5 +151,6 @@ Provider keys in the `providers` map follow specific formats:
 | Instagram Business | `"instagram"` | `"instagram"` |
 | TikTok | `"tiktok"` | `"tiktok"` |
 | YouTube | `"youtube"` | `"youtube"` |
+| Discord Webhooks | `"discord"` | `"discord"` |
 
 **Important:** For Mastodon, the `instanceURL` stored in `SocialAccount.InstanceURL` must match exactly with the key used to register the adapter. The canonical adapter key is `"mastodon:" + server.InstanceURL` (the full URL from config, e.g., `https://masto.pt`). When looking up the provider, use `"mastodon:" + account.InstanceURL` without modification. Human-friendly server names may still be used as OAuth selection labels, but not as the persisted provider key.

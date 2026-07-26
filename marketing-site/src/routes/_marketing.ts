@@ -54,7 +54,13 @@ export const plans = [
 		posts: '100',
 		storage: '1 GB',
 		seats: '1',
-		limits: ['1 workspace', '3 social accounts', '100 scheduled posts/month', '1 GB media', '1 seat'],
+		limits: [
+			'1 workspace',
+			'3 social accounts',
+			'100 scheduled posts/month',
+			'1 GB media',
+			'1 seat'
+		],
 		featured: false
 	},
 	{
@@ -67,7 +73,13 @@ export const plans = [
 		posts: '500',
 		storage: '5 GB',
 		seats: '1',
-		limits: ['3 workspaces', '6 social accounts', '500 scheduled posts/month', '5 GB media', '1 seat'],
+		limits: [
+			'3 workspaces',
+			'6 social accounts',
+			'500 scheduled posts/month',
+			'5 GB media',
+			'1 seat'
+		],
 		featured: true
 	},
 	{
@@ -80,7 +92,13 @@ export const plans = [
 		posts: '2,500',
 		storage: '25 GB',
 		seats: '1',
-		limits: ['10 workspaces', '15 social accounts', '2,500 scheduled posts/month', '25 GB media', '1 seat'],
+		limits: [
+			'10 workspaces',
+			'15 social accounts',
+			'2,500 scheduled posts/month',
+			'25 GB media',
+			'1 seat'
+		],
 		featured: false
 	},
 	{
@@ -177,7 +195,8 @@ export const platforms = [
 			'Media publishing needs OAuth 1.0a access-token and secret pairs.',
 			'Polls, quote posts, and other format settings remain subject to the account API tier.'
 		],
-		verification: 'Verify OAuth, account quota, and the formats you plan to use with the connected account.',
+		verification:
+			'Verify OAuth, account quota, and the formats you plan to use with the connected account.',
 		docsUrl: `${siteUrl.replace('openpost.social', 'docs.openpost.social')}/providers/x/`
 	},
 	{
@@ -205,8 +224,16 @@ export const platforms = [
 			'Confirm the instance-specific text and media rules before scheduling.'
 		],
 		formats: [
-			{ name: 'Post, thread, or link', text: '500 characters by default', media: 'Text only' },
-			{ name: 'Media post', text: '500 characters by default', media: 'Up to 4 images, GIFs, or MP4 attachments' }
+			{
+				name: 'Post, thread, or link',
+				text: '500 characters by default',
+				media: 'Text only'
+			},
+			{
+				name: 'Media post',
+				text: '500 characters by default',
+				media: 'Up to 4 images, GIFs, or MP4 attachments'
+			}
 		],
 		limits: [
 			`${PLATFORM_LIMITS.mastodon.charLimit} characters by default`,
@@ -219,7 +246,8 @@ export const platforms = [
 			'Custom instances must be public HTTPS and allow app registration.',
 			'One adapter registration is maintained per Mastodon instance.'
 		],
-		verification: 'Check the destination instance rules and publish one media test before relying on a new server.',
+		verification:
+			'Check the destination instance rules and publish one media test before relying on a new server.',
 		docsUrl: `${siteUrl.replace('openpost.social', 'docs.openpost.social')}/providers/mastodon/`
 	},
 	{
@@ -247,9 +275,21 @@ export const platforms = [
 			'Publish a test if you plan to use video or rich links.'
 		],
 		formats: [
-			{ name: 'Post, thread, or link', text: '300 characters', media: 'Text or a rich link card' },
-			{ name: 'Image post', text: '300 characters', media: '1-4 JPEG, PNG, or WebP images' },
-			{ name: 'Video', text: '300 characters', media: '1 MP4 video, up to 100 MB' }
+			{
+				name: 'Post, thread, or link',
+				text: '300 characters',
+				media: 'Text or a rich link card'
+			},
+			{
+				name: 'Image post',
+				text: '300 characters',
+				media: '1-4 JPEG, PNG, or WebP images'
+			},
+			{
+				name: 'Video',
+				text: '300 characters',
+				media: '1 MP4 video, up to 100 MB'
+			}
 		],
 		limits: [
 			`${PLATFORM_LIMITS.bluesky.charLimit} characters`,
@@ -262,7 +302,8 @@ export const platforms = [
 			'App passwords can be revoked independently from the main account password.',
 			'Provider-side processing can delay video availability after upload.'
 		],
-		verification: 'The text and image paths are implemented; test video with the account before a scheduled campaign.',
+		verification:
+			'The text and image paths are implemented; test video with the account before a scheduled campaign.',
 		docsUrl: `${siteUrl.replace('openpost.social', 'docs.openpost.social')}/providers/bluesky/`
 	},
 	{
@@ -282,7 +323,8 @@ export const platforms = [
 			detail: '3,000 post · 1,250 comment',
 			chips: ['PDF document', 'Comment child', 'Organization-ready']
 		},
-		accountRequirement: 'A LinkedIn developer app with the publishing products and scopes your account needs.',
+		accountRequirement:
+			'A LinkedIn developer app with the publishing products and scopes your account needs.',
 		auth: 'OAuth 2.0',
 		setup: [
 			'Configure the LinkedIn client ID, secret, and callback URL.',
@@ -290,9 +332,21 @@ export const platforms = [
 			'Connect the member or organization account and test each approved media type.'
 		],
 		formats: [
-			{ name: 'Post or link', text: '3,000 characters', media: 'Text or link metadata' },
-			{ name: 'Comment thread', text: '1,250 characters per child', media: 'Text only' },
-			{ name: 'Image, document, or video', text: '3,000 characters', media: 'One image, PDF document, or video per rendition' }
+			{
+				name: 'Post or link',
+				text: '3,000 characters',
+				media: 'Text or link metadata'
+			},
+			{
+				name: 'Comment thread',
+				text: '1,250 characters per child',
+				media: 'Text only'
+			},
+			{
+				name: 'Image, document, or video',
+				text: '3,000 characters',
+				media: 'One image, PDF document, or video per rendition'
+			}
 		],
 		limits: [
 			`${PLATFORM_LIMITS.linkedin.charLimit} characters for posts`,
@@ -305,7 +359,8 @@ export const platforms = [
 			'Documents use the LinkedIn Documents API and require a title.',
 			'Organization posting depends on the connected member role and granted access.'
 		],
-		verification: 'OAuth success alone does not prove every publishing permission; test the formats your team will schedule.',
+		verification:
+			'OAuth success alone does not prove every publishing permission; test the formats your team will schedule.',
 		docsUrl: `${siteUrl.replace('openpost.social', 'docs.openpost.social')}/providers/linkedin/`
 	},
 	{
@@ -333,9 +388,21 @@ export const platforms = [
 			'Connect the account and test image, video, or carousel publishing from production-like hosting.'
 		],
 		formats: [
-			{ name: 'Post or reply thread', text: '500 characters', media: 'Text only' },
-			{ name: 'Image or video', text: '500 characters', media: 'One public HTTPS media item' },
-			{ name: 'Carousel', text: '500 characters', media: '2-10 public HTTPS images or videos' }
+			{
+				name: 'Post or reply thread',
+				text: '500 characters',
+				media: 'Text only'
+			},
+			{
+				name: 'Image or video',
+				text: '500 characters',
+				media: 'One public HTTPS media item'
+			},
+			{
+				name: 'Carousel',
+				text: '500 characters',
+				media: '2-10 public HTTPS images or videos'
+			}
 		],
 		limits: [
 			`${PLATFORM_LIMITS.threads.charLimit} characters`,
@@ -348,7 +415,8 @@ export const platforms = [
 			'Video processing and account permissions can still fail after a successful OAuth connection.',
 			'Local development needs a public tunnel for callbacks and media.'
 		],
-		verification: 'Verify that Meta can fetch the exact production media URL before scheduling media-heavy work.',
+		verification:
+			'Verify that Meta can fetch the exact production media URL before scheduling media-heavy work.',
 		docsUrl: `${siteUrl.replace('openpost.social', 'docs.openpost.social')}/providers/threads/`
 	},
 	{
@@ -356,8 +424,8 @@ export const platforms = [
 		name: 'Facebook Pages',
 		short: 'facebook',
 		tag: 'Pages, media, Stories',
-		status: 'Preview',
-		statusDetail: 'Code path exists; live access still needs review',
+		status: 'Supported',
+		statusDetail: 'Meta review and Page permissions still apply',
 		description:
 			'OpenPost has publishing paths for selected Facebook Pages, including text, photos, video, and Stories.',
 		heroTitle: 'Prepare a Facebook Page post and its media placement together.',
@@ -365,10 +433,11 @@ export const platforms = [
 			label: 'Selected Page',
 			headline: 'Feed post or Story',
 			body: 'Page selection, placement, and public media access are verified as separate requirements.',
-			detail: 'Pages only · Preview',
+			detail: 'Pages only',
 			chips: ['Feed', 'Multi-photo', 'Story']
 		},
-		accountRequirement: 'A Facebook Page, eligible Meta user, configured Meta app, and the required reviewed permissions.',
+		accountRequirement:
+			'A Facebook Page, eligible Meta user, configured Meta app, and the required reviewed permissions.',
 		auth: 'Meta OAuth 2.0 with Page selection',
 		setup: [
 			'Configure the Facebook provider app, scopes, and callback URI.',
@@ -376,9 +445,21 @@ export const platforms = [
 			'Complete provider review and run a live Page audit before production scheduling.'
 		],
 		formats: [
-			{ name: 'Page post or link', text: '63,206 characters', media: 'Text or link metadata' },
-			{ name: 'Photo or multi-photo', text: '63,206 characters', media: '1 image or 2-10 public HTTPS photos' },
-			{ name: 'Video or Story', text: '63,206 characters for video', media: 'One public HTTPS video; Story accepts one image or video' }
+			{
+				name: 'Page post or link',
+				text: '63,206 characters',
+				media: 'Text or link metadata'
+			},
+			{
+				name: 'Photo or multi-photo',
+				text: '63,206 characters',
+				media: '1 image or 2-10 public HTTPS photos'
+			},
+			{
+				name: 'Video or Story',
+				text: '63,206 characters for video',
+				media: 'One public HTTPS video; Story accepts one image or video'
+			}
 		],
 		limits: [
 			`${PLATFORM_LIMITS.facebook.charLimit.toLocaleString()} characters`,
@@ -387,11 +468,12 @@ export const platforms = [
 			'Provider permissions and live-account verification required'
 		],
 		limitations: [
-			'OpenPost labels Facebook as Preview because provider review and Page permissions determine whether the path is usable.',
+			'Provider review and Page permissions determine whether a specific Page and format are usable.',
 			'Media must be available at a public HTTPS URL that Meta can fetch.',
 			'This integration publishes to Pages, not personal Facebook profiles.'
 		],
-		verification: 'Do not plan a launch around this integration until Page selection and every required format pass a live audit.',
+		verification:
+			'Do not plan a launch around this integration until Page selection and every required format pass a live audit.',
 		docsUrl: `${siteUrl.replace('openpost.social', 'docs.openpost.social')}/providers/facebook/`
 	},
 	{
@@ -399,8 +481,8 @@ export const platforms = [
 		name: 'Instagram',
 		short: 'instagram',
 		tag: 'Feed, carousel, Story, Reel',
-		status: 'Preview',
-		statusDetail: 'Code path exists; live access still needs review',
+		status: 'Supported',
+		statusDetail: 'Business or Creator account and Meta review required',
 		description:
 			'OpenPost has media-first publishing paths for Instagram feed posts, carousels, Stories, and Reels.',
 		heroTitle: 'Choose the Instagram placement before you shape the caption.',
@@ -419,9 +501,21 @@ export const platforms = [
 			'Choose the Instagram account during OAuth and complete a live format audit.'
 		],
 		formats: [
-			{ name: 'Feed image', text: '2,200 caption characters', media: 'One public HTTPS image' },
-			{ name: 'Carousel', text: '2,200 caption characters', media: '2-10 public HTTPS images or videos' },
-			{ name: 'Story or Reel', text: 'No Story caption; 2,200 for Reel', media: 'Public HTTPS media required' }
+			{
+				name: 'Feed image',
+				text: '2,200 caption characters',
+				media: 'One public HTTPS image'
+			},
+			{
+				name: 'Carousel',
+				text: '2,200 caption characters',
+				media: '2-10 public HTTPS images or videos'
+			},
+			{
+				name: 'Story or Reel',
+				text: 'No Story caption; 2,200 for Reel',
+				media: 'Public HTTPS media required'
+			}
 		],
 		limits: [
 			`${PLATFORM_LIMITS.instagram.charLimit.toLocaleString()} caption characters`,
@@ -433,9 +527,10 @@ export const platforms = [
 		limitations: [
 			'Instagram has no text-only publication profile in OpenPost.',
 			'Media must be public HTTPS and meet Meta format rules.',
-			'OpenPost labels this integration Preview until provider access and live-account behavior are audited.'
+			'Provider access and each planned placement still need a live-account audit.'
 		],
-		verification: 'Test each planned placement—feed, carousel, Story, and Reel—because one successful format does not prove the others.',
+		verification:
+			'Test each planned placement—feed, carousel, Story, and Reel—because one successful format does not prove the others.',
 		docsUrl: `${siteUrl.replace('openpost.social', 'docs.openpost.social')}/providers/instagram/`
 	},
 	{
@@ -443,7 +538,7 @@ export const platforms = [
 		name: 'TikTok',
 		short: 'tiktok',
 		tag: 'Video and photo posts',
-		status: 'Preview',
+		status: 'Supported',
 		statusDetail: 'App review and provider audit required',
 		description:
 			'OpenPost implements TikTok video and photo-post flows, with profile-specific caption limits.',
@@ -453,9 +548,10 @@ export const platforms = [
 			headline: 'Video or 1-35 photos',
 			body: 'Video and photo posts keep different captions, media rules, and app-review checks.',
 			detail: '2,200 video · 4,000 photo',
-			chips: ['9:16 video', 'Photo post', 'Preview']
+			chips: ['9:16 video', 'Photo post', 'Provider audit']
 		},
-		accountRequirement: 'A TikTok developer app with Content Posting API access and approved Direct Post permissions.',
+		accountRequirement:
+			'A TikTok developer app with Content Posting API access and approved Direct Post permissions.',
 		auth: 'OAuth 2.0',
 		setup: [
 			'Configure the TikTok provider app, redirect URI, scopes, and content-posting access.',
@@ -463,8 +559,16 @@ export const platforms = [
 			'Complete app review and audit both video and photo publishing with the real account.'
 		],
 		formats: [
-			{ name: 'Video', text: '2,200 caption characters', media: 'One public HTTPS MP4 or QuickTime video' },
-			{ name: 'Photo post', text: '4,000 caption characters', media: '1-35 public HTTPS JPEG or WebP images' }
+			{
+				name: 'Video',
+				text: '2,200 caption characters',
+				media: 'One public HTTPS MP4 or QuickTime video'
+			},
+			{
+				name: 'Photo post',
+				text: '4,000 caption characters',
+				media: '1-35 public HTTPS JPEG or WebP images'
+			}
 		],
 		limits: [
 			`${PLATFORM_LIMITS.tiktok.charLimit.toLocaleString()} characters for video captions`,
@@ -478,7 +582,8 @@ export const platforms = [
 			'Pull-from-URL media must use a verified public HTTPS prefix or domain.',
 			'Video and photo posts use different caption and media constraints.'
 		],
-		verification: 'Treat the integration as unavailable for production until both provider review and the intended publishing flow pass.',
+		verification:
+			'Treat the integration as unavailable for production until both provider review and the intended publishing flow pass.',
 		docsUrl: `${siteUrl.replace('openpost.social', 'docs.openpost.social')}/providers/tiktok/`
 	},
 	{
@@ -486,7 +591,7 @@ export const platforms = [
 		name: 'YouTube',
 		short: 'youtube',
 		tag: 'Shorts and long video',
-		status: 'Preview',
+		status: 'Supported',
 		statusDetail: 'Provider audit required',
 		description:
 			'OpenPost implements resumable Shorts and video uploads to a selected YouTube channel.',
@@ -498,7 +603,8 @@ export const platforms = [
 			detail: 'One video per rendition',
 			chips: ['Private by default', 'Thumbnail', 'Playlist']
 		},
-		accountRequirement: 'A Google Cloud OAuth app with YouTube Data API v3 and an eligible YouTube channel.',
+		accountRequirement:
+			'A Google Cloud OAuth app with YouTube Data API v3 and an eligible YouTube channel.',
 		auth: 'Google OAuth 2.0 with channel selection',
 		setup: [
 			'Enable YouTube Data API v3 and configure the Google OAuth app and callback URI.',
@@ -506,8 +612,16 @@ export const platforms = [
 			'Choose a channel during connection and complete a resumable upload audit.'
 		],
 		formats: [
-			{ name: 'Short', text: 'Required title; up to 5,000 description characters', media: 'Exactly one short video' },
-			{ name: 'Video', text: 'Required title; up to 5,000 description characters', media: 'Exactly one video, up to the long-video profile limit' }
+			{
+				name: 'Short',
+				text: 'Required title; up to 5,000 description characters',
+				media: 'Exactly one short video'
+			},
+			{
+				name: 'Video',
+				text: 'Required title; up to 5,000 description characters',
+				media: 'Exactly one video, up to the long-video profile limit'
+			}
 		],
 		limits: [
 			`${PLATFORM_LIMITS.youtube.charLimit.toLocaleString()} description characters`,
@@ -516,11 +630,12 @@ export const platforms = [
 			'Unaudited Google projects can force uploads private'
 		],
 		limitations: [
-			'OpenPost labels YouTube Preview until the Google project and live channel pass a provider audit.',
+			'The Google project and live channel must pass a provider audit before production use.',
 			'Unaudited Google projects can force uploads to private visibility.',
 			'Exactly one video is accepted per rendition; text-only YouTube posts are not supported.'
 		],
-		verification: 'Confirm upload, processing completion, thumbnail, playlist, and final privacy on the production channel.',
+		verification:
+			'Confirm upload, processing completion, thumbnail, playlist, and final privacy on the production channel.',
 		docsUrl: `${siteUrl.replace('openpost.social', 'docs.openpost.social')}/providers/youtube/`
 	}
 ] as const;
@@ -697,12 +812,14 @@ export const workflowBlocks = [
 export const securityItems = [
 	{
 		title: 'Encrypted provider tokens',
-		description: 'Social access and refresh tokens use AES-256-GCM authenticated encryption at rest.',
+		description:
+			'Social access and refresh tokens use AES-256-GCM authenticated encryption at rest.',
 		icon: LockKeyhole
 	},
 	{
 		title: 'TOTP, passkeys, and sessions',
-		description: 'Users can add a second sign-in factor and review or revoke active browser sessions.',
+		description:
+			'Users can add a second sign-in factor and review or revoke active browser sessions.',
 		icon: ShieldCheck
 	},
 	{
@@ -767,7 +884,8 @@ export const comparisons = [
 		slug: 'buffer',
 		name: 'Buffer',
 		category: 'Established hosted scheduler',
-		bestFor: 'Creators and teams that want a polished hosted scheduler with analytics and community workflows.',
+		bestFor:
+			'Creators and teams that want a polished hosted scheduler with analytics and community workflows.',
 		openPostAngle:
 			'Buffer is an established hosted scheduler. OpenPost is the publishing layer for human and agent workflows, with workspace-bound automation, provider credentials kept inside the service, and a compact self-hosted option.',
 		verdict:
@@ -785,15 +903,38 @@ export const comparisons = [
 			'You want a long-established hosted product with a larger support ecosystem.'
 		],
 		rows: [
-			{ area: 'Publishing', openpost: 'Base posts, account renditions, reusable media, queues, and visible job outcomes.', competitor: 'Multi-channel planning, queueing, ideas, and publishing in a mature hosted workflow.' },
-			{ area: 'Analytics and engagement', openpost: 'Provider-reported account growth and publication counters, without a social inbox, listening, or enterprise benchmarks.', competitor: 'Analytics and community workflows are part of Buffer’s product.' },
-			{ area: 'Automation', openpost: 'HTTP API, CLI, MCP, scoped tokens, and assistant-facing operations.', competitor: 'Public GraphQL API, CLI, and MCP are available, including on the Free plan with plan-specific limits.' },
-			{ area: 'Hosting and source', openpost: 'AGPL-3.0-only source, managed app, or self-hosted deployment.', competitor: 'Hosted proprietary service.' }
+			{
+				area: 'Publishing',
+				openpost:
+					'Base posts, account renditions, reusable media, queues, and visible job outcomes.',
+				competitor:
+					'Multi-channel planning, queueing, ideas, and publishing in a mature hosted workflow.'
+			},
+			{
+				area: 'Analytics and engagement',
+				openpost:
+					'Provider-reported analytics, stored engagement, and supported-account inboxes; no listening or enterprise benchmarks.',
+				competitor: 'Analytics and community workflows are part of Buffer’s product.'
+			},
+			{
+				area: 'Automation',
+				openpost: 'HTTP API, CLI, MCP, scoped tokens, and assistant-facing operations.',
+				competitor:
+					'Public GraphQL API, CLI, and MCP are available, including on the Free plan with plan-specific limits.'
+			},
+			{
+				area: 'Hosting and source',
+				openpost: 'AGPL-3.0-only source, managed app, or self-hosted deployment.',
+				competitor: 'Hosted proprietary service.'
+			}
 		],
 		sources: [
 			{ label: 'Buffer pricing', href: 'https://buffer.com/pricing' },
 			{ label: 'Buffer API', href: 'https://buffer.com/api' },
-			{ label: 'Buffer MCP guide', href: 'https://developers.buffer.com/guides/integrations/mcp.html' }
+			{
+				label: 'Buffer MCP guide',
+				href: 'https://developers.buffer.com/guides/integrations/mcp.html'
+			}
 		],
 		reviewedAt: '2026-07-22'
 	},
@@ -801,7 +942,8 @@ export const comparisons = [
 		slug: 'hootsuite',
 		name: 'Hootsuite',
 		category: 'Full social management suite',
-		bestFor: 'Organizations that need publishing, inbox, analytics, listening, governance, and enterprise services together.',
+		bestFor:
+			'Organizations that need publishing, inbox, analytics, listening, governance, and enterprise services together.',
 		openPostAngle:
 			'OpenPost is a focused publishing layer for people and automation. Hootsuite is a much broader social management system with inbox, listening, analytics, ads, and enterprise controls.',
 		verdict:
@@ -819,14 +961,39 @@ export const comparisons = [
 			'You need enterprise permissions, SSO, compliance integrations, or services.'
 		],
 		rows: [
-			{ area: 'Publishing', openpost: 'Focused composer, account renditions, posting slots, queues, media, and job visibility.', competitor: 'Unlimited scheduling on current plans, calendar, content library, bulk tools, and recommended times.' },
-			{ area: 'Beyond publishing', openpost: 'No advanced listening, advertising, or unified social-care inbox.', competitor: 'Inbox, analytics, listening, ads, benchmarking, and AI insights are core parts of the suite.' },
-			{ area: 'Automation', openpost: 'HTTP API, CLI, MCP, and workspace-bound tokens.', competitor: 'Hootsuite now publishes MCP connectors for publishing, inbox, and listening workflows.' },
-			{ area: 'Operations', openpost: 'Managed app or compact self-hosted deployment.', competitor: 'Hosted service with enterprise plans, procurement, support, and compliance options.' }
+			{
+				area: 'Publishing',
+				openpost:
+					'Focused composer, account renditions, posting slots, queues, media, and job visibility.',
+				competitor:
+					'Unlimited scheduling on current plans, calendar, content library, bulk tools, and recommended times.'
+			},
+			{
+				area: 'Beyond publishing',
+				openpost:
+					'Stored engagement, personal alerts, and supported-account inboxes; no advanced listening or advertising.',
+				competitor:
+					'Inbox, analytics, listening, ads, benchmarking, and AI insights are core parts of the suite.'
+			},
+			{
+				area: 'Automation',
+				openpost: 'HTTP API, CLI, MCP, and workspace-bound tokens.',
+				competitor:
+					'Hootsuite now publishes MCP connectors for publishing, inbox, and listening workflows.'
+			},
+			{
+				area: 'Operations',
+				openpost: 'Managed app or compact self-hosted deployment.',
+				competitor:
+					'Hosted service with enterprise plans, procurement, support, and compliance options.'
+			}
 		],
 		sources: [
 			{ label: 'Hootsuite plans', href: 'https://www.hootsuite.com/plans' },
-			{ label: 'Hootsuite MCP connectors', href: 'https://www.hootsuite.com/integrations/mcp' }
+			{
+				label: 'Hootsuite MCP connectors',
+				href: 'https://www.hootsuite.com/integrations/mcp'
+			}
 		],
 		reviewedAt: '2026-07-22'
 	},
@@ -834,7 +1001,8 @@ export const comparisons = [
 		slug: 'typefully',
 		name: 'Typefully',
 		category: 'Writing-first social workspace',
-		bestFor: 'Creators and teams that want a highly polished writing, review, queue, and cross-platform publishing workflow.',
+		bestFor:
+			'Creators and teams that want a highly polished writing, review, queue, and cross-platform publishing workflow.',
 		openPostAngle:
 			'Typefully is a mature writing-led workspace with agent integrations. OpenPost emphasizes the boundary between agents and connected accounts: scoped access, destination renditions, human review, and visible queue state.',
 		verdict:
@@ -852,16 +1020,42 @@ export const comparisons = [
 			'You want Typefully’s mature queue, API v2, MCP, webhooks, and agent-skill ecosystem.'
 		],
 		rows: [
-			{ area: 'Platforms and variants', openpost: 'Account-specific renditions across implemented and preview adapters.', competitor: 'API v2 supports X, LinkedIn, Mastodon, Threads, and Bluesky with different content per platform.' },
-			{ area: 'Writing workflow', openpost: 'Focused composer with prompts, previews, formats, and media reuse.', competitor: 'Writing, thread editing, review, sharing, queueing, and collaboration are core strengths.' },
-			{ area: 'Automation', openpost: 'HTTP API, CLI, compact MCP catalog, and scoped automation tokens.', competitor: 'Public API v2, MCP, webhooks, Zapier, and an agent skill; next-free-slot scheduling is supported.' },
-			{ area: 'Hosting and source', openpost: 'AGPL-licensed source plus managed and self-hosted options.', competitor: 'Hosted proprietary service.' }
+			{
+				area: 'Platforms and variants',
+				openpost:
+					'Account-specific renditions across supported adapters with explicit provider gates.',
+				competitor:
+					'API v2 supports X, LinkedIn, Mastodon, Threads, and Bluesky with different content per platform.'
+			},
+			{
+				area: 'Writing workflow',
+				openpost: 'Focused composer with prompts, previews, formats, and media reuse.',
+				competitor:
+					'Writing, thread editing, review, sharing, queueing, and collaboration are core strengths.'
+			},
+			{
+				area: 'Automation',
+				openpost: 'HTTP API, CLI, compact MCP catalog, and scoped automation tokens.',
+				competitor:
+					'Public API v2, MCP, webhooks, Zapier, and an agent skill; next-free-slot scheduling is supported.'
+			},
+			{
+				area: 'Hosting and source',
+				openpost: 'AGPL-licensed source plus managed and self-hosted options.',
+				competitor: 'Hosted proprietary service.'
+			}
 		],
 		sources: [
 			{ label: 'Typefully pricing', href: 'https://typefully.com/pricing' },
 			{ label: 'Typefully API v2', href: 'https://typefully.com/docs/api' },
-			{ label: 'API, MCP, and webhooks release', href: 'https://typefully.com/changelog/all-new-api-zapier-integration-mcp-and-126' },
-			{ label: 'Typefully help center', href: 'https://support.typefully.com/' }
+			{
+				label: 'API, MCP, and webhooks release',
+				href: 'https://typefully.com/changelog/all-new-api-zapier-integration-mcp-and-126'
+			},
+			{
+				label: 'Typefully help center',
+				href: 'https://support.typefully.com/'
+			}
 		],
 		reviewedAt: '2026-07-22'
 	},
@@ -869,7 +1063,8 @@ export const comparisons = [
 		slug: 'postiz',
 		name: 'Postiz',
 		category: 'Broad open-source automation suite',
-		bestFor: 'Builders and teams that want many networks, AI generation, analytics, and agent-first automation.',
+		bestFor:
+			'Builders and teams that want many networks, AI generation, analytics, and agent-first automation.',
 		openPostAngle:
 			'Postiz is a broad open-source automation suite. OpenPost takes the narrower position: a human-reviewable publishing layer between agents and social accounts, packaged as one Go service with no Redis queue.',
 		verdict:
@@ -887,16 +1082,40 @@ export const comparisons = [
 			'You want built-in AI image/video generation, analytics, and agent distribution tooling.'
 		],
 		rows: [
-			{ area: 'Network breadth', openpost: 'Nine provider adapters are documented, with five Available and four honestly marked Preview.', competitor: 'Postiz advertises 30-plus platforms and integrations.' },
-			{ area: 'Automation', openpost: 'HTTP API, CLI, MCP, and workspace-bound tokens.', competitor: 'REST API, CLI, MCP, and agent skills are first-class product paths.' },
-			{ area: 'Product scope', openpost: 'Publishing, workspaces, media, schedules, and visible job outcomes.', competitor: 'Broader AI generation, analytics, and distribution suite.' },
-			{ area: 'Self-hosting', openpost: 'Single Go binary or container; SQLite by default; no Redis required.', competitor: 'Open-source self-hosting and a managed cloud option with a larger service stack.' }
+			{
+				area: 'Network breadth',
+				openpost:
+					'Ten implemented provider adapters are documented, with runtime readiness and live verification reported separately.',
+				competitor: 'Postiz advertises 30-plus platforms and integrations.'
+			},
+			{
+				area: 'Automation',
+				openpost: 'HTTP API, CLI, MCP, and workspace-bound tokens.',
+				competitor: 'REST API, CLI, MCP, and agent skills are first-class product paths.'
+			},
+			{
+				area: 'Product scope',
+				openpost: 'Publishing, workspaces, media, schedules, and visible job outcomes.',
+				competitor: 'Broader AI generation, analytics, and distribution suite.'
+			},
+			{
+				area: 'Self-hosting',
+				openpost: 'Single Go binary or container; SQLite by default; no Redis required.',
+				competitor:
+					'Open-source self-hosting and a managed cloud option with a larger service stack.'
+			}
 		],
 		sources: [
 			{ label: 'Postiz product', href: 'https://postiz.com/' },
 			{ label: 'Postiz pricing', href: 'https://postiz.com/pricing' },
-			{ label: 'Postiz public API', href: 'https://docs.postiz.com/public-api' },
-			{ label: 'Postiz source', href: 'https://github.com/gitroomhq/postiz-app' }
+			{
+				label: 'Postiz public API',
+				href: 'https://docs.postiz.com/public-api'
+			},
+			{
+				label: 'Postiz source',
+				href: 'https://github.com/gitroomhq/postiz-app'
+			}
 		],
 		reviewedAt: '2026-07-22'
 	},
@@ -904,7 +1123,8 @@ export const comparisons = [
 		slug: 'post-bridge',
 		name: 'Post Bridge',
 		category: 'Straightforward hosted cross-poster',
-		bestFor: 'Creators and small teams that want simple hosted cross-platform scheduling and account-specific content overrides.',
+		bestFor:
+			'Creators and small teams that want simple hosted cross-platform scheduling and account-specific content overrides.',
 		openPostAngle:
 			'Post Bridge is a straightforward hosted cross-poster. OpenPost adds a workspace-bound agent layer, destination review, visible publishing state, open source, and self-hosting.',
 		verdict:
@@ -922,15 +1142,44 @@ export const comparisons = [
 			'You are comfortable with its separate API add-on and do not need self-hosting.'
 		],
 		rows: [
-			{ area: 'Publishing', openpost: 'Base content, account renditions, formats, posting slots, and reply threads on core providers.', competitor: 'Cross-platform scheduling with platform- and account-specific content overrides.' },
-			{ area: 'Scheduling horizon', openpost: 'Future scheduling and recurring workspace posting slots.', competitor: 'Official help documents scheduling up to two months ahead.' },
-			{ area: 'Automation', openpost: 'HTTP API, CLI, and MCP included in the product surface.', competitor: 'Public HTTP API is available as a paid add-on; current docs show posting, media, accounts, results, and some analytics.' },
-			{ area: 'Threads and hosting', openpost: 'Reply threads on implemented providers; managed or self-hosted.', competitor: 'Official help says X and Threads thread scheduling is not currently supported; hosted service only.' }
+			{
+				area: 'Publishing',
+				openpost:
+					'Base content, account renditions, formats, posting slots, and reply threads on core providers.',
+				competitor:
+					'Cross-platform scheduling with platform- and account-specific content overrides.'
+			},
+			{
+				area: 'Scheduling horizon',
+				openpost: 'Future scheduling and recurring workspace posting slots.',
+				competitor: 'Official help documents scheduling up to two months ahead.'
+			},
+			{
+				area: 'Automation',
+				openpost: 'HTTP API, CLI, and MCP included in the product surface.',
+				competitor:
+					'Public HTTP API is available as a paid add-on; current docs show posting, media, accounts, results, and some analytics.'
+			},
+			{
+				area: 'Threads and hosting',
+				openpost: 'Reply threads on implemented providers; managed or self-hosted.',
+				competitor:
+					'Official help says X and Threads thread scheduling is not currently supported; hosted service only.'
+			}
 		],
 		sources: [
-			{ label: 'Post Bridge API overview', href: 'https://support.post-bridge.com/api/post-bridge-api-overview-access-and-pricing' },
-			{ label: 'Post Bridge API reference', href: 'https://api.post-bridge.com/reference' },
-			{ label: 'Thread scheduling limits', href: 'https://support.post-bridge.com/social-media-scheduling/thread-scheduling-on-x-twitter-and-instagram-threads-current-limitations' }
+			{
+				label: 'Post Bridge API overview',
+				href: 'https://support.post-bridge.com/api/post-bridge-api-overview-access-and-pricing'
+			},
+			{
+				label: 'Post Bridge API reference',
+				href: 'https://api.post-bridge.com/reference'
+			},
+			{
+				label: 'Thread scheduling limits',
+				href: 'https://support.post-bridge.com/social-media-scheduling/thread-scheduling-on-x-twitter-and-instagram-threads-current-limitations'
+			}
 		],
 		reviewedAt: '2026-07-22'
 	},
@@ -938,7 +1187,8 @@ export const comparisons = [
 		slug: 'mixpost',
 		name: 'Mixpost',
 		category: 'Self-host-first social suite',
-		bestFor: 'Laravel teams that want a larger self-hosted product, one-time paid editions, analytics, and unlimited team access.',
+		bestFor:
+			'Laravel teams that want a larger self-hosted product, one-time paid editions, analytics, and unlimited team access.',
 		openPostAngle:
 			'Mixpost is the stronger self-host-first suite. OpenPost is a smaller publishing layer for humans and agents, available as a managed app or one Go binary or container with no Redis requirement.',
 		verdict:
@@ -956,13 +1206,35 @@ export const comparisons = [
 			'You need Mixpost Pro’s analytics, approval, API, MCP, webhooks, or broader suite features.'
 		],
 		rows: [
-			{ area: 'Product model', openpost: 'One AGPL edition, available as a managed app or self-hosted server.', competitor: 'Free open-source Lite plus one-time paid Pro and Enterprise editions.' },
-			{ area: 'Publishing suite', openpost: 'Focused composer, renditions, media, schedules, and job outcomes.', competitor: 'Broader self-hosted suite with analytics, approval, AI features, and unlimited team members in paid editions.' },
-			{ area: 'Automation', openpost: 'HTTP API, CLI, MCP, and workspace-bound tokens.', competitor: 'Mixpost’s current pricing page lists API, MCP, and webhooks for its paid product.' },
-			{ area: 'Runtime', openpost: 'Go/SvelteKit, SQLite by default, one binary or container, no Redis required.', competitor: 'Laravel/PHP deployment intended for operators already comfortable with that stack.' }
+			{
+				area: 'Product model',
+				openpost: 'One AGPL edition, available as a managed app or self-hosted server.',
+				competitor: 'Free open-source Lite plus one-time paid Pro and Enterprise editions.'
+			},
+			{
+				area: 'Publishing suite',
+				openpost: 'Focused composer, renditions, media, schedules, and job outcomes.',
+				competitor:
+					'Broader self-hosted suite with analytics, approval, AI features, and unlimited team members in paid editions.'
+			},
+			{
+				area: 'Automation',
+				openpost: 'HTTP API, CLI, MCP, and workspace-bound tokens.',
+				competitor:
+					'Mixpost’s current pricing page lists API, MCP, and webhooks for its paid product.'
+			},
+			{
+				area: 'Runtime',
+				openpost: 'Go/SvelteKit, SQLite by default, one binary or container, no Redis required.',
+				competitor:
+					'Laravel/PHP deployment intended for operators already comfortable with that stack.'
+			}
 		],
 		sources: [
-			{ label: 'Mixpost pricing and editions', href: 'https://mixpost.app/pricing' },
+			{
+				label: 'Mixpost pricing and editions',
+				href: 'https://mixpost.app/pricing'
+			},
 			{ label: 'Mixpost source', href: 'https://github.com/inovector/mixpost' }
 		],
 		reviewedAt: '2026-07-22'

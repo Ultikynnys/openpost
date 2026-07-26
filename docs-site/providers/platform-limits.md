@@ -1,6 +1,6 @@
 # Supported Platforms & Limitations
 
-OpenPost has implemented capability-resolved publishing for X, Mastodon, Bluesky, Threads, LinkedIn, Facebook Pages, Instagram Professional accounts, TikTok, and YouTube. Some providers still require app review, account eligibility, public media URLs, or live-account verification.
+OpenPost has implemented capability-resolved publishing for X, Mastodon, Bluesky, Threads, LinkedIn, Facebook Pages, Instagram Professional accounts, TikTok, YouTube, and Discord webhooks. Some providers still require app review, account eligibility, public media URLs, or live-account verification.
 
 Provider-native API capabilities are not the same as production-ready OpenPost support. The table below reflects the current implementation state, including paths that still need provider approval, deployment configuration, or real-account verification.
 
@@ -13,10 +13,11 @@ Provider-native API capabilities are not the same as production-ready OpenPost s
 | Bluesky   | Supported | Up to 4 images                             | Implemented for one MP4 video via `app.bsky.video.*`, real-account verification still required | AT Protocol reply refs                                   | Supported  | Supported |
 | LinkedIn  | Supported | One image, 2-20 images, or a document      | Implemented, with live-account verification still recommended                                  | Thread children are posted as comments                   | Supported  | Supported |
 | Threads   | Supported | One image or a 2-10 item carousel          | One video or mixed carousel with public HTTPS media                                            | `reply_to_id`                                            | Supported  | Supported |
-| Facebook  | Supported | One image or a 2-10 image multi-photo post | One public HTTPS video URL; Story publishing accepts exactly one image or video                | Comment replies                                          | Preview    | Supported |
-| Instagram | No        | Single image and carousel paths            | Implemented for Reels, needs live-account verification                                         | Comment replies/story paths exist for supported settings | Preview    | Supported |
-| TikTok    | No        | 1-35 JPEG/WebP photos, up to 20 MB each    | Direct Post and inbox/upload video paths implemented, needs live-account verification          | No                                                       | Preview    | Supported |
-| YouTube   | No        | Thumbnail only                             | Short and Video uploads with explicit privacy, category, and metadata; needs live verification | No                                                       | Preview    | Supported |
+| Facebook  | Supported | One image or a 2-10 image multi-photo post | One public HTTPS video URL; Story publishing accepts exactly one image or video                | Comment replies                                          | Supported  | Supported |
+| Instagram | No        | Single image and carousel paths            | Reels for Business and Creator accounts; live-account verification is still recommended        | Comment replies/story paths exist for supported settings | Supported  | Supported |
+| TikTok    | No        | 1-35 JPEG/WebP photos, up to 20 MB each    | Direct Post and inbox/upload video paths; provider audit still applies                          | No                                                       | Supported  | Supported |
+| YouTube   | No        | Thumbnail only                             | Short and Video uploads with explicit privacy, category, metadata, and resumable transfer      | Comment replies and moderation                           | Supported  | Supported |
+| Discord Webhooks | Supported | Up to 10 file attachments | Files share Discord's per-webhook upload size limit | Reply references between segments | Supported | Supported |
 
 ## Planned Platform Adapters
 
@@ -25,7 +26,7 @@ No planned provider adapter is exposed as connectable today. Future provider roa
 ## Known Limitations
 
 - **Video support is uneven** — implementation exists across multiple providers, but support is still provider-dependent and some paths need end-to-end verification with real accounts.
-- **TikTok and YouTube remain preview integrations** — both publishing paths exist. TikTok Direct Post requires app audit approval, while unaudited Google projects can force YouTube uploads to private. Verify each production account and format before relying on either integration.
+- **TikTok and YouTube have provider gates** — TikTok Direct Post requires app audit approval, while unaudited Google projects can force YouTube uploads to private. Verify each production account and format before relying on either integration.
 - **Capability gates are deliberate** — account-, permission-, review-, partner-, or provider-search-gated controls remain unavailable with a reason until OpenPost can verify access.
 - **X limits are resolved per account** — Basic, Premium, and Premium+ accounts use subscribed text and video limits when X verifies the tier. Unknown or stale tiers use standard limits.
 - **Planned providers are discovery-only** — adding a future provider to provider app config fails until its adapter is implemented.

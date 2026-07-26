@@ -70,12 +70,9 @@ OpenPost stays deliberately narrower than an all-in-one social marketing platfor
 
 ## Supported platforms
 
-| Status        | Platforms                                                        |
-| ------------- | ---------------------------------------------------------------- |
-| **Supported** | X, Mastodon, Bluesky, LinkedIn, Threads                          |
-| **Preview**   | Facebook Pages, Instagram professional accounts, TikTok, YouTube |
+X, Mastodon, Bluesky, LinkedIn profiles and Organization Pages, Threads, Facebook Pages, Instagram Business and Creator accounts, TikTok, YouTube, and Discord webhooks are supported.
 
-Preview integrations have working publishing paths, but provider review, app configuration, account eligibility, or live-account verification may still limit production use. Check the [provider matrix](https://docs.openpost.social/providers/platform-limits) for current formats, media limits, and setup notes.
+Provider review, app configuration, account eligibility, quotas, public-media access, or live-account verification may still limit a specific account or format. Check the [provider matrix](https://docs.openpost.social/providers/platform-limits) for current formats, media limits, and setup notes.
 
 ## Self-host in a few minutes
 

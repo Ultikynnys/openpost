@@ -35,14 +35,14 @@ Self-hosted OpenPost has no software subscription. You operate its server, TLS, 
 
 ## What OpenPost supports
 
-- **Implemented integrations:** X, Mastodon, Bluesky, LinkedIn, and Threads
-- **Preview integrations:** Facebook Pages, Instagram professional accounts, TikTok, and YouTube
+- **Publishing integrations:** X, Mastodon, Bluesky, LinkedIn profiles and Organization Pages, Threads, Facebook Pages, Instagram Business and Creator accounts, TikTok, YouTube, and Discord webhooks
+- **Communications:** cross-provider engagement, personal notifications, and a unified inbox for supported message APIs
 
-Preview means the code path exists but provider approval, app configuration, quotas, or live-account verification can still block production publishing. See [Supported Platforms & Limitations](/providers/platform-limits) for the current profile-level matrix.
+Provider approval, app configuration, quotas, public-media access, or live-account verification can still block a specific account or format. See [Supported Platforms & Limitations](/providers/platform-limits) for the current profile-level matrix.
 
 ## What OpenPost is not
 
-OpenPost focuses on drafting, adapting, scheduling, publishing, and provider-reported account and publication analytics. It does not include enterprise social listening, ad management, benchmarking, or a unified social inbox. Media and metric support vary by provider.
+OpenPost focuses on drafting, adapting, scheduling, publishing, provider-reported analytics, engagement, notifications, and supported social conversations. It does not include enterprise social listening, ad management, or benchmarking. Media, metric, engagement, and messaging support vary by provider.
 
 **Current limitations:**
 

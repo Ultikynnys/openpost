@@ -73,7 +73,7 @@ Before approval, inspect every destination in the composer:
 2. Read the rendition without the base post beside it.
 3. Check character, thread, media-count, and format limits.
 4. Verify links, mentions, hashtags, titles, descriptions, and alt text.
-5. Remove providers that are preview-only or not verified for the exact path.
+5. Remove providers that are not configured or not verified for the exact path.
 6. Confirm the workspace timezone and scheduled time.
 7. Save edits before approving the mutation.
 

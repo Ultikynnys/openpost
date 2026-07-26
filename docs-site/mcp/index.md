@@ -73,7 +73,7 @@ assistant should use `search_operations` before `query_operation` or
 ## Safe workflow
 
 1. Start with a workspace-scoped `mcp:read` token. Ask the assistant to inspect the current workspace, provider catalog, accounts, recent media, and provider readiness.
-2. If the agent must create or change drafts and destination-specific renditions, switch to a workspace-scoped `mcp:full` token and approve only those exact mutations. Keep preview providers out of the campaign unless the exact path has passed a fresh live rehearsal.
+2. If the agent must create or change drafts and destination-specific renditions, switch to a workspace-scoped `mcp:full` token and approve only those exact mutations. Keep any unverified account or format out of the campaign until the exact path has passed a fresh live rehearsal.
 3. Open the campaign in the web app. Review each account, rendition, media attachment, accessibility text, format, and schedule.
 4. Approve `execute_operation` only after the final content and accounts are correct.
 5. Inspect the queue and lifecycle events. Record published URLs or failures from OpenPost instead of treating a scheduled state as proof of publication.

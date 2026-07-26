@@ -113,6 +113,8 @@ const selfHostingSidebar = [
 			{ text: 'Instagram', link: '/providers/instagram' },
 			{ text: 'TikTok', link: '/providers/tiktok' },
 			{ text: 'YouTube', link: '/providers/youtube' },
+			{ text: 'Discord Webhooks', link: '/providers/discord' },
+			{ text: 'Engagement, Inbox & Notifications', link: '/usage/communications' },
 		],
 	},
 	{
