@@ -154,9 +154,11 @@ func (i *InstagramAdapter) ListAccountSelections(ctx context.Context, token *Tok
 			Username:    firstNonEmptyString(ig.Username, ig.Name, page.Name),
 			DisplayName: firstNonEmptyString(ig.Name, ig.Username, page.Name),
 			AvatarURL:   firstNonEmptyString(ig.ProfilePictureURL, page.Picture.Data.URL),
-			Kind:        "instagram_business_account",
+			Kind:        "Instagram professional",
+			Description: firstNonEmptyString(ig.AccountType, "Business or Creator account"),
 			Extra: map[string]string{
-				"page_id": page.ID,
+				"page_id":      page.ID,
+				"account_type": strings.ToLower(ig.AccountType),
 			},
 		})
 	}
@@ -192,13 +194,17 @@ func (i *InstagramAdapter) SelectAccount(ctx context.Context, token *TokenResult
 			AccountUsername:  firstNonEmptyString(ig.Username, ig.Name, page.Name),
 			AccountAvatarURL: firstNonEmptyString(ig.ProfilePictureURL, page.Picture.Data.URL),
 			Token:            &pageToken,
+			CapabilityState: map[string]string{
+				"instagram_account_type": strings.ToLower(firstNonEmptyString(ig.AccountType, "professional")),
+				"facebook_page_id":       page.ID,
+			},
 		}, nil
 	}
 	return nil, fmt.Errorf("instagram account selection %s was not found", selectionID)
 }
 
 func (i *InstagramAdapter) listInstagramPages(ctx context.Context, accessToken string) ([]instagramPage, error) {
-	fields := "id,name,username,access_token,picture.type(square),instagram_business_account{id,username,name,profile_picture_url}"
+	fields := "id,name,username,access_token,picture.type(square),instagram_business_account{id,username,name,profile_picture_url,account_type}"
 	endpoint := i.graphURL("me/accounts") + "?fields=" + url.QueryEscape(fields) + "&limit=100&access_token=" + url.QueryEscape(accessToken)
 	respBody, err := DoRequest(ctx, http.MethodGet, endpoint, nil, nil)
 	if err != nil {
@@ -650,6 +656,8 @@ func instagramScopes() []string {
 	return []string{
 		"instagram_basic",
 		"instagram_content_publish",
+		"instagram_manage_comments",
+		"instagram_manage_messages",
 		"instagram_manage_insights",
 		"pages_show_list",
 		"pages_read_engagement",
@@ -666,6 +674,7 @@ type instagramPage struct {
 		Username          string `json:"username"`
 		Name              string `json:"name"`
 		ProfilePictureURL string `json:"profile_picture_url"`
+		AccountType       string `json:"account_type"`
 	} `json:"instagram_business_account"`
 	Picture struct {
 		Data struct {

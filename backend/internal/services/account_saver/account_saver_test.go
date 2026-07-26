@@ -120,6 +120,65 @@ func TestSaveAccount_X(t *testing.T) {
 	require.Len(t, jobs, 1)
 }
 
+func TestSaveAccountsFromInputsConnectsLinkedInIdentitiesAtomically(t *testing.T) {
+	db := createTestDB(t)
+	encryptor := crypto.NewTokenEncryptor("test-secret-key-for-testing-only")
+	saver := NewAccountSaver(db, encryptor)
+	ctx := context.Background()
+	seedWorkspaceMember(t, db, "workspace-1", "user-1")
+	token := &platform.TokenResult{
+		AccessToken: "member-token",
+		Extra:       map[string]string{"user_id": "member-1", "scope": "w_member_social w_organization_social"},
+	}
+
+	accounts, err := saver.SaveAccountsFromInputs(ctx, []SaveAccountInput{
+		{
+			UserID: "user-1", WorkspaceID: "workspace-1", PlatformName: "linkedin",
+			AccountID: "urn:li:person:member-1", AccountUsername: "Ada", Token: token,
+			CapabilityState: map[string]string{"linkedin_account_type": "person"},
+		},
+		{
+			UserID: "user-1", WorkspaceID: "workspace-1", PlatformName: "linkedin",
+			AccountID: "urn:li:organization:42", AccountUsername: "OpenPost", Token: token,
+			CapabilityState: map[string]string{"linkedin_account_type": "organization"},
+		},
+	})
+	require.NoError(t, err)
+	require.Len(t, accounts, 2)
+	require.Equal(t, "urn:li:person:member-1", accounts[0].AccountID)
+	require.Equal(t, "urn:li:organization:42", accounts[1].AccountID)
+	require.NotEqual(t, accounts[0].Slug, accounts[1].Slug)
+
+	var stored []models.SocialAccount
+	require.NoError(t, db.NewSelect().Model(&stored).Order("created_at ASC").Scan(ctx))
+	require.Len(t, stored, 2)
+	for _, account := range stored {
+		decrypted, decryptErr := encryptor.Decrypt(account.AccessTokenEnc)
+		require.NoError(t, decryptErr)
+		require.Equal(t, "member-token", decrypted)
+	}
+}
+
+func TestSaveAccountsFromInputsRollsBackEveryIdentity(t *testing.T) {
+	db := createTestDB(t)
+	encryptor := crypto.NewTokenEncryptor("test-secret-key-for-testing-only")
+	saver := NewAccountSaver(db, encryptor)
+	ctx := context.Background()
+	seedWorkspaceMember(t, db, "workspace-1", "user-1")
+	_, err := db.ExecContext(ctx, `CREATE UNIQUE INDEX social_accounts_remote_test_idx ON social_accounts (workspace_id, platform, account_id)`)
+	require.NoError(t, err)
+	token := &platform.TokenResult{AccessToken: "member-token"}
+
+	_, err = saver.SaveAccountsFromInputs(ctx, []SaveAccountInput{
+		{UserID: "user-1", WorkspaceID: "workspace-1", PlatformName: "linkedin", AccountID: "duplicate", AccountUsername: "One", Token: token},
+		{UserID: "user-1", WorkspaceID: "workspace-1", PlatformName: "linkedin", AccountID: "duplicate", AccountUsername: "Two", Token: token},
+	})
+	require.Error(t, err)
+	count, countErr := db.NewSelect().Model((*models.SocialAccount)(nil)).Count(ctx)
+	require.NoError(t, countErr)
+	require.Zero(t, count)
+}
+
 // TestSaveAccount_Mastodon tests saving a Mastodon account.
 func TestSaveAccount_Mastodon(t *testing.T) {
 	t.Parallel()

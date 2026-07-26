@@ -1497,12 +1497,12 @@ func TestMCPCallListProviderCatalog(t *testing.T) {
 	content := result["content"].([]any)
 	text := content[0].(map[string]any)["text"].(string)
 	require.Contains(t, text, "available: Bluesky, X (Twitter), Mastodon")
-	require.Contains(t, text, "needs configuration: LinkedIn, Threads, Instagram, Facebook, YouTube, TikTok")
+	require.Contains(t, text, "needs configuration: Discord, LinkedIn, Threads, Instagram, Facebook, YouTube, TikTok")
 	require.NotContains(t, text, "planned:")
 
 	structured := result["structuredContent"].(map[string]any)
 	providers := structured["providers"].([]any)
-	require.Len(t, providers, 9)
+	require.Len(t, providers, 10)
 	byPlatform := map[string]map[string]any{}
 	for _, item := range providers {
 		provider := item.(map[string]any)

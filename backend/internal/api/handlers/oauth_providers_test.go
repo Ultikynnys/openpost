@@ -62,6 +62,7 @@ func TestListProvidersReportsConfiguredProviders(t *testing.T) {
 		auth: testAuthenticator{},
 		providers: map[string]platform.Adapter{
 			"bluesky":                   providerAvailabilityAdapter{},
+			"discord":                   providerAvailabilityAdapter{},
 			"x":                         providerAvailabilityAdapter{},
 			"mastodon:https://masto.pt": mastodonAdapter,
 			"mastodon:Personal":         mastodonAdapter,
@@ -77,14 +78,17 @@ func TestListProvidersReportsConfiguredProviders(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec.Code)
 	var out []ProviderInfo
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &out))
-	require.Len(t, out, 9)
+	require.Len(t, out, 10)
 	require.Equal(t, "bluesky", out[0].Platform)
 	require.Equal(t, providerStatusAvailable, out[0].Status)
 	require.True(t, out[0].Configured)
 	require.Contains(t, out[0].Capabilities, "MCP workflows")
-	require.Equal(t, "x", out[1].Platform)
+	require.Equal(t, "discord", out[1].Platform)
 	require.Equal(t, providerStatusAvailable, out[1].Status)
 	require.True(t, out[1].Configured)
+	require.Equal(t, "x", out[2].Platform)
+	require.Equal(t, providerStatusAvailable, out[2].Status)
+	require.True(t, out[2].Configured)
 	require.Equal(t, ProviderInfo{
 		Platform:     "mastodon",
 		DisplayName:  "Mastodon",
@@ -95,27 +99,27 @@ func TestListProvidersReportsConfiguredProviders(t *testing.T) {
 		Capabilities: coreProviderCapabilities,
 		Name:         "Personal",
 		InstanceURL:  "https://masto.pt",
-	}, out[2])
-	require.Equal(t, "linkedin", out[3].Platform)
-	require.Equal(t, providerStatusNeedsConfiguration, out[3].Status)
-	require.False(t, out[3].Configured)
-	require.Equal(t, "threads", out[4].Platform)
+	}, out[3])
+	require.Equal(t, "linkedin", out[4].Platform)
 	require.Equal(t, providerStatusNeedsConfiguration, out[4].Status)
 	require.False(t, out[4].Configured)
-	require.Equal(t, "instagram", out[5].Platform)
+	require.Equal(t, "threads", out[5].Platform)
 	require.Equal(t, providerStatusNeedsConfiguration, out[5].Status)
 	require.False(t, out[5].Configured)
-	require.Equal(t, "facebook", out[6].Platform)
+	require.Equal(t, "instagram", out[6].Platform)
 	require.Equal(t, providerStatusNeedsConfiguration, out[6].Status)
-	require.Equal(t, "youtube", out[7].Platform)
+	require.False(t, out[6].Configured)
+	require.Equal(t, "facebook", out[7].Platform)
 	require.Equal(t, providerStatusNeedsConfiguration, out[7].Status)
-	require.False(t, out[7].Configured)
-	require.Equal(t, "tiktok", out[8].Platform)
+	require.Equal(t, "youtube", out[8].Platform)
 	require.Equal(t, providerStatusNeedsConfiguration, out[8].Status)
 	require.False(t, out[8].Configured)
-	require.Equal(t, "OAuth app connection for TikTok videos and photo posts.", out[8].Description)
-	require.Contains(t, out[8].Capabilities, "Short videos")
-	require.Contains(t, out[8].Capabilities, "Photo posts")
+	require.Equal(t, "tiktok", out[9].Platform)
+	require.Equal(t, providerStatusNeedsConfiguration, out[9].Status)
+	require.False(t, out[9].Configured)
+	require.Equal(t, "OAuth app connection for TikTok videos and photo posts.", out[9].Description)
+	require.Contains(t, out[9].Capabilities, "Short videos")
+	require.Contains(t, out[9].Capabilities, "Photo posts")
 }
 
 func TestListProvidersIncludesUnavailableMastodonPlaceholder(t *testing.T) {
@@ -124,7 +128,7 @@ func TestListProvidersIncludesUnavailableMastodonPlaceholder(t *testing.T) {
 	handler := &OAuthHandler{providers: map[string]platform.Adapter{}}
 	out := handler.providerAvailability()
 
-	require.Len(t, out, 9)
+	require.Len(t, out, 10)
 	require.Equal(t, ProviderInfo{
 		Platform:    "mastodon",
 		DisplayName: "Mastodon",
@@ -132,7 +136,7 @@ func TestListProvidersIncludesUnavailableMastodonPlaceholder(t *testing.T) {
 		Configured:  false,
 		Status:      providerStatusNeedsConfiguration,
 		Description: "Configure Mastodon servers or dynamic instance registration before connecting.",
-	}, out[2])
+	}, out[3])
 }
 
 func TestListProvidersReportsDynamicMastodonAvailable(t *testing.T) {
@@ -144,7 +148,7 @@ func TestListProvidersReportsDynamicMastodonAvailable(t *testing.T) {
 	}
 	out := handler.providerAvailability()
 
-	require.Len(t, out, 9)
+	require.Len(t, out, 10)
 	require.Equal(t, ProviderInfo{
 		Platform:     "mastodon",
 		DisplayName:  "Mastodon",
@@ -154,5 +158,5 @@ func TestListProvidersReportsDynamicMastodonAvailable(t *testing.T) {
 		Description:  "Connect any public Mastodon instance.",
 		Capabilities: coreProviderCapabilities,
 		Name:         "Custom instance",
-	}, out[2])
+	}, out[3])
 }

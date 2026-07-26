@@ -278,12 +278,13 @@ func TestLoadSupportsFileBackedProviderApps(t *testing.T) {
 
 	cfg := Load()
 
-	require.Len(t, cfg.ProviderApps, 2)
+	require.Len(t, cfg.ProviderApps, 3)
 	require.Equal(t, "bluesky", cfg.ProviderApps[0].Provider)
-	require.Equal(t, "youtube", cfg.ProviderApps[1].Provider)
-	require.Equal(t, "youtube-client", cfg.ProviderApps[1].ClientID)
-	require.Equal(t, "youtube-secret", cfg.ProviderApps[1].ClientSecret)
-	require.Equal(t, "https://app.openpost.social/api/v1/accounts/youtube/callback", cfg.ProviderApps[1].RedirectURI)
+	require.Equal(t, "discord", cfg.ProviderApps[1].Provider)
+	require.Equal(t, "youtube", cfg.ProviderApps[2].Provider)
+	require.Equal(t, "youtube-client", cfg.ProviderApps[2].ClientID)
+	require.Equal(t, "youtube-secret", cfg.ProviderApps[2].ClientSecret)
+	require.Equal(t, "https://app.openpost.social/api/v1/accounts/youtube/callback", cfg.ProviderApps[2].RedirectURI)
 }
 
 func TestLoadSelfHostedCORSOriginsIncludeLocalDevelopmentDefaults(t *testing.T) {
@@ -508,16 +509,17 @@ func TestLoadBuildsProviderAppRegistryFromLegacyEnv(t *testing.T) {
 
 	cfg := Load()
 
-	require.Len(t, cfg.ProviderApps, 5)
+	require.Len(t, cfg.ProviderApps, 6)
 	require.Equal(t, "bluesky", cfg.ProviderApps[0].Provider)
-	require.Equal(t, "x", cfg.ProviderApps[1].Provider)
-	require.Equal(t, "https://app.openpost.social/api/v1/accounts/x/callback", cfg.ProviderApps[1].RedirectURI)
-	require.Equal(t, "mastodon", cfg.ProviderApps[2].Provider)
-	require.Equal(t, "https://masto.pt", cfg.ProviderApps[2].InstanceURL)
-	require.Equal(t, "linkedin", cfg.ProviderApps[3].Provider)
-	require.Equal(t, "https://app.openpost.social/api/v1/accounts/linkedin/callback", cfg.ProviderApps[3].RedirectURI)
-	require.Equal(t, "threads", cfg.ProviderApps[4].Provider)
-	require.Equal(t, "https://app.openpost.social/api/v1/accounts/threads/callback", cfg.ProviderApps[4].RedirectURI)
+	require.Equal(t, "discord", cfg.ProviderApps[1].Provider)
+	require.Equal(t, "x", cfg.ProviderApps[2].Provider)
+	require.Equal(t, "https://app.openpost.social/api/v1/accounts/x/callback", cfg.ProviderApps[2].RedirectURI)
+	require.Equal(t, "mastodon", cfg.ProviderApps[3].Provider)
+	require.Equal(t, "https://masto.pt", cfg.ProviderApps[3].InstanceURL)
+	require.Equal(t, "linkedin", cfg.ProviderApps[4].Provider)
+	require.Equal(t, "https://app.openpost.social/api/v1/accounts/linkedin/callback", cfg.ProviderApps[4].RedirectURI)
+	require.Equal(t, "threads", cfg.ProviderApps[5].Provider)
+	require.Equal(t, "https://app.openpost.social/api/v1/accounts/threads/callback", cfg.ProviderApps[5].RedirectURI)
 }
 
 func TestLoadMergesStructuredProviderApps(t *testing.T) {
@@ -535,20 +537,21 @@ func TestLoadMergesStructuredProviderApps(t *testing.T) {
 
 	cfg := Load()
 
-	require.Len(t, cfg.ProviderApps, 7)
+	require.Len(t, cfg.ProviderApps, 8)
 	require.Equal(t, "bluesky", cfg.ProviderApps[0].Provider)
-	require.Equal(t, "cloud-x-client", cfg.ProviderApps[1].ClientID)
-	require.Equal(t, "https://app.openpost.social/api/v1/accounts/x/callback", cfg.ProviderApps[1].RedirectURI)
-	require.Equal(t, "mastodon", cfg.ProviderApps[2].Provider)
-	require.Equal(t, "urn:ietf:wg:oauth:2.0:oob", cfg.ProviderApps[2].RedirectURI)
-	require.Equal(t, "facebook", cfg.ProviderApps[3].Provider)
-	require.Equal(t, "https://app.openpost.social/api/v1/accounts/facebook/callback", cfg.ProviderApps[3].RedirectURI)
-	require.Equal(t, "instagram", cfg.ProviderApps[4].Provider)
-	require.Equal(t, "https://app.openpost.social/api/v1/accounts/instagram/callback", cfg.ProviderApps[4].RedirectURI)
-	require.Equal(t, "tiktok", cfg.ProviderApps[5].Provider)
-	require.Equal(t, "https://app.openpost.social/api/v1/accounts/tiktok/callback", cfg.ProviderApps[5].RedirectURI)
-	require.Equal(t, "youtube", cfg.ProviderApps[6].Provider)
-	require.Equal(t, "https://app.openpost.social/api/v1/accounts/youtube/callback", cfg.ProviderApps[6].RedirectURI)
+	require.Equal(t, "discord", cfg.ProviderApps[1].Provider)
+	require.Equal(t, "cloud-x-client", cfg.ProviderApps[2].ClientID)
+	require.Equal(t, "https://app.openpost.social/api/v1/accounts/x/callback", cfg.ProviderApps[2].RedirectURI)
+	require.Equal(t, "mastodon", cfg.ProviderApps[3].Provider)
+	require.Equal(t, "urn:ietf:wg:oauth:2.0:oob", cfg.ProviderApps[3].RedirectURI)
+	require.Equal(t, "facebook", cfg.ProviderApps[4].Provider)
+	require.Equal(t, "https://app.openpost.social/api/v1/accounts/facebook/callback", cfg.ProviderApps[4].RedirectURI)
+	require.Equal(t, "instagram", cfg.ProviderApps[5].Provider)
+	require.Equal(t, "https://app.openpost.social/api/v1/accounts/instagram/callback", cfg.ProviderApps[5].RedirectURI)
+	require.Equal(t, "tiktok", cfg.ProviderApps[6].Provider)
+	require.Equal(t, "https://app.openpost.social/api/v1/accounts/tiktok/callback", cfg.ProviderApps[6].RedirectURI)
+	require.Equal(t, "youtube", cfg.ProviderApps[7].Provider)
+	require.Equal(t, "https://app.openpost.social/api/v1/accounts/youtube/callback", cfg.ProviderApps[7].RedirectURI)
 }
 
 func TestLoadInvalidProductionPrimitiveEnumsFallback(t *testing.T) {

@@ -65,6 +65,7 @@ type Config struct {
 	LinkedInClientSecret         string
 	LinkedInRedirectURI          string
 	DisableLinkedInThreadReplies bool
+	EnableLinkedInOrganizations  bool
 
 	ThreadsClientID     string
 	ThreadsClientSecret string
@@ -175,6 +176,7 @@ func Load() *Config {
 		LinkedInClientSecret:         getEnvWithFallbacks("LINKEDIN_CLIENT_SECRET", ""),
 		LinkedInRedirectURI:          oauthRedirectFromFrontend("LINKEDIN_REDIRECT_URI", "", frontendURL, "/api/v1/accounts/linkedin/callback"),
 		DisableLinkedInThreadReplies: getEnvBoolWithAliases(false, "LINKEDIN_DISABLE_THREAD_REPLIES", "OPENPOST_DISABLE_LINKEDIN_THREAD_REPLIES"),
+		EnableLinkedInOrganizations:  getEnvBoolWithAliases(false, "OPENPOST_LINKEDIN_ORGANIZATIONS_ENABLED"),
 
 		ThreadsClientID:     getEnvWithFallbacks("THREADS_CLIENT_ID", ""),
 		ThreadsClientSecret: getEnvWithFallbacks("THREADS_CLIENT_SECRET", ""),
@@ -242,7 +244,7 @@ func Load() *Config {
 }
 
 func providerAppsFromLegacyConfig(cfg *Config) []platform.AppConfig {
-	apps := []platform.AppConfig{{Provider: "bluesky"}}
+	apps := []platform.AppConfig{{Provider: "bluesky"}, {Provider: "discord"}}
 	if cfg.TwitterClientID != "" {
 		apps = append(apps, platform.AppConfig{
 			Provider:     "x",

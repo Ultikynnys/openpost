@@ -30,6 +30,7 @@ import (
 	"github.com/openpost/backend/internal/services/auth"
 	"github.com/openpost/backend/internal/services/billing"
 	cliauth "github.com/openpost/backend/internal/services/cli_auth"
+	communicationsservice "github.com/openpost/backend/internal/services/communications"
 	"github.com/openpost/backend/internal/services/crypto"
 	"github.com/openpost/backend/internal/services/entitlements"
 	"github.com/openpost/backend/internal/services/feedback"
@@ -38,6 +39,7 @@ import (
 	"github.com/openpost/backend/internal/services/mediasigner"
 	"github.com/openpost/backend/internal/services/mediastore"
 	"github.com/openpost/backend/internal/services/mfa"
+	"github.com/openpost/backend/internal/services/notifications"
 	"github.com/openpost/backend/internal/services/passwordmail"
 	"github.com/openpost/backend/internal/services/providerapps"
 	"github.com/openpost/backend/internal/services/publisher"
@@ -159,6 +161,7 @@ func main() {
 	providerAppConfigs = platform.MergeAppConfigs(providerAppConfigs, dbProviderApps...)
 	providers, providerEntries, err := platform.BuildAdapterRegistry(providerAppConfigs, platform.RegistryOptions{
 		DisableLinkedInThreadReplies: cfg.DisableLinkedInThreadReplies,
+		EnableLinkedInOrganizations:  cfg.EnableLinkedInOrganizations,
 	})
 	if err != nil {
 		log.Fatalf("failed to build provider app registry: %v", err)
@@ -168,10 +171,14 @@ func main() {
 	}
 
 	analyticsService := analyticsservice.NewService(db, tokenManager)
+	notificationService := notifications.NewService(db)
+	publishSvc.SetNotificationService(notificationService)
+	communicationsService := communicationsservice.NewService(db, tokenManager, notificationService)
 	for name, adapter := range providers {
 		tokenManager.SetProvider(name, adapter)
 		publishSvc.SetProvider(name, adapter)
 		analyticsService.SetProvider(name, adapter)
+		communicationsService.SetProvider(name, adapter)
 	}
 
 	storage, err := mediastore.New(context.Background(), mediastore.Config{
@@ -216,8 +223,12 @@ func main() {
 	worker := queue.NewWorker(db, "worker-1", 1*time.Second, publishSvc, tokenManager, storage)
 	worker.SetFeedbackService(feedbackService)
 	worker.SetAnalyticsService(analyticsService)
+	worker.SetCommunicationsService(communicationsService)
 	if err := analyticsService.ScheduleSweep(context.Background(), time.Now().UTC()); err != nil {
 		log.Fatalf("failed to schedule analytics collection: %v", err)
+	}
+	if err := communicationsService.ScheduleSweep(context.Background(), time.Now().UTC()); err != nil {
+		log.Fatalf("failed to schedule communications collection: %v", err)
 	}
 
 	apiGroup := e.Group("/api/v1")
@@ -287,6 +298,7 @@ func main() {
 			tokenManager.SetProvider,
 			publishSvc.SetProvider,
 			analyticsService.SetProvider,
+			communicationsService.SetProvider,
 		},
 		MastodonAppService:           mastodonAppService,
 		FrontendURL:                  cfg.FrontendURL,
@@ -297,6 +309,8 @@ func main() {
 		StudioModelBaseURL:           cfg.StudioModelBaseURL,
 		FeedbackService:              feedbackService,
 		AnalyticsService:             analyticsService,
+		CommunicationsService:        communicationsService,
+		NotificationService:          notificationService,
 		MediaHandler:                 mediaHandler,
 		ProfileHandler:               profileHandler,
 		BillingHandler:               billingHandler,

@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -179,6 +180,9 @@ type AccountResponse struct {
 	LimitProfile           string     `json:"limit_profile,omitempty" enum:"standard,x-premium" doc:"Account-specific publishing limit profile"`
 	CapabilityCheckedAt    *time.Time `json:"capability_checked_at,omitempty" doc:"When account-specific publishing limits were last verified"`
 	ThreadRepliesSupported bool       `json:"thread_replies_supported" doc:"Whether this account supports thread replies in current server config"`
+	AccountKind            string     `json:"account_kind,omitempty" doc:"Normalized identity kind, such as person, organization, creator, or business"`
+	MessagingSupported     bool       `json:"messaging_supported" doc:"Whether OpenPost has a messaging connector for this provider"`
+	MessagesEnabled        bool       `json:"messages_enabled" doc:"Whether this account opted in to inbox synchronization"`
 }
 
 type ListAccountsOutput struct {
@@ -204,7 +208,8 @@ type GetAccountSelectionOutput struct {
 type CompleteAccountSelectionInput struct {
 	ConnectionID string `path:"connection_id" doc:"Pending OAuth account-selection ID"`
 	Body         struct {
-		SelectionID string `json:"selection_id" doc:"Selected account, page, or channel ID"`
+		SelectionID  string   `json:"selection_id,omitempty" doc:"Selected account, page, or channel ID. Retained for single-selection clients."`
+		SelectionIDs []string `json:"selection_ids,omitempty" doc:"Selected account, Page, or organization IDs. LinkedIn supports connecting several identities from one grant."`
 	}
 }
 
@@ -215,7 +220,8 @@ type CompleteAccountSelectionOutput struct {
 type UpdateAccountInput struct {
 	AccountID string `path:"account_id"`
 	Body      struct {
-		Slug string `json:"slug" doc:"New account slug. Use lowercase letters, numbers, and hyphens."`
+		Slug            string `json:"slug" doc:"New account slug. Use lowercase letters, numbers, and hyphens."`
+		MessagesEnabled *bool  `json:"messages_enabled,omitempty" doc:"Opt this account in or out of inbox synchronization"`
 	}
 }
 
@@ -240,6 +246,13 @@ var providerCatalog = []ProviderInfo{
 		AuthMode:     "app_password",
 		Description:  "Handle and app-password connection with no server app setup.",
 		Capabilities: coreProviderCapabilities,
+	},
+	{
+		Platform:     "discord",
+		DisplayName:  "Discord",
+		AuthMode:     "webhook",
+		Description:  "Connect a Discord channel with its incoming webhook URL.",
+		Capabilities: []string{"Text posts", "Media attachments", "Scheduling", "Message deletion", "MCP workflows"},
 	},
 	{
 		Platform:     "x",
@@ -273,7 +286,7 @@ var providerCatalog = []ProviderInfo{
 		Platform:     "instagram",
 		DisplayName:  "Instagram",
 		AuthMode:     "oauth",
-		Description:  "Meta OAuth connection for Instagram Business publishing.",
+		Description:  "Meta OAuth connection for Instagram Business and Creator publishing.",
 		Capabilities: []string{"Images", "Reels", "Scheduling", "Platform variants", "MCP workflows"},
 	},
 	{
@@ -1020,6 +1033,56 @@ func (h *OAuthHandler) BlueskyLogin(api huma.API) {
 	})
 }
 
+type DiscordWebhookLoginInput struct {
+	Body struct {
+		WorkspaceID string `json:"workspace_id" doc:"Workspace ID"`
+		WebhookURL  string `json:"webhook_url" doc:"Discord incoming webhook URL"`
+	}
+}
+
+func (h *OAuthHandler) DiscordWebhookLogin(api huma.API) {
+	huma.Register(api, huma.Operation{
+		OperationID: "discord-webhook-login",
+		Method:      http.MethodPost,
+		Path:        "/accounts/discord/webhook",
+		Summary:     "Connect a Discord channel using an incoming webhook",
+		Tags:        []string{tagAccounts},
+		Middlewares: huma.Middlewares{middleware.AuthMiddleware(api, h.auth)},
+		Errors:      []int{400, 403},
+	}, func(ctx context.Context, input *DiscordWebhookLoginInput) (*struct{}, error) {
+		userID := middleware.GetUserID(ctx)
+		if err := h.ensureCanStartAccountConnection(ctx, input.Body.WorkspaceID, userID); err != nil {
+			return nil, err
+		}
+		adapter, ok := h.providers["discord"].(*platform.DiscordAdapter)
+		if !ok {
+			return nil, huma.Error400BadRequest("discord webhooks are not configured")
+		}
+		webhookURL := strings.TrimSpace(input.Body.WebhookURL)
+		profile, err := adapter.GetProfile(ctx, webhookURL)
+		if err != nil {
+			return nil, huma.Error400BadRequest(err.Error())
+		}
+		token := &platform.TokenResult{
+			AccessToken: webhookURL,
+			TokenType:   "Webhook",
+		}
+		_, err = h.accountSaver.SaveAccountFromInput(ctx, account_saver.SaveAccountInput{
+			UserID:          userID,
+			PlatformName:    "discord",
+			WorkspaceID:     input.Body.WorkspaceID,
+			AccountID:       profile.ID,
+			AccountUsername: firstNonEmpty(profile.DisplayName, profile.Username),
+			Token:           token,
+			CapabilityState: profile.CapabilityState,
+		})
+		if err != nil {
+			return nil, huma.Error403Forbidden(accountConnectionErrorMessage(err))
+		}
+		return nil, nil
+	})
+}
+
 func (h *OAuthHandler) GetAccountSelection(api huma.API) {
 	huma.Register(api, huma.Operation{
 		OperationID: "get-account-selection",
@@ -1050,6 +1113,7 @@ func (h *OAuthHandler) GetAccountSelection(api huma.API) {
 	})
 }
 
+//nolint:gocyclo // Validation and the atomic multi-account handoff share one OAuth completion boundary.
 func (h *OAuthHandler) CompleteAccountSelection(api huma.API) {
 	huma.Register(api, huma.Operation{
 		OperationID: "complete-account-selection",
@@ -1060,9 +1124,25 @@ func (h *OAuthHandler) CompleteAccountSelection(api huma.API) {
 		Middlewares: huma.Middlewares{middleware.AuthMiddleware(api, h.auth)},
 		Errors:      []int{400, 403, 404},
 	}, func(ctx context.Context, input *CompleteAccountSelectionInput) (*CompleteAccountSelectionOutput, error) {
-		selectionID := strings.TrimSpace(input.Body.SelectionID)
-		if selectionID == "" {
-			return nil, huma.Error400BadRequest("selection_id is required")
+		selectionIDs := append([]string(nil), input.Body.SelectionIDs...)
+		if selectionID := strings.TrimSpace(input.Body.SelectionID); selectionID != "" {
+			selectionIDs = append(selectionIDs, selectionID)
+		}
+		seenSelections := map[string]struct{}{}
+		normalizedSelections := make([]string, 0, len(selectionIDs))
+		for _, selectionID := range selectionIDs {
+			selectionID = strings.TrimSpace(selectionID)
+			if selectionID == "" {
+				continue
+			}
+			if _, exists := seenSelections[selectionID]; exists {
+				continue
+			}
+			seenSelections[selectionID] = struct{}{}
+			normalizedSelections = append(normalizedSelections, selectionID)
+		}
+		if len(normalizedSelections) == 0 {
+			return nil, huma.Error400BadRequest("selection_ids must include at least one account")
 		}
 
 		userID := middleware.GetUserID(ctx)
@@ -1085,33 +1165,41 @@ func (h *OAuthHandler) CompleteAccountSelection(api huma.API) {
 			return nil, huma.Error500InternalServerError("failed to decrypt pending account selection")
 		}
 
-		selected, err := selector.SelectAccount(ctx, tokenResp, selectionID)
-		if err != nil {
-			return nil, huma.Error400BadRequest(err.Error())
+		if pending.Platform != "linkedin" && len(normalizedSelections) > 1 {
+			return nil, huma.Error400BadRequest("this provider supports one account per connection")
 		}
-		if selected == nil {
-			return nil, huma.Error400BadRequest("selected account was not found")
-		}
-		if selected.Token == nil {
-			selected.Token = tokenResp
+		saveInputs := make([]account_saver.SaveAccountInput, 0, len(normalizedSelections))
+		for _, selectionID := range normalizedSelections {
+			selected, err := selector.SelectAccount(ctx, tokenResp, selectionID)
+			if err != nil {
+				return nil, huma.Error400BadRequest(err.Error())
+			}
+			if selected == nil {
+				return nil, huma.Error400BadRequest("selected account was not found")
+			}
+			if selected.Token == nil {
+				selected.Token = tokenResp
+			}
+			saveInputs = append(saveInputs, account_saver.SaveAccountInput{
+				UserID:           userID,
+				PlatformName:     pending.Platform,
+				WorkspaceID:      pending.WorkspaceID,
+				AccountID:        selected.AccountID,
+				AccountUsername:  selected.AccountUsername,
+				AccountAvatarURL: selected.AccountAvatarURL,
+				InstanceURL:      firstNonEmpty(selected.InstanceURL, pending.InstanceURL),
+				Token:            selected.Token,
+				CapabilityState:  selected.CapabilityState,
+			})
 		}
 
 		saver := h.accountSaver
 		if saver == nil {
 			saver = account_saver.NewAccountSaver(h.db, h.crypto)
 		}
-		account, err := saver.SaveAccountFromInput(ctx, account_saver.SaveAccountInput{
-			UserID:           userID,
-			PlatformName:     pending.Platform,
-			WorkspaceID:      pending.WorkspaceID,
-			AccountID:        selected.AccountID,
-			AccountUsername:  selected.AccountUsername,
-			AccountAvatarURL: selected.AccountAvatarURL,
-			InstanceURL:      firstNonEmpty(selected.InstanceURL, pending.InstanceURL),
-			Token:            selected.Token,
-		})
+		accounts, err := saver.SaveAccountsFromInputs(ctx, saveInputs)
 		if err != nil {
-			log.Printf("[OAuth Selection] Failed to save selected account: %v", err)
+			log.Printf("[OAuth Selection] Failed to save selected accounts: %v", err)
 			return nil, huma.Error403Forbidden(accountConnectionErrorMessage(err))
 		}
 
@@ -1124,7 +1212,7 @@ func (h *OAuthHandler) CompleteAccountSelection(api huma.API) {
 			return nil, huma.Error500InternalServerError("failed to complete account selection")
 		}
 
-		return &CompleteAccountSelectionOutput{Body: accountResponse(*account, h.disableLinkedInThreadReplies)}, nil
+		return &CompleteAccountSelectionOutput{Body: accountResponse(*accounts[0], h.disableLinkedInThreadReplies)}, nil
 	})
 }
 
@@ -1280,6 +1368,18 @@ func (h *OAuthHandler) UpdateAccount(api huma.API) {
 		if err != nil {
 			return nil, err
 		}
+		capabilityState := map[string]string{}
+		_ = json.Unmarshal([]byte(account.CapabilityState), &capabilityState)
+		if input.Body.MessagesEnabled != nil {
+			if *input.Body.MessagesEnabled && !accountMessagingSupported(account.Platform) {
+				return nil, huma.Error400BadRequest("messages are not supported for this provider")
+			}
+			capabilityState["messages_enabled"] = strconv.FormatBool(*input.Body.MessagesEnabled)
+		}
+		encodedCapabilityState, err := json.Marshal(capabilityState)
+		if err != nil {
+			return nil, huma.Error500InternalServerError("failed to encode account capabilities")
+		}
 
 		var existing models.SocialAccount
 		err = h.db.NewSelect().
@@ -1299,12 +1399,14 @@ func (h *OAuthHandler) UpdateAccount(api huma.API) {
 		if _, err := h.db.NewUpdate().
 			Model((*models.SocialAccount)(nil)).
 			Set("slug = ?", slug).
+			Set("capability_state_json = ?", string(encodedCapabilityState)).
 			Where("id = ?", account.ID).
 			Exec(ctx); err != nil {
 			return nil, huma.Error500InternalServerError("failed to update account")
 		}
 
 		account.Slug = slug
+		account.CapabilityState = string(encodedCapabilityState)
 		return &UpdateAccountOutput{Body: accountResponse(account, h.disableLinkedInThreadReplies)}, nil
 	})
 }
@@ -1377,6 +1479,13 @@ func accountResponse(acc models.SocialAccount, disableLinkedInThreadReplies bool
 		checkedAt := acc.CapabilityCheckedAt
 		capabilityCheckedAt = &checkedAt
 	}
+	capabilityState := map[string]string{}
+	_ = json.Unmarshal([]byte(acc.CapabilityState), &capabilityState)
+	accountKind := firstNonEmpty(
+		capabilityState["linkedin_account_type"],
+		capabilityState["instagram_account_type"],
+		capabilityState["connection_type"],
+	)
 
 	return AccountResponse{
 		ID:                     acc.ID,
@@ -1390,5 +1499,17 @@ func accountResponse(acc models.SocialAccount, disableLinkedInThreadReplies bool
 		LimitProfile:           accountLimitProfile(acc),
 		CapabilityCheckedAt:    capabilityCheckedAt,
 		ThreadRepliesSupported: threadRepliesSupported,
+		AccountKind:            accountKind,
+		MessagingSupported:     accountMessagingSupported(acc.Platform),
+		MessagesEnabled:        capabilityState["messages_enabled"] == "true",
+	}
+}
+
+func accountMessagingSupported(provider string) bool {
+	switch provider {
+	case "x", "bluesky", "mastodon", "facebook", "instagram":
+		return true
+	default:
+		return false
 	}
 }

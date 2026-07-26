@@ -31,6 +31,66 @@ func TestLinkedInGenerateAuthURLEncodesScopesWithPercentSpaces(t *testing.T) {
 	}
 }
 
+func TestLinkedInOrganizationSelectionUsesOrganizationURN(t *testing.T) {
+	originalClient := httpClient
+	defer func() { httpClient = originalClient }()
+
+	httpClient = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		switch req.URL.Path {
+		case "/v2/userinfo":
+			return jsonResponse(req, `{"sub":"member-1","name":"Ada Member","given_name":"Ada"}`), nil
+		case "/rest/organizationAcls":
+			if req.URL.Query().Get("role") != "ADMINISTRATOR" || req.URL.Query().Get("state") != "APPROVED" {
+				t.Fatalf("unexpected organization ACL query %s", req.URL.RawQuery)
+			}
+			return jsonResponse(req, `{"elements":[{"organization":"urn:li:organization:42"}],"paging":{"links":[]}}`), nil
+		case "/rest/organizations":
+			return jsonResponse(req, `{"results":{"42":{"localizedName":"OpenPost","vanityName":"openpost"}},"statuses":{"42":200}}`), nil
+		default:
+			t.Fatalf("unexpected request %s %s", req.Method, req.URL.String())
+			return nil, nil
+		}
+	})}
+
+	adapter := NewLinkedInAdapter("", "", "", false, true)
+	token := &TokenResult{AccessToken: "member-token", Extra: map[string]string{"user_id": "member-1"}}
+	options, err := adapter.ListAccountSelections(context.Background(), token)
+	if err != nil {
+		t.Fatalf("ListAccountSelections returned error: %v", err)
+	}
+	if len(options) != 2 || options[0].ID != "person:member-1" || options[1].ID != "organization:42" {
+		t.Fatalf("unexpected options %#v", options)
+	}
+	selected, err := adapter.SelectAccount(context.Background(), token, "organization:42")
+	if err != nil {
+		t.Fatalf("SelectAccount returned error: %v", err)
+	}
+	if selected.AccountID != "urn:li:organization:42" || selected.Token != token {
+		t.Fatalf("unexpected selected organization %#v", selected)
+	}
+	if selected.CapabilityState["linkedin_account_type"] != "organization" {
+		t.Fatalf("missing organization capability state %#v", selected.CapabilityState)
+	}
+}
+
+func TestLinkedInOrganizationScopesAreExplicitlyEnabled(t *testing.T) {
+	withoutOrganizations, _ := NewLinkedInAdapter("id", "secret", "https://app.example/callback", false).GenerateAuthURL("state")
+	withOrganizations, _ := NewLinkedInAdapter("id", "secret", "https://app.example/callback", false, true).GenerateAuthURL("state")
+	if strings.Contains(withoutOrganizations, "rw_organization_admin") {
+		t.Fatalf("organization scopes must be opt-in: %s", withoutOrganizations)
+	}
+	parsed, err := url.Parse(withOrganizations)
+	if err != nil {
+		t.Fatal(err)
+	}
+	scope := parsed.Query().Get("scope")
+	for _, required := range []string{"rw_organization_admin", "w_organization_social", "r_organization_social"} {
+		if !strings.Contains(scope, required) {
+			t.Fatalf("missing scope %s from %q", required, scope)
+		}
+	}
+}
+
 func TestLinkedInUploadDocumentInitializesUploadsAndWaitsForAvailability(t *testing.T) {
 	originalClient := httpClient
 	defer func() { httpClient = originalClient }()

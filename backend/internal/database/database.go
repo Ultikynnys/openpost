@@ -167,6 +167,26 @@ func CreateSchema(db *bun.DB) error {
 		Exec(ctx); err != nil {
 		return fmt.Errorf("failed to create analytics subject uniqueness index: %w", err)
 	}
+	if _, err := db.NewCreateIndex().
+		Index("communications_sweep_pending_unique_idx").
+		Table("jobs").
+		Column("type").
+		Unique().
+		Where("status = 'pending' AND type = 'communications_sweep'").
+		IfNotExists().
+		Exec(ctx); err != nil {
+		return fmt.Errorf("failed to create communications sweep uniqueness index: %w", err)
+	}
+	if _, err := db.NewCreateIndex().
+		Index("communications_subject_active_unique_idx").
+		Table("jobs").
+		Column("type", "payload").
+		Unique().
+		Where("status IN ('pending', 'processing') AND type IN ('engagement_sync', 'messages_sync', 'engagement_action', 'message_send')").
+		IfNotExists().
+		Exec(ctx); err != nil {
+		return fmt.Errorf("failed to create communications subject uniqueness index: %w", err)
+	}
 
 	return nil
 }

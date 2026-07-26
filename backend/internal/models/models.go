@@ -595,6 +595,133 @@ type AnalyticsSyncState struct {
 	UpdatedAt       time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"updated_at"`
 }
 
+// EngagementItem is a normalized reply or comment collected from a provider.
+// Provider payloads are deliberately not retained.
+type EngagementItem struct {
+	bun.BaseModel `bun:"table:engagement_items"`
+
+	ID                   string    `bun:",pk" json:"id"`
+	WorkspaceID          string    `bun:"workspace_id,notnull" json:"workspace_id"`
+	RenditionID          string    `bun:"rendition_id,notnull" json:"rendition_id"`
+	SocialAccountID      string    `bun:"social_account_id,notnull" json:"social_account_id"`
+	Platform             string    `bun:",notnull" json:"platform"`
+	RemoteID             string    `bun:"remote_id,notnull" json:"remote_id"`
+	ParentRemoteID       string    `bun:"parent_remote_id,notnull,default:''" json:"parent_remote_id"`
+	ConversationRemoteID string    `bun:"conversation_remote_id,notnull,default:''" json:"conversation_remote_id"`
+	AuthorRemoteID       string    `bun:"author_remote_id,notnull,default:''" json:"author_remote_id"`
+	AuthorName           string    `bun:"author_name,notnull,default:''" json:"author_name"`
+	AuthorHandle         string    `bun:"author_handle,notnull,default:''" json:"author_handle"`
+	AuthorAvatarURL      string    `bun:"author_avatar_url,notnull,default:''" json:"author_avatar_url"`
+	Body                 string    `bun:",notnull,default:''" json:"body"`
+	IsOurs               bool      `bun:"is_ours,notnull,default:false" json:"is_ours"`
+	CanReply             bool      `bun:"can_reply,notnull,default:false" json:"can_reply"`
+	CanHide              bool      `bun:"can_hide,notnull,default:false" json:"can_hide"`
+	CanDelete            bool      `bun:"can_delete,notnull,default:false" json:"can_delete"`
+	Hidden               bool      `bun:",notnull,default:false" json:"hidden"`
+	ReadAt               time.Time `bun:"read_at,nullzero" json:"read_at"`
+	ArchivedAt           time.Time `bun:"archived_at,nullzero" json:"archived_at"`
+	RemoteCreatedAt      time.Time `bun:"remote_created_at,nullzero" json:"remote_created_at"`
+	LastSeenAt           time.Time `bun:"last_seen_at,notnull" json:"last_seen_at"`
+	CreatedAt            time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"created_at"`
+	UpdatedAt            time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"updated_at"`
+}
+
+// Conversation is a provider DM thread. It stores only the normalized
+// counterpart and latest-message summary needed by the inbox.
+type Conversation struct {
+	bun.BaseModel `bun:"table:conversations"`
+
+	ID                       string    `bun:",pk" json:"id"`
+	WorkspaceID              string    `bun:"workspace_id,notnull" json:"workspace_id"`
+	SocialAccountID          string    `bun:"social_account_id,notnull" json:"social_account_id"`
+	Platform                 string    `bun:",notnull" json:"platform"`
+	RemoteConversationID     string    `bun:"remote_conversation_id,notnull" json:"remote_conversation_id"`
+	CounterpartRemoteID      string    `bun:"counterpart_remote_id,notnull,default:''" json:"counterpart_remote_id"`
+	CounterpartName          string    `bun:"counterpart_name,notnull,default:''" json:"counterpart_name"`
+	CounterpartHandle        string    `bun:"counterpart_handle,notnull,default:''" json:"counterpart_handle"`
+	CounterpartAvatarURL     string    `bun:"counterpart_avatar_url,notnull,default:''" json:"counterpart_avatar_url"`
+	LastMessageAt            time.Time `bun:"last_message_at,nullzero" json:"last_message_at"`
+	LastMessagePreview       string    `bun:"last_message_preview,notnull,default:''" json:"last_message_preview"`
+	LastRemoteMessageID      string    `bun:"last_remote_message_id,notnull,default:''" json:"last_remote_message_id"`
+	UnreadCount              int       `bun:"unread_count,notnull,default:0" json:"unread_count"`
+	ReadAt                   time.Time `bun:"read_at,nullzero" json:"read_at"`
+	ArchivedAt               time.Time `bun:"archived_at,nullzero" json:"archived_at"`
+	MessagingWindowExpiresAt time.Time `bun:"messaging_window_expires_at,nullzero" json:"messaging_window_expires_at"`
+	CreatedAt                time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"created_at"`
+	UpdatedAt                time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"updated_at"`
+}
+
+// DirectMessage is a normalized inbound or outbound message in a Conversation.
+type DirectMessage struct {
+	bun.BaseModel `bun:"table:direct_messages"`
+
+	ID              string    `bun:",pk" json:"id"`
+	WorkspaceID     string    `bun:"workspace_id,notnull" json:"workspace_id"`
+	ConversationID  string    `bun:"conversation_id,notnull" json:"conversation_id"`
+	RemoteMessageID string    `bun:"remote_message_id,notnull,default:''" json:"remote_message_id"`
+	Direction       string    `bun:",notnull" json:"direction"`
+	AuthorRemoteID  string    `bun:"author_remote_id,notnull,default:''" json:"author_remote_id"`
+	Body            string    `bun:",notnull,default:''" json:"body"`
+	AttachmentsJSON string    `bun:"attachments_json,notnull,default:'[]'" json:"attachments_json"`
+	SendStatus      string    `bun:"send_status,notnull,default:'received'" json:"send_status"`
+	ErrorMessage    string    `bun:"error_message,notnull,default:''" json:"error_message"`
+	RemoteCreatedAt time.Time `bun:"remote_created_at,nullzero" json:"remote_created_at"`
+	CreatedAt       time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"created_at"`
+	UpdatedAt       time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"updated_at"`
+}
+
+// CommunicationSyncState is the latest safe cursor and collection state for
+// one engagement or messaging subject.
+type CommunicationSyncState struct {
+	bun.BaseModel `bun:"table:communication_sync_states"`
+
+	ID               string    `bun:",pk" json:"id"`
+	WorkspaceID      string    `bun:"workspace_id,notnull" json:"workspace_id"`
+	Capability       string    `bun:",notnull" json:"capability"`
+	SubjectType      string    `bun:"subject_type,notnull" json:"subject_type"`
+	SubjectID        string    `bun:"subject_id,notnull" json:"subject_id"`
+	SocialAccountID  string    `bun:"social_account_id,notnull" json:"social_account_id"`
+	Platform         string    `bun:",notnull" json:"platform"`
+	Status           string    `bun:",notnull,default:'pending'" json:"status"`
+	ErrorCode        string    `bun:"error_code,notnull,default:''" json:"error_code"`
+	ErrorMessage     string    `bun:"error_message,notnull,default:''" json:"error_message"`
+	Cursor           string    `bun:",notnull,default:''" json:"cursor"`
+	BackfillComplete bool      `bun:"backfill_complete,notnull,default:false" json:"backfill_complete"`
+	LastAttemptedAt  time.Time `bun:"last_attempted_at,nullzero" json:"last_attempted_at"`
+	LastSuccessAt    time.Time `bun:"last_success_at,nullzero" json:"last_success_at"`
+	NextSyncAt       time.Time `bun:"next_sync_at,nullzero" json:"next_sync_at"`
+	EmptyStreak      int       `bun:"empty_streak,notnull,default:0" json:"empty_streak"`
+	CreatedAt        time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"created_at"`
+	UpdatedAt        time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"updated_at"`
+}
+
+// UserNotification is an in-app notification addressed to one user.
+type UserNotification struct {
+	bun.BaseModel `bun:"table:user_notifications"`
+
+	ID          string    `bun:",pk" json:"id"`
+	UserID      string    `bun:"user_id,notnull" json:"user_id"`
+	WorkspaceID string    `bun:"workspace_id,notnull,default:''" json:"workspace_id"`
+	Type        string    `bun:",notnull" json:"type"`
+	Title       string    `bun:",notnull" json:"title"`
+	Body        string    `bun:",notnull,default:''" json:"body"`
+	Href        string    `bun:",notnull,default:''" json:"href"`
+	PayloadJSON string    `bun:"payload_json,notnull,default:'{}'" json:"payload_json"`
+	DedupKey    string    `bun:"dedup_key,notnull,default:''" json:"-"`
+	ReadAt      time.Time `bun:"read_at,nullzero" json:"read_at"`
+	CreatedAt   time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"created_at"`
+}
+
+// UserNotificationPreference stores the user's per-event delivery choices.
+// Critical in-app notifications are enforced by the notification service.
+type UserNotificationPreference struct {
+	bun.BaseModel `bun:"table:user_notification_preferences"`
+
+	UserID          string    `bun:"user_id,pk" json:"user_id"`
+	PreferencesJSON string    `bun:"preferences_json,notnull,default:'{}'" json:"preferences_json"`
+	UpdatedAt       time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"updated_at"`
+}
+
 type PublicationLifecycleEvent struct {
 	bun.BaseModel `bun:"table:publication_lifecycle_events"`
 

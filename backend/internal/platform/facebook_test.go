@@ -34,6 +34,11 @@ func TestFacebookGenerateAuthURL(t *testing.T) {
 	if !strings.Contains(query.Get("scope"), "pages_manage_posts") {
 		t.Fatalf("expected pages_manage_posts scope, got %q", query.Get("scope"))
 	}
+	for _, scope := range []string{"pages_manage_engagement", "pages_messaging"} {
+		if !strings.Contains(query.Get("scope"), scope) {
+			t.Fatalf("expected %s scope, got %q", scope, query.Get("scope"))
+		}
+	}
 }
 
 func TestFacebookExchangeAndSelectPage(t *testing.T) {

@@ -29,6 +29,11 @@ func TestInstagramGenerateAuthURL(t *testing.T) {
 	if !strings.Contains(query.Get("scope"), "instagram_content_publish") {
 		t.Fatalf("expected instagram_content_publish scope, got %q", query.Get("scope"))
 	}
+	for _, scope := range []string{"instagram_manage_comments", "instagram_manage_messages"} {
+		if !strings.Contains(query.Get("scope"), scope) {
+			t.Fatalf("expected %s scope, got %q", scope, query.Get("scope"))
+		}
+	}
 	if strings.Contains(query.Get("scope"), "business_management") {
 		t.Fatalf("did not expect unrelated business_management scope, got %q", query.Get("scope"))
 	}
@@ -53,7 +58,7 @@ func TestInstagramExchangeAndSelectBusinessAccount(t *testing.T) {
 			if req.URL.Query().Get(oauthParamAccessToken) != "long-token" {
 				t.Fatalf("unexpected accounts token %q", req.URL.Query().Get(oauthParamAccessToken))
 			}
-			return jsonResponse(req, `{"data":[{"id":"page-1","name":"OpenPost Page","access_token":"page-token","picture":{"data":{"url":"https://cdn.example/page.png"}},"instagram_business_account":{"id":"ig-1","username":"openpost","name":"OpenPost IG","profile_picture_url":"https://cdn.example/ig.png"}}]}`), nil
+			return jsonResponse(req, `{"data":[{"id":"page-1","name":"OpenPost Page","access_token":"page-token","picture":{"data":{"url":"https://cdn.example/page.png"}},"instagram_business_account":{"id":"ig-1","username":"openpost","name":"OpenPost IG","profile_picture_url":"https://cdn.example/ig.png","account_type":"CREATOR"}}]}`), nil
 		case "/v25.0/me/permissions":
 			return jsonResponse(req, `{"data":[{"permission":"instagram_basic","status":"granted"},{"permission":"instagram_content_publish","status":"granted"},{"permission":"instagram_manage_insights","status":"granted"},{"permission":"pages_show_list","status":"granted"},{"permission":"pages_read_engagement","status":"granted"}]}`), nil
 		default:
@@ -91,6 +96,9 @@ func TestInstagramExchangeAndSelectBusinessAccount(t *testing.T) {
 	}
 	if !strings.Contains(selected.Token.Extra["scope"], "instagram_manage_insights") {
 		t.Fatalf("expected selected account to preserve scopes, got %#v", selected.Token.Extra)
+	}
+	if selected.CapabilityState["instagram_account_type"] != "creator" || selected.CapabilityState["facebook_page_id"] != "page-1" {
+		t.Fatalf("expected Creator account capability state, got %#v", selected.CapabilityState)
 	}
 	if accountsCalls != 2 {
 		t.Fatalf("expected two accounts calls, got %d", accountsCalls)

@@ -20,6 +20,7 @@ import (
 	"github.com/openpost/backend/internal/services/lifecycle"
 	"github.com/openpost/backend/internal/services/mediasigner"
 	"github.com/openpost/backend/internal/services/mediastore"
+	"github.com/openpost/backend/internal/services/notifications"
 	"github.com/openpost/backend/internal/services/tokenmanager"
 	"github.com/openpost/backend/internal/services/usage"
 	"github.com/uptrace/bun"
@@ -43,6 +44,7 @@ type Service struct {
 	storage                      mediastore.BlobStorage
 	usage                        *usage.Service
 	quota                        entitlements.Service
+	notifications                *notifications.Service
 }
 
 func NewService(db *bun.DB, tm *tokenmanager.TokenManager) *Service {
@@ -81,6 +83,10 @@ func (s *Service) SetEntitlement(entitlement entitlements.Service) {
 	if entitlement != nil {
 		s.quota = entitlement
 	}
+}
+
+func (s *Service) SetNotificationService(service *notifications.Service) {
+	s.notifications = service
 }
 
 func (s *Service) SetProvider(platformName string, adapter platform.Adapter) {
@@ -360,16 +366,19 @@ func (s *Service) publishRendition(ctx context.Context, publication *models.Publ
 	}
 	platformMediaIDs := make([]string, 0, len(mediaAttachments))
 	mediaItems := make([]platform.MediaItem, 0, len(mediaAttachments))
+	_, publishesMediaDirectly := provider.(platform.DirectMediaPublisher)
 	for _, media := range mediaAttachments {
 		s.recordPublicationLifecycleEvent(ctx, publication.WorkspaceID, publication.ID, rendition.ID, lifecycle.EventUploadStarted, lifecycle.StatusStarted, "media upload started", map[string]any{
 			"platform": rendition.Platform,
 			"media_id": media.ID,
 		})
-		mediaID, err := s.platformMediaIDForRendition(ctx, rendition, account, provider, token, media)
-		if err != nil {
-			return fmt.Errorf("media upload failed for %s: %w", media.ID, err)
+		if !publishesMediaDirectly {
+			mediaID, err := s.platformMediaIDForRendition(ctx, rendition, account, provider, token, media)
+			if err != nil {
+				return fmt.Errorf("media upload failed for %s: %w", media.ID, err)
+			}
+			platformMediaIDs = append(platformMediaIDs, mediaID)
 		}
-		platformMediaIDs = append(platformMediaIDs, mediaID)
 		mediaItems = append(mediaItems, platform.MediaItem{
 			ID:               media.ID,
 			MimeType:         media.MimeType,
@@ -399,7 +408,7 @@ func (s *Service) publishRendition(ctx context.Context, publication *models.Publ
 		"provider_key": providerKey,
 	})
 	s.recordProviderWriteCall(ctx, publication.WorkspaceID)
-	externalID, err := provider.Publish(ctx, token, account.AccountID, req)
+	externalID, err := s.publishProvider(ctx, provider, token, account.AccountID, req, mediaAttachments)
 	if err != nil && isExpiredTokenError(err) {
 		refreshedToken, refreshErr := s.tm.ForceRefreshAccessToken(ctx, account.ID)
 		if refreshErr != nil {
@@ -413,7 +422,7 @@ func (s *Service) publishRendition(ctx context.Context, publication *models.Publ
 			return quotaErr
 		}
 		s.recordProviderWriteCall(ctx, publication.WorkspaceID)
-		externalID, err = provider.Publish(ctx, refreshedToken, account.AccountID, req)
+		externalID, err = s.publishProvider(ctx, provider, refreshedToken, account.AccountID, req, mediaAttachments)
 	}
 	if err != nil {
 		return err
@@ -498,6 +507,7 @@ func (s *Service) publishRenditionSegments(
 		}
 		platformMediaIDs := make([]string, 0, len(mediaAttachments))
 		mediaItems := make([]platform.MediaItem, 0, len(mediaAttachments))
+		_, publishesMediaDirectly := provider.(platform.DirectMediaPublisher)
 		uploadRendition := *rendition
 		uploadRendition.SettingsJSON = mustPublisherJSON(settings)
 		for _, media := range mediaAttachments {
@@ -506,11 +516,13 @@ func (s *Service) publishRenditionSegments(
 				"segment_id": segment.ID,
 				"media_id":   media.ID,
 			})
-			mediaID, uploadErr := s.platformMediaIDForRendition(ctx, &uploadRendition, account, provider, token, media)
-			if uploadErr != nil {
-				return s.failRenditionSegment(ctx, segment, fmt.Errorf("media upload failed for %s: %w", media.ID, uploadErr))
+			if !publishesMediaDirectly {
+				mediaID, uploadErr := s.platformMediaIDForRendition(ctx, &uploadRendition, account, provider, token, media)
+				if uploadErr != nil {
+					return s.failRenditionSegment(ctx, segment, fmt.Errorf("media upload failed for %s: %w", media.ID, uploadErr))
+				}
+				platformMediaIDs = append(platformMediaIDs, mediaID)
 			}
-			platformMediaIDs = append(platformMediaIDs, mediaID)
 			mediaItems = append(mediaItems, platform.MediaItem{
 				ID:               media.ID,
 				MimeType:         media.MimeType,
@@ -558,7 +570,7 @@ func (s *Service) publishRenditionSegments(
 			"position":     segment.Position,
 		})
 		s.recordProviderWriteCall(ctx, publication.WorkspaceID)
-		externalID, publishErr := provider.Publish(ctx, token, account.AccountID, req)
+		externalID, publishErr := s.publishProvider(ctx, provider, token, account.AccountID, req, mediaAttachments)
 		if publishErr != nil && isExpiredTokenError(publishErr) {
 			token, err = s.tm.ForceRefreshAccessToken(ctx, account.ID)
 			if err != nil {
@@ -568,7 +580,7 @@ func (s *Service) publishRenditionSegments(
 				return s.failRenditionSegment(ctx, segment, quotaErr)
 			}
 			s.recordProviderWriteCall(ctx, publication.WorkspaceID)
-			externalID, publishErr = provider.Publish(ctx, token, account.AccountID, req)
+			externalID, publishErr = s.publishProvider(ctx, provider, token, account.AccountID, req, mediaAttachments)
 		}
 		if publishErr != nil {
 			return s.failRenditionSegment(ctx, segment, publishErr)
@@ -1034,13 +1046,16 @@ func (s *Service) publishToDestination(ctx context.Context, post *models.Post, d
 	var platformMediaIDs []string
 	var mediaAltTexts []string
 	mediaItems := make([]platform.MediaItem, 0, len(mediaAttachments))
+	_, publishesMediaDirectly := provider.(platform.DirectMediaPublisher)
 	for _, media := range mediaAttachments {
-		mediaID, err := s.platformMediaIDForDestination(ctx, post, dest, account, provider, token, media, publishContent)
-		if err != nil {
-			log.Printf("[Publisher] Failed to upload media %s to %s: %v", media.ID, account.Platform, err)
-			return fmt.Errorf("media upload failed for %s: %w", media.ID, err)
+		if !publishesMediaDirectly {
+			mediaID, err := s.platformMediaIDForDestination(ctx, post, dest, account, provider, token, media, publishContent)
+			if err != nil {
+				log.Printf("[Publisher] Failed to upload media %s to %s: %v", media.ID, account.Platform, err)
+				return fmt.Errorf("media upload failed for %s: %w", media.ID, err)
+			}
+			platformMediaIDs = append(platformMediaIDs, mediaID)
 		}
-		platformMediaIDs = append(platformMediaIDs, mediaID)
 		mediaAltTexts = append(mediaAltTexts, media.AltText)
 		mediaItems = append(mediaItems, platform.MediaItem{
 			ID:               media.ID,
@@ -1070,7 +1085,7 @@ func (s *Service) publishToDestination(ctx context.Context, post *models.Post, d
 		return err
 	}
 	s.recordProviderWriteCall(ctx, post.WorkspaceID)
-	externalID, err := provider.Publish(ctx, token, account.AccountID, req)
+	externalID, err := s.publishProvider(ctx, provider, token, account.AccountID, req, mediaAttachments)
 	if err != nil {
 		if isExpiredTokenError(err) {
 			log.Printf("[Publisher] Token expired for %s account %s, forcing refresh and retry", account.Platform, account.ID)
@@ -1082,7 +1097,7 @@ func (s *Service) publishToDestination(ctx context.Context, post *models.Post, d
 				return quotaErr
 			}
 			s.recordProviderWriteCall(ctx, post.WorkspaceID)
-			externalID, err = provider.Publish(ctx, refreshedToken, account.AccountID, req)
+			externalID, err = s.publishProvider(ctx, provider, refreshedToken, account.AccountID, req, mediaAttachments)
 			if err != nil {
 				return err
 			}
@@ -1364,6 +1379,46 @@ func (s *Service) saveProviderMediaState(ctx context.Context, postID, socialAcco
 	return err
 }
 
+func (s *Service) publishProvider(
+	ctx context.Context,
+	provider platform.Adapter,
+	token, accountID string,
+	req *platform.PublishRequest,
+	media []models.MediaAttachment,
+) (string, error) {
+	direct, ok := provider.(platform.DirectMediaPublisher)
+	if !ok || len(media) == 0 {
+		return provider.Publish(ctx, token, accountID, req)
+	}
+	if s.storage == nil {
+		return "", fmt.Errorf("media storage is not configured")
+	}
+
+	inputs := make([]platform.UploadMediaRequest, 0, len(media))
+	readers := make([]io.ReadCloser, 0, len(media))
+	closeReaders := func() {
+		for _, reader := range readers {
+			_ = reader.Close()
+		}
+	}
+	for _, item := range media {
+		reader, err := s.storage.Open(filepath.Base(item.FilePath))
+		if err != nil {
+			closeReaders()
+			return "", fmt.Errorf("opening media file %s: %w", item.FilePath, err)
+		}
+		readers = append(readers, reader)
+		inputs = append(inputs, platform.UploadMediaRequest{
+			MimeType: item.MimeType,
+			Filename: firstNonEmptyPublisherString(item.OriginalFilename, filepath.Base(item.FilePath)),
+			Size:     item.Size,
+			Reader:   reader,
+		})
+	}
+	defer closeReaders()
+	return direct.PublishWithMedia(ctx, token, accountID, req, inputs)
+}
+
 func (s *Service) uploadMediaToPlatform(ctx context.Context, account *models.SocialAccount, provider platform.Adapter, token string, media models.MediaAttachment, content string) (string, error) {
 	if requiresPublicMedia(account.Platform, "") {
 		return s.getPublicMediaURL(media), nil
@@ -1618,6 +1673,36 @@ func (s *Service) finalizePublication(ctx context.Context, publication *models.P
 			publication.ID,
 			err,
 		)
+	}
+	s.notifyPublicationResult(ctx, publication, status)
+}
+
+func (s *Service) notifyPublicationResult(ctx context.Context, publication *models.Publication, status string) {
+	if s.notifications == nil || publication.CreatedByID == "" {
+		return
+	}
+	input := notifications.CreateInput{
+		UserID:      publication.CreatedByID,
+		WorkspaceID: publication.WorkspaceID,
+		Href:        "/activity?publication=" + publication.ID,
+		Payload:     map[string]any{"publication_id": publication.ID},
+	}
+	switch status {
+	case models.PublicationStatusPublished:
+		input.Type = notifications.TypePostPublished
+		input.Title = "Publication completed"
+		input.Body = firstNonEmptyPublisherString(publication.Title, "Your publication was published.")
+		input.DedupKey = fmt.Sprintf("publication:%s:revision:%d:published", publication.ID, publication.Revision)
+	case models.PublicationStatusFailed:
+		input.Type = notifications.TypePublishFailed
+		input.Title = "Publication needs attention"
+		input.Body = firstNonEmptyPublisherString(publication.Title, "One or more destinations failed.")
+		input.DedupKey = fmt.Sprintf("publication:%s:revision:%d:failed", publication.ID, publication.Revision)
+	default:
+		return
+	}
+	if err := s.notifications.Create(ctx, input); err != nil {
+		log.Printf("[Publisher] Failed to notify publication result for %s: %v", publication.ID, err)
 	}
 }
 

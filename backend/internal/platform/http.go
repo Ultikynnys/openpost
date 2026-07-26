@@ -18,6 +18,20 @@ var httpClient = &http.Client{Timeout: 30 * time.Second}
 // DoRequest executes an HTTP request and returns the response body.
 // Non-2xx responses retain only status, stable provider code, and Retry-After.
 func DoRequest(ctx context.Context, method, url string, body io.Reader, headers map[string]string) ([]byte, error) {
+	return doRequestWithClient(ctx, httpClient, method, url, body, headers)
+}
+
+// DoRequestNoRedirect is for credential-bearing URLs whose redirect target
+// must never receive the original request implicitly.
+func DoRequestNoRedirect(ctx context.Context, method, url string, body io.Reader, headers map[string]string) ([]byte, error) {
+	client := *httpClient
+	client.CheckRedirect = func(*http.Request, []*http.Request) error {
+		return http.ErrUseLastResponse
+	}
+	return doRequestWithClient(ctx, &client, method, url, body, headers)
+}
+
+func doRequestWithClient(ctx context.Context, client *http.Client, method, url string, body io.Reader, headers map[string]string) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, method, url, body)
 	if err != nil {
 		return nil, fmt.Errorf("creating request: %w", err)
@@ -27,7 +41,7 @@ func DoRequest(ctx context.Context, method, url string, body io.Reader, headers 
 		req.Header.Set(k, v)
 	}
 
-	resp, err := httpClient.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("request failed: %w", err)
 	}

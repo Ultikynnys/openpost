@@ -50,6 +50,13 @@ type UploadMediaRequest struct {
 	CaptionReader     io.Reader
 }
 
+// DirectMediaPublisher is an optional publishing extension for providers, such
+// as Discord webhooks, that accept message fields and file bodies in one
+// request. Readers are owned by the caller and are valid only for this call.
+type DirectMediaPublisher interface {
+	PublishWithMedia(ctx context.Context, accessToken, accountID string, req *PublishRequest, media []UploadMediaRequest) (string, error)
+}
+
 type MediaValidationIssue struct {
 	Provider string
 	MediaID  string
@@ -67,6 +74,7 @@ var ErrUnsupportedCommentAction = errors.New("comment action unsupported")
 func RegisterAllMediaValidators() {
 	registerMediaValidatorsOnce.Do(func() {
 		MediaValidators[providerBluesky] = validateBlueskyMedia
+		MediaValidators[providerDiscord] = validateDiscordMedia
 		MediaValidators[providerFacebook] = validateFacebookMedia
 		MediaValidators[providerInstagram] = validateInstagramMedia
 		MediaValidators[providerLinkedIn] = validateLinkedInMedia
@@ -116,6 +124,7 @@ type SelectedAccount struct {
 	AccountAvatarURL string
 	InstanceURL      string
 	Token            *TokenResult
+	CapabilityState  map[string]string
 }
 
 type DestinationOptionsInput struct {
@@ -244,11 +253,15 @@ type Adapter interface {
 
 type Comment struct {
 	ID              string `json:"id"`
+	ParentID        string `json:"parent_id,omitempty"`
+	ConversationID  string `json:"conversation_id,omitempty"`
 	AuthorID        string `json:"author_id,omitempty"`
 	AuthorName      string `json:"author_name,omitempty"`
+	AuthorHandle    string `json:"author_handle,omitempty"`
 	AuthorAvatarURL string `json:"author_avatar_url,omitempty"`
 	Text            string `json:"text"`
 	CreatedAt       string `json:"created_at,omitempty"`
+	IsOurs          bool   `json:"is_ours"`
 	Hidden          bool   `json:"hidden"`
 	CanReply        bool   `json:"can_reply"`
 	CanHide         bool   `json:"can_hide"`

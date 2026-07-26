@@ -19,6 +19,7 @@ type AppConfig struct {
 
 type RegistryOptions struct {
 	DisableLinkedInThreadReplies bool
+	EnableLinkedInOrganizations  bool
 }
 
 type RegistryEntry struct {
@@ -47,6 +48,9 @@ var appBuilders = map[string]appBuilder{
 	providerBluesky: func(_ AppConfig, _ RegistryOptions) (Adapter, error) {
 		return NewBlueskyAdapter(""), nil
 	},
+	providerDiscord: func(_ AppConfig, _ RegistryOptions) (Adapter, error) {
+		return NewDiscordAdapter(), nil
+	},
 	providerFacebook: func(app AppConfig, _ RegistryOptions) (Adapter, error) {
 		if strings.TrimSpace(app.ClientID) == "" {
 			return nil, fmt.Errorf("facebook provider app requires client_id")
@@ -63,7 +67,7 @@ var appBuilders = map[string]appBuilder{
 		if strings.TrimSpace(app.ClientID) == "" {
 			return nil, fmt.Errorf("linkedin provider app requires client_id")
 		}
-		return NewLinkedInAdapter(app.ClientID, app.ClientSecret, app.RedirectURI, opts.DisableLinkedInThreadReplies), nil
+		return NewLinkedInAdapter(app.ClientID, app.ClientSecret, app.RedirectURI, opts.DisableLinkedInThreadReplies, opts.EnableLinkedInOrganizations), nil
 	},
 	providerThreads: func(app AppConfig, _ RegistryOptions) (Adapter, error) {
 		if strings.TrimSpace(app.ClientID) == "" {

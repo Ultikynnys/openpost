@@ -34,14 +34,17 @@ type LinkedInAdapter struct {
 	clientSecret         string
 	redirectURI          string
 	disableThreadReplies bool
+	enableOrganizations  bool
 }
 
-func NewLinkedInAdapter(clientID, clientSecret, redirectURI string, disableThreadReplies bool) *LinkedInAdapter {
+func NewLinkedInAdapter(clientID, clientSecret, redirectURI string, disableThreadReplies bool, enableOrganizations ...bool) *LinkedInAdapter {
+	organizationsEnabled := len(enableOrganizations) > 0 && enableOrganizations[0]
 	return &LinkedInAdapter{
 		clientID:             clientID,
 		clientSecret:         clientSecret,
 		redirectURI:          redirectURI,
 		disableThreadReplies: disableThreadReplies,
+		enableOrganizations:  organizationsEnabled,
 	}
 }
 
@@ -49,6 +52,9 @@ func (l *LinkedInAdapter) GenerateAuthURL(state string) (string, map[string]stri
 	scope := "openid profile w_member_social w_member_social_feed"
 	if l.disableThreadReplies {
 		scope = "openid profile w_member_social"
+	}
+	if l.enableOrganizations {
+		scope += " rw_organization_admin w_organization_social r_organization_social"
 	}
 
 	params := map[string]string{
@@ -80,6 +86,7 @@ func (l *LinkedInAdapter) ExchangeCode(ctx context.Context, code string, _ map[s
 		ExpiresIn             int    `json:"expires_in"`
 		RefreshToken          string `json:"refresh_token"`
 		RefreshTokenExpiresIn int    `json:"refresh_token_expires_in"`
+		Scope                 string `json:"scope"`
 	}
 	if err := json.Unmarshal(respBody, &tokenResp); err != nil {
 		return nil, fmt.Errorf("decoding linkedin token: %w", err)
@@ -90,6 +97,7 @@ func (l *LinkedInAdapter) ExchangeCode(ctx context.Context, code string, _ map[s
 		RefreshToken: tokenResp.RefreshToken,
 		ExpiresIn:    tokenResp.ExpiresIn,
 		TokenType:    tokenTypeBearer,
+		Extra:        map[string]string{"scope": tokenResp.Scope},
 	}, nil
 }
 
@@ -122,6 +130,7 @@ func (l *LinkedInAdapter) RefreshToken(ctx context.Context, input RefreshTokenIn
 		ExpiresIn             int    `json:"expires_in"`
 		RefreshToken          string `json:"refresh_token"`
 		RefreshTokenExpiresIn int    `json:"refresh_token_expires_in"`
+		Scope                 string `json:"scope"`
 	}
 	if err := json.Unmarshal(respBody, &tokenResp); err != nil {
 		return nil, fmt.Errorf("decoding linkedin refresh: %w", err)
@@ -132,6 +141,7 @@ func (l *LinkedInAdapter) RefreshToken(ctx context.Context, input RefreshTokenIn
 		RefreshToken: tokenResp.RefreshToken,
 		ExpiresIn:    tokenResp.ExpiresIn,
 		TokenType:    tokenTypeBearer,
+		Extra:        map[string]string{"scope": tokenResp.Scope},
 	}, nil
 }
 
@@ -147,19 +157,168 @@ func (l *LinkedInAdapter) GetProfile(ctx context.Context, accessToken string) (*
 		Sub       string `json:"sub"`
 		Name      string `json:"name"`
 		GivenName string `json:"given_name"`
+		Picture   string `json:"picture"`
 	}
 	if err := json.Unmarshal(respBody, &profile); err != nil {
 		return nil, fmt.Errorf("decoding linkedin profile: %w", err)
 	}
 
 	return &UserProfile{
-		ID:          profile.Sub,
-		Username:    profile.GivenName,
-		DisplayName: profile.Name,
+		ID:              profile.Sub,
+		Username:        profile.GivenName,
+		DisplayName:     profile.Name,
+		CapabilityState: map[string]string{"linkedin_account_type": "person"},
 	}, nil
 }
 
-func (l *LinkedInAdapter) UploadMedia(ctx context.Context, accessToken, personID, mimeType string, reader io.Reader) (string, error) {
+func (l *LinkedInAdapter) ListAccountSelections(ctx context.Context, token *TokenResult) ([]AccountSelectionOption, error) {
+	if token == nil || strings.TrimSpace(token.AccessToken) == "" {
+		return nil, fmt.Errorf("linkedin access token is required")
+	}
+	profile, err := l.GetProfile(ctx, token.AccessToken)
+	if err != nil {
+		return nil, err
+	}
+	personal := AccountSelectionOption{
+		ID:          "person:" + profile.ID,
+		Username:    profile.Username,
+		DisplayName: profile.DisplayName,
+		Kind:        "Personal profile",
+		Description: "Publish as your LinkedIn member profile.",
+	}
+	if !l.enableOrganizations {
+		return []AccountSelectionOption{personal}, nil
+	}
+	organizations, err := l.administeredOrganizations(ctx, token.AccessToken)
+	if err != nil {
+		// Organization discovery depends on restricted LinkedIn products.
+		// Personal publishing remains usable when discovery is unavailable.
+		return []AccountSelectionOption{personal}, nil
+	}
+	options := make([]AccountSelectionOption, 0, 1+len(organizations))
+	options = append(options, personal)
+	return append(options, organizations...), nil
+}
+
+func (l *LinkedInAdapter) SelectAccount(ctx context.Context, token *TokenResult, selectionID string) (*SelectedAccount, error) {
+	selectionID = strings.TrimSpace(selectionID)
+	options, err := l.ListAccountSelections(ctx, token)
+	if err != nil {
+		return nil, err
+	}
+	for _, option := range options {
+		if option.ID != selectionID {
+			continue
+		}
+		kind, remoteID, ok := strings.Cut(selectionID, ":")
+		if !ok || remoteID == "" {
+			return nil, fmt.Errorf("linkedin account selection is malformed")
+		}
+		authorURN := "urn:li:" + kind + ":" + remoteID
+		return &SelectedAccount{
+			AccountID:        authorURN,
+			AccountUsername:  firstNonEmptyString(option.Username, option.DisplayName),
+			AccountAvatarURL: option.AvatarURL,
+			Token:            token,
+			CapabilityState: map[string]string{
+				"linkedin_account_type": kind,
+				"linkedin_author_urn":   authorURN,
+			},
+		}, nil
+	}
+	return nil, fmt.Errorf("the selected LinkedIn account is no longer available")
+}
+
+//nolint:gocyclo // LinkedIn's bounded ACL pagination, deduplication, and batch lookup form one discovery flow.
+func (l *LinkedInAdapter) administeredOrganizations(ctx context.Context, accessToken string) ([]AccountSelectionOption, error) {
+	const maxPages = 20
+	headers := linkedinHeaders(accessToken, linkedInAPIVersion())
+	urns := make([]string, 0)
+	seen := map[string]struct{}{}
+	start := 0
+	for page := 0; page < maxPages; page++ {
+		endpoint := fmt.Sprintf("https://api.linkedin.com/rest/organizationAcls?q=roleAssignee&role=ADMINISTRATOR&state=APPROVED&count=20&start=%d", start)
+		body, err := DoRequest(ctx, http.MethodGet, endpoint, nil, headers)
+		if err != nil {
+			return nil, err
+		}
+		var response struct {
+			Elements []struct {
+				Organization       string `json:"organization"`
+				OrganizationTarget string `json:"organizationTarget"`
+			} `json:"elements"`
+			Paging struct {
+				Links []struct {
+					Rel string `json:"rel"`
+				} `json:"links"`
+			} `json:"paging"`
+		}
+		if err := json.Unmarshal(body, &response); err != nil {
+			return nil, fmt.Errorf("decoding linkedin organization access: %w", err)
+		}
+		for _, item := range response.Elements {
+			urn := firstNonEmptyString(item.OrganizationTarget, item.Organization)
+			if urn == "" {
+				continue
+			}
+			if _, ok := seen[urn]; ok {
+				continue
+			}
+			seen[urn] = struct{}{}
+			urns = append(urns, urn)
+		}
+		hasNext := false
+		for _, link := range response.Paging.Links {
+			hasNext = hasNext || link.Rel == "next"
+		}
+		if !hasNext || len(response.Elements) == 0 {
+			break
+		}
+		start += len(response.Elements)
+	}
+	if len(urns) == 0 {
+		return nil, nil
+	}
+	ids := make([]string, 0, len(urns))
+	for _, urn := range urns {
+		ids = append(ids, urn[strings.LastIndex(urn, ":")+1:])
+	}
+	endpoint := "https://api.linkedin.com/rest/organizations?ids=List(" + strings.Join(ids, ",") + ")"
+	body, err := DoRequest(ctx, http.MethodGet, endpoint, nil, headers)
+	if err != nil {
+		return nil, err
+	}
+	var result struct {
+		Results map[string]struct {
+			LocalizedName string `json:"localizedName"`
+			VanityName    string `json:"vanityName"`
+			LogoV2        struct {
+				Original string `json:"original"`
+			} `json:"logoV2"`
+		} `json:"results"`
+		Statuses map[string]int `json:"statuses"`
+	}
+	if err := json.Unmarshal(body, &result); err != nil {
+		return nil, fmt.Errorf("decoding linkedin organizations: %w", err)
+	}
+	options := make([]AccountSelectionOption, 0, len(ids))
+	for _, id := range ids {
+		org, ok := result.Results[id]
+		if !ok || (result.Statuses[id] != 0 && result.Statuses[id] != http.StatusOK) {
+			continue
+		}
+		options = append(options, AccountSelectionOption{
+			ID:          "organization:" + id,
+			Username:    org.VanityName,
+			DisplayName: firstNonEmptyString(org.LocalizedName, org.VanityName, id),
+			Kind:        "Organization Page",
+			Description: "Publish and manage engagement as this LinkedIn Page.",
+		})
+	}
+	return options, nil
+}
+
+func (l *LinkedInAdapter) UploadMedia(ctx context.Context, accessToken, accountID, mimeType string, reader io.Reader) (string, error) {
 	data, err := io.ReadAll(reader)
 	if err != nil {
 		return "", fmt.Errorf("reading media: %w", err)
@@ -168,20 +327,20 @@ func (l *LinkedInAdapter) UploadMedia(ctx context.Context, accessToken, personID
 	isVideo := strings.Contains(mimeType, "video")
 
 	if isVideo {
-		return l.uploadVideo(ctx, accessToken, personID, mimeType, data)
+		return l.uploadVideo(ctx, accessToken, accountID, mimeType, data)
 	}
 	if isLinkedInDocumentMime(mimeType) {
-		return l.uploadDocument(ctx, accessToken, personID, data)
+		return l.uploadDocument(ctx, accessToken, accountID, data)
 	}
-	return l.uploadImage(ctx, accessToken, personID, mimeType, data)
+	return l.uploadImage(ctx, accessToken, accountID, mimeType, data)
 }
 
-func (l *LinkedInAdapter) uploadImage(ctx context.Context, accessToken, personID, _ string, data []byte) (string, error) {
+func (l *LinkedInAdapter) uploadImage(ctx context.Context, accessToken, accountID, _ string, data []byte) (string, error) {
 	apiVersion := linkedInAPIVersion()
 
 	registerPayload := map[string]interface{}{
 		"initializeUploadRequest": map[string]interface{}{
-			"owner": "urn:li:person:" + personID,
+			"owner": linkedInAuthorURN(accountID),
 		},
 	}
 
@@ -193,12 +352,12 @@ func (l *LinkedInAdapter) uploadImage(ctx context.Context, accessToken, personID
 	return l.completeImageUpload(ctx, accessToken, respBody, data)
 }
 
-func (l *LinkedInAdapter) uploadVideo(ctx context.Context, accessToken, personID, _ string, data []byte) (string, error) {
+func (l *LinkedInAdapter) uploadVideo(ctx context.Context, accessToken, accountID, _ string, data []byte) (string, error) {
 	apiVersion := linkedInAPIVersion()
 
 	registerPayload := map[string]interface{}{
 		"initializeUploadRequest": map[string]interface{}{
-			"owner":           "urn:li:person:" + personID,
+			"owner":           linkedInAuthorURN(accountID),
 			"fileSizeBytes":   int64(len(data)),
 			"uploadCaptions":  false,
 			"uploadThumbnail": false,
@@ -213,12 +372,12 @@ func (l *LinkedInAdapter) uploadVideo(ctx context.Context, accessToken, personID
 	return l.completeVideoUpload(ctx, accessToken, apiVersion, respBody, data)
 }
 
-func (l *LinkedInAdapter) uploadDocument(ctx context.Context, accessToken, personID string, data []byte) (string, error) {
+func (l *LinkedInAdapter) uploadDocument(ctx context.Context, accessToken, accountID string, data []byte) (string, error) {
 	apiVersion := linkedInAPIVersion()
 
 	registerPayload := map[string]interface{}{
 		"initializeUploadRequest": map[string]interface{}{
-			"owner": "urn:li:person:" + personID,
+			"owner": linkedInAuthorURN(accountID),
 		},
 	}
 
@@ -381,9 +540,9 @@ func (l *LinkedInAdapter) completeDocumentUpload(ctx context.Context, accessToke
 	return registerResult.Value.Document, nil
 }
 
-func (l *LinkedInAdapter) Publish(ctx context.Context, accessToken, personID string, req *PublishRequest) (string, error) {
+func (l *LinkedInAdapter) Publish(ctx context.Context, accessToken, accountID string, req *PublishRequest) (string, error) {
 	apiVersion := linkedInAPIVersion()
-	authorURN := "urn:li:person:" + personID
+	authorURN := linkedInAuthorURN(accountID)
 
 	if req.ReplyToID != "" {
 		return l.postComment(ctx, accessToken, authorURN, req.ReplyToID, req.Content)
@@ -505,7 +664,7 @@ func (l *LinkedInAdapter) postComment(ctx context.Context, accessToken, actorURN
 	return result.ID, nil
 }
 
-func (l *LinkedInAdapter) ListComments(ctx context.Context, accessToken, _ string, externalID string) ([]Comment, error) {
+func (l *LinkedInAdapter) ListComments(ctx context.Context, accessToken, accountID string, externalID string) ([]Comment, error) {
 	apiVersion := linkedInAPIVersion()
 	endpoint := "https://api.linkedin.com/rest/socialActions/" + url.QueryEscape(externalID) + "/comments"
 	respBody, err := DoRequest(ctx, http.MethodGet, endpoint, nil, linkedinHeaders(accessToken, apiVersion))
@@ -531,15 +690,18 @@ func (l *LinkedInAdapter) ListComments(ctx context.Context, accessToken, _ strin
 	}
 
 	comments := make([]Comment, 0, len(result.Elements))
+	actorURN := linkedInAuthorURN(accountID)
 	for _, item := range result.Elements {
 		id := firstNonEmptyString(item.CommentURN, item.ID)
+		isOurs := actorURN != "" && item.Actor == actorURN
 		comments = append(comments, Comment{
 			ID:        id,
 			AuthorID:  item.Actor,
 			Text:      item.Message.Text,
 			CreatedAt: linkedInTimestamp(item.Created.Time),
 			CanReply:  true,
-			CanDelete: true,
+			CanDelete: isOurs,
+			IsOurs:    isOurs,
 		})
 	}
 	return comments, nil

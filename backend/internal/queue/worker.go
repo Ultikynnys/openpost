@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/openpost/backend/internal/models"
 	analyticsservice "github.com/openpost/backend/internal/services/analytics"
+	communicationsservice "github.com/openpost/backend/internal/services/communications"
 	"github.com/openpost/backend/internal/services/feedback"
 	"github.com/openpost/backend/internal/services/mediastore"
 	"github.com/openpost/backend/internal/services/publisher"
@@ -36,15 +37,16 @@ const (
 
 // BackgroundWorker polls the configured database for pending jobs.
 type BackgroundWorker struct {
-	db        *bun.DB
-	workerID  string
-	interval  time.Duration
-	publisher *publisher.Service
-	tokens    *tokenmanager.TokenManager
-	storage   mediastore.BlobStorage
-	feedback  *feedback.Service
-	analytics *analyticsservice.Service
-	done      chan struct{}
+	db             *bun.DB
+	workerID       string
+	interval       time.Duration
+	publisher      *publisher.Service
+	tokens         *tokenmanager.TokenManager
+	storage        mediastore.BlobStorage
+	feedback       *feedback.Service
+	analytics      *analyticsservice.Service
+	communications *communicationsservice.Service
+	done           chan struct{}
 }
 
 func (w *BackgroundWorker) SetFeedbackService(service *feedback.Service) {
@@ -53,6 +55,10 @@ func (w *BackgroundWorker) SetFeedbackService(service *feedback.Service) {
 
 func (w *BackgroundWorker) SetAnalyticsService(service *analyticsservice.Service) {
 	w.analytics = service
+}
+
+func (w *BackgroundWorker) SetCommunicationsService(service *communicationsservice.Service) {
+	w.communications = service
 }
 
 func NewWorker(db *bun.DB, id string, interval time.Duration, pub *publisher.Service, tokens *tokenmanager.TokenManager, storage mediastore.BlobStorage) *BackgroundWorker {
@@ -120,6 +126,24 @@ func (w *BackgroundWorker) requeueStaleProcessingJobs(ctx context.Context) {
 	if rows, rowsErr := superseded.RowsAffected(); rowsErr == nil && rows > 0 {
 		log.Printf("[Worker %s] superseded %d stale analytics sweep job(s)\n", w.workerID, rows)
 	}
+	communicationsSuperseded, err := w.db.NewUpdate().
+		Model((*models.Job)(nil)).
+		Set("status = ?", jobStatusCompleted).
+		Set("last_error = ?", "A later communications sweep was already queued after worker recovery.").
+		Set("locked_at = NULL").
+		Set("locked_by = ''").
+		Where("type = ? AND status = ?", communicationsservice.JobTypeSweep, jobStatusProcessing).
+		Where("locked_at IS NOT NULL").
+		Where("locked_at <= ?", cutoff).
+		Where("EXISTS (SELECT 1 FROM jobs AS queued_sweep WHERE queued_sweep.type = ? AND queued_sweep.status = ?)", communicationsservice.JobTypeSweep, jobStatusPending).
+		Exec(ctx)
+	if err != nil {
+		log.Printf("[Worker %s] failed to supersede stale communications sweep: %v\n", w.workerID, err)
+		return
+	}
+	if rows, rowsErr := communicationsSuperseded.RowsAffected(); rowsErr == nil && rows > 0 {
+		log.Printf("[Worker %s] superseded %d stale communications sweep job(s)\n", w.workerID, rows)
+	}
 
 	result, err := w.db.NewUpdate().
 		Model((*models.Job)(nil)).
@@ -166,6 +190,7 @@ func (w *BackgroundWorker) processNextJobIfAvailable(ctx context.Context) bool {
 	return true
 }
 
+//nolint:gocyclo // Centralizes lock heartbeat, typed failure policy, retries, and terminal job state.
 func (w *BackgroundWorker) handleLockedJob(ctx context.Context, job *models.Job) {
 	log.Printf("[Worker %s] processing job: %s (Type: %s)\n", w.workerID, job.ID, job.Type)
 
@@ -208,6 +233,20 @@ func (w *BackgroundWorker) handleLockedJob(ctx context.Context, job *models.Job)
 				retryable = false
 				lastError = "Analytics sweep finished with an error; the next sweep remains queued."
 			}
+		case communicationsservice.JobTypeSweep,
+			communicationsservice.JobTypeEngagementSync,
+			communicationsservice.JobTypeMessagesSync:
+			failure := publisher.ClassifyFailure(processErr)
+			retryable = failure.Retryable || failure.Kind == publisher.FailureUnknown
+			retryAfter = failure.RetryAfter
+			lastError = "Communications collection failed. OpenPost will retry when the failure is temporary."
+			if job.Type == communicationsservice.JobTypeSweep && w.hasPendingCommunicationsSweep(ctx, job.ID) {
+				retryable = false
+				lastError = "Communications sweep finished with an error; the next sweep remains queued."
+			}
+		case communicationsservice.JobTypeEngagementAct, communicationsservice.JobTypeMessageSend:
+			retryable = false
+			lastError = "The provider write failed. OpenPost did not retry because the provider result may be ambiguous."
 		}
 		if !retryable || job.Attempts >= job.MaxAttempts {
 			job.Status = jobStatusFailed
@@ -257,6 +296,18 @@ func (w *BackgroundWorker) hasPendingAnalyticsSweep(ctx context.Context, exclude
 	return exists
 }
 
+func (w *BackgroundWorker) hasPendingCommunicationsSweep(ctx context.Context, excludeID string) bool {
+	exists, err := w.db.NewSelect().
+		Model((*models.Job)(nil)).
+		Where("type = ? AND status = ? AND id != ?", communicationsservice.JobTypeSweep, jobStatusPending, excludeID).
+		Exists(ctx)
+	if err != nil {
+		log.Printf("[Worker %s] failed to inspect queued communications sweep: %v\n", w.workerID, err)
+		return false
+	}
+	return exists
+}
+
 func (w *BackgroundWorker) heartbeatJobLock(ctx context.Context, jobID string) {
 	ticker := time.NewTicker(processingHeartbeat)
 	defer ticker.Stop()
@@ -299,6 +350,15 @@ func (w *BackgroundWorker) executeJob(ctx context.Context, job *models.Job) erro
 			return fmt.Errorf("analytics collection is not configured")
 		}
 		return w.analytics.HandleJob(ctx, job.Type, job.Payload)
+	case communicationsservice.JobTypeSweep,
+		communicationsservice.JobTypeEngagementSync,
+		communicationsservice.JobTypeMessagesSync,
+		communicationsservice.JobTypeEngagementAct,
+		communicationsservice.JobTypeMessageSend:
+		if w.communications == nil {
+			return fmt.Errorf("communications collection is not configured")
+		}
+		return w.communications.HandleJob(ctx, job.Type, job.Payload)
 	default:
 		return fmt.Errorf("unsupported job type %q", job.Type)
 	}

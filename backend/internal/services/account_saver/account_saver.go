@@ -79,54 +79,104 @@ func (s *AccountSaver) SaveAccount(ctx context.Context, userID, platformName, wo
 }
 
 func (s *AccountSaver) SaveAccountFromInput(ctx context.Context, input SaveAccountInput) (*models.SocialAccount, error) {
-	if err := s.validateSaveAccountInput(ctx, input); err != nil {
-		return nil, err
-	}
-	input.AccountID = accountIDFromToken(input.AccountID, input.Token)
-
-	if err := s.CheckSocialAccountQuota(ctx, input.WorkspaceID); err != nil {
-		return nil, err
-	}
-
-	encAccess, encRefresh, err := s.encryptAccountTokens(input.Token)
+	accounts, err := s.SaveAccountsFromInputs(ctx, []SaveAccountInput{input})
 	if err != nil {
 		return nil, err
 	}
-	expiresAt := tokenExpiresAt(input.Token)
-	capabilityState, capabilityCheckedAt, err := encodeCapabilityState(input.CapabilityState)
-	if err != nil {
+	return accounts[0], nil
+}
+
+// SaveAccountsFromInputs validates quota once and inserts every selected
+// identity in one transaction. This is used when one OAuth grant connects
+// several Pages or organizations.
+//
+//nolint:gocyclo // Validation, encryption, slug allocation, and inserts must complete as one transaction.
+func (s *AccountSaver) SaveAccountsFromInputs(ctx context.Context, inputs []SaveAccountInput) ([]*models.SocialAccount, error) {
+	if len(inputs) == 0 {
+		return nil, fmt.Errorf("at least one account is required")
+	}
+	first := inputs[0]
+	if err := s.validateSaveAccountInput(ctx, first); err != nil {
+		return nil, err
+	}
+	for _, input := range inputs {
+		if input.UserID != first.UserID || input.WorkspaceID != first.WorkspaceID {
+			return nil, fmt.Errorf("selected accounts must belong to the same user and workspace")
+		}
+		if input.Token == nil {
+			return nil, fmt.Errorf("token response is required")
+		}
+	}
+	if err := s.checkSocialAccountQuota(ctx, first.WorkspaceID, int64(len(inputs))); err != nil {
 		return nil, err
 	}
 
-	account := &models.SocialAccount{
-		ID:                  uuid.New().String(),
-		WorkspaceID:         input.WorkspaceID,
-		Slug:                "",
-		Platform:            input.PlatformName,
-		AccountID:           input.AccountID,
-		AccountUsername:     input.AccountUsername,
-		AccountAvatarURL:    input.AccountAvatarURL,
-		InstanceURL:         input.InstanceURL,
-		AccessTokenEnc:      encAccess,
-		RefreshTokenEnc:     encRefresh,
-		TokenExpiresAt:      expiresAt,
-		GrantedScopes:       grantedScopesFromToken(input.Token),
-		CapabilityState:     capabilityState,
-		CapabilityCheckedAt: capabilityCheckedAt,
-		IsActive:            true,
-		CreatedAt:           time.Now().UTC(),
+	var existingSlugs []string
+	if err := s.db.NewSelect().
+		Model((*models.SocialAccount)(nil)).
+		Column("slug").
+		Where("workspace_id = ?", first.WorkspaceID).
+		Where("is_active = ?", true).
+		Scan(ctx, &existingSlugs); err != nil {
+		return nil, fmt.Errorf("loading account slugs: %w", err)
 	}
-	account.Slug = s.uniqueSlug(ctx, input.WorkspaceID, defaultSlug(input.PlatformName, input.AccountUsername, input.AccountID, input.InstanceURL))
+	usedSlugs := make(map[string]struct{}, len(existingSlugs)+len(inputs))
+	for _, slug := range existingSlugs {
+		usedSlugs[slug] = struct{}{}
+	}
 
-	if _, err := s.db.NewInsert().Model(account).Exec(ctx); err != nil {
+	accounts := make([]*models.SocialAccount, 0, len(inputs))
+	for _, input := range inputs {
+		input.AccountID = accountIDFromToken(input.AccountID, input.Token)
+		encAccess, encRefresh, err := s.encryptAccountTokens(input.Token)
+		if err != nil {
+			return nil, err
+		}
+		capabilityState, capabilityCheckedAt, err := encodeCapabilityState(input.CapabilityState)
+		if err != nil {
+			return nil, err
+		}
+		baseSlug := defaultSlug(input.PlatformName, input.AccountUsername, input.AccountID, input.InstanceURL)
+		account := &models.SocialAccount{
+			ID:                  uuid.New().String(),
+			WorkspaceID:         input.WorkspaceID,
+			Slug:                nextAvailableSlug(baseSlug, usedSlugs),
+			Platform:            input.PlatformName,
+			AccountID:           input.AccountID,
+			AccountUsername:     input.AccountUsername,
+			AccountAvatarURL:    input.AccountAvatarURL,
+			InstanceURL:         input.InstanceURL,
+			AccessTokenEnc:      encAccess,
+			RefreshTokenEnc:     encRefresh,
+			TokenExpiresAt:      tokenExpiresAt(input.Token),
+			GrantedScopes:       grantedScopesFromToken(input.Token),
+			CapabilityState:     capabilityState,
+			CapabilityCheckedAt: capabilityCheckedAt,
+			IsActive:            true,
+			CreatedAt:           time.Now().UTC(),
+		}
+		usedSlugs[account.Slug] = struct{}{}
+		accounts = append(accounts, account)
+	}
+
+	if err := s.db.RunInTx(ctx, &sql.TxOptions{}, func(txCtx context.Context, tx bun.Tx) error {
+		for _, account := range accounts {
+			if _, err := tx.NewInsert().Model(account).Exec(txCtx); err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
 		return nil, err
 	}
 
-	if err := tokenmanager.ScheduleRefreshJob(ctx, s.db, account.ID, expiresAt); err != nil {
-		log.Printf("[AccountSaver] Failed to schedule refresh job for account %s: %v", account.ID, err)
+	for _, account := range accounts {
+		if err := tokenmanager.ScheduleRefreshJob(ctx, s.db, account.ID, account.TokenExpiresAt); err != nil {
+			log.Printf("[AccountSaver] Failed to schedule refresh job for account %s: %v", account.ID, err)
+		}
 	}
 
-	return account, nil
+	return accounts, nil
 }
 
 func encodeCapabilityState(state map[string]string) (string, time.Time, error) {
@@ -184,6 +234,12 @@ func (s *AccountSaver) encryptAccountTokens(token *platform.TokenResult) ([]byte
 }
 
 func accountIDFromToken(fallback string, token *platform.TokenResult) string {
+	// LinkedIn selection stores the complete author URN. The shared member
+	// token may also carry a person user_id, which must not replace an
+	// organization identity.
+	if strings.HasPrefix(strings.TrimSpace(fallback), "urn:li:") {
+		return fallback
+	}
 	if token.Extra == nil {
 		return fallback
 	}
@@ -238,6 +294,10 @@ func firstNonEmptyTokenExtra(extra map[string]string, keys ...string) string {
 }
 
 func (s *AccountSaver) CheckSocialAccountQuota(ctx context.Context, workspaceID string) error {
+	return s.checkSocialAccountQuota(ctx, workspaceID, 1)
+}
+
+func (s *AccountSaver) checkSocialAccountQuota(ctx context.Context, workspaceID string, amount int64) error {
 	current, err := s.db.NewSelect().
 		Model((*models.SocialAccount)(nil)).
 		Where("workspace_id = ?", workspaceID).
@@ -251,7 +311,7 @@ func (s *AccountSaver) CheckSocialAccountQuota(ctx context.Context, workspaceID 
 		WorkspaceID: workspaceID,
 		Limit:       entitlements.LimitSocialAccounts,
 		Current:     int64(current),
-		Amount:      1,
+		Amount:      amount,
 	})
 	if err != nil {
 		return fmt.Errorf("checking social account limit: %w", err)
@@ -263,6 +323,21 @@ func (s *AccountSaver) CheckSocialAccountQuota(ctx context.Context, workspaceID 
 		return fmt.Errorf("social account limit exceeded")
 	}
 	return nil
+}
+
+func nextAvailableSlug(base string, used map[string]struct{}) string {
+	if base == "" {
+		base = "account"
+	}
+	for i := 0; ; i++ {
+		candidate := base
+		if i > 0 {
+			candidate = fmt.Sprintf("%s-%d", base, i+1)
+		}
+		if _, exists := used[candidate]; !exists {
+			return candidate
+		}
+	}
 }
 
 func defaultSlug(platformName, accountUsername, accountID, instanceURL string) string {
@@ -283,30 +358,4 @@ func defaultSlug(platformName, accountUsername, accountID, instanceURL string) s
 		return strings.ToLower(platformName)
 	}
 	return base
-}
-
-func (s *AccountSaver) uniqueSlug(ctx context.Context, workspaceID, base string) string {
-	if base == "" {
-		base = "account"
-	}
-	for i := 0; ; i++ {
-		candidate := base
-		if i > 0 {
-			candidate = fmt.Sprintf("%s-%d", base, i+1)
-		}
-
-		var existing models.SocialAccount
-		err := s.db.NewSelect().
-			Model(&existing).
-			Where("workspace_id = ?", workspaceID).
-			Where("slug = ?", candidate).
-			Where("is_active = ?", true).
-			Scan(ctx)
-		if err != nil {
-			if err == sql.ErrNoRows {
-				return candidate
-			}
-			return base
-		}
-	}
 }

@@ -13,6 +13,7 @@ import (
 	"github.com/openpost/backend/internal/services/auth"
 	"github.com/openpost/backend/internal/services/billing"
 	cliauth "github.com/openpost/backend/internal/services/cli_auth"
+	communicationsservice "github.com/openpost/backend/internal/services/communications"
 	servicecrypto "github.com/openpost/backend/internal/services/crypto"
 	"github.com/openpost/backend/internal/services/entitlements"
 	"github.com/openpost/backend/internal/services/feedback"
@@ -21,6 +22,7 @@ import (
 	"github.com/openpost/backend/internal/services/mediasigner"
 	"github.com/openpost/backend/internal/services/mediastore"
 	"github.com/openpost/backend/internal/services/mfa"
+	"github.com/openpost/backend/internal/services/notifications"
 	"github.com/openpost/backend/internal/services/passwordmail"
 	"github.com/openpost/backend/internal/services/providerapps"
 	"github.com/openpost/backend/internal/services/sessions"
@@ -55,6 +57,8 @@ type RouteDeps struct {
 	StudioModelBaseURL           string
 	FeedbackService              *feedback.Service
 	AnalyticsService             *analyticsservice.Service
+	CommunicationsService        *communicationsservice.Service
+	NotificationService          *notifications.Service
 
 	MediaHandler    *handlers.MediaHandler
 	BillingHandler  *handlers.BillingHandler
@@ -142,6 +146,8 @@ func RegisterHumaRoutes(api huma.API, deps RouteDeps) {
 	publicationHandler.RegisterRoutes(api)
 	handlers.NewCommentHandler(deps.DB, deps.Authenticator, deps.Providers, deps.TokenEncryptor).RegisterRoutes(api)
 	handlers.NewAnalyticsHandler(deps.DB, deps.Authenticator, deps.AnalyticsService).RegisterRoutes(api)
+	handlers.NewCommunicationsHandler(deps.DB, deps.Authenticator, deps.CommunicationsService).RegisterRoutes(api)
+	handlers.NewNotificationHandler(deps.DB, deps.Authenticator, deps.NotificationService).RegisterRoutes(api)
 
 	mcpOAuthHandler := deps.MCPOAuthHandler
 	if mcpOAuthHandler == nil {
@@ -212,6 +218,7 @@ func RegisterHumaRoutes(api huma.API, deps RouteDeps) {
 	oauthHandler.Callback(api)
 	oauthHandler.ExchangeCode(api)
 	oauthHandler.BlueskyLogin(api)
+	oauthHandler.DiscordWebhookLogin(api)
 	oauthHandler.GetAccountSelection(api)
 	oauthHandler.CompleteAccountSelection(api)
 	oauthHandler.ListAccounts(api)
