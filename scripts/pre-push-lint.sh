@@ -53,7 +53,7 @@ denv_lint() {
     # Fallback: run the underlying commands directly. Used when the
     # developer hasn't entered the devenv shell (e.g. CI machines).
     (
-      unformatted=$(cd backend && gofmt -l .)
+      unformatted=$(cd backend && find . -path './.devenv' -prune -o -type f -name '*.go' -exec gofmt -l {} +)
       if [ -n "$unformatted" ]; then
         echo "$unformatted"
         exit 1

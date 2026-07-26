@@ -10,11 +10,11 @@ let
 
   backend-gofmt-check = pkgs.writeShellApplication {
     name = "backend-gofmt-check";
-    runtimeInputs = [ goToolchain pkgs.gnumake ];
+    runtimeInputs = [ goToolchain pkgs.findutils pkgs.gnumake ];
     text = ''
       export GOROOT="${goToolchain}/share/go"
       cd "${config.git.root}/backend"
-      unformatted=$(gofmt -l .)
+      unformatted=$(find . -path './.devenv' -prune -o -type f -name '*.go' -exec gofmt -l {} +)
       if [ -n "$unformatted" ]; then
         echo "$unformatted"
         exit 1
@@ -49,11 +49,11 @@ let
 
   cli-gofmt-check = pkgs.writeShellApplication {
     name = "cli-gofmt-check";
-    runtimeInputs = [ goToolchain pkgs.gnumake ];
+    runtimeInputs = [ goToolchain pkgs.findutils pkgs.gnumake ];
     text = ''
       export GOROOT="${goToolchain}/share/go"
       cd "${config.git.root}/cli"
-      unformatted=$(gofmt -l .)
+      unformatted=$(find . -path './.devenv' -prune -o -type f -name '*.go' -exec gofmt -l {} +)
       if [ -n "$unformatted" ]; then
         echo "$unformatted"
         exit 1
