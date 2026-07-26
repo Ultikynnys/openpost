@@ -15,6 +15,7 @@
 	let selectedMode = $state<ComposerModeKey>('post');
 	let lastComposerThreadState = false;
 	const initialScheduleDate = $derived(page.url.searchParams.get('date'));
+	const initialScheduleTime = $derived(page.url.searchParams.get('time'));
 	const initialWorkspaceId = $derived(page.url.searchParams.get('workspace_id'));
 	const composerResetCounter = $derived(ui.composerResetCounter);
 	const sampleCampaignActive = $derived(isSampleCampaignRequested(page.url.searchParams));
@@ -82,6 +83,7 @@
 				<div data-testid="text-thread-composer-shell" class="flex min-h-0 flex-1 flex-col">
 					<ComposeTextPost
 						{initialScheduleDate}
+						{initialScheduleTime}
 						{initialWorkspaceId}
 						onSuccess={handleComposerReset}
 						onDeleted={handleComposerReset}
@@ -102,6 +104,7 @@
 					<ComposeFocusedPublication
 						mode={selectedMode}
 						{initialScheduleDate}
+						{initialScheduleTime}
 						{initialWorkspaceId}
 						onSuccess={handleComposerReset}
 						onDraftCreated={handlePublicationDraftCreated}

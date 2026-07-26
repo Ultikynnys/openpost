@@ -8,7 +8,7 @@ export async function loadStudioBrandFonts(brand: StudioBrandKit): Promise<void>
 		const descriptor = `${font.style} ${font.weight} 12px "${family}"`;
 		if (document.fonts.check(descriptor)) continue;
 		const source = getAuthenticatedMediaURL(`/media/${font.media_id}`);
-		const face = new FontFace(family, `url("${source}") format("woff2")`, {
+		const face = new FontFace(family, `url("${source}")`, {
 			weight: String(font.weight),
 			style: font.style
 		});

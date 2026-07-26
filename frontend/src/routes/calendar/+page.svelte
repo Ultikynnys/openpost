@@ -2,13 +2,14 @@
 	import { goto } from '$app/navigation';
 	import { SvelteDate, SvelteMap, SvelteSet } from 'svelte/reactivity';
 	import { resolve } from '$app/paths';
-	import { client, type Post, type SocialAccount } from '$lib/api/client';
+	import { client, type SocialAccount } from '$lib/api/client';
 	import type { components } from '$lib/api/types';
 	import {
 		isFutureSchedule,
 		workspaceClock,
 		workspaceDateKeyFromISO,
-		workspaceScheduleMoveToDate
+		workspaceScheduleMoveToDate,
+		workspaceScheduleToISO
 	} from '$lib/components/compose/schedule-timezone';
 	import PlatformIcon from '$lib/components/platform-icon.svelte';
 	import PageHeader from '$lib/components/page-header.svelte';
@@ -31,12 +32,16 @@
 	import ChevronRightIcon from 'lucide-svelte/icons/chevron-right';
 	import ClockIcon from 'lucide-svelte/icons/clock';
 	import Loader2Icon from 'lucide-svelte/icons/loader-2';
+	import ListIcon from 'lucide-svelte/icons/list';
+	import LockIcon from 'lucide-svelte/icons/lock-keyhole';
 	import PlusIcon from 'lucide-svelte/icons/plus';
 	import RefreshCwIcon from 'lucide-svelte/icons/refresh-cw';
+	import Rows3Icon from 'lucide-svelte/icons/rows-3';
 
 	type Publication = components['schemas']['PublicationResponse'];
-	type PostDestination = components['schemas']['PostDestinationResponse'];
 	type Rendition = components['schemas']['RenditionResponse'];
+	type CalendarView = 'month' | 'week';
+	type CalendarStatus = 'all' | 'scheduled' | 'published';
 
 	type CalendarDay = {
 		date: Date;
@@ -54,12 +59,12 @@
 	type CalendarItem = {
 		id: string;
 		key: string;
-		kind: 'post' | 'publication';
+		href: string;
 		title: string;
 		preview: string;
 		status: string;
-		scheduledAt: string;
-		randomDelayMinutes: number;
+		occursAt: string;
+		movable: boolean;
 		workspaceId: string;
 		workspaceName: string;
 		accounts: AccountBadge[];
@@ -70,9 +75,10 @@
 	};
 
 	let currentMonth = $state(startOfMonth(workspaceTodayDate('UTC')));
+	let viewMode = $state<CalendarView>('month');
+	let selectedStatus = $state<CalendarStatus>('all');
 	let selectedWorkspaceIds = $state<string[]>([]);
 	let selectedPlatform = $state('all');
-	let posts = $state<Post[]>([]);
 	let publications = $state<Publication[]>([]);
 	let accountsByWorkspace = $state<Record<string, SocialAccount[]>>({});
 	let loading = $state(true);
@@ -107,30 +113,24 @@
 	const days = $derived.by(() =>
 		buildCalendarDays(currentMonth, workspaceCtx.weekStartsOn, workspaceTodayDate(viewerTimeZone))
 	);
+	const weekDays = $derived.by(() =>
+		buildWeekDays(currentMonth, workspaceCtx.weekStartsOn, workspaceTodayDate(viewerTimeZone))
+	);
+	const displayDays = $derived(viewMode === 'week' ? weekDays : days);
 	const weekdayLabels = $derived.by(() =>
 		days.slice(0, 7).map((day) => formatWorkspaceDate(day.date, { weekday: 'short' }))
 	);
-	const visibleDayKeys = $derived(new SvelteSet(days.map((day) => day.key)));
-	const allItems = $derived.by((): CalendarItem[] => {
-		const items: CalendarItem[] = [];
-		const linkedPublicationIDs = new SvelteSet(
-			posts.map((post) => post.publication_id).filter((id): id is string => Boolean(id))
-		);
-		for (const post of posts) {
-			const item = postToCalendarItem(post);
-			if (item) items.push(item);
-		}
-		for (const publication of publications) {
-			if (linkedPublicationIDs.has(publication.id)) continue;
-			const item = publicationToCalendarItem(publication);
-			if (item) items.push(item);
-		}
-		return items.sort(
-			(a, b) =>
-				new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime() ||
-				a.title.localeCompare(b.title)
-		);
-	});
+	const visibleDayKeys = $derived(new SvelteSet(displayDays.map((day) => day.key)));
+	const allItems = $derived.by((): CalendarItem[] =>
+		publications
+			.map(publicationToCalendarItem)
+			.filter((item): item is CalendarItem => item !== null)
+			.sort(
+				(a, b) =>
+					new Date(a.occursAt).getTime() - new Date(b.occursAt).getTime() ||
+					a.title.localeCompare(b.title)
+			)
+	);
 	const availablePlatforms = $derived.by(() => {
 		const platforms = new SvelteSet<string>();
 		for (const workspaceId of activeWorkspaceIds) {
@@ -145,17 +145,18 @@
 	});
 	const visibleItems = $derived.by(() =>
 		allItems.filter((item) => {
-			const scheduledDay = workspaceDateKeyFromISO(item.scheduledAt, viewerTimeZone);
+			const scheduledDay = workspaceDateKeyFromISO(item.occursAt, viewerTimeZone);
 			const inVisibleMonth = scheduledDay ? visibleDayKeys.has(scheduledDay) : false;
 			const platformMatches =
 				selectedPlatform === 'all' || item.platforms.includes(selectedPlatform);
-			return inVisibleMonth && platformMatches;
+			const statusMatches = selectedStatus === 'all' || item.status === selectedStatus;
+			return inVisibleMonth && platformMatches && statusMatches;
 		})
 	);
 	const itemsByDay = $derived.by(() => {
 		const map = new SvelteMap<string, CalendarItem[]>();
 		for (const item of visibleItems) {
-			const key = workspaceDateKeyFromISO(item.scheduledAt, viewerTimeZone);
+			const key = workspaceDateKeyFromISO(item.occursAt, viewerTimeZone);
 			if (!key) continue;
 			const existing = map.get(key) ?? [];
 			existing.push(item);
@@ -164,20 +165,22 @@
 		return map;
 	});
 	const agendaDays = $derived.by(() =>
-		days
-			.filter((day) => !day.outsideMonth)
+		displayDays
+			.filter((day) => viewMode === 'week' || !day.outsideMonth)
 			.map((day) => ({ day, items: itemsByDay.get(day.key) ?? [] }))
 			.filter((entry) => entry.items.length > 0)
 	);
 	const emptyMonthDays = $derived(
-		days.filter(
+		displayDays.filter(
 			(day) =>
-				!day.outsideMonth &&
+				(viewMode === 'week' || !day.outsideMonth) &&
 				day.key >= workspaceTodayKey &&
 				(itemsByDay.get(day.key)?.length ?? 0) === 0
 		)
 	);
-	const monthAllowsCreate = $derived(days.some((day) => !day.outsideMonth && !isPastDay(day)));
+	const monthAllowsCreate = $derived(
+		displayDays.some((day) => (viewMode === 'week' || !day.outsideMonth) && !isPastDay(day))
+	);
 	const selectedEmptyDay = $derived.by(
 		() =>
 			emptyMonthDays.find((day) => day.key === selectedEmptyDateKey) ??
@@ -185,17 +188,13 @@
 			emptyMonthDays[0] ??
 			null
 	);
-	const monthItems = $derived(
-		visibleItems.filter(
-			(item) =>
-				workspaceDateKeyFromISO(item.scheduledAt, viewerTimeZone)?.slice(0, 7) ===
-				monthKey(currentMonth)
-		)
+	const scheduledCount = $derived(
+		visibleItems.filter((item) => item.status === 'scheduled').length
 	);
-	const postCount = $derived(monthItems.filter((item) => item.kind === 'post').length);
-	const publicationCount = $derived(
-		monthItems.filter((item) => item.kind === 'publication').length
+	const publishedCount = $derived(
+		visibleItems.filter((item) => item.status === 'published').length
 	);
+	const weekHours = Array.from({ length: 24 }, (_, hour) => hour);
 	const selectedWorkspaceLabel = $derived.by(() => {
 		if (selectedWorkspaceIds.length === 0 || selectedWorkspaceIds.length === workspaces.length) {
 			return m.calendar_all_workspaces();
@@ -249,7 +248,6 @@
 					: workspaceCtx.workspaces.map((workspace) => workspace.id);
 			if (workspaceIds.length === 0) {
 				if (request !== activeRequest) return;
-				posts = [];
 				publications = [];
 				accountsByWorkspace = {};
 				dataRevision += 1;
@@ -257,14 +255,12 @@
 				return;
 			}
 
-			const [postGroups, publicationGroups, accountEntries] = await Promise.all([
-				Promise.all(workspaceIds.map(fetchScheduledPosts)),
-				Promise.all(workspaceIds.map(fetchScheduledPublications)),
+			const [publicationGroups, accountEntries] = await Promise.all([
+				Promise.all(workspaceIds.map(fetchPublications)),
 				Promise.all(workspaceIds.map(fetchAccounts))
 			]);
 
 			if (request !== activeRequest) return;
-			posts = postGroups.flat();
 			publications = publicationGroups.flat();
 			accountsByWorkspace = Object.fromEntries(accountEntries);
 			dataRevision += 1;
@@ -282,30 +278,12 @@
 		}
 	}
 
-	async function fetchScheduledPosts(workspaceId: string) {
-		const out: Post[] = [];
-		let offset = 0;
-		while (true) {
-			const { data, error, response } = await client.GET('/posts', {
-				params: { query: { workspace_id: workspaceId, status: 'scheduled', limit: 200, offset } }
-			});
-			if (error) throw new Error(problemMessage(error, m.calendar_failed_load()));
-			out.push(...(data ?? []));
-			const hasMore = response.headers.get('X-Has-More') === 'true';
-			if (!hasMore) break;
-			const nextOffset = Number(response.headers.get('X-Next-Offset') ?? offset + 200);
-			if (!Number.isFinite(nextOffset) || nextOffset <= offset) break;
-			offset = nextOffset;
-		}
-		return out;
-	}
-
-	async function fetchScheduledPublications(workspaceId: string) {
+	async function fetchPublications(workspaceId: string) {
 		const out: Publication[] = [];
 		let offset = 0;
 		while (true) {
 			const { data, error, response } = await client.GET('/publications', {
-				params: { query: { workspace_id: workspaceId, status: 'scheduled', limit: 200, offset } }
+				params: { query: { workspace_id: workspaceId, limit: 200, offset } }
 			});
 			if (error) throw new Error(problemMessage(error, m.calendar_failed_load()));
 			out.push(...(data ?? []));
@@ -326,30 +304,16 @@
 		return [workspaceId, data ?? []];
 	}
 
-	function postToCalendarItem(post: Post): CalendarItem | null {
-		if (!post.scheduled_at || post.parent_post_id) return null;
-		const accounts = accountsForDestinations(post.workspace_id, post.destinations ?? []);
-		const initial = initialPostText(post.content);
-		return {
-			id: post.id,
-			key: `post:${post.id}`,
-			kind: 'post',
-			title: initial || m.calendar_untitled_post(),
-			preview: initial || post.content,
-			status: post.status,
-			scheduledAt: post.scheduled_at,
-			randomDelayMinutes: post.random_delay_minutes ?? 0,
-			workspaceId: post.workspace_id,
-			workspaceName: workspaceName(post.workspace_id),
-			accounts,
-			platforms: unique(accounts.map((account) => account.platform)),
-			mediaCount: post.media_ids?.length ?? 0,
-			profile: ''
-		};
-	}
-
 	function publicationToCalendarItem(publication: Publication): CalendarItem | null {
-		if (!publication.scheduled_at) return null;
+		if (publication.status !== 'scheduled' && publication.status !== 'published') return null;
+		const occursAt =
+			publication.status === 'published'
+				? publication.actual_run_at ||
+					publication.scheduled_at ||
+					publication.updated_at ||
+					publication.created_at
+				: publication.scheduled_at;
+		if (!occursAt) return null;
 		const renditions = publication.renditions ?? [];
 		const accounts = accountsForRenditions(publication.workspace_id, renditions);
 		const title =
@@ -357,12 +321,16 @@
 		return {
 			id: publication.id,
 			key: `publication:${publication.id}`,
-			kind: 'publication',
+			href:
+				(publication.intent === 'post' || publication.intent === 'thread') &&
+				publication.text_post_id
+					? `/posts/${encodeURIComponent(publication.text_post_id)}`
+					: `/publications/${encodeURIComponent(publication.id)}`,
 			title,
 			preview: firstLine(publication.source_text) || title,
 			status: publication.status,
-			scheduledAt: publication.scheduled_at,
-			randomDelayMinutes: 0,
+			occursAt,
+			movable: publication.status === 'scheduled',
 			workspaceId: publication.workspace_id,
 			workspaceName: workspaceName(publication.workspace_id),
 			accounts,
@@ -371,21 +339,6 @@
 			profile: publication.content_profile,
 			publication
 		};
-	}
-
-	function accountsForDestinations(workspaceId: string, destinations: PostDestination[]) {
-		const byId = accountMap(workspaceId);
-		return uniqueById(
-			destinations.map((destination) => {
-				const account = byId.get(destination.social_account_id);
-				if (account) return accountBadge(account);
-				return {
-					id: destination.social_account_id,
-					platform: destination.platform,
-					label: platformLabel(destination.platform)
-				};
-			})
-		);
 	}
 
 	function accountsForRenditions(workspaceId: string, renditions: Rendition[]) {
@@ -440,19 +393,34 @@
 	}
 
 	function changeMonth(delta: number) {
-		currentMonth = startOfMonth(addMonths(currentMonth, delta));
+		currentMonth =
+			viewMode === 'month'
+				? startOfMonth(addMonths(currentMonth, delta))
+				: addDays(currentMonth, delta * 7);
+	}
+
+	function changeView(nextView: CalendarView) {
+		if (nextView === viewMode) return;
+		if (nextView === 'week') {
+			const today = workspaceTodayDate(viewerTimeZone);
+			currentMonth =
+				today.getFullYear() === currentMonth.getFullYear() &&
+				today.getMonth() === currentMonth.getMonth()
+					? today
+					: new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1, 12);
+		} else {
+			currentMonth = startOfMonth(currentMonth);
+		}
+		viewMode = nextView;
 	}
 
 	function goToToday() {
-		currentMonth = startOfMonth(workspaceTodayDate(viewerTimeZone));
+		const today = workspaceTodayDate(viewerTimeZone);
+		currentMonth = viewMode === 'month' ? startOfMonth(today) : today;
 	}
 
 	function openItem(item: CalendarItem) {
-		if (item.kind === 'post') {
-			goto(resolve(`/posts/${item.id}`));
-		} else if (item.kind === 'publication') {
-			goto(resolve(`/publications/${item.id}`));
-		}
+		goto(resolve(item.href as '/'));
 	}
 
 	function composeWorkspaceId() {
@@ -460,12 +428,13 @@
 		return workspaceCtx.currentWorkspace?.id ?? activeWorkspaceIds[0] ?? '';
 	}
 
-	function createPostOnDate(date: Date) {
+	function createPostOnDate(date: Date, time = '') {
 		if (isPastDate(date)) {
 			errorMessage = m.calendar_past_date();
 			return;
 		}
 		const params = new URLSearchParams({ date: dateKey(date) });
+		if (time) params.set('time', time);
 		const workspaceId = composeWorkspaceId();
 		if (workspaceId) params.set('workspace_id', workspaceId);
 		goto(resolve(`/?${params.toString()}`));
@@ -476,6 +445,10 @@
 	}
 
 	function onDragStart(event: DragEvent, item: CalendarItem) {
+		if (!item.movable) {
+			event.preventDefault();
+			return;
+		}
 		draggingKey = item.key;
 		successMessage = '';
 		errorMessage = '';
@@ -509,20 +482,46 @@
 			errorMessage = m.calendar_past_date();
 			return;
 		}
-		if (!item || workspaceDateKeyFromISO(item.scheduledAt, viewerTimeZone) === day.key) return;
+		if (!item?.movable || workspaceDateKeyFromISO(item.occursAt, viewerTimeZone) === day.key)
+			return;
 		await rescheduleItem(item, day.date);
 	}
 
-	async function rescheduleItem(item: CalendarItem, targetDate: Date) {
+	function snappedTime(event: DragEvent | MouseEvent, hour: number) {
+		const bounds = (event.currentTarget as HTMLElement).getBoundingClientRect();
+		const quarter = Math.max(
+			0,
+			Math.min(3, Math.floor(((event.clientY - bounds.top) / bounds.height) * 4))
+		);
+		return `${String(hour).padStart(2, '0')}:${String(quarter * 15).padStart(2, '0')}`;
+	}
+
+	function onWeekDragOver(event: DragEvent, day: CalendarDay, hour: number) {
+		if (!draggingKey || reschedulingKey || isPastDay(day)) return;
+		event.preventDefault();
+		dropTargetKey = `${day.key}|${snappedTime(event, hour)}`;
+		if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+	}
+
+	async function onWeekDrop(event: DragEvent, day: CalendarDay, hour: number) {
+		event.preventDefault();
+		const key = event.dataTransfer?.getData('text/plain') || draggingKey;
+		const item = allItems.find((candidate) => candidate.key === key);
+		const time = snappedTime(event, hour);
+		draggingKey = '';
+		dropTargetKey = '';
+		if (!item?.movable || isPastDay(day)) return;
+		await rescheduleItem(item, day.date, time);
+	}
+
+	async function rescheduleItem(item: CalendarItem, targetDate: Date, targetTime = '') {
 		if (isPastDate(targetDate)) {
 			errorMessage = m.calendar_past_date();
 			return;
 		}
-		const nextScheduledAt = workspaceScheduleMoveToDate(
-			item.scheduledAt,
-			calendarDate(targetDate),
-			viewerTimeZone
-		);
+		const nextScheduledAt = targetTime
+			? workspaceScheduleToISO(calendarDate(targetDate), targetTime, viewerTimeZone)
+			: workspaceScheduleMoveToDate(item.occursAt, calendarDate(targetDate), viewerTimeZone);
 		if (!nextScheduledAt) {
 			errorMessage = m.calendar_reschedule_failed();
 			return;
@@ -531,7 +530,6 @@
 			errorMessage = m.calendar_past_date();
 			return;
 		}
-		const previousPosts = posts;
 		const previousPublications = publications;
 		const mutationLoadKey = loadKey;
 		const mutationDataRevision = dataRevision;
@@ -539,27 +537,12 @@
 		errorMessage = '';
 		successMessage = '';
 
-		if (item.kind === 'post') {
-			posts = posts.map((post) =>
-				post.id === item.id ? { ...post, scheduled_at: nextScheduledAt } : post
-			);
-		} else {
-			publications = publications.map((publication) =>
-				publication.id === item.id ? { ...publication, scheduled_at: nextScheduledAt } : publication
-			);
-		}
+		publications = publications.map((publication) =>
+			publication.id === item.id ? { ...publication, scheduled_at: nextScheduledAt } : publication
+		);
 
 		try {
-			if (item.kind === 'post') {
-				const { error } = await client.PATCH('/posts/{id}', {
-					params: { path: { id: item.id } },
-					body: {
-						scheduled_at: nextScheduledAt,
-						random_delay_minutes: item.randomDelayMinutes
-					}
-				});
-				if (error) throw new Error(problemMessage(error, m.calendar_reschedule_failed()));
-			} else if (item.publication) {
+			if (item.publication) {
 				const publication = item.publication;
 				const { data, error } = await client.PUT('/publications/{id}', {
 					params: { path: { id: item.id } },
@@ -581,17 +564,11 @@
 				}
 			}
 			if (loadKey === mutationLoadKey) {
-				if (item.kind === 'post') {
-					posts = posts.map((post) =>
-						post.id === item.id ? { ...post, scheduled_at: nextScheduledAt } : post
-					);
-				} else {
-					publications = publications.map((publication) =>
-						publication.id === item.id
-							? { ...publication, scheduled_at: nextScheduledAt }
-							: publication
-					);
-				}
+				publications = publications.map((publication) =>
+					publication.id === item.id
+						? { ...publication, scheduled_at: nextScheduledAt }
+						: publication
+				);
 				dataRevision += 1;
 				successMessage = m.calendar_rescheduled({
 					title: item.title,
@@ -601,7 +578,6 @@
 			ui.triggerRefresh();
 		} catch (error) {
 			if (loadKey === mutationLoadKey && dataRevision === mutationDataRevision) {
-				posts = previousPosts;
 				publications = previousPublications;
 				errorMessage = problemMessage(error, m.calendar_reschedule_failed());
 			}
@@ -618,6 +594,10 @@
 		return new Date(date.getFullYear(), date.getMonth() + count, 1);
 	}
 
+	function addDays(date: Date, count: number) {
+		return new Date(date.getFullYear(), date.getMonth(), date.getDate() + count, 12);
+	}
+
 	function buildCalendarDays(month: Date, weekStart: number, todayDate: Date) {
 		const first = startOfWeek(startOfMonth(month), weekStart);
 		const todayKey = dateKey(todayDate);
@@ -630,6 +610,20 @@
 				key: dateKey(date),
 				outsideMonth: date.getMonth() !== monthValue,
 				today: dateKey(date) === todayKey
+			};
+		});
+	}
+
+	function buildWeekDays(date: Date, weekStart: number, todayDate: Date) {
+		const first = startOfWeek(date, weekStart);
+		const todayKey = dateKey(todayDate);
+		return Array.from({ length: 7 }, (_, index): CalendarDay => {
+			const value = addDays(first, index);
+			return {
+				date: value,
+				key: dateKey(value),
+				outsideMonth: false,
+				today: dateKey(value) === todayKey
 			};
 		});
 	}
@@ -680,17 +674,6 @@
 		return text.trim().split(/\n+/)[0]?.trim() ?? '';
 	}
 
-	function initialPostText(content: string) {
-		if (!content.startsWith('__openpost_thread__:')) return firstLine(content);
-		try {
-			const data = JSON.parse(content.slice('__openpost_thread__:'.length));
-			const entries = Array.isArray(data) ? data : Array.isArray(data?.p) ? data.p : [];
-			return firstLine(entries[0]?.c ?? '');
-		} catch {
-			return firstLine(content);
-		}
-	}
-
 	function unique(values: string[]) {
 		return Array.from(new Set(values.filter(Boolean)));
 	}
@@ -727,7 +710,7 @@
 
 	function workspaceDotStyle(workspaceId: string) {
 		const hue = workspaceHue(workspaceId);
-		return `background-color: oklch(0.62 0.16 ${hue});`;
+		return `background-color: oklch(0.46 0.16 ${hue});`;
 	}
 
 	function platformLabel(platform: string) {
@@ -750,12 +733,45 @@
 		return formatWorkspaceDate(date, { month: 'long', year: 'numeric' });
 	}
 
+	function formatCalendarTitle() {
+		if (viewMode === 'month') return formatMonth(currentMonth);
+		return `${formatEmptyDate(weekDays[0].date)} – ${formatEmptyDate(weekDays[6].date)}`;
+	}
+
+	function statusFilterLabel() {
+		switch (selectedStatus) {
+			case 'scheduled':
+				return m.calendar_status_scheduled();
+			case 'published':
+				return m.calendar_status_published();
+			default:
+				return m.calendar_status_all();
+		}
+	}
+
 	function formatTime(value: string) {
 		return new Date(value).toLocaleTimeString(getLocaleTag(), {
 			hour: '2-digit',
 			minute: '2-digit',
 			timeZone: viewerTimeZone
 		});
+	}
+
+	function timeParts(value: string) {
+		const parts = new Intl.DateTimeFormat('en-GB', {
+			hour: '2-digit',
+			minute: '2-digit',
+			hourCycle: 'h23',
+			timeZone: viewerTimeZone
+		}).formatToParts(new Date(value));
+		return {
+			hour: Number(parts.find((part) => part.type === 'hour')?.value ?? 0),
+			minute: Number(parts.find((part) => part.type === 'minute')?.value ?? 0)
+		};
+	}
+
+	function itemsForHour(day: CalendarDay, hour: number) {
+		return (itemsByDay.get(day.key) ?? []).filter((item) => timeParts(item.occursAt).hour === hour);
 	}
 
 	function formatAgendaDate(value: Date) {
@@ -792,10 +808,10 @@
 	}
 
 	function itemTone(item: CalendarItem) {
-		if (item.kind === 'publication') {
-			return 'border-violet-500/25 bg-violet-50/70 text-violet-950 hover:bg-violet-100 dark:bg-violet-950/30 dark:text-violet-100 dark:hover:bg-violet-950/45';
+		if (item.status === 'published') {
+			return 'border-emerald-500/20 bg-emerald-50/65 text-emerald-950 hover:bg-emerald-100 dark:bg-emerald-950/25 dark:text-emerald-100 dark:hover:bg-emerald-950/35';
 		}
-		return 'border-sky-500/25 bg-sky-50/80 text-sky-950 hover:bg-sky-100 dark:bg-sky-950/30 dark:text-sky-100 dark:hover:bg-sky-950/45';
+		return 'border-violet-500/25 bg-violet-50/70 text-violet-950 hover:bg-violet-100 dark:bg-violet-950/30 dark:text-violet-100 dark:hover:bg-violet-950/45';
 	}
 </script>
 
@@ -810,20 +826,15 @@
 	<header class="border-b bg-background/95">
 		<div class="px-4 py-4 lg:px-6" style="container-type: inline-size;">
 			<PageHeader
-				title={formatMonth(currentMonth)}
+				title={formatCalendarTitle()}
 				eyebrow={m.calendar_kicker()}
 				icon={CalendarDaysIcon}
 				loading={initialLoading}
 			>
 				{#snippet meta()}
-					<span>{m.calendar_scheduled_summary({ count: monthItems.length })}</span>
+					<span>{m.calendar_scheduled_summary({ count: scheduledCount })}</span>
 					<span class="text-muted-foreground/40">/</span>
-					<span>
-						{m.calendar_post_publication_summary({
-							posts: postCount,
-							publications: publicationCount
-						})}
-					</span>
+					<span>{m.calendar_published_summary({ count: publishedCount })}</span>
 					<span class="text-muted-foreground/40">/</span>
 					<span>{viewerTimeZone}</span>
 				{/snippet}
@@ -837,14 +848,18 @@
 											{...props}
 											variant="ghost"
 											size="icon-sm"
-											aria-label={m.calendar_previous_month()}
+											aria-label={viewMode === 'month'
+												? m.calendar_previous_month()
+												: m.calendar_previous_week()}
 											onclick={() => changeMonth(-1)}
 										>
 											<ChevronLeftIcon class="size-4" />
 										</Button>
 									{/snippet}
 								</Tooltip.Trigger>
-								<Tooltip.Content>{m.calendar_previous_month()}</Tooltip.Content>
+								<Tooltip.Content>
+									{viewMode === 'month' ? m.calendar_previous_month() : m.calendar_previous_week()}
+								</Tooltip.Content>
 							</Tooltip.Root>
 							<Button variant="ghost" size="sm" onclick={goToToday}>{m.calendar_today()}</Button>
 							<Tooltip.Root>
@@ -854,15 +869,40 @@
 											{...props}
 											variant="ghost"
 											size="icon-sm"
-											aria-label={m.calendar_next_month()}
+											aria-label={viewMode === 'month'
+												? m.calendar_next_month()
+												: m.calendar_next_week()}
 											onclick={() => changeMonth(1)}
 										>
 											<ChevronRightIcon class="size-4" />
 										</Button>
 									{/snippet}
 								</Tooltip.Trigger>
-								<Tooltip.Content>{m.calendar_next_month()}</Tooltip.Content>
+								<Tooltip.Content>
+									{viewMode === 'month' ? m.calendar_next_month() : m.calendar_next_week()}
+								</Tooltip.Content>
 							</Tooltip.Root>
+						</div>
+
+						<div class="inline-flex rounded-md border bg-card p-1">
+							<Button
+								variant={viewMode === 'month' ? 'secondary' : 'ghost'}
+								size="sm"
+								class="gap-1.5"
+								onclick={() => changeView('month')}
+							>
+								<CalendarDaysIcon class="size-3.5" />
+								{m.calendar_month_view()}
+							</Button>
+							<Button
+								variant={viewMode === 'week' ? 'secondary' : 'ghost'}
+								size="sm"
+								class="gap-1.5"
+								onclick={() => changeView('week')}
+							>
+								<Rows3Icon class="size-3.5" />
+								{m.calendar_week_view()}
+							</Button>
 						</div>
 
 						<DropdownMenu.Root>
@@ -924,6 +964,39 @@
 								</DropdownMenu.RadioGroup>
 							</DropdownMenu.Content>
 						</DropdownMenu.Root>
+
+						<DropdownMenu.Root>
+							<DropdownMenu.Trigger>
+								{#snippet child({ props })}
+									<Button {...props} variant="outline" class="max-w-44 justify-start">
+										<span class="truncate">{statusFilterLabel()}</span>
+									</Button>
+								{/snippet}
+							</DropdownMenu.Trigger>
+							<DropdownMenu.Content class="w-48" align="end">
+								<DropdownMenu.Label>{m.calendar_status_filter()}</DropdownMenu.Label>
+								<DropdownMenu.RadioGroup bind:value={selectedStatus}>
+									<DropdownMenu.RadioItem value="all">
+										{m.calendar_status_all()}
+									</DropdownMenu.RadioItem>
+									<DropdownMenu.RadioItem value="scheduled">
+										{m.calendar_status_scheduled()}
+									</DropdownMenu.RadioItem>
+									<DropdownMenu.RadioItem value="published">
+										{m.calendar_status_published()}
+									</DropdownMenu.RadioItem>
+								</DropdownMenu.RadioGroup>
+							</DropdownMenu.Content>
+						</DropdownMenu.Root>
+
+						<Button
+							variant="outline"
+							class="gap-1.5"
+							href={resolve('/settings') + '?tab=schedule#posting-schedule'}
+						>
+							<ListIcon class="size-4" />
+							{m.calendar_open_queue()}
+						</Button>
 
 						<Tooltip.Root>
 							<Tooltip.Trigger>
@@ -997,7 +1070,7 @@
 			/>
 		{:else}
 			<section class="space-y-5 xl:hidden" aria-label={m.calendar_month_grid()}>
-				{#if monthItems.length > 0 && selectedEmptyDay}
+				{#if visibleItems.length > 0 && selectedEmptyDay}
 					<div data-testid="calendar-empty-date-create" class="rounded-lg border bg-muted/20 p-3">
 						<div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
 							<div class="min-w-0">
@@ -1060,7 +1133,7 @@
 									onclick={() => openItem(item)}
 								>
 									<div class="w-14 shrink-0 pt-0.5 text-sm font-medium text-muted-foreground">
-										{formatTime(item.scheduledAt)}
+										{formatTime(item.occursAt)}
 									</div>
 									<div class="min-w-0 flex-1">
 										<p class="line-clamp-2 text-sm leading-snug font-medium">{item.title}</p>
@@ -1085,164 +1158,258 @@
 				{/each}
 			</section>
 
-			<section
-				class="month-shell hidden h-full min-h-[720px] min-w-[980px] grid-rows-[auto_minmax(0,1fr)] overflow-hidden rounded-lg border bg-card shadow-sm xl:grid"
-				aria-label={m.calendar_month_grid()}
-			>
-				<div class="grid grid-cols-7 border-b bg-muted/45">
-					{#each weekdayLabels as label (label)}
-						<div class="px-3 py-2 text-xs font-medium tracking-normal text-muted-foreground">
-							{label}
-						</div>
-					{/each}
-				</div>
-				<div class="grid min-h-0 grid-cols-7 grid-rows-6">
-					{#each days as day (day.key)}
-						{@const dayItems = itemsByDay.get(day.key) ?? []}
-						<div
-							role="group"
-							aria-label={formatAgendaDate(day.date)}
-							class={cn(
-								'group/day relative flex min-h-0 flex-col border-r border-b bg-background/70 p-2 transition-colors last:border-r-0',
-								day.outsideMonth && 'bg-muted/25 text-muted-foreground',
-								day.today && 'bg-primary/[0.035]',
-								dropTargetKey === day.key && 'bg-primary/10 ring-2 ring-primary ring-inset'
-							)}
-							ondragover={(event) => onDragOver(event, day)}
-							ondragleave={() => onDragLeave(day)}
-							ondrop={(event) => onDrop(event, day)}
-						>
-							<div class="mb-2 flex items-start justify-between gap-2">
-								<div class="flex items-center gap-2">
-									<span
-										class={cn(
-											'flex size-7 items-center justify-center rounded-md text-sm font-medium',
-											day.today && 'bg-primary text-primary-foreground',
-											day.outsideMonth && !day.today && 'text-muted-foreground'
-										)}
-									>
-										{day.date.getDate()}
-									</span>
-									{#if dayItems.length > 0}
-										<Badge class="bg-muted text-muted-foreground">
-											{m.calendar_day_item_count({ count: dayItems.length })}
-										</Badge>
+			{#if viewMode === 'month'}
+				<section
+					class="month-shell hidden h-full min-h-[720px] min-w-[980px] grid-rows-[auto_minmax(0,1fr)] overflow-hidden rounded-lg border bg-card shadow-sm xl:grid"
+					aria-label={m.calendar_month_grid()}
+				>
+					<div class="grid grid-cols-7 border-b bg-muted/45">
+						{#each weekdayLabels as label (label)}
+							<div class="px-3 py-2 text-xs font-medium tracking-normal text-muted-foreground">
+								{label}
+							</div>
+						{/each}
+					</div>
+					<div class="grid min-h-0 grid-cols-7 grid-rows-6">
+						{#each days as day (day.key)}
+							{@const dayItems = itemsByDay.get(day.key) ?? []}
+							<div
+								role="group"
+								aria-label={formatAgendaDate(day.date)}
+								class={cn(
+									'group/day relative flex min-h-0 flex-col border-r border-b bg-background/70 p-2 transition-colors last:border-r-0',
+									day.outsideMonth && 'bg-muted/25 text-muted-foreground',
+									day.today && 'bg-primary/[0.035]',
+									dropTargetKey === day.key && 'bg-primary/10 ring-2 ring-primary ring-inset'
+								)}
+								ondragover={(event) => onDragOver(event, day)}
+								ondragleave={() => onDragLeave(day)}
+								ondrop={(event) => onDrop(event, day)}
+							>
+								<div class="mb-2 flex items-start justify-between gap-2">
+									<div class="flex items-center gap-2">
+										<span
+											class={cn(
+												'flex size-7 items-center justify-center rounded-md text-sm font-medium',
+												day.today && 'bg-primary text-primary-foreground',
+												day.outsideMonth && !day.today && 'text-muted-foreground'
+											)}
+										>
+											{day.date.getDate()}
+										</span>
+										{#if dayItems.length > 0}
+											<Badge class="bg-muted text-muted-foreground">
+												{m.calendar_day_item_count({ count: dayItems.length })}
+											</Badge>
+										{/if}
+									</div>
+									<div class="flex items-center gap-1">
+										<Tooltip.Root>
+											<Tooltip.Trigger>
+												{#snippet child({ props })}
+													<Button
+														{...props}
+														type="button"
+														variant="outline"
+														size="icon-xs"
+														class="size-7 border-border/70 bg-background/85 opacity-80 shadow-xs group-hover/day:opacity-100 hover:bg-background dark:bg-input/30 dark:hover:bg-input/50"
+														aria-label={`${m.calendar_create_post()} ${day.key}`}
+														disabled={isPastDay(day)}
+														data-calendar-day-action
+														onclick={(event) => {
+															event.stopPropagation();
+															createPostOnDate(day.date);
+														}}
+													>
+														<PlusIcon class="size-3" />
+													</Button>
+												{/snippet}
+											</Tooltip.Trigger>
+											<Tooltip.Content>{m.calendar_create_post()}</Tooltip.Content>
+										</Tooltip.Root>
+									</div>
+								</div>
+
+								<div class="calendar-day-scroll min-h-0 flex-1 space-y-1.5 overflow-y-auto pr-1">
+									{#if dayItems.length === 0}
+										<div class="h-full min-h-24" aria-hidden="true"></div>
+									{:else}
+										{#each dayItems as item (item.key)}
+											<button
+												type="button"
+												draggable={item.movable}
+												data-calendar-item
+												class={cn(
+													'w-full rounded-md border p-2 text-left shadow-xs transition-all hover:-translate-y-0.5 hover:shadow-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
+													itemTone(item),
+													draggingKey === item.key && 'opacity-50',
+													reschedulingKey === item.key && 'pointer-events-none opacity-60'
+												)}
+												aria-label={m.calendar_publication_card({ title: item.title })}
+												ondragstart={(event) => onDragStart(event, item)}
+												ondragend={onDragEnd}
+												onclick={() => openItem(item)}
+											>
+												<div class="flex items-start gap-2">
+													<div
+														class="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-md text-xs font-semibold text-white shadow-xs"
+														style={workspaceDotStyle(item.workspaceId)}
+													>
+														{workspaceInitials(item.workspaceId)}
+													</div>
+													<div class="min-w-0 flex-1">
+														<div
+															class="mb-1 flex items-center gap-1.5 text-xs font-medium text-current/70"
+														>
+															<ClockIcon class="size-3" />
+															<span>{formatTime(item.occursAt)}</span>
+															<span class="truncate">{item.workspaceName}</span>
+														</div>
+														<div class="line-clamp-2 text-sm leading-snug font-semibold">
+															{item.title}
+														</div>
+														{#if item.preview && item.preview !== item.title}
+															<div class="mt-0.5 line-clamp-2 text-xs leading-snug text-current/70">
+																{item.preview}
+															</div>
+														{/if}
+													</div>
+												</div>
+												<div class="mt-2 flex flex-wrap items-center gap-1">
+													<span
+														class="inline-flex items-center gap-1 rounded-sm bg-background/65 px-1.5 py-0.5 text-xs font-medium text-current/75 ring-1 ring-current/10"
+													>
+														{#if item.status === 'published'}
+															<LockIcon class="size-3" />
+															{m.calendar_status_published()}
+														{:else}
+															{m.calendar_status_scheduled()}
+														{/if}
+													</span>
+													{#each item.accounts.slice(0, 3) as account (account.id)}
+														<span
+															class="inline-flex max-w-32 items-center gap-1 rounded-sm bg-background/65 px-1.5 py-0.5 text-xs font-medium text-current/75 ring-1 ring-current/10"
+															title={`${platformLabel(account.platform)} ${account.label}`}
+														>
+															<PlatformIcon platform={account.platform} class="size-3" />
+															<span class="truncate">{account.label}</span>
+														</span>
+													{/each}
+													{#if item.accounts.length > 3}
+														<span
+															class="inline-flex rounded-sm bg-background/65 px-1.5 py-0.5 text-xs font-medium text-current/75 ring-1 ring-current/10"
+														>
+															{m.calendar_more_accounts({ count: item.accounts.length - 3 })}
+														</span>
+													{/if}
+													{#if reschedulingKey === item.key}
+														<Loader2Icon class="ml-auto size-3.5 animate-spin text-current/60" />
+													{/if}
+												</div>
+											</button>
+										{/each}
 									{/if}
 								</div>
-								<div class="flex items-center gap-1">
-									<Tooltip.Root>
-										<Tooltip.Trigger>
-											{#snippet child({ props })}
-												<Button
-													{...props}
-													type="button"
-													variant="outline"
-													size="icon-xs"
-													class="size-7 border-border/70 bg-background/85 opacity-80 shadow-xs group-hover/day:opacity-100 hover:bg-background dark:bg-input/30 dark:hover:bg-input/50"
-													aria-label={`${m.calendar_create_post()} ${day.key}`}
-													disabled={isPastDay(day)}
-													data-calendar-day-action
-													onclick={(event) => {
-														event.stopPropagation();
-														createPostOnDate(day.date);
-													}}
-												>
-													<PlusIcon class="size-3" />
-												</Button>
-											{/snippet}
-										</Tooltip.Trigger>
-										<Tooltip.Content>{m.calendar_create_post()}</Tooltip.Content>
-									</Tooltip.Root>
-								</div>
 							</div>
-
-							<div class="calendar-day-scroll min-h-0 flex-1 space-y-1.5 overflow-y-auto pr-1">
-								{#if dayItems.length === 0}
-									<div class="h-full min-h-24" aria-hidden="true"></div>
-								{:else}
-									{#each dayItems as item (item.key)}
+						{/each}
+					</div>
+				</section>
+			{:else}
+				<section
+					class="hidden h-full min-h-[720px] overflow-auto rounded-lg border bg-card shadow-sm xl:block"
+					aria-label={m.calendar_week_grid()}
+				>
+					<div class="min-w-[1120px]">
+						<div
+							class="sticky top-0 z-30 grid grid-cols-[4.5rem_repeat(7,minmax(0,1fr))] border-b bg-background/95 backdrop-blur"
+						>
+							<div class="border-r p-2 text-xs text-muted-foreground">{viewerTimeZone}</div>
+							{#each weekDays as day (day.key)}
+								<div
+									class={cn(
+										'border-r px-2 py-2 text-center last:border-r-0',
+										day.today && 'bg-primary/[0.045]'
+									)}
+								>
+									<div class="text-xs font-medium text-muted-foreground">
+										{formatWorkspaceDate(day.date, { weekday: 'short' })}
+									</div>
+									<div
+										class="mt-0.5 flex items-center justify-center gap-1.5 text-sm font-semibold"
+									>
+										<span>{day.date.getDate()}</span>
+										{#if (itemsByDay.get(day.key)?.length ?? 0) > 0}
+											<Badge class="bg-muted text-muted-foreground">
+												{m.calendar_day_item_count({
+													count: itemsByDay.get(day.key)?.length ?? 0
+												})}
+											</Badge>
+										{/if}
+									</div>
+								</div>
+							{/each}
+						</div>
+						{#each weekHours as hour (hour)}
+							<div class="grid grid-cols-[4.5rem_repeat(7,minmax(0,1fr))]">
+								<div
+									class="border-r border-b px-2 pt-1 text-right text-xs text-muted-foreground tabular-nums"
+								>
+									{String(hour).padStart(2, '0')}:00
+								</div>
+								{#each weekDays as day (day.key)}
+									<div
+										role="group"
+										aria-label={`${formatAgendaDate(day.date)} ${String(hour).padStart(2, '0')}:00`}
+										class={cn(
+											'week-hour relative h-20 border-r border-b last:border-r-0',
+											day.today && 'bg-primary/[0.025]',
+											dropTargetKey.startsWith(`${day.key}|`) &&
+												Number(dropTargetKey.slice(11, 13)) === hour &&
+												'bg-primary/10'
+										)}
+										ondragover={(event) => onWeekDragOver(event, day, hour)}
+										ondragleave={() => (dropTargetKey = '')}
+										ondrop={(event) => onWeekDrop(event, day, hour)}
+									>
 										<button
 											type="button"
-											draggable={true}
-											data-calendar-item
-											class={cn(
-												'w-full rounded-md border p-2 text-left shadow-xs transition-all hover:-translate-y-0.5 hover:shadow-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
-												itemTone(item),
-												draggingKey === item.key && 'opacity-50',
-												reschedulingKey === item.key && 'pointer-events-none opacity-60'
-											)}
-											aria-label={item.kind === 'post'
-												? m.calendar_open_post({ title: item.title })
-												: m.calendar_publication_card({ title: item.title })}
-											ondragstart={(event) => onDragStart(event, item)}
-											ondragend={onDragEnd}
-											onclick={() => openItem(item)}
-										>
-											<div class="flex items-start gap-2">
-												<div
-													class="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-md text-[10px] font-semibold text-white shadow-xs"
-													style={workspaceDotStyle(item.workspaceId)}
-												>
-													{workspaceInitials(item.workspaceId)}
-												</div>
-												<div class="min-w-0 flex-1">
-													<div
-														class="mb-1 flex items-center gap-1.5 text-[11px] font-medium text-current/70"
-													>
-														<ClockIcon class="size-3" />
-														<span>{formatTime(item.scheduledAt)}</span>
-														<span class="truncate">{item.workspaceName}</span>
-													</div>
-													<div class="line-clamp-2 text-sm leading-snug font-semibold">
-														{item.title}
-													</div>
-													{#if item.preview && item.preview !== item.title}
-														<div class="mt-0.5 line-clamp-2 text-xs leading-snug text-current/70">
-															{item.preview}
-														</div>
-													{/if}
-												</div>
-											</div>
-											<div class="mt-2 flex flex-wrap items-center gap-1">
-												<span
-													class="inline-flex items-center gap-1 rounded-sm bg-background/65 px-1.5 py-0.5 text-[11px] font-medium text-current/75 ring-1 ring-current/10"
-												>
-													{#if item.kind === 'publication'}
-														{m.calendar_publication_label()}
-													{:else}
-														{m.calendar_post_label()}
-													{/if}
+											class="absolute inset-0 w-full cursor-crosshair focus-visible:z-10 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none focus-visible:ring-inset disabled:cursor-not-allowed"
+											disabled={isPastDay(day)}
+											aria-label={`${m.calendar_create_post()} ${day.key} ${String(hour).padStart(2, '0')}:00`}
+											onclick={(event) => createPostOnDate(day.date, snappedTime(event, hour))}
+										></button>
+										{#each itemsForHour(day, hour) as item (item.key)}
+											{@const minute = timeParts(item.occursAt).minute}
+											<button
+												type="button"
+												draggable={item.movable}
+												class={cn(
+													'absolute right-1 left-1 z-10 min-h-9 rounded-md border px-2 py-1 text-left text-xs shadow-xs transition-shadow hover:shadow-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
+													itemTone(item),
+													draggingKey === item.key && 'opacity-50',
+													reschedulingKey === item.key && 'pointer-events-none opacity-60'
+												)}
+												style={`top: calc(${(minute / 60) * 100}% + 0.125rem);`}
+												aria-label={m.calendar_publication_card({ title: item.title })}
+												ondragstart={(event) => onDragStart(event, item)}
+												ondragend={onDragEnd}
+												onclick={() => openItem(item)}
+											>
+												<span class="flex items-center gap-1 font-medium">
+													{#if !item.movable}<LockIcon class="size-3 shrink-0" />{/if}
+													<span class="truncate">{formatTime(item.occursAt)} · {item.title}</span>
 												</span>
-												{#each item.accounts.slice(0, 3) as account (account.id)}
-													<span
-														class="inline-flex max-w-32 items-center gap-1 rounded-sm bg-background/65 px-1.5 py-0.5 text-[11px] font-medium text-current/75 ring-1 ring-current/10"
-														title={`${platformLabel(account.platform)} ${account.label}`}
-													>
-														<PlatformIcon platform={account.platform} class="size-3" />
-														<span class="truncate">{account.label}</span>
-													</span>
-												{/each}
-												{#if item.accounts.length > 3}
-													<span
-														class="inline-flex rounded-sm bg-background/65 px-1.5 py-0.5 text-[11px] font-medium text-current/75 ring-1 ring-current/10"
-													>
-														{m.calendar_more_accounts({ count: item.accounts.length - 3 })}
-													</span>
-												{/if}
-												{#if reschedulingKey === item.key}
-													<Loader2Icon class="ml-auto size-3.5 animate-spin text-current/60" />
-												{/if}
-											</div>
-										</button>
-									{/each}
-								{/if}
+											</button>
+										{/each}
+									</div>
+								{/each}
 							</div>
-						</div>
-					{/each}
-				</div>
-			</section>
+						{/each}
+					</div>
+				</section>
+			{/if}
 
-			{#if monthItems.length === 0}
+			{#if visibleItems.length === 0}
 				<div class="mt-5 xl:hidden">
 					<EmptyState
 						icon={CalendarDaysIcon}
@@ -1266,5 +1433,20 @@
 	.calendar-day-scroll {
 		scrollbar-width: thin;
 		scrollbar-color: color-mix(in oklch, var(--muted-foreground) 30%, transparent) transparent;
+	}
+
+	.week-hour {
+		background-image: linear-gradient(
+			to bottom,
+			transparent calc(25% - 0.5px),
+			color-mix(in oklch, var(--border) 55%, transparent) 25%,
+			transparent calc(25% + 0.5px),
+			transparent calc(50% - 0.5px),
+			color-mix(in oklch, var(--border) 55%, transparent) 50%,
+			transparent calc(50% + 0.5px),
+			transparent calc(75% - 0.5px),
+			color-mix(in oklch, var(--border) 55%, transparent) 75%,
+			transparent calc(75% + 0.5px)
+		);
 	}
 </style>

@@ -783,8 +783,8 @@ func (h *StudioHandler) updateBrandKit(ctx context.Context, input *UpdateStudioB
 	}
 	for _, font := range input.Body.Fonts {
 		media := mediaByID[font.MediaID]
-		if !isWOFF2Media(media) {
-			return nil, huma.Error400BadRequest("brand fonts must be WOFF2 files")
+		if !isStudioBrandFontMedia(media) {
+			return nil, huma.Error400BadRequest("brand fonts must be WOFF2, TTF, or OTF files")
 		}
 	}
 	colorsJSON, _ := json.Marshal(input.Body.Colors)
@@ -1354,9 +1354,18 @@ func studioBrandFontCSSFamily(id string) string {
 	return "OpenPostBrand_" + strings.ReplaceAll(id, "-", "")
 }
 
-func isWOFF2Media(media models.MediaAttachment) bool {
-	return strings.EqualFold(media.MimeType, "font/woff2") ||
-		strings.EqualFold(filepath.Ext(media.OriginalFilename), ".woff2")
+func isStudioBrandFontMedia(media models.MediaAttachment) bool {
+	switch strings.ToLower(filepath.Ext(media.OriginalFilename)) {
+	case ".woff2", ".ttf", ".otf":
+		return true
+	}
+	switch strings.ToLower(media.MimeType) {
+	case "font/woff2", "font/ttf", "font/otf", "font/sfnt",
+		"application/x-font-ttf", "application/x-font-opentype", "application/font-sfnt":
+		return true
+	default:
+		return false
+	}
 }
 
 func collectionResponse(collection models.MediaCollection, itemCount int) MediaCollectionResponse {

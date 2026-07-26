@@ -2,7 +2,8 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
-	import { client, type Post, type SocialAccount } from '$lib/api/client';
+	import { client, type SocialAccount } from '$lib/api/client';
+	import type { components } from '$lib/api/types';
 	import { workspaceCtx } from '$lib/stores/workspace.svelte';
 	import { Button } from '$lib/components/ui/button';
 	import { Tabs, TabsList, TabsTrigger, TabsContent } from '$lib/components/ui/tabs';
@@ -22,7 +23,22 @@
 	import CopyIcon from 'lucide-svelte/icons/copy';
 	import { m } from '$lib/paraglide/messages';
 	import { getLocaleTag } from '$lib/i18n';
-	import { getDraftPresentation } from '$lib/components/compose/draft-utils';
+
+	type Publication = components['schemas']['PublicationResponse'];
+	type ActivityDestination = NonNullable<Publication['renditions']>[number];
+	type ActivityItem = {
+		id: string;
+		publication_id: string;
+		href: string;
+		content: string;
+		status: string;
+		scheduled_at?: string;
+		actual_run_at?: string;
+		created_at: string;
+		isThread: boolean;
+		postCount: number;
+		destinations: ActivityDestination[];
+	};
 
 	type JobLog = {
 		id: string;
@@ -33,7 +49,7 @@
 		last_error?: string;
 	};
 
-	let posts = $state.raw<Post[]>([]);
+	let posts = $state.raw<ActivityItem[]>([]);
 	let failedJobs = $state.raw<JobLog[]>([]);
 	let accounts = $state.raw<SocialAccount[]>([]);
 	let copiedReportPostID = $state('');
@@ -46,19 +62,19 @@
 	let dataRequestSequence = 0;
 	let activeTab = $state(page.url.searchParams.get('tab') === 'drafts' ? 'drafts' : 'scheduled');
 
-	function isThreadChild(post: Post) {
-		return Boolean(post.parent_post_id) || (post.thread_sequence ?? 0) > 0;
-	}
-
 	const scheduledPosts = $derived(
 		posts
-			.filter((post) => post.status === 'scheduled' && !isThreadChild(post))
+			.filter((post) => post.status === 'scheduled')
 			.toSorted((a, b) => timestamp(a.scheduled_at) - timestamp(b.scheduled_at))
 	);
 	const publishedPosts = $derived(
 		posts
-			.filter((post) => post.status === 'published' && !isThreadChild(post))
-			.toSorted((a, b) => timestamp(b.created_at) - timestamp(a.created_at))
+			.filter((post) => post.status === 'published')
+			.toSorted(
+				(a, b) =>
+					timestamp(b.actual_run_at || b.scheduled_at || b.created_at) -
+					timestamp(a.actual_run_at || a.scheduled_at || a.created_at)
+			)
 	);
 	const failedPosts = $derived(
 		posts
@@ -106,8 +122,8 @@
 			}
 
 			const [postsResponse, jobsResponse, accountsResponse] = await Promise.all([
-				client.GET('/posts', {
-					params: { query: { workspace_id: workspaceId, limit: 200 } }
+				client.GET('/publications', {
+					params: { query: { workspace_id: workspaceId, limit: 200, offset: 0 } }
 				}),
 				client.GET('/jobs', {
 					params: {
@@ -126,7 +142,7 @@
 			if (postsResponse.error || !postsResponse.data) {
 				throw new Error(m.activity_failed_posts());
 			}
-			posts = postsResponse.data;
+			posts = postsResponse.data.map(activityItem);
 			failedJobs = jobsResponse.error
 				? []
 				: (jobsResponse.data ?? []).filter((job) => job.status === 'failed');
@@ -173,12 +189,35 @@
 			: m.activity_thread_post_many({ count });
 	}
 
-	function postText(post: Post) {
-		if (post.status !== 'draft') return post.content || m.activity_untitled_post();
-		const presentation = getDraftPresentation(post);
-		return presentation.isThread
-			? `${presentation.title} · ${threadPostCount(presentation.postCount)}`
-			: presentation.title;
+	function activityItem(publication: Publication): ActivityItem {
+		const segments = publication.segments ?? [];
+		const content =
+			publication.source_text.trim() ||
+			segments.find((segment) => segment.body.trim())?.body.trim() ||
+			publication.title.trim() ||
+			m.activity_untitled_post();
+		const isThread = publication.intent === 'thread' || segments.length > 1;
+		return {
+			id: publication.id,
+			publication_id: publication.id,
+			href:
+				(publication.intent === 'post' || publication.intent === 'thread') &&
+				publication.text_post_id
+					? `/posts/${encodeURIComponent(publication.text_post_id)}`
+					: `/publications/${encodeURIComponent(publication.id)}`,
+			content,
+			status: publication.status,
+			scheduled_at: publication.scheduled_at,
+			actual_run_at: publication.actual_run_at,
+			created_at: publication.created_at,
+			isThread,
+			postCount: Math.max(1, segments.length),
+			destinations: publication.renditions ?? []
+		};
+	}
+
+	function postText(post: ActivityItem) {
+		return post.isThread ? `${post.content} · ${threadPostCount(post.postCount)}` : post.content;
 	}
 
 	function truncate(value: string, max = 180) {
@@ -194,7 +233,7 @@
 		}
 	}
 
-	function statusLabel(post: Post) {
+	function statusLabel(post: ActivityItem) {
 		switch (post.status) {
 			case 'scheduled':
 				return m.activity_status_scheduled();
@@ -207,7 +246,7 @@
 		}
 	}
 
-	function statusIcon(post: Post) {
+	function statusIcon(post: ActivityItem) {
 		switch (post.status) {
 			case 'scheduled':
 				return ClockIcon;
@@ -220,7 +259,7 @@
 		}
 	}
 
-	function statusClass(post: Post) {
+	function statusClass(post: ActivityItem) {
 		switch (post.status) {
 			case 'scheduled':
 				return 'text-amber-700 dark:text-amber-300';
@@ -233,11 +272,11 @@
 		}
 	}
 
-	function destinationAccount(destination: NonNullable<Post['destinations']>[number]) {
+	function destinationAccount(destination: ActivityDestination) {
 		return accounts.find((account) => account.id === destination.social_account_id);
 	}
 
-	function destinationName(destination: NonNullable<Post['destinations']>[number]) {
+	function destinationName(destination: ActivityDestination) {
 		const account = destinationAccount(destination);
 		return (
 			account?.slug ||
@@ -271,7 +310,7 @@
 		}
 	}
 
-	function destinationSummary(post: Post) {
+	function destinationSummary(post: ActivityItem) {
 		const destinations = post.destinations ?? [];
 		return m.activity_delivery_summary({
 			published: destinations.filter((destination) =>
@@ -281,7 +320,7 @@
 		});
 	}
 
-	function buildDeliveryReport(post: Post) {
+	function buildDeliveryReport(post: ActivityItem) {
 		const lines = [
 			m.activity_report_heading(),
 			`${m.activity_report_post()}: ${post.id}`,
@@ -301,7 +340,7 @@
 		return lines.join('\n');
 	}
 
-	async function copyDeliveryReport(post: Post) {
+	async function copyDeliveryReport(post: ActivityItem) {
 		try {
 			await navigator.clipboard.writeText(buildDeliveryReport(post));
 			copiedReportPostID = post.id;
@@ -313,7 +352,7 @@
 		}
 	}
 
-	function destinationActionLabel(destination: NonNullable<Post['destinations']>[number]) {
+	function destinationActionLabel(destination: ActivityDestination) {
 		switch (destination.error_action) {
 			case 'retry':
 				return m.activity_retry_destination();
@@ -328,10 +367,7 @@
 		}
 	}
 
-	async function runDestinationAction(
-		post: Post,
-		destination: NonNullable<Post['destinations']>[number]
-	) {
+	async function runDestinationAction(post: ActivityItem, destination: ActivityDestination) {
 		if (
 			destination.error_action === 'retry' &&
 			destination.error_retryable &&
@@ -373,11 +409,11 @@
 			await goto(resolve('/settings') + '?tab=billing#billing');
 			return;
 		}
-		await goto(resolve('/posts/[id]', { id: post.id }));
+		await goto(resolve(post.href as '/'));
 	}
 </script>
 
-{#snippet postList(items: Post[], emptyTitle: string, emptyDescription: string)}
+{#snippet postList(items: ActivityItem[], emptyTitle: string, emptyDescription: string)}
 	{#if items.length === 0}
 		<EmptyState
 			icon={FileTextIcon}
@@ -397,7 +433,7 @@
 						<div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
 							<span class={['font-medium', statusClass(post)]}>{statusLabel(post)}</span>
 							<span class="text-muted-foreground">
-								{formatDateTime(post.scheduled_at || post.created_at)}
+								{formatDateTime(post.actual_run_at || post.scheduled_at || post.created_at)}
 							</span>
 						</div>
 						<p class="mt-1.5 max-w-[72ch] text-sm leading-6 text-foreground/92">
@@ -424,7 +460,7 @@
 								>
 									<div>
 										<p class="text-xs font-medium">{m.activity_delivery_details()}</p>
-										<p class="text-[0.6875rem] text-muted-foreground">{destinationSummary(post)}</p>
+										<p class="text-xs text-muted-foreground">{destinationSummary(post)}</p>
 									</div>
 									<Button
 										variant="ghost"
@@ -483,7 +519,7 @@
 						variant="ghost"
 						size="sm"
 						class="min-h-10 shrink-0"
-						onclick={() => goto(resolve('/posts/[id]', { id: post.id }))}
+						onclick={() => goto(resolve(post.href as '/'))}
 						aria-label={m.activity_edit_post({ title: truncate(postText(post), 40) })}
 					>
 						<PencilIcon class="size-4 sm:mr-1.5" />

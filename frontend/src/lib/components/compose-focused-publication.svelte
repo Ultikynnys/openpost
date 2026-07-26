@@ -122,6 +122,7 @@
 		mode: ComposerModeKey;
 		initialPublication?: Publication | null;
 		initialScheduleDate?: string | null;
+		initialScheduleTime?: string | null;
 		initialWorkspaceId?: string | null;
 		onSuccess?: () => void;
 		onCancel?: () => void;
@@ -133,6 +134,7 @@
 		mode,
 		initialPublication = null,
 		initialScheduleDate = null,
+		initialScheduleTime = null,
 		initialWorkspaceId = null,
 		onSuccess,
 		onCancel,
@@ -1312,6 +1314,9 @@
 			return;
 		}
 		selectedDate = requestedDate;
+		if (initialScheduleTime && /^([01]\d|2[0-3]):[0-5]\d$/.test(initialScheduleTime)) {
+			selectedTime = initialScheduleTime;
+		}
 	}
 
 	async function fillNextSlot(showComposerError = false): Promise<boolean> {

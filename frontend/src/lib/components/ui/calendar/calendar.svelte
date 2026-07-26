@@ -21,6 +21,7 @@
 		monthFormat: monthFormatProp,
 		yearFormat = 'numeric',
 		day,
+		captionAction,
 		disableDaysOutsideMonth = false,
 		...restProps
 	}: WithoutChildrenOrChild<CalendarPrimitive.RootProps> & {
@@ -31,6 +32,7 @@
 		monthFormat?: CalendarPrimitive.MonthSelectProps['monthFormat'];
 		yearFormat?: CalendarPrimitive.YearSelectProps['yearFormat'];
 		day?: Snippet<[{ day: DateValue; outsideMonth: boolean }]>;
+		captionAction?: Snippet;
 	} = $props();
 
 	const monthFormat = $derived.by(() => {
@@ -80,6 +82,9 @@ get along, so we shut typescript up by casting `value` to `never`.
 							{locale}
 							{monthIndex}
 						/>
+						{#if captionAction && monthIndex === 0}
+							{@render captionAction()}
+						{/if}
 					</Calendar.Header>
 					<Calendar.Grid>
 						<Calendar.GridHead>

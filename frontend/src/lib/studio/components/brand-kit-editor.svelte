@@ -5,7 +5,9 @@
 	import { uploadMediaFile } from '$lib/media-upload-client';
 	import { getAuthenticatedMediaURL } from '$lib/media-url';
 	import { saveStudioBrandKit } from '../api';
+	import { loadStudioBrandFonts } from '../fonts';
 	import StudioColorPicker from './studio-color-picker.svelte';
+	import StudioFontPicker from './studio-font-picker.svelte';
 	import type {
 		StudioBrandAsset,
 		StudioBrandColor,
@@ -61,12 +63,17 @@
 			id: color.id || crypto.randomUUID()
 		}));
 		backgrounds = kit.backgrounds.map((value) => ({ id: crypto.randomUUID(), value }));
+		fonts = structuredClone($state.snapshot(kit.fonts));
 		textStyles = structuredClone($state.snapshot(kit.text_styles)).map((style) => ({
 			...style,
-			id: style.id || crypto.randomUUID()
+			id: style.id || crypto.randomUUID(),
+			font_family:
+				fonts.find((font) => font.media_id === style.font_asset_id)?.css_family || style.font_family
 		}));
 		assets = structuredClone($state.snapshot(kit.assets));
-		fonts = structuredClone($state.snapshot(kit.fonts));
+		void loadStudioBrandFonts(kit).catch(() => {
+			// A failed preview does not prevent the user from replacing or removing the font.
+		});
 	}
 
 	function updateColor(index: number, field: 'name' | 'value', value: string) {
@@ -84,10 +91,32 @@
 	function updateTextStyle(
 		index: number,
 		field: keyof StudioBrandTextStyle,
-		value: string | number
+		value: string | number | undefined
 	) {
 		textStyles = textStyles.map((style, itemIndex) =>
 			itemIndex === index ? { ...style, [field]: value } : style
+		);
+	}
+
+	function updateTextStyleFont(
+		index: number,
+		font: {
+			family: string;
+			assetID?: string;
+			weight?: number;
+			style?: 'normal' | 'italic';
+		}
+	) {
+		textStyles = textStyles.map((textStyle, itemIndex) =>
+			itemIndex === index
+				? {
+						...textStyle,
+						font_family: font.family,
+						font_asset_id: font.assetID,
+						font_weight: font.weight ?? textStyle.font_weight,
+						font_style: font.style ?? textStyle.font_style
+					}
+				: textStyle
 		);
 	}
 
@@ -97,7 +126,7 @@
 			{
 				id: crypto.randomUUID(),
 				name: m.brand_text_style_default({ number: textStyles.length + 1 }),
-				font_family: fonts[0]?.family || 'Geist Variable',
+				font_family: fonts[0]?.css_family || fonts[0]?.family || 'Geist Variable',
 				font_asset_id: fonts[0]?.media_id,
 				font_weight: 700,
 				font_style: 'normal',
@@ -107,6 +136,21 @@
 				letter_spacing: 0
 			}
 		];
+	}
+
+	function brandFontFileMetadata(filename: string): { mimeType: string; format: string } {
+		switch (filename.toLowerCase().split('.').pop()) {
+			case 'ttf':
+				return { mimeType: 'font/ttf', format: 'truetype' };
+			case 'otf':
+				return { mimeType: 'font/otf', format: 'opentype' };
+			default:
+				return { mimeType: 'font/woff2', format: 'woff2' };
+		}
+	}
+
+	function brandFontCSSFamily(mediaID: string): string {
+		return `OpenPostBrand_${mediaID.replaceAll('-', '')}`;
 	}
 
 	async function uploadBrandAsset(file: File | undefined) {
@@ -150,25 +194,45 @@
 		error = '';
 		let objectURL = '';
 		try {
+			const fileMetadata = brandFontFileMetadata(file.name);
 			objectURL = URL.createObjectURL(file);
 			const previewFamily = `OpenPostFontCheck-${crypto.randomUUID()}`;
-			const face = new FontFace(previewFamily, `url("${objectURL}") format("woff2")`, {
-				weight: String(fontWeight),
-				style: fontStyle
-			});
+			const face = new FontFace(
+				previewFamily,
+				`url("${objectURL}") format("${fileMetadata.format}")`,
+				{
+					weight: String(fontWeight),
+					style: fontStyle
+				}
+			);
 			await face.load();
 			const uploaded = await uploadMediaFile({
 				workspaceId: kit.workspace_id,
-				file: new File([file], file.name, { type: 'font/woff2' }),
+				file: new File([file], file.name, {
+					type: fileMetadata.mimeType,
+					lastModified: file.lastModified
+				}),
 				source: 'upload',
 				assetKind: 'brand_font'
 			});
+			const cssFamily = brandFontCSSFamily(uploaded.id);
+			const uploadedFace = new FontFace(
+				cssFamily,
+				`url("${objectURL}") format("${fileMetadata.format}")`,
+				{
+					weight: String(fontWeight),
+					style: fontStyle
+				}
+			);
+			await uploadedFace.load();
+			document.fonts.add(uploadedFace);
 			fonts = [
 				...fonts,
 				{
 					id: crypto.randomUUID(),
 					media_id: uploaded.id,
 					family: fontFamily.trim(),
+					css_family: cssFamily,
 					weight: fontWeight,
 					style: fontStyle,
 					license_acknowledged: true
@@ -337,47 +401,51 @@
 					<p class="mt-1 text-sm text-muted-foreground">{m.brand_assets_description()}</p>
 				</div>
 			</div>
-			<div class="grid grid-cols-2 gap-3 sm:grid-cols-3">
-				{#each assets as asset, index (asset.id)}
-					<div class="min-w-0 overflow-hidden rounded-xl border">
-						<div class="flex aspect-square items-center justify-center bg-muted/30 p-3">
-							<img
-								src={getAuthenticatedMediaURL(`/media/${asset.media_id}/thumb/md`)}
-								alt={asset.name || asset.role}
-								class="max-h-full max-w-full object-contain"
-							/>
-						</div>
-						<div class="space-y-2 border-t p-2">
-							<Input
-								class="min-h-11"
-								value={asset.name}
-								placeholder={m.brand_asset_name()}
-								aria-label={m.brand_asset_name()}
-								oninput={(event) =>
-									(assets = assets.map((item, itemIndex) =>
-										itemIndex === index ? { ...item, name: event.currentTarget.value } : item
-									))}
-							/>
-							<div class="flex gap-1">
-								<select
-									class="h-11 min-w-0 flex-1 rounded-md border border-input bg-background px-2 text-xs"
-									value={asset.role}
-									aria-label={m.brand_asset_role()}
-									onchange={(event) =>
-										(assets = assets.map((item, itemIndex) =>
-											itemIndex === index
-												? {
-														...item,
-														role: event.currentTarget.value as StudioBrandAsset['role']
-													}
-												: item
-										))}
+			<div class="space-y-3">
+				{#if assets.length > 0}
+					<div class="divide-y rounded-xl border">
+						{#each assets as asset, index (asset.id)}
+							<div class="grid grid-cols-[4.5rem_minmax(0,1fr)_2.75rem] items-start gap-3 p-3">
+								<div
+									class="flex aspect-square items-center justify-center overflow-hidden rounded-lg bg-muted/30 p-2"
 								>
-									<option value="primary_logo">{m.brand_primary_logo()}</option>
-									<option value="secondary_logo">{m.brand_secondary_logo()}</option>
-									<option value="mark">{m.brand_mark()}</option>
-									<option value="watermark">{m.brand_watermark()}</option>
-								</select>
+									<img
+										src={getAuthenticatedMediaURL(`/media/${asset.media_id}/thumb/md`)}
+										alt={asset.name || asset.role}
+										class="max-h-full max-w-full object-contain"
+									/>
+								</div>
+								<div class="grid min-w-0 gap-2">
+									<Input
+										class="min-h-10"
+										value={asset.name}
+										placeholder={m.brand_asset_name()}
+										aria-label={m.brand_asset_name()}
+										oninput={(event) =>
+											(assets = assets.map((item, itemIndex) =>
+												itemIndex === index ? { ...item, name: event.currentTarget.value } : item
+											))}
+									/>
+									<select
+										class="h-10 min-w-0 rounded-md border border-input bg-background px-2 text-sm"
+										value={asset.role}
+										aria-label={m.brand_asset_role()}
+										onchange={(event) =>
+											(assets = assets.map((item, itemIndex) =>
+												itemIndex === index
+													? {
+															...item,
+															role: event.currentTarget.value as StudioBrandAsset['role']
+														}
+													: item
+											))}
+									>
+										<option value="primary_logo">{m.brand_primary_logo()}</option>
+										<option value="secondary_logo">{m.brand_secondary_logo()}</option>
+										<option value="mark">{m.brand_mark()}</option>
+										<option value="watermark">{m.brand_watermark()}</option>
+									</select>
+								</div>
 								<Button
 									variant="ghost"
 									size="icon"
@@ -388,16 +456,16 @@
 									<TrashIcon />
 								</Button>
 							</div>
-						</div>
+						{/each}
 					</div>
-				{/each}
+				{/if}
 				<label
-					class="flex aspect-square min-h-32 cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed p-4 text-center text-sm font-medium hover:bg-muted/40"
+					class="flex min-h-16 cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed px-4 text-center text-sm font-medium transition-colors focus-within:ring-2 focus-within:ring-ring hover:bg-muted/40"
 				>
 					{#if uploadingAsset}
-						<LoaderIcon class="mb-2 animate-spin" />
+						<LoaderIcon class="animate-spin" />
 					{:else}
-						<UploadIcon class="mb-2" />
+						<UploadIcon />
 					{/if}
 					{m.brand_upload_asset()}
 					<input
@@ -493,11 +561,11 @@
 					{:else}
 						<UploadIcon class="mr-2" />
 					{/if}
-					{m.brand_upload_woff2()}
+					{m.brand_upload_font()}
 					<input
 						type="file"
 						class="sr-only"
-						accept=".woff2,font/woff2"
+						accept=".woff2,.ttf,.otf,font/woff2,font/ttf,font/otf"
 						disabled={uploadingFont}
 						onchange={(event) => uploadBrandFont(event.currentTarget.files?.[0])}
 					/>
@@ -507,12 +575,12 @@
 	</section>
 
 	<section class="space-y-4 border-t pt-8">
-		<div class="flex items-start justify-between gap-3">
+		<div class="flex flex-col items-start justify-between gap-3 sm:flex-row">
 			<div>
 				<h2 class="font-semibold">{m.studio_text_styles()}</h2>
 				<p class="mt-1 text-sm text-muted-foreground">{m.brand_styles_description()}</p>
 			</div>
-			<Button variant="outline" size="sm" class="min-h-11" onclick={addTextStyle}
+			<Button variant="outline" size="sm" class="min-h-11 w-full sm:w-auto" onclick={addTextStyle}
 				><PlusIcon /> {m.brand_add_style()}</Button
 			>
 		</div>
@@ -522,67 +590,88 @@
 					<p class="text-xs font-medium text-muted-foreground">{style.name}</p>
 					<p
 						class="mt-2 line-clamp-1"
-						style:font-family={style.font_family}
+						style:font-family={fonts.find((font) => font.media_id === style.font_asset_id)
+							?.css_family || style.font_family}
 						style:font-weight={style.font_weight}
+						style:font-style={style.font_style}
 						style:font-size={`${Math.min(28, Math.max(18, style.font_size / 2.5))}px`}
 						style:color={style.color}
 					>
 						{m.brand_style_preview()}
 					</p>
 				</summary>
-				<div class="grid gap-3 border-t p-3 sm:grid-cols-2 lg:grid-cols-5">
-					<label class="grid gap-1 text-xs font-medium">
-						<span>{m.brand_style_name()}</span>
-						<Input
-							class="min-h-11"
-							value={style.name}
-							oninput={(event) => updateTextStyle(index, 'name', event.currentTarget.value)}
-						/>
-					</label>
-					<label class="grid gap-1 text-xs font-medium">
-						<span>{m.studio_font_family()}</span>
-						<Input
-							class="min-h-11"
-							value={style.font_family}
-							oninput={(event) => updateTextStyle(index, 'font_family', event.currentTarget.value)}
-						/>
-					</label>
-					<label class="grid gap-1 text-xs font-medium">
-						<span>{m.brand_font_weight()}</span>
-						<Input
-							class="min-h-11"
-							type="number"
-							min="100"
-							max="900"
-							step="100"
-							value={style.font_weight}
-							oninput={(event) =>
-								updateTextStyle(index, 'font_weight', event.currentTarget.valueAsNumber)}
-						/>
-					</label>
-					<label class="grid gap-1 text-xs font-medium">
-						<span>{m.brand_font_size()}</span>
-						<Input
-							class="min-h-11"
-							type="number"
-							min="6"
-							max="512"
-							value={style.font_size}
-							oninput={(event) =>
-								updateTextStyle(index, 'font_size', event.currentTarget.valueAsNumber)}
-						/>
-					</label>
-					<label class="grid gap-1 text-xs font-medium">
-						<span>{m.brand_color_value()}</span>
-						<Input
-							class="min-h-11"
-							value={style.color}
-							oninput={(event) => updateTextStyle(index, 'color', event.currentTarget.value)}
-						/>
-					</label>
+				<div class="space-y-4 border-t p-4">
+					<div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+						<label class="grid gap-1 text-xs font-medium">
+							<span>{m.brand_style_name()}</span>
+							<Input
+								class="min-h-11"
+								value={style.name}
+								oninput={(event) => updateTextStyle(index, 'name', event.currentTarget.value)}
+							/>
+						</label>
+						<label class="grid gap-1 text-xs font-medium lg:col-span-2">
+							<span>{m.studio_font_family()}</span>
+							<div class="[&>button]:min-h-11">
+								<StudioFontPicker
+									value={style.font_family}
+									brandFonts={fonts}
+									onChange={(font) => updateTextStyleFont(index, font)}
+								/>
+							</div>
+						</label>
+						<label class="grid gap-1 text-xs font-medium">
+							<span>{m.brand_font_weight()}</span>
+							<select
+								class="h-11 rounded-md border border-input bg-background px-2 text-sm"
+								value={style.font_weight}
+								onchange={(event) =>
+									updateTextStyle(index, 'font_weight', Number(event.currentTarget.value))}
+							>
+								{#each [100, 200, 300, 400, 500, 600, 700, 800, 900] as weight (weight)}
+									<option value={weight}>{weight}</option>
+								{/each}
+							</select>
+						</label>
+						<label class="grid gap-1 text-xs font-medium">
+							<span>{m.brand_font_style()}</span>
+							<select
+								class="h-11 rounded-md border border-input bg-background px-2 text-sm"
+								value={style.font_style}
+								onchange={(event) =>
+									updateTextStyle(index, 'font_style', event.currentTarget.value)}
+							>
+								<option value="normal">{m.studio_normal()}</option>
+								<option value="italic">{m.studio_italic()}</option>
+							</select>
+						</label>
+						<label class="grid gap-1 text-xs font-medium">
+							<span>{m.brand_font_size()}</span>
+							<Input
+								class="min-h-11"
+								type="number"
+								min="6"
+								max="512"
+								value={style.font_size}
+								oninput={(event) =>
+									updateTextStyle(index, 'font_size', event.currentTarget.valueAsNumber)}
+							/>
+						</label>
+						<label class="grid gap-1 text-xs font-medium sm:col-span-2">
+							<span>{m.brand_color_value()}</span>
+							<div class="[&>button]:min-h-11">
+								<StudioColorPicker
+									label={m.brand_choose_color({ name: style.name || m.studio_text_styles() })}
+									value={style.color}
+									brandColors={colors}
+									onChange={(value) => updateTextStyle(index, 'color', value)}
+								/>
+							</div>
+						</label>
+					</div>
 					<Button
 						variant="ghost"
-						class="min-h-11 justify-start text-destructive lg:col-span-5"
+						class="min-h-11 justify-start text-destructive"
 						onclick={() => (textStyles = textStyles.filter((_, itemIndex) => itemIndex !== index))}
 					>
 						<TrashIcon />

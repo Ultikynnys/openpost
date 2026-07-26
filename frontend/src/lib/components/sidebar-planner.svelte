@@ -3,9 +3,9 @@
 	import { page } from '$app/state';
 	import { getLocalTimeZone, today, type DateValue } from '@internationalized/date';
 	import { SvelteMap } from 'svelte/reactivity';
-	import { client, type Post, type ScheduleOverview } from '$lib/api/client';
+	import { client } from '$lib/api/client';
 	import type { components } from '$lib/api/types';
-	import { getDraftPresentation } from '$lib/components/compose/draft-utils';
+	import { workspaceDateKeyFromISO } from '$lib/components/compose/schedule-timezone';
 	import AppToast from '$lib/components/app-toast.svelte';
 	import DestructiveConfirmDialog from '$lib/components/destructive-confirm-dialog.svelte';
 	import * as CalendarUi from '$lib/components/ui/calendar';
@@ -14,7 +14,6 @@
 	import { workspaceCtx } from '$lib/stores/workspace.svelte';
 	import { m } from '$lib/paraglide/messages';
 	import { getLocaleTag } from '$lib/i18n';
-	import CalendarIcon from 'lucide-svelte/icons/calendar-days';
 	import FileTextIcon from 'lucide-svelte/icons/file-text';
 	import ImageIcon from 'lucide-svelte/icons/image';
 	import MaximizeIcon from 'lucide-svelte/icons/maximize-2';
@@ -25,7 +24,6 @@
 	type Publication = components['schemas']['PublicationResponse'];
 	type PlannerDraft = {
 		id: string;
-		kind: 'post' | 'publication';
 		revision: number;
 		href: string;
 		title: string;
@@ -37,9 +35,8 @@
 
 	let selectedDate = $state<DateValue | undefined>(undefined);
 	let calendarPlaceholder = $state<DateValue>(today(getLocalTimeZone()));
-	let overview = $state<ScheduleOverview | null>(null);
+	let dayCounts = $state.raw(new SvelteMap<string, number>());
 	let drafts = $state.raw<PlannerDraft[]>([]);
-	let loadingSchedule = $state(true);
 	let loadingDrafts = $state(true);
 	let deleteDraftDialogOpen = $state(false);
 	let draftPendingDelete = $state<PlannerDraft | null>(null);
@@ -55,15 +52,6 @@
 		const date = calendarPlaceholder.toDate(getLocalTimeZone());
 		return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
 	});
-	const dayCounts = $derived.by(() => {
-		const counts = new SvelteMap<string, number>();
-		for (const day of overview?.days ?? []) counts.set(day.date, day.count);
-		return counts;
-	});
-	const scheduledCount = $derived(
-		(overview?.days ?? []).reduce((total, day) => total + day.count, 0)
-	);
-
 	$effect(() => {
 		const currentWorkspaceId = workspaceId;
 		const currentMonth = monthString;
@@ -81,22 +69,45 @@
 
 	async function loadOverview(currentWorkspaceId: string, month: string) {
 		const request = ++overviewRequest;
-		loadingSchedule = true;
+		if (!currentWorkspaceId) {
+			dayCounts = new SvelteMap();
+			return;
+		}
 		try {
-			const { data, error } = await client.GET('/posts/schedule-overview', {
-				params: {
-					query: {
-						month,
-						...(currentWorkspaceId ? { workspace_id: currentWorkspaceId } : {})
+			const publications: Publication[] = [];
+			let offset = 0;
+			while (true) {
+				const { data, error, response } = await client.GET('/publications', {
+					params: {
+						query: {
+							workspace_id: currentWorkspaceId,
+							status: 'scheduled',
+							limit: 200,
+							offset
+						}
 					}
-				}
-			});
+				});
+				if (error) throw new Error(error.detail);
+				publications.push(...(data ?? []));
+				if (response.headers.get('X-Has-More') !== 'true') break;
+				const nextOffset = Number(response.headers.get('X-Next-Offset') ?? offset + 200);
+				if (!Number.isFinite(nextOffset) || nextOffset <= offset) break;
+				offset = nextOffset;
+			}
 			if (request !== overviewRequest) return;
-			overview = error || !data ? null : data;
+			const nextCounts = new SvelteMap<string, number>();
+			for (const publication of publications) {
+				if (!publication.scheduled_at) continue;
+				const key = workspaceDateKeyFromISO(
+					publication.scheduled_at,
+					workspaceCtx.settings.timezone || 'UTC'
+				);
+				if (!key?.startsWith(month)) continue;
+				nextCounts.set(key, (nextCounts.get(key) ?? 0) + 1);
+			}
+			dayCounts = nextCounts;
 		} catch {
-			if (request === overviewRequest) overview = null;
-		} finally {
-			if (request === overviewRequest) loadingSchedule = false;
+			if (request === overviewRequest) dayCounts = new SvelteMap();
 		}
 	}
 
@@ -110,35 +121,20 @@
 		}
 
 		try {
-			const [legacyResult, publicationResult] = await Promise.all([
-				client.GET('/posts', {
-					params: {
-						query: { workspace_id: currentWorkspaceId, status: 'draft', limit: 8 }
+			const publicationResult = await client.GET('/publications', {
+				params: {
+					query: {
+						workspace_id: currentWorkspaceId,
+						status: 'draft',
+						limit: 8,
+						offset: 0
 					}
-				}),
-				client.GET('/publications', {
-					params: {
-						query: {
-							workspace_id: currentWorkspaceId,
-							status: 'draft',
-							limit: 8,
-							offset: 0
-						}
-					}
-				})
-			]);
+				}
+			});
 			if (request !== draftsRequest) return;
 			const publications = publicationResult.error ? [] : (publicationResult.data ?? []);
-			const legacyPosts = legacyResult.error ? [] : (legacyResult.data ?? []);
-			drafts = [
-				...publications
-					.filter(
-						(publication) =>
-							!publication.id.startsWith('legacy-publication:') && !publication.text_post_id
-					)
-					.map(publicationDraft),
-				...legacyPosts.map(legacyDraft)
-			]
+			drafts = publications
+				.map(publicationDraft)
 				.sort((left, right) => right.createdAt.localeCompare(left.createdAt))
 				.slice(0, 8);
 		} catch {
@@ -152,9 +148,12 @@
 		const segments = publication.segments ?? [];
 		return {
 			id: publication.id,
-			kind: 'publication',
 			revision: publication.revision,
-			href: `/publications/${encodeURIComponent(publication.id)}`,
+			href:
+				(publication.intent === 'post' || publication.intent === 'thread') &&
+				publication.text_post_id
+					? `/posts/${encodeURIComponent(publication.text_post_id)}`
+					: `/publications/${encodeURIComponent(publication.id)}`,
 			title:
 				publication.source_text.trim() ||
 				publication.title.trim() ||
@@ -165,21 +164,6 @@
 				(publication.media?.length ?? 0) > 0 ||
 				segments.some((segment) => (segment.media?.length ?? 0) > 0),
 			createdAt: publication.created_at
-		};
-	}
-
-	function legacyDraft(post: Post): PlannerDraft {
-		const presentation = getDraftPresentation(post);
-		return {
-			id: post.id,
-			kind: 'post',
-			revision: post.revision,
-			href: `/posts/${post.id}`,
-			title: presentation.title,
-			isThread: presentation.isThread,
-			postCount: presentation.postCount,
-			hasMedia: presentation.hasMedia,
-			createdAt: post.created_at
 		};
 	}
 
@@ -195,23 +179,14 @@
 		deletingDraftId = draft.id;
 		draftDeleteError = '';
 		try {
-			if (draft.kind === 'publication') {
-				const { error } = await client.DELETE('/publications/{id}', {
-					params: {
-						path: { id: draft.id },
-						query: { confirm: true, expected_revision: draft.revision }
-					}
-				});
-				if (error) {
-					throw new Error(error.detail || m.sidebar_delete_draft_failed());
+			const { error } = await client.DELETE('/publications/{id}', {
+				params: {
+					path: { id: draft.id },
+					query: { confirm: true, expected_revision: draft.revision }
 				}
-			} else {
-				const { error } = await client.DELETE('/posts/{id}', {
-					params: { path: { id: draft.id } }
-				});
-				if (error) {
-					throw new Error(error.detail || m.sidebar_delete_draft_failed());
-				}
+			});
+			if (error) {
+				throw new Error(error.detail || m.sidebar_delete_draft_failed());
 			}
 
 			drafts = drafts.filter((candidate) => candidate.id !== draft.id);
@@ -247,34 +222,27 @@
 	</div>
 {/snippet}
 
+{#snippet calendarAction()}
+	<button
+		type="button"
+		class="relative z-10 inline-flex size-7 items-center justify-center rounded-md text-sidebar-foreground/52 hover:bg-sidebar-accent hover:text-sidebar-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-none"
+		onclick={() => onNavigate('/calendar')}
+		aria-label={m.sidebar_calendar()}
+		title={m.sidebar_calendar()}
+	>
+		<MaximizeIcon class="size-3.5" />
+	</button>
+{/snippet}
+
 <div class="flex min-h-0 flex-1 flex-col" data-testid="desktop-sidebar-planner">
 	<section class="shrink-0 border-b border-sidebar-border px-2 pb-3">
-		<div class="mb-1 flex h-8 items-center justify-between px-2">
-			<button
-				type="button"
-				class="group/calendar-link inline-flex items-center gap-1.5 text-xs font-medium text-sidebar-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-none"
-				onclick={() => onNavigate('/calendar')}
-				aria-label={m.sidebar_calendar()}
-			>
-				<CalendarIcon class="size-3.5 text-primary" />
-				<span>{m.sidebar_calendar()}</span>
-				<MaximizeIcon
-					class="size-3 text-sidebar-foreground/42 transition-colors group-hover/calendar-link:text-sidebar-foreground"
-				/>
-			</button>
-			<span class="text-xs text-sidebar-foreground/48 tabular-nums">
-				{#if loadingSchedule}{m.sidebar_schedule_loading()}{:else}{m.sidebar_schedule_count({
-						count: scheduledCount
-					})}{/if}
-			</span>
-		</div>
-
 		<CalendarUi.Calendar
 			type="single"
 			bind:value={selectedDate}
 			bind:placeholder={calendarPlaceholder}
 			onValueChange={handleDateChange}
 			day={dayMarker}
+			captionAction={calendarAction}
 			locale={getLocaleTag()}
 			weekStartsOn={workspaceCtx.settings.week_start as 0 | 1 | 2 | 3 | 4 | 5 | 6}
 			class="w-full bg-transparent p-0 select-none [--cell-size:1.75rem] [&_[role=gridcell]_[role=button][data-today]]:bg-sidebar-primary [&_[role=gridcell]_[role=button][data-today]]:text-sidebar-primary-foreground [&_tr]:justify-between"
