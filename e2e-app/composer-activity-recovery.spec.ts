@@ -186,17 +186,24 @@ test("activity clears cross-workspace data and preserves a valid view on refresh
     (resolveStarted) => (markFirstRefreshStarted = resolveStarted),
   );
   let firstRefreshFinished = false;
-  let firstPostRequests = 0;
-  let failNextPostsRequest = false;
+  let gateNextFirstRefresh = false;
+  let failNextPublicationsRequest = false;
   const jobWorkspaceIDs: string[] = [];
 
-  await page.route("**/api/v1/posts?**", async (route) => {
-    const workspaceID = new URL(route.request().url()).searchParams.get(
-      "workspace_id",
-    );
+  await page.route("**/api/v1/publications?**", async (route) => {
+    const url = new URL(route.request().url());
+    const workspaceID = url.searchParams.get("workspace_id");
+    if (url.searchParams.has("status")) {
+      await route.fulfill({
+        contentType: "application/json",
+        headers: { "X-Has-More": "false" },
+        json: [],
+      });
+      return;
+    }
     let isGatedFirstRefresh = false;
-    if (failNextPostsRequest) {
-      failNextPostsRequest = false;
+    if (failNextPublicationsRequest) {
+      failNextPublicationsRequest = false;
       await route.fulfill({
         status: 503,
         contentType: "application/problem+json",
@@ -204,28 +211,57 @@ test("activity clears cross-workspace data and preserves a valid view on refresh
       });
       return;
     }
-    if (workspaceID === first.id) {
-      firstPostRequests += 1;
-      if (firstPostRequests === 2) {
-        isGatedFirstRefresh = true;
-        markFirstRefreshStarted();
-        await firstRefreshGate;
-      }
+    if (gateNextFirstRefresh && workspaceID === first.id) {
+      gateNextFirstRefresh = false;
+      isGatedFirstRefresh = true;
+      markFirstRefreshStarted();
+      await firstRefreshGate;
     }
     const isSecond = workspaceID === second.id;
     try {
       await route.fulfill({
         contentType: "application/json",
+        headers: { "X-Has-More": "false" },
         json: [
           {
-            id: isSecond ? "current-post" : "previous-post",
+            id: isSecond ? "current-publication" : "previous-publication",
+            text_post_id: isSecond ? "current-post" : "previous-post",
             workspace_id: workspaceID,
-            content: isSecond
+            created_by: "activity-recovery-user",
+            title: isSecond
               ? "Current workspace post"
               : "Previous workspace post",
+            intent: "post",
+            content_profile: "short_text",
+            source_text: isSecond
+              ? "Current workspace post"
+              : "Previous workspace post",
+            source_url: "",
+            goal: "",
+            audience: "",
             status: "draft",
+            revision: 1,
+            scheduled_at: "",
+            actual_run_at: "",
             created_at: "2026-07-20T10:00:00Z",
-            destinations: [],
+            updated_at: "2026-07-20T10:00:00Z",
+            metadata: {},
+            renditions: [],
+            segments: [
+              {
+                id: isSecond ? "current-segment" : "previous-segment",
+                position: 0,
+                body: isSecond
+                  ? "Current workspace post"
+                  : "Previous workspace post",
+                title: "",
+                description: "",
+                url: "",
+                settings: {},
+                media: [],
+              },
+            ],
+            media: [],
           },
         ],
       });
@@ -247,6 +283,7 @@ test("activity clears cross-workspace data and preserves a valid view on refresh
   await expect(
     page.locator("main").getByText("Previous workspace post"),
   ).toBeVisible();
+  gateNextFirstRefresh = true;
   await page.getByRole("button", { name: "Refresh" }).click();
   await firstRefreshStarted;
 
@@ -269,7 +306,7 @@ test("activity clears cross-workspace data and preserves a valid view on refresh
   await expect.poll(() => jobWorkspaceIDs.includes(first.id)).toBe(true);
   await expect.poll(() => jobWorkspaceIDs.includes(second.id)).toBe(true);
 
-  failNextPostsRequest = true;
+  failNextPublicationsRequest = true;
   await page.getByRole("button", { name: "Refresh" }).click();
   await expect(page.getByText("Failed to load posts")).toBeVisible();
   await expect(

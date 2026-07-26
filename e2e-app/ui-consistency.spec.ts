@@ -470,7 +470,7 @@ test("core routes use one bounded content-shaped loading state", async ({
   const delay = async () =>
     new Promise<void>((resolveDelay) => setTimeout(resolveDelay, 700));
 
-  await page.route("**/api/v1/posts?**", async (route) => {
+  await page.route("**/api/v1/publications?**", async (route) => {
     await delay();
     await route.continue();
   });
@@ -483,7 +483,7 @@ test("core routes use one bounded content-shaped loading state", async ({
   await expect(page.getByTestId("page-loading")).toHaveCount(0, {
     timeout: 15_000,
   });
-  await page.unroute("**/api/v1/posts?**");
+  await page.unroute("**/api/v1/publications?**");
 
   await page.route("**/api/v1/media?**", async (route) => {
     await delay();
@@ -500,10 +500,6 @@ test("core routes use one bounded content-shaped loading state", async ({
   });
   await page.unroute("**/api/v1/media?**");
 
-  await page.route("**/api/v1/posts?**", async (route) => {
-    await delay();
-    await route.continue();
-  });
   await page.route("**/api/v1/publications?**", async (route) => {
     await delay();
     await route.continue();

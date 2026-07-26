@@ -26,6 +26,7 @@ All notable changes to this project are documented in this file.
 
 ### Fixed
 
+- Aligned release browser checks with publication-backed Activity and Calendar loading, the current brand-font picker, and slower Studio export environments.
 - Redirected marketing-site documentation paths to the canonical docs site and restored real 404 responses for unknown paths.
 - Made Studio layer reordering work with touch drag handles on mobile, corrected one-direction drop placement, and kept keyboard reordering one step at a time.
 - Preserved image aspect ratios when Studio media metadata arrives before or after insertion, made stretch the default image fit, and enlarged canvas resize handles for touch.

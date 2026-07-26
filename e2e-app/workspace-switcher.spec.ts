@@ -88,16 +88,16 @@ test("workspace-scoped pages reload when the sidebar workspace changes", async (
   await page.goto("/activity");
   await expect(workspaceButton).toContainText(next.name);
   const previous = next.id === first.id ? second : first;
-  const postsRequest = page.waitForRequest((candidate) => {
+  const publicationsRequest = page.waitForRequest((candidate) => {
     const url = new URL(candidate.url());
     return (
-      url.pathname === "/api/v1/posts" &&
+      url.pathname === "/api/v1/publications" &&
       url.searchParams.get("workspace_id") === previous.id
     );
   });
   await workspaceButton.click();
   await page.getByRole("menuitem", { name: new RegExp(previous.name) }).click();
-  await postsRequest;
+  await publicationsRequest;
   await expect(workspaceButton).toContainText(previous.name);
 });
 

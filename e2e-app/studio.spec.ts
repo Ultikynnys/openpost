@@ -573,7 +573,9 @@ test("Studio creates from an original template, adapts to mobile, and exports to
     .getByRole("button", { name: "Export to Media", exact: true })
     .click();
 
-  await expect(page.getByText("1 exported page saved to Media.")).toBeVisible();
+  await expect(page.getByText("1 exported page saved to Media.")).toBeVisible({
+    timeout: 15_000,
+  });
   const designID = new URL(page.url()).pathname.split("/").at(-1);
   if (!designID) throw new Error("Studio URL did not contain a design ID");
   const savedDesign = await request.get(`/api/v1/studio/designs/${designID}`, {

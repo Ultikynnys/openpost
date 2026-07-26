@@ -143,8 +143,14 @@ test("brand kit inputs keep focus while editing", async ({ page, request }) => {
   await expect(styleName).toHaveValue("Campaign heading");
 
   const fontFamily = page.getByLabel("Font family");
-  await fontFamily.fill("");
-  await fontFamily.pressSequentially("Geist Variable", { delay: 20 });
-  await expect(fontFamily).toBeFocused();
-  await expect(fontFamily).toHaveValue("Geist Variable");
+  await fontFamily.click();
+  const fontSearch = page.getByLabel("Search fonts");
+  await fontSearch.fill("");
+  await fontSearch.pressSequentially("Geist Variable", { delay: 20 });
+  await expect(fontSearch).toBeFocused();
+  await expect(fontSearch).toHaveValue("Geist Variable");
+  await page
+    .getByRole("button", { name: "Geist Variable", exact: true })
+    .click();
+  await expect(fontFamily).toContainText("Geist Variable");
 });

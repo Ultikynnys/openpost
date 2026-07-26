@@ -185,9 +185,9 @@ test("onboarding does not offer workspace creation when bootstrap fails", async 
   const loadError = page.getByTestId("onboarding-load-error");
   await expect(loadError).toContainText("Failed to load workspaces");
   await expect(page.getByLabel("Workspace name")).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Create workspace" })).toHaveCount(
-    0,
-  );
+  await expect(
+    page.getByRole("button", { name: "Create workspace" }),
+  ).toHaveCount(0);
 
   allowWorkspaceLoad = true;
   await loadError.getByRole("button", { name: "Try again" }).click();
@@ -277,31 +277,46 @@ test("portrait calendar can create on an empty date in a populated month", async
 
   const scheduledAt = new Date("2030-06-01T10:00:00.000Z").toISOString();
 
-  await page.route("**/api/v1/posts?**", async (route) => {
+  await page.route("**/api/v1/publications?**", async (route) => {
     await route.fulfill({
       contentType: "application/json",
       headers: { "X-Has-More": "false" },
       json: [
         {
-          id: "scheduled-post",
+          id: "scheduled-publication",
+          text_post_id: "scheduled-post",
           workspace_id: workspace.id,
           created_by: "calendar-test-user",
-          content: "Scheduled item",
+          title: "Scheduled item",
+          intent: "post",
+          content_profile: "short_text",
+          source_text: "Scheduled item",
+          source_url: "",
+          goal: "",
+          audience: "",
           status: "scheduled",
+          revision: 1,
           scheduled_at: scheduledAt,
+          actual_run_at: "",
           created_at: scheduledAt,
-          random_delay_minutes: 0,
-          destinations: [],
-          media_ids: [],
+          updated_at: scheduledAt,
+          metadata: {},
+          renditions: [],
+          segments: [
+            {
+              id: "scheduled-segment",
+              position: 0,
+              body: "Scheduled item",
+              title: "",
+              description: "",
+              url: "",
+              settings: {},
+              media: [],
+            },
+          ],
+          media: [],
         },
       ],
-    });
-  });
-  await page.route("**/api/v1/publications?**", async (route) => {
-    await route.fulfill({
-      contentType: "application/json",
-      headers: { "X-Has-More": "false" },
-      json: [],
     });
   });
   await page.route("**/api/v1/accounts?**", async (route) => {
