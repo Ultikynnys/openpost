@@ -1,5 +1,5 @@
 export type PrimaryNavigationItem = {
-	id: 'new' | 'calendar' | 'posts' | 'media' | 'accounts' | 'settings';
+	id: 'new' | 'calendar' | 'posts' | 'analytics' | 'media' | 'accounts' | 'settings';
 	label: string;
 	href: string;
 	match: string[];
@@ -10,6 +10,13 @@ export const primaryNavigation: PrimaryNavigationItem[] = [
 	{ id: 'new', label: 'New post', href: '/', match: ['/'], mobile: true },
 	{ id: 'calendar', label: 'Calendar', href: '/calendar', match: ['/calendar'], mobile: true },
 	{ id: 'posts', label: 'Posts', href: '/activity', match: ['/activity', '/posts'], mobile: true },
+	{
+		id: 'analytics',
+		label: 'Analytics',
+		href: '/analytics',
+		match: ['/analytics'],
+		mobile: false
+	},
 	{ id: 'media', label: 'Media', href: '/media', match: ['/media'], mobile: true },
 	{
 		id: 'accounts',

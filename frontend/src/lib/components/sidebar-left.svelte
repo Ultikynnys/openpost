@@ -21,6 +21,7 @@
 	import CalendarIcon from 'lucide-svelte/icons/calendar-days';
 	import ComposeIcon from 'lucide-svelte/icons/square-pen';
 	import PostsIcon from 'lucide-svelte/icons/files';
+	import AnalyticsIcon from 'lucide-svelte/icons/chart-no-axes-combined';
 	import MediaIcon from 'lucide-svelte/icons/images';
 	import AccountsIcon from 'lucide-svelte/icons/users';
 	import SettingsIcon from 'lucide-svelte/icons/settings';
@@ -49,7 +50,9 @@
 	);
 	const sidebarNavigationItems = $derived(navigationItems.filter((item) => item.id !== 'new'));
 	const workspaceNavigationItems = $derived(
-		navigationItems.filter((item) => ['posts', 'media', 'accounts', 'settings'].includes(item.id))
+		navigationItems.filter((item) =>
+			['posts', 'analytics', 'media', 'accounts', 'settings'].includes(item.id)
+		)
 	);
 	const showDesktopPlanner = $derived(!sidebar.isMobile && sidebar.state === 'expanded');
 	const showHomeBrand = $derived(currentPath === '/' && !ui.activeComposerDraftId);
@@ -62,6 +65,8 @@
 				return CalendarIcon;
 			case 'posts':
 				return PostsIcon;
+			case 'analytics':
+				return AnalyticsIcon;
 			case 'media':
 				return MediaIcon;
 			case 'accounts':
@@ -79,6 +84,8 @@
 				return m.sidebar_calendar();
 			case 'posts':
 				return m.sidebar_activity();
+			case 'analytics':
+				return m.sidebar_analytics();
 			case 'media':
 				return m.sidebar_media();
 			case 'accounts':

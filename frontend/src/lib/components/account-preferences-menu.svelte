@@ -11,6 +11,7 @@
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
 	import LanguageSwitcher from './language-switcher.svelte';
 	import WorkspaceMenuItems from './workspace-menu-items.svelte';
+	import AnalyticsIcon from 'lucide-svelte/icons/chart-no-axes-combined';
 	import AccountsIcon from 'lucide-svelte/icons/users';
 	import SettingsIcon from 'lucide-svelte/icons/settings';
 	import UserIcon from 'lucide-svelte/icons/user-round';
@@ -104,6 +105,19 @@
 			/>
 		</div>
 	{/if}
+	<DropdownMenu.Item>
+		{#snippet child({ props })}
+			<a
+				{...props}
+				class={[props.class, 'min-h-11 gap-3']}
+				href={resolve('/analytics' as '/')}
+				onclick={onNavigate}
+			>
+				<AnalyticsIcon class="size-4 text-muted-foreground" />
+				{m.sidebar_analytics()}
+			</a>
+		{/snippet}
+	</DropdownMenu.Item>
 	<DropdownMenu.Item>
 		{#snippet child({ props })}
 			<a
