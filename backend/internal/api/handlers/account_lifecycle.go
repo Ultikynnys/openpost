@@ -990,6 +990,10 @@ func (ids workspaceDeletionIDs) jobReferences(workspaceIDs []string) map[string]
 
 func workspaceDeletionPlan(workspaceIDs []string, ids workspaceDeletionIDs) []modelDeletion {
 	deletions := []modelDeletion{}
+	deletions = appendIDDeletions(deletions, workspaceIDs, "workspace_id IN (?)",
+		(*models.AnalyticsAccountSnapshot)(nil),
+		(*models.AnalyticsRenditionSnapshot)(nil),
+		(*models.AnalyticsSyncState)(nil))
 	deletions = appendIDDeletions(deletions, ids.renditions, "rendition_id IN (?)",
 		(*models.RenditionMedia)(nil))
 	deletions = appendIDDeletions(deletions, ids.publications, "publication_id IN (?)",

@@ -32,7 +32,7 @@ func NewThreadsAdapter(clientID, clientSecret, redirectURI string) *ThreadsAdapt
 				AuthURL:  "https://www.threads.com/oauth/authorize",
 				TokenURL: "https://graph.threads.net/oauth/access_token",
 			},
-			Scopes: []string{"threads_basic", "threads_content_publish", "threads_manage_replies"},
+			Scopes: []string{"threads_basic", "threads_content_publish", "threads_manage_replies", "threads_manage_insights"},
 		},
 	}
 }
@@ -119,7 +119,10 @@ func (t *ThreadsAdapter) exchangeLongLivedToken(ctx context.Context, shortLivedT
 		AccessToken: tokenResp.AccessToken,
 		ExpiresIn:   tokenResp.ExpiresIn,
 		TokenType:   tokenTypeBearer,
-		Extra:       map[string]string{"user_id": t.lastUserID},
+		Extra: map[string]string{
+			"user_id": t.lastUserID,
+			"scope":   strings.Join(t.config.Scopes, " "),
+		},
 	}, nil
 }
 
@@ -442,15 +445,9 @@ func (t *ThreadsAdapter) createContainer(ctx context.Context, accessToken, userI
 	return containerID, nil
 }
 
-//nolint:gocyclo
 func applyThreadsSettings(payload map[string]string, req *PublishRequest) error {
-	if replyControl := settingString(req.Settings, "reply_control"); replyControl != "" {
-		switch replyControl {
-		case "everyone", "accounts_you_follow", "mentioned_only", "parent_post_author_only", "followers_only":
-			payload["reply_control"] = replyControl
-		default:
-			return fmt.Errorf("threads reply_control %q is not supported", replyControl)
-		}
+	if err := applyThreadsReplyControl(payload, req.Settings); err != nil {
+		return err
 	}
 	if topicTag := settingString(req.Settings, "topic_tag"); topicTag != "" {
 		payload["topic_tag"] = topicTag
@@ -470,70 +467,119 @@ func applyThreadsSettings(payload map[string]string, req *PublishRequest) error 
 	if settingBool(req.Settings, "reply_approvals") {
 		payload["enable_reply_approvals"] = "true"
 	}
+
 	options := separatedSettingValues(req.Settings, "poll_options")
 	textAttachment := settingString(req.Settings, "text_attachment_plaintext")
 	textAttachmentLink := settingString(req.Settings, "text_attachment_link_url")
 	gifID := settingString(req.Settings, "gif_id")
+	if err := applyThreadsTextAttachment(payload, req, options, textAttachment, textAttachmentLink, gifID); err != nil {
+		return err
+	}
+	if err := applyThreadsGIFAttachment(payload, req, options, textAttachment, gifID); err != nil {
+		return err
+	}
+	return applyThreadsPollAttachment(payload, req, options)
+}
+
+func applyThreadsReplyControl(payload map[string]string, settings map[string]any) error {
+	replyControl := settingString(settings, "reply_control")
+	if replyControl == "" {
+		return nil
+	}
+	switch replyControl {
+	case "everyone", "accounts_you_follow", "mentioned_only", "parent_post_author_only", "followers_only":
+		payload["reply_control"] = replyControl
+		return nil
+	default:
+		return fmt.Errorf("threads reply_control %q is not supported", replyControl)
+	}
+}
+
+func applyThreadsTextAttachment(
+	payload map[string]string,
+	req *PublishRequest,
+	options []string,
+	textAttachment string,
+	textAttachmentLink string,
+	gifID string,
+) error {
 	if textAttachmentLink != "" && textAttachment == "" {
 		return fmt.Errorf("threads text attachment links require text attachment content")
 	}
-	if textAttachment != "" {
-		if len([]rune(textAttachment)) > 10000 {
-			return fmt.Errorf("threads text attachments support at most 10000 characters")
-		}
-		if len(req.PlatformMediaIDs) > 0 {
-			return fmt.Errorf("threads text attachments require a text-only post")
-		}
-		if len(options) > 0 || payload["link_attachment"] != "" || gifID != "" {
-			return fmt.Errorf("threads text attachments cannot be combined with polls, link attachments, or GIFs")
-		}
-		attachment := map[string]string{"plaintext": textAttachment}
-		if textAttachmentLink != "" {
-			attachment["link_attachment_url"] = textAttachmentLink
-		}
-		encoded, err := json.Marshal(attachment)
-		if err != nil {
-			return fmt.Errorf("encoding threads text attachment: %w", err)
-		}
-		payload["text_attachment"] = string(encoded)
+	if textAttachment == "" {
+		return nil
 	}
-	if gifID != "" {
-		if len(req.PlatformMediaIDs) > 0 {
-			return fmt.Errorf("threads GIF attachments require a text-only post")
-		}
-		if len(options) > 0 || payload["link_attachment"] != "" || textAttachment != "" {
-			return fmt.Errorf("threads GIF attachments cannot be combined with polls, link attachments, or text attachments")
-		}
-		encoded, err := json.Marshal(map[string]string{"gif_id": gifID, "provider": "GIPHY"})
-		if err != nil {
-			return fmt.Errorf("encoding threads GIF attachment: %w", err)
-		}
-		payload["gif_attachment"] = string(encoded)
+	if len([]rune(textAttachment)) > 10000 {
+		return fmt.Errorf("threads text attachments support at most 10000 characters")
 	}
-	if len(options) > 0 {
-		if len(req.PlatformMediaIDs) > 0 {
-			return fmt.Errorf("threads polls cannot be combined with media")
-		}
-		if payload["link_attachment"] != "" {
-			return fmt.Errorf("threads polls cannot be combined with a link attachment")
-		}
-		if len(options) < 2 || len(options) > 4 {
-			return fmt.Errorf("threads polls require 2-4 options")
-		}
-		poll := map[string]string{}
-		keys := []string{"option_a", "option_b", "option_c", "option_d"}
-		for index, option := range options {
-			if len([]rune(option)) > 25 {
-				return fmt.Errorf("threads poll options support at most 25 characters")
-			}
-			poll[keys[index]] = option
-		}
-		encoded, err := json.Marshal(poll)
-		if err != nil {
-			return fmt.Errorf("encoding threads poll: %w", err)
-		}
-		payload["poll_attachment"] = string(encoded)
+	if len(req.PlatformMediaIDs) > 0 {
+		return fmt.Errorf("threads text attachments require a text-only post")
 	}
+	if len(options) > 0 || payload["link_attachment"] != "" || gifID != "" {
+		return fmt.Errorf("threads text attachments cannot be combined with polls, link attachments, or GIFs")
+	}
+	attachment := map[string]string{"plaintext": textAttachment}
+	if textAttachmentLink != "" {
+		attachment["link_attachment_url"] = textAttachmentLink
+	}
+	encoded, err := json.Marshal(attachment)
+	if err != nil {
+		return fmt.Errorf("encoding threads text attachment: %w", err)
+	}
+	payload["text_attachment"] = string(encoded)
+	return nil
+}
+
+func applyThreadsGIFAttachment(
+	payload map[string]string,
+	req *PublishRequest,
+	options []string,
+	textAttachment string,
+	gifID string,
+) error {
+	if gifID == "" {
+		return nil
+	}
+	if len(req.PlatformMediaIDs) > 0 {
+		return fmt.Errorf("threads GIF attachments require a text-only post")
+	}
+	if len(options) > 0 || payload["link_attachment"] != "" || textAttachment != "" {
+		return fmt.Errorf("threads GIF attachments cannot be combined with polls, link attachments, or text attachments")
+	}
+	encoded, err := json.Marshal(map[string]string{"gif_id": gifID, "provider": "GIPHY"})
+	if err != nil {
+		return fmt.Errorf("encoding threads GIF attachment: %w", err)
+	}
+	payload["gif_attachment"] = string(encoded)
+	return nil
+}
+
+func applyThreadsPollAttachment(payload map[string]string, req *PublishRequest, options []string) error {
+	if len(options) == 0 {
+		return nil
+	}
+	if len(req.PlatformMediaIDs) > 0 {
+		return fmt.Errorf("threads polls cannot be combined with media")
+	}
+	if payload["link_attachment"] != "" {
+		return fmt.Errorf("threads polls cannot be combined with a link attachment")
+	}
+	if len(options) < 2 || len(options) > 4 {
+		return fmt.Errorf("threads polls require 2-4 options")
+	}
+	poll := map[string]string{}
+	keys := []string{"option_a", "option_b", "option_c", "option_d"}
+	for index, option := range options {
+		if len([]rune(option)) > 25 {
+			return fmt.Errorf("threads poll options support at most 25 characters")
+		}
+		poll[keys[index]] = option
+	}
+	encoded, err := json.Marshal(poll)
+	if err != nil {
+		return fmt.Errorf("encoding threads poll: %w", err)
+	}
+	payload["poll_attachment"] = string(encoded)
 	return nil
 }
 

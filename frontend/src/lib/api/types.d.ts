@@ -227,6 +227,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/analytics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get stored account and publication analytics */
+        get: operations["get-analytics-overview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/analytics/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Queue analytics collection for a workspace */
+        post: operations["refresh-analytics"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api-tokens": {
         parameters: {
             query?: never;
@@ -2397,6 +2431,27 @@ export interface components {
             role: string;
             timezone: string;
         };
+        AccountOverview: {
+            account_supported: boolean;
+            avatar_url?: string;
+            content_supported: boolean;
+            error_code?: string;
+            error_message?: string;
+            /** Format: int64 */
+            follower_delta?: number;
+            follower_series: components["schemas"]["SeriesPoint"][] | null;
+            id: string;
+            /** Format: date-time */
+            last_synced_at?: string;
+            metrics: {
+                [key: string]: number;
+            };
+            missing_account_scopes: string[] | null;
+            missing_content_scopes: string[] | null;
+            platform: string;
+            status: string;
+            username: string;
+        };
         AccountReauthenticationInputBody: {
             /**
              * Format: uri
@@ -2821,6 +2876,26 @@ export interface components {
             purpose: string;
             return_url: string;
             workspace_id: string;
+        };
+        ContentOverview: {
+            account_id: string;
+            /** Format: int64 */
+            engagement: number;
+            error_code?: string;
+            error_message?: string;
+            /** Format: date-time */
+            last_synced_at?: string;
+            metrics: {
+                [key: string]: number;
+            };
+            platform: string;
+            publication_id: string;
+            /** Format: date-time */
+            published_at: string;
+            rendition_id: string;
+            status: string;
+            title: string;
+            username: string;
         };
         CreateAPITokenInputBody: {
             /**
@@ -4090,6 +4165,14 @@ export interface components {
             readonly $schema?: string;
             message: string;
         };
+        MetricSummary: {
+            /** Format: int64 */
+            delta?: number;
+            /** Format: int64 */
+            measured: number;
+            /** Format: int64 */
+            value: number;
+        };
         NextAvailableSlotOutputBody: {
             /**
              * Format: uri
@@ -4136,6 +4219,23 @@ export interface components {
             /** Format: int64 */
             current_seats: number;
             members: components["schemas"]["OrganizationMemberResponse"][] | null;
+        };
+        Overview: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/Overview.json
+             */
+            readonly $schema?: string;
+            accounts: components["schemas"]["AccountOverview"][] | null;
+            content: components["schemas"]["ContentOverview"][] | null;
+            /** Format: date-time */
+            generated_at: string;
+            /** Format: date-time */
+            last_synced_at?: string;
+            /** Format: int64 */
+            range_days: number;
+            summary: components["schemas"]["Summary"];
         };
         PasskeyCeremonyOutputBody: {
             /**
@@ -4680,6 +4780,27 @@ export interface components {
             /** @description Readiness status */
             status: string;
         };
+        RefreshAnalyticsInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/RefreshAnalyticsInputBody.json
+             */
+            readonly $schema?: string;
+            /** @description Workspace ID */
+            workspace_id: string;
+        };
+        RefreshAnalyticsOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/RefreshAnalyticsOutputBody.json
+             */
+            readonly $schema?: string;
+            message: string;
+            /** Format: int64 */
+            queued: number;
+        };
         RegisterInputBody: {
             /**
              * Format: uri
@@ -5210,6 +5331,11 @@ export interface components {
             /** @description Whether authenticator-based 2FA is enabled */
             totp_enabled: boolean;
             user: components["schemas"]["UserProfile"];
+        };
+        SeriesPoint: {
+            date: string;
+            /** Format: int64 */
+            value: number;
         };
         SettingCondition: {
             key: string;
@@ -5765,6 +5891,15 @@ export interface components {
             message: string;
             /** @description Created schedule slots */
             schedules: components["schemas"]["PostingScheduleResponse"][] | null;
+        };
+        Summary: {
+            engagement: components["schemas"]["MetricSummary"];
+            followers: components["schemas"]["MetricSummary"];
+            impressions: components["schemas"]["MetricSummary"];
+            /** Format: int64 */
+            published: number;
+            reach: components["schemas"]["MetricSummary"];
+            views: components["schemas"]["MetricSummary"];
         };
         TextPostPublicationInput: {
             /** @description Target audience */
@@ -7047,6 +7182,127 @@ export interface operations {
             };
             /** @description Error */
             default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "get-analytics-overview": {
+        parameters: {
+            query: {
+                /** @description Workspace ID */
+                workspace_id: string;
+                /** @description Reporting window in days (7, 30, or 90) */
+                days?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Overview"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "refresh-analytics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RefreshAnalyticsInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RefreshAnalyticsOutputBody"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };

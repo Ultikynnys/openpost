@@ -3,6 +3,7 @@ package handlers
 const (
 	tagAuth              = "Auth"
 	tagAccounts          = "Accounts"
+	tagAnalytics         = "Analytics"
 	tagCapabilities      = "Capabilities"
 	tagMedia             = "Media"
 	tagMCP               = "MCP"

@@ -38,8 +38,8 @@ func TestTikTokGenerateAuthURL(t *testing.T) {
 	if !strings.Contains(query.Get("scope"), "video.publish") {
 		t.Fatalf("expected video.publish scope, got %q", query.Get("scope"))
 	}
-	if strings.Contains(query.Get("scope"), "user.info.stats") || strings.Contains(query.Get("scope"), "video.list") {
-		t.Fatalf("did not expect unused read scopes, got %q", query.Get("scope"))
+	if !strings.Contains(query.Get("scope"), "user.info.stats") || !strings.Contains(query.Get("scope"), "video.list") {
+		t.Fatalf("expected analytics read scopes, got %q", query.Get("scope"))
 	}
 }
 

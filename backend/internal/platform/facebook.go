@@ -56,7 +56,15 @@ func (f *FacebookAdapter) GenerateAuthURL(state string) (string, map[string]stri
 }
 
 func (f *FacebookAdapter) ExchangeCode(ctx context.Context, code string, _ map[string]string) (*TokenResult, error) {
-	return exchangeMetaAuthCode(ctx, f.graphURL, f.clientID, f.clientSecret, f.redirectURI, "facebook", code)
+	token, err := exchangeMetaAuthCode(ctx, f.graphURL, f.clientID, f.clientSecret, f.redirectURI, "facebook", code)
+	if err != nil {
+		return nil, err
+	}
+	scopes, err := fetchMetaGrantedScopes(ctx, f.graphURL, token.AccessToken)
+	if err != nil {
+		return nil, fmt.Errorf("facebook granted permissions: %w", err)
+	}
+	return tokenWithGrantedScopes(token, scopes), nil
 }
 
 func exchangeMetaAuthCode(ctx context.Context, graphURL func(string) string, clientID, clientSecret, redirectURI, providerName, code string) (*TokenResult, error) {
@@ -124,6 +132,43 @@ func decodeFacebookToken(label string, respBody []byte) (*TokenResult, error) {
 		ExpiresIn:   tokenResp.ExpiresIn,
 		TokenType:   firstNonEmptyString(tokenResp.TokenType, tokenTypeBearer),
 	}, nil
+}
+
+func tokenWithGrantedScopes(token *TokenResult, scopes []string) *TokenResult {
+	if token == nil {
+		return nil
+	}
+	if token.Extra == nil {
+		token.Extra = map[string]string{}
+	}
+	token.Extra["scope"] = strings.Join(scopes, " ")
+	return token
+}
+
+func fetchMetaGrantedScopes(ctx context.Context, graphURL func(string) string, accessToken string) ([]string, error) {
+	endpoint := graphURL("me/permissions") + "?" + url.Values{
+		oauthParamAccessToken: {accessToken},
+	}.Encode()
+	body, err := DoRequest(ctx, http.MethodGet, endpoint, nil, nil)
+	if err != nil {
+		return nil, err
+	}
+	var response struct {
+		Data []struct {
+			Permission string `json:"permission"`
+			Status     string `json:"status"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(body, &response); err != nil {
+		return nil, fmt.Errorf("decoding granted permissions: %w", err)
+	}
+	scopes := make([]string, 0, len(response.Data))
+	for _, permission := range response.Data {
+		if permission.Status == "granted" && permission.Permission != "" {
+			scopes = append(scopes, permission.Permission)
+		}
+	}
+	return scopes, nil
 }
 
 func (f *FacebookAdapter) RefreshCapability() RefreshCapability {

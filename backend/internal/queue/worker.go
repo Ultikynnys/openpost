@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/openpost/backend/internal/models"
+	analyticsservice "github.com/openpost/backend/internal/services/analytics"
 	"github.com/openpost/backend/internal/services/feedback"
 	"github.com/openpost/backend/internal/services/mediastore"
 	"github.com/openpost/backend/internal/services/publisher"
@@ -42,11 +43,16 @@ type BackgroundWorker struct {
 	tokens    *tokenmanager.TokenManager
 	storage   mediastore.BlobStorage
 	feedback  *feedback.Service
+	analytics *analyticsservice.Service
 	done      chan struct{}
 }
 
 func (w *BackgroundWorker) SetFeedbackService(service *feedback.Service) {
 	w.feedback = service
+}
+
+func (w *BackgroundWorker) SetAnalyticsService(service *analyticsservice.Service) {
+	w.analytics = service
 }
 
 func NewWorker(db *bun.DB, id string, interval time.Duration, pub *publisher.Service, tokens *tokenmanager.TokenManager, storage mediastore.BlobStorage) *BackgroundWorker {
@@ -96,6 +102,25 @@ func (w *BackgroundWorker) processDueJobs(ctx context.Context) {
 
 func (w *BackgroundWorker) requeueStaleProcessingJobs(ctx context.Context) {
 	cutoff := time.Now().UTC().Add(-staleProcessingJobAge)
+	superseded, err := w.db.NewUpdate().
+		Model((*models.Job)(nil)).
+		Set("status = ?", jobStatusCompleted).
+		Set("last_error = ?", "A later analytics sweep was already queued after worker recovery.").
+		Set("locked_at = NULL").
+		Set("locked_by = ''").
+		Where("type = ? AND status = ?", analyticsservice.JobTypeSweep, jobStatusProcessing).
+		Where("locked_at IS NOT NULL").
+		Where("locked_at <= ?", cutoff).
+		Where("EXISTS (SELECT 1 FROM jobs AS queued_sweep WHERE queued_sweep.type = ? AND queued_sweep.status = ?)", analyticsservice.JobTypeSweep, jobStatusPending).
+		Exec(ctx)
+	if err != nil {
+		log.Printf("[Worker %s] failed to supersede stale analytics sweep: %v\n", w.workerID, err)
+		return
+	}
+	if rows, rowsErr := superseded.RowsAffected(); rowsErr == nil && rows > 0 {
+		log.Printf("[Worker %s] superseded %d stale analytics sweep job(s)\n", w.workerID, rows)
+	}
+
 	result, err := w.db.NewUpdate().
 		Model((*models.Job)(nil)).
 		Set("status = ?", jobStatusPending).
@@ -160,7 +185,8 @@ func (w *BackgroundWorker) handleLockedJob(ctx context.Context, job *models.Job)
 		retryable := true
 		retryAfter := time.Duration(0)
 		lastError := processErr.Error()
-		if job.Type == jobTypePublishPost || job.Type == jobTypePublishPublication {
+		switch job.Type {
+		case jobTypePublishPost, jobTypePublishPublication:
 			failure := publisher.ClassifyFailure(processErr)
 			retryable = failure.Retryable
 			retryAfter = failure.RetryAfter
@@ -170,6 +196,17 @@ func (w *BackgroundWorker) handleLockedJob(ctx context.Context, job *models.Job)
 				retryable = true
 				retryAfter = directed.Failure.RetryAfter
 				lastError = directed.Failure.Message
+			}
+		case analyticsservice.JobTypeSweep,
+			analyticsservice.JobTypeAccountSync,
+			analyticsservice.JobTypeRenditionSync:
+			failure := publisher.ClassifyFailure(processErr)
+			retryable = failure.Retryable || failure.Kind == publisher.FailureUnknown
+			retryAfter = failure.RetryAfter
+			lastError = "Analytics collection failed. OpenPost will retry when the failure is temporary."
+			if job.Type == analyticsservice.JobTypeSweep && w.hasPendingAnalyticsSweep(ctx, job.ID) {
+				retryable = false
+				lastError = "Analytics sweep finished with an error; the next sweep remains queued."
 			}
 		}
 		if !retryable || job.Attempts >= job.MaxAttempts {
@@ -206,6 +243,18 @@ func (w *BackgroundWorker) handleLockedJob(ctx context.Context, job *models.Job)
 	}
 
 	log.Printf("[Worker %s] job %s completed successfully\n", w.workerID, job.ID)
+}
+
+func (w *BackgroundWorker) hasPendingAnalyticsSweep(ctx context.Context, excludeID string) bool {
+	exists, err := w.db.NewSelect().
+		Model((*models.Job)(nil)).
+		Where("type = ? AND status = ? AND id != ?", analyticsservice.JobTypeSweep, jobStatusPending, excludeID).
+		Exists(ctx)
+	if err != nil {
+		log.Printf("[Worker %s] failed to inspect queued analytics sweep: %v\n", w.workerID, err)
+		return false
+	}
+	return exists
 }
 
 func (w *BackgroundWorker) heartbeatJobLock(ctx context.Context, jobID string) {
@@ -245,6 +294,11 @@ func (w *BackgroundWorker) executeJob(ctx context.Context, job *models.Job) erro
 			return fmt.Errorf("feedback delivery is not configured")
 		}
 		return w.feedback.HandleDeliveryJob(ctx, job.Payload)
+	case analyticsservice.JobTypeSweep, analyticsservice.JobTypeAccountSync, analyticsservice.JobTypeRenditionSync:
+		if w.analytics == nil {
+			return fmt.Errorf("analytics collection is not configured")
+		}
+		return w.analytics.HandleJob(ctx, job.Type, job.Payload)
 	default:
 		return fmt.Errorf("unsupported job type %q", job.Type)
 	}

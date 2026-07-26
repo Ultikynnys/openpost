@@ -11,6 +11,33 @@ import (
 	"testing"
 )
 
+func TestThreadsExchangeCodeRecordsGrantedAnalyticsScope(t *testing.T) {
+	originalClient := httpClient
+	defer func() { httpClient = originalClient }()
+
+	httpClient = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		if req.URL.Host == "graph.threads.net" {
+			if req.URL.Path == "/oauth/access_token" {
+				return jsonResponse(req, `{"access_token":"short","user_id":12345}`), nil
+			}
+			if req.URL.Path == "/access_token" {
+				return jsonResponse(req, `{"access_token":"long","expires_in":5184000}`), nil
+			}
+		}
+		t.Fatalf("unexpected request %s %s", req.Method, req.URL.String())
+		return nil, nil
+	})}
+
+	token, err := NewThreadsAdapter("client", "secret", "https://app.example/callback").
+		ExchangeCode(context.Background(), "code", nil)
+	if err != nil {
+		t.Fatalf("ExchangeCode returned error: %v", err)
+	}
+	if token.AccessToken != "long" || !strings.Contains(token.Extra["scope"], "threads_manage_insights") {
+		t.Fatalf("expected token with analytics scope, got %#v", token)
+	}
+}
+
 func TestThreadsListCommentsMapsReplies(t *testing.T) {
 	originalClient := httpClient
 	defer func() { httpClient = originalClient }()

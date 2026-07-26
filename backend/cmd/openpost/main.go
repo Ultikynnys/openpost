@@ -25,6 +25,7 @@ import (
 	"github.com/openpost/backend/internal/database"
 	"github.com/openpost/backend/internal/platform"
 	"github.com/openpost/backend/internal/queue"
+	analyticsservice "github.com/openpost/backend/internal/services/analytics"
 	"github.com/openpost/backend/internal/services/apitokens"
 	"github.com/openpost/backend/internal/services/auth"
 	"github.com/openpost/backend/internal/services/billing"
@@ -166,9 +167,11 @@ func main() {
 		log.Printf("Registered provider adapter: %s", entry.Key)
 	}
 
+	analyticsService := analyticsservice.NewService(db, tokenManager)
 	for name, adapter := range providers {
 		tokenManager.SetProvider(name, adapter)
 		publishSvc.SetProvider(name, adapter)
+		analyticsService.SetProvider(name, adapter)
 	}
 
 	storage, err := mediastore.New(context.Background(), mediastore.Config{
@@ -212,6 +215,10 @@ func main() {
 
 	worker := queue.NewWorker(db, "worker-1", 1*time.Second, publishSvc, tokenManager, storage)
 	worker.SetFeedbackService(feedbackService)
+	worker.SetAnalyticsService(analyticsService)
+	if err := analyticsService.ScheduleSweep(context.Background(), time.Now().UTC()); err != nil {
+		log.Fatalf("failed to schedule analytics collection: %v", err)
+	}
 
 	apiGroup := e.Group("/api/v1")
 	apiGroup.Use(handlers.FeedbackBodyLimitMiddleware)
@@ -279,6 +286,7 @@ func main() {
 		ProviderRegistrars: []func(string, platform.Adapter){
 			tokenManager.SetProvider,
 			publishSvc.SetProvider,
+			analyticsService.SetProvider,
 		},
 		MastodonAppService:           mastodonAppService,
 		FrontendURL:                  cfg.FrontendURL,
@@ -288,6 +296,7 @@ func main() {
 		StudioEnabled:                cfg.StudioEnabled,
 		StudioModelBaseURL:           cfg.StudioModelBaseURL,
 		FeedbackService:              feedbackService,
+		AnalyticsService:             analyticsService,
 		MediaHandler:                 mediaHandler,
 		ProfileHandler:               profileHandler,
 		BillingHandler:               billingHandler,

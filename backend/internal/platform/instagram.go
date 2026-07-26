@@ -101,7 +101,15 @@ func (i *InstagramAdapter) GenerateAuthURL(state string) (string, map[string]str
 }
 
 func (i *InstagramAdapter) ExchangeCode(ctx context.Context, code string, _ map[string]string) (*TokenResult, error) {
-	return exchangeMetaAuthCode(ctx, i.graphURL, i.clientID, i.clientSecret, i.redirectURI, "instagram", code)
+	token, err := exchangeMetaAuthCode(ctx, i.graphURL, i.clientID, i.clientSecret, i.redirectURI, "instagram", code)
+	if err != nil {
+		return nil, err
+	}
+	scopes, err := fetchMetaGrantedScopes(ctx, i.graphURL, token.AccessToken)
+	if err != nil {
+		return nil, fmt.Errorf("instagram granted permissions: %w", err)
+	}
+	return tokenWithGrantedScopes(token, scopes), nil
 }
 
 func (i *InstagramAdapter) RefreshCapability() RefreshCapability {
@@ -642,6 +650,7 @@ func instagramScopes() []string {
 	return []string{
 		"instagram_basic",
 		"instagram_content_publish",
+		"instagram_manage_insights",
 		"pages_show_list",
 		"pages_read_engagement",
 	}

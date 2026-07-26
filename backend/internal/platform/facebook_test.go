@@ -64,6 +64,8 @@ func TestFacebookExchangeAndSelectPage(t *testing.T) {
 				t.Fatalf("unexpected accounts token %q", req.URL.Query().Get(oauthParamAccessToken))
 			}
 			return jsonResponse(req, `{"data":[{"id":"page-1","name":"OpenPost Page","username":"openpost","access_token":"page-token","picture":{"data":{"url":"https://cdn.example/page.png"}}}]}`), nil
+		case "/v25.0/me/permissions":
+			return jsonResponse(req, `{"data":[{"permission":"pages_show_list","status":"granted"},{"permission":"pages_read_engagement","status":"granted"},{"permission":"pages_manage_posts","status":"granted"},{"permission":"declined_scope","status":"declined"}]}`), nil
 		default:
 			t.Fatalf("unexpected request %s %s", req.Method, req.URL.String())
 			return nil, nil
@@ -77,6 +79,9 @@ func TestFacebookExchangeAndSelectPage(t *testing.T) {
 	}
 	if token.AccessToken != "long-token" || token.ExpiresIn != 5184000 {
 		t.Fatalf("unexpected token: %#v", token)
+	}
+	if !strings.Contains(token.Extra["scope"], "pages_read_engagement") {
+		t.Fatalf("expected granted Facebook scopes, got %#v", token.Extra)
 	}
 
 	options, err := adapter.ListAccountSelections(context.Background(), token)
@@ -93,6 +98,9 @@ func TestFacebookExchangeAndSelectPage(t *testing.T) {
 	}
 	if selected.AccountID != "page-1" || selected.Token.AccessToken != "page-token" || selected.Token.ExpiresIn != 0 {
 		t.Fatalf("unexpected selected account: %#v", selected)
+	}
+	if !strings.Contains(selected.Token.Extra["scope"], "pages_read_engagement") {
+		t.Fatalf("expected selected account to preserve scopes, got %#v", selected.Token.Extra)
 	}
 	if accountsCalls != 2 {
 		t.Fatalf("expected two accounts calls, got %d", accountsCalls)

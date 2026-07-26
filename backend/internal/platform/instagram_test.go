@@ -54,6 +54,8 @@ func TestInstagramExchangeAndSelectBusinessAccount(t *testing.T) {
 				t.Fatalf("unexpected accounts token %q", req.URL.Query().Get(oauthParamAccessToken))
 			}
 			return jsonResponse(req, `{"data":[{"id":"page-1","name":"OpenPost Page","access_token":"page-token","picture":{"data":{"url":"https://cdn.example/page.png"}},"instagram_business_account":{"id":"ig-1","username":"openpost","name":"OpenPost IG","profile_picture_url":"https://cdn.example/ig.png"}}]}`), nil
+		case "/v25.0/me/permissions":
+			return jsonResponse(req, `{"data":[{"permission":"instagram_basic","status":"granted"},{"permission":"instagram_content_publish","status":"granted"},{"permission":"instagram_manage_insights","status":"granted"},{"permission":"pages_show_list","status":"granted"},{"permission":"pages_read_engagement","status":"granted"}]}`), nil
 		default:
 			t.Fatalf("unexpected request %s %s", req.Method, req.URL.String())
 			return nil, nil
@@ -67,6 +69,9 @@ func TestInstagramExchangeAndSelectBusinessAccount(t *testing.T) {
 	}
 	if token.AccessToken != "long-token" {
 		t.Fatalf("unexpected token: %#v", token)
+	}
+	if !strings.Contains(token.Extra["scope"], "instagram_manage_insights") {
+		t.Fatalf("expected granted Instagram analytics scope, got %#v", token.Extra)
 	}
 
 	options, err := adapter.ListAccountSelections(context.Background(), token)
@@ -83,6 +88,9 @@ func TestInstagramExchangeAndSelectBusinessAccount(t *testing.T) {
 	}
 	if selected.AccountID != "ig-1" || selected.Token.AccessToken != "page-token" || selected.Token.ExpiresIn != 0 {
 		t.Fatalf("unexpected selected account: %#v", selected)
+	}
+	if !strings.Contains(selected.Token.Extra["scope"], "instagram_manage_insights") {
+		t.Fatalf("expected selected account to preserve scopes, got %#v", selected.Token.Extra)
 	}
 	if accountsCalls != 2 {
 		t.Fatalf("expected two accounts calls, got %d", accountsCalls)

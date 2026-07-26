@@ -8,6 +8,7 @@ import (
 	"github.com/openpost/backend/internal/api/handlers"
 	"github.com/openpost/backend/internal/api/middleware"
 	"github.com/openpost/backend/internal/platform"
+	analyticsservice "github.com/openpost/backend/internal/services/analytics"
 	"github.com/openpost/backend/internal/services/apitokens"
 	"github.com/openpost/backend/internal/services/auth"
 	"github.com/openpost/backend/internal/services/billing"
@@ -53,6 +54,7 @@ type RouteDeps struct {
 	StudioEnabled                bool
 	StudioModelBaseURL           string
 	FeedbackService              *feedback.Service
+	AnalyticsService             *analyticsservice.Service
 
 	MediaHandler    *handlers.MediaHandler
 	BillingHandler  *handlers.BillingHandler
@@ -139,6 +141,7 @@ func RegisterHumaRoutes(api huma.API, deps RouteDeps) {
 	publicationHandler.SetCapabilityDependencies(deps.Providers, deps.TokenSource)
 	publicationHandler.RegisterRoutes(api)
 	handlers.NewCommentHandler(deps.DB, deps.Authenticator, deps.Providers, deps.TokenEncryptor).RegisterRoutes(api)
+	handlers.NewAnalyticsHandler(deps.DB, deps.Authenticator, deps.AnalyticsService).RegisterRoutes(api)
 
 	mcpOAuthHandler := deps.MCPOAuthHandler
 	if mcpOAuthHandler == nil {
