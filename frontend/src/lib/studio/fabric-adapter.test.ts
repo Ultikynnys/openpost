@@ -70,6 +70,49 @@ describe('Studio image geometry', () => {
 		expect(second.width * second.scaleX).toBe(1440);
 		expect(second.height * second.scaleY).toBe(810);
 	});
+
+	it.each(['cover', 'contain'] as const)(
+		'recomputes %s object geometry after a frame aspect-ratio change',
+		(fit) => {
+			const previous = imageLayer(800, 800, fit);
+			const next = imageLayer(1200, 600, fit);
+			const initial = computeImageGeometry(previous, 1920, 1080);
+			const imageObject = {
+				...initial,
+				__studioSourceWidth: 1920,
+				__studioSourceHeight: 1080,
+				set(updates: Record<string, unknown>) {
+					Object.assign(this, updates);
+				},
+				setCoords() {},
+				applyFilters() {}
+			};
+			const adapter = new OpenPostFabricAdapter({
+				canvas: {} as HTMLCanvasElement,
+				document: { width_px: 1080, height_px: 1080 } as StudioDocument,
+				page: {
+					id: 'page',
+					name: 'Page 1',
+					background_color: '#ffffff',
+					layers: [next]
+				},
+				readOnly: false,
+				onSelection: () => undefined,
+				onTransform: () => undefined,
+				onTextChange: () => undefined
+			});
+			const internals = adapter as unknown as {
+				fabric: object;
+				updateObject(target: typeof imageObject, previous: StudioLayer, next: StudioLayer): void;
+			};
+			internals.fabric = {};
+
+			internals.updateObject(imageObject, previous, next);
+
+			expect(imageObject).toMatchObject(computeImageGeometry(next, 1920, 1080));
+			expect(imageObject.scaleX).toBeCloseTo(imageObject.scaleY);
+		}
+	);
 });
 
 describe('Studio layer render order', () => {
@@ -140,5 +183,100 @@ describe('Studio layer render order', () => {
 		internals.syncObjectOrder();
 
 		expect(moved).toEqual(['circle', 'image', 'rectangle', 'text', 'group']);
+	});
+});
+
+describe('Studio group state', () => {
+	it('refreshes unchanged descendants when a group becomes hidden and locked', async () => {
+		const child: StudioLayer = {
+			...imageLayer(400, 300),
+			id: 'child',
+			type: 'shape',
+			parent_id: 'group',
+			image: undefined,
+			shape: {
+				kind: 'rectangle' as const,
+				fill: '#ffffff',
+				stroke: '#00000000',
+				stroke_width: 0,
+				radius: 0
+			}
+		};
+		const group = {
+			...imageLayer(500, 400),
+			id: 'group',
+			type: 'group',
+			image: undefined
+		} as StudioLayer;
+		const previousPage: StudioPage = {
+			id: 'page',
+			name: 'Page 1',
+			background_color: '#ffffff',
+			layers: [child, group]
+		};
+		const nextPage = structuredClone(previousPage);
+		const nextGroup = nextPage.layers.find((layer) => layer.id === 'group')!;
+		nextGroup.visible = false;
+		nextGroup.locked = true;
+		const document = { width_px: 1080, height_px: 1080 } as StudioDocument;
+		const adapter = new OpenPostFabricAdapter({
+			canvas: {} as HTMLCanvasElement,
+			document,
+			page: previousPage,
+			readOnly: false,
+			staticCanvas: true,
+			onSelection: () => undefined,
+			onTransform: () => undefined,
+			onTextChange: () => undefined
+		});
+		const makeObject = () => ({
+			visible: true,
+			selectable: true,
+			evented: true,
+			set(updates: Record<string, unknown>) {
+				Object.assign(this, updates);
+			},
+			setCoords() {}
+		});
+		const childObject = makeObject();
+		const groupObject = makeObject();
+		const internals = adapter as unknown as {
+			fabric: object;
+			canvas: {
+				backgroundColor: string;
+				moveObjectTo(object: object, index: number): void;
+				renderAll(): void;
+			};
+			objectByLayerID: Map<string, ReturnType<typeof makeObject>>;
+			layerSnapshots: Map<string, StudioLayer>;
+			decorationsByLayerID: Map<string, object[]>;
+		};
+		internals.fabric = {};
+		internals.canvas = {
+			backgroundColor: previousPage.background_color,
+			moveObjectTo() {},
+			renderAll() {}
+		};
+		internals.objectByLayerID = new Map([
+			['child', childObject],
+			['group', groupObject]
+		]);
+		internals.layerSnapshots = new Map(
+			previousPage.layers.map((layer) => [layer.id, structuredClone(layer)])
+		);
+		internals.decorationsByLayerID = new Map();
+
+		await adapter.sync(document, nextPage);
+
+		expect(childObject).toMatchObject({
+			visible: false,
+			selectable: false,
+			evented: false,
+			lockMovementX: true,
+			lockMovementY: true,
+			lockRotation: true,
+			lockScalingX: true,
+			lockScalingY: true
+		});
 	});
 });

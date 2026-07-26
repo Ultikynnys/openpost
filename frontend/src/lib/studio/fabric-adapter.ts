@@ -83,6 +83,30 @@ export function studioLayerRenderOrder(layers: StudioLayer[]): StudioLayer[] {
 	return ordered;
 }
 
+function layerIsVisibleIn(layer: StudioLayer, layers: readonly StudioLayer[]): boolean {
+	let current: StudioLayer | undefined = layer;
+	const visited = new Set<string>();
+	while (current) {
+		if (!current.visible) return false;
+		if (!current.parent_id || visited.has(current.parent_id)) break;
+		visited.add(current.parent_id);
+		current = layers.find((candidate) => candidate.id === current?.parent_id);
+	}
+	return true;
+}
+
+function layerIsLockedIn(layer: StudioLayer, layers: readonly StudioLayer[]): boolean {
+	let current: StudioLayer | undefined = layer;
+	const visited = new Set<string>();
+	while (current) {
+		if (current.locked) return true;
+		if (!current.parent_id || visited.has(current.parent_id)) break;
+		visited.add(current.parent_id);
+		current = layers.find((candidate) => candidate.id === current?.parent_id);
+	}
+	return false;
+}
+
 export class OpenPostFabricAdapter {
 	private fabric: FabricModule | null = null;
 	private canvas: FabricStaticCanvas | null = null;
@@ -196,6 +220,7 @@ export class OpenPostFabricAdapter {
 		}
 
 		const sequence = ++this.renderSequence;
+		const previousLayers = [...this.layerSnapshots.values()];
 		this.document = document;
 		this.page = page;
 		this.syncing = true;
@@ -227,7 +252,11 @@ export class OpenPostFabricAdapter {
 					this.objectByLayerID.set(layer.id, object);
 					this.canvas.add(object);
 					this.refreshDecorations(layer, object);
-				} else if (JSON.stringify(previous) !== JSON.stringify(layer)) {
+				} else if (
+					JSON.stringify(previous) !== JSON.stringify(layer) ||
+					layerIsVisibleIn(previous, previousLayers) !== layerIsVisibleIn(layer, page.layers) ||
+					layerIsLockedIn(previous, previousLayers) !== layerIsLockedIn(layer, page.layers)
+				) {
 					this.updateObject(object, previous, layer);
 					this.refreshDecorations(layer, object);
 				}
@@ -1090,27 +1119,11 @@ export class OpenPostFabricAdapter {
 	}
 
 	private layerIsVisible(layer: StudioLayer): boolean {
-		let current: StudioLayer | undefined = layer;
-		const visited = new Set<string>();
-		while (current) {
-			if (!current.visible) return false;
-			if (!current.parent_id || visited.has(current.parent_id)) break;
-			visited.add(current.parent_id);
-			current = this.page.layers.find((candidate) => candidate.id === current?.parent_id);
-		}
-		return true;
+		return layerIsVisibleIn(layer, this.page.layers);
 	}
 
 	private layerIsLocked(layer: StudioLayer): boolean {
-		let current: StudioLayer | undefined = layer;
-		const visited = new Set<string>();
-		while (current) {
-			if (current.locked) return true;
-			if (!current.parent_id || visited.has(current.parent_id)) break;
-			visited.add(current.parent_id);
-			current = this.page.layers.find((candidate) => candidate.id === current?.parent_id);
-		}
-		return false;
+		return layerIsLockedIn(layer, this.page.layers);
 	}
 
 	private usesAreaSelection(): boolean {
