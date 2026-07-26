@@ -26,10 +26,14 @@ All notable changes to this project are documented in this file.
 - Made Studio layer reordering work with touch drag handles on mobile, corrected one-direction drop placement, and kept keyboard reordering one step at a time.
 - Preserved image aspect ratios when Studio media metadata arrives before or after insertion, made stretch the default image fit, and enlarged canvas resize handles for touch.
 - Kept every grouped Studio child inside its group stacking slot during initial renders and later canvas syncs so unrelated circles, images, and other layers cannot render between grouped text and shapes.
+- Added right-click and long-press actions to Media assets, editable designs, and sidebar drafts, including first-class design favorites and safe design deletion.
+- Simplified the Media toolbar by combining counts with storage, removing duplicate status controls, reducing the layout switcher, and removing the doubled divider above Workspace navigation.
 - Kept Android Studio text editing anchored above the keyboard without refitting the canvas or panning the document, and made long mobile Settings menus scroll within the visible viewport.
 - Kept release artifact packaging on the pinned Node, pnpm, and Go toolchains after Devenv preflight so transient Nix store references cannot strand frontend, server, or CLI release assets.
 - Kept Brand kit text fields and color controls mounted while their values change so keyboard focus, selection, and color-picker state no longer reset during editing.
 - Kept resized Studio images flush with their frames by preserving source-pixel geometry during Fabric transforms, and kept canvas selection synchronized after document updates.
+- Applied hidden and locked Studio group state to every descendant during incremental canvas updates, and recomputed cover/contain image geometry after frame aspect-ratio changes so the editor matches saved previews and exports.
+- Kept the text-and-thread composer's compatibility draft in sync when normalized publications are created or edited through REST and MCP, including an upgrade backfill for existing publications.
 - Routed uploads through the storage mode advertised by the server instead of probing an unsupported direct-upload endpoint, and raised the bounded frontend build heap to the verified bundle minimum.
 
 ## [1.27.9] - 2026-07-25

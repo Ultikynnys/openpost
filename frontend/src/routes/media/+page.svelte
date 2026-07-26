@@ -9,7 +9,13 @@
 	import { getAuthenticatedMediaURL } from '$lib/media-url';
 	import { isSupportedMediaFile, uploadMediaFiles } from '$lib/media-upload-client';
 	import { uploadMediaFile } from '$lib/media-upload-client';
-	import { duplicateStudioDesign, listStudioDesigns, loadStudioConfig } from '$lib/studio/api';
+	import {
+		deleteStudioDesign,
+		duplicateStudioDesign,
+		listStudioDesigns,
+		loadStudioConfig,
+		toggleStudioDesignFavorite
+	} from '$lib/studio/api';
 	import type { StudioDesignSummary } from '$lib/studio/types';
 	import { clampMediaPage } from '$lib/media-pagination';
 	import { workspaceCtx } from '$lib/stores/workspace.svelte';
@@ -37,7 +43,6 @@
 	import ChevronLeftIcon from 'lucide-svelte/icons/chevron-left';
 	import ChevronRightIcon from 'lucide-svelte/icons/chevron-right';
 	import Grid2X2Icon from 'lucide-svelte/icons/grid-2x2';
-	import MoreHorizontalIcon from 'lucide-svelte/icons/ellipsis';
 	import CameraIcon from 'lucide-svelte/icons/camera';
 	import PaletteIcon from 'lucide-svelte/icons/palette';
 	import SearchIcon from 'lucide-svelte/icons/search';
@@ -106,8 +111,10 @@
 		failed_ids: string[];
 	}
 
-	type MediaDeletionRequest =
-		{ kind: 'single'; media: MediaItem } | { kind: 'batch'; ids: string[] };
+	type LibraryDeletionRequest =
+		| { kind: 'single'; media: MediaItem }
+		| { kind: 'batch'; ids: string[] }
+		| { kind: 'design'; design: StudioDesignSummary };
 
 	let workspaces = $derived<Workspace[]>(workspaceCtx.workspaces);
 	let selectedWorkspaceId = $derived(workspaceCtx.currentWorkspace?.id ?? '');
@@ -169,10 +176,14 @@
 	let detailSaving = $state(false);
 
 	let deleteDialogOpen = $state(false);
-	let deletionRequest = $state.raw<MediaDeletionRequest | null>(null);
+	let deletionRequest = $state.raw<LibraryDeletionRequest | null>(null);
 
 	const selectedMediaIds = new SvelteSet<string>();
 	let isSelectionMode = $state(false);
+	const libraryContextContentClass =
+		'z-50 min-w-52 rounded-lg bg-popover/95 p-1 text-sm text-popover-foreground shadow-md ring-1 ring-foreground/10 backdrop-blur outline-none';
+	const libraryContextItemClass =
+		'flex min-h-9 cursor-default items-center gap-2 rounded-md px-2 outline-none data-highlighted:bg-muted data-disabled:pointer-events-none data-disabled:opacity-45';
 
 	function notify(message: string, tone: 'neutral' | 'success' | 'error' = 'neutral') {
 		toastMessage = message;
@@ -189,6 +200,22 @@
 
 	function uploadedCountLabel(count: number) {
 		return count === 1 ? m.media_uploaded_one() : m.media_uploaded_many({ count });
+	}
+
+	function deletionTitle(request: LibraryDeletionRequest | null) {
+		if (request?.kind === 'design') return m.studio_design_delete_title();
+		if (request?.kind === 'batch') return m.media_delete_batch_title();
+		return m.media_delete_title();
+	}
+
+	function deletionDescription(request: LibraryDeletionRequest | null) {
+		if (request?.kind === 'design') return m.studio_design_delete_body();
+		if (request?.kind === 'batch') {
+			return request.ids.length === 1
+				? m.media_delete_batch_body_one()
+				: m.media_delete_batch_body_many({ count: request.ids.length });
+		}
+		return m.media_delete_body();
 	}
 
 	function usageSummaryLabel(count: number) {
@@ -381,6 +408,14 @@
 		}
 	}
 
+	async function toggleDesignFavorite(design: StudioDesignSummary) {
+		try {
+			design.is_favorite = await toggleStudioDesignFavorite(design.id);
+		} catch (cause) {
+			notify(cause instanceof Error ? cause.message : m.studio_design_favorite_failed(), 'error');
+		}
+	}
+
 	async function toggleFavoriteBatch() {
 		const ids = Array.from(selectedMediaIds);
 		for (const id of ids) {
@@ -449,6 +484,11 @@
 		deleteDialogOpen = true;
 	}
 
+	function requestDeleteDesign(design: StudioDesignSummary) {
+		deletionRequest = { kind: 'design', design };
+		deleteDialogOpen = true;
+	}
+
 	async function deleteMedia(mediaId: string) {
 		const requestViewKey = mediaViewKey();
 		try {
@@ -502,11 +542,25 @@
 		}
 	}
 
-	async function confirmMediaDeletion() {
+	async function deleteDesign(design: StudioDesignSummary) {
+		try {
+			await deleteStudioDesign(design.id);
+			designs = designs.filter((candidate) => candidate.id !== design.id);
+			notify(m.studio_design_deleted(), 'success');
+		} catch (cause) {
+			notify(cause instanceof Error ? cause.message : m.studio_design_delete_failed(), 'error');
+		}
+	}
+
+	async function confirmLibraryDeletion() {
 		const request = deletionRequest;
 		if (!request) return;
 		if (request.kind === 'single') {
 			await deleteMedia(request.media.id);
+			return;
+		}
+		if (request.kind === 'design') {
+			await deleteDesign(request.design);
 			return;
 		}
 		await deleteSelectedBatch(request.ids);
@@ -859,12 +913,33 @@
 			Boolean(dateTo)
 		].filter(Boolean).length
 	);
+	const activeDetailFilterCount = $derived(
+		[
+			mediaType !== 'all',
+			source !== 'all',
+			Boolean(collectionID),
+			Boolean(tagID),
+			aspect !== 'all',
+			minWidth > 0,
+			minHeight > 0,
+			maxWidth > 0,
+			maxHeight > 0,
+			Boolean(dateFrom),
+			Boolean(dateTo)
+		].filter(Boolean).length
+	);
 	const visibleDesigns = $derived(
-		studioEnabled && !isSelectionMode && currentPage === 0 && activeFilterCount === 0
-			? designs.filter((design) =>
-					designDisplayTitle(design.title)
-						.toLocaleLowerCase()
-						.includes(search.trim().toLocaleLowerCase())
+		studioEnabled &&
+			!isSelectionMode &&
+			currentPage === 0 &&
+			activeDetailFilterCount === 0 &&
+			(filter === 'all' || filter === 'favorites')
+			? designs.filter(
+					(design) =>
+						(filter !== 'favorites' || design.is_favorite) &&
+						designDisplayTitle(design.title)
+							.toLocaleLowerCase()
+							.includes(search.trim().toLocaleLowerCase())
 				)
 			: []
 	);
@@ -881,9 +956,10 @@
 
 	const descriptionText = $derived.by(() => {
 		if (totalCount > 0 || designs.length > 0) {
-			let text: string = m.media_library_count({
+			let text: string = m.media_library_summary({
 				assets: totalCount,
-				designs: designs.length
+				designs: designs.length,
+				size: formatSize(storageUsage.used_bytes)
 			});
 			if (filter === 'unused') {
 				text += ` (${m.media_unused_suffix({ count: totalCount })})`;
@@ -963,20 +1039,9 @@
 		{/if}
 	{/snippet}
 
-	<div class="flex items-center justify-between gap-3 text-xs text-muted-foreground">
-		<p>
-			{m.media_storage_summary({
-				count: storageUsage.asset_count,
-				size: formatSize(storageUsage.used_bytes)
-			})}
-		</p>
-		{#if mediaLoading && mediaItems.length > 0}
-			<span class="inline-flex items-center gap-1.5" role="status">
-				<LoaderIcon class="size-3.5 animate-spin" />
-				{m.common_loading()}
-			</span>
-		{/if}
-	</div>
+	{#if mediaLoading && mediaItems.length > 0}
+		<span class="sr-only" role="status">{m.common_loading()}</span>
+	{/if}
 	{#if error && mediaItems.length > 0}
 		<InlineNotice
 			tone="error"
@@ -1005,18 +1070,18 @@
 		</div>
 		<Button
 			type="button"
-			variant={activeFilterCount > 0 ? 'secondary' : 'outline'}
+			variant={activeDetailFilterCount > 0 ? 'secondary' : 'outline'}
 			class="h-11 min-w-11 shrink-0 sm:w-auto"
 			aria-label={m.media_filters()}
 			onclick={() => (filterDialogOpen = true)}
 		>
 			<SlidersHorizontalIcon />
 			<span class="hidden sm:inline">{m.media_filters()}</span>
-			{#if activeFilterCount > 0}
+			{#if activeDetailFilterCount > 0}
 				<span
 					class="flex size-5 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground"
 				>
-					{activeFilterCount}
+					{activeDetailFilterCount}
 				</span>
 			{/if}
 		</Button>
@@ -1056,20 +1121,15 @@
 					<Select.Item value="recently_used">{m.media_recently_used()}</Select.Item>
 				</Select.Content>
 			</Select.Root>
-			<div class="hidden rounded-lg border p-0.5 sm:flex">
-				<Button
-					variant={layoutMode === 'grid' ? 'secondary' : 'ghost'}
-					size="icon-sm"
-					onclick={() => (layoutMode = 'grid')}
-					aria-label={m.media_grid_view()}><Grid2X2Icon /></Button
-				>
-				<Button
-					variant={layoutMode === 'list' ? 'secondary' : 'ghost'}
-					size="icon-sm"
-					onclick={() => (layoutMode = 'list')}
-					aria-label={m.media_compact_view()}><ListIcon /></Button
-				>
-			</div>
+			<Button
+				variant="ghost"
+				size="icon-sm"
+				class="hidden sm:inline-flex"
+				onclick={() => (layoutMode = layoutMode === 'grid' ? 'list' : 'grid')}
+				aria-label={layoutMode === 'grid' ? m.media_compact_view() : m.media_grid_view()}
+			>
+				{#if layoutMode === 'grid'}<ListIcon />{:else}<Grid2X2Icon />{/if}
+			</Button>
 			{#if mediaCanEdit && mediaItems.length > 0 && !isSelectionMode}
 				<Button variant="outline" size="sm" class="h-11" onclick={() => (isSelectionMode = true)}>
 					{m.media_select()}
@@ -1211,6 +1271,14 @@
 									>
 										{m.media_design()}
 									</span>
+									{#if design.is_favorite}
+										<div
+											class="absolute bottom-2 left-2 rounded-full bg-background/90 p-1.5 shadow-sm"
+											aria-label={m.media_filter_favorites()}
+										>
+											<HeartIcon class="size-3.5 fill-red-500 text-red-500" />
+										</div>
+									{/if}
 								</div>
 								<div class="min-w-0 p-2.5">
 									<p class="truncate text-sm font-medium">{designDisplayTitle(design.title)}</p>
@@ -1226,179 +1294,197 @@
 						{/snippet}
 					</ContextMenu.Trigger>
 					<ContextMenu.Portal>
-						<ContextMenu.Content
-							class="z-50 min-w-44 rounded-lg bg-popover/95 p-1 text-sm text-popover-foreground shadow-md ring-1 ring-foreground/10 backdrop-blur outline-none"
-						>
+						<ContextMenu.Content class={libraryContextContentClass}>
 							<ContextMenu.Item
-								class="flex min-h-9 cursor-default items-center rounded-md px-2 outline-none data-highlighted:bg-muted"
+								class={libraryContextItemClass}
 								onclick={() => goto(resolve(`/studio/${design.id}` as '/'))}
 							>
+								<ExternalLinkIcon class="size-4" />
 								{m.studio_open_design()}
 							</ContextMenu.Item>
 							<ContextMenu.Item
-								class="flex min-h-9 cursor-default items-center rounded-md px-2 outline-none data-highlighted:bg-muted"
+								class={libraryContextItemClass}
 								disabled={!mediaCanEdit}
 								onclick={() => duplicateDesign(design.id)}
 							>
+								<Grid2X2Icon class="size-4" />
 								{m.studio_duplicate_design()}
 							</ContextMenu.Item>
+							<ContextMenu.Item
+								class={libraryContextItemClass}
+								disabled={!mediaCanEdit}
+								onclick={() => toggleDesignFavorite(design)}
+							>
+								<HeartIcon class="size-4" fill={design.is_favorite ? 'currentColor' : 'none'} />
+								{design.is_favorite ? m.media_unfavorite() : m.media_favorite()}
+							</ContextMenu.Item>
+							{#if mediaCanEdit}
+								<ContextMenu.Separator class="my-1 h-px bg-border" />
+								<ContextMenu.Item
+									class="{libraryContextItemClass} text-destructive data-highlighted:text-destructive"
+									onclick={() => requestDeleteDesign(design)}
+								>
+									<TrashIcon class="size-4" />
+									{m.common_delete()}
+								</ContextMenu.Item>
+							{/if}
 						</ContextMenu.Content>
 					</ContextMenu.Portal>
 				</ContextMenu.Root>
 			{/each}
 			{#each mediaItems as media (media.id)}
-				<div
-					data-library-kind="asset"
-					class="group relative overflow-hidden rounded-xl border bg-card transition-colors hover:border-foreground/20 {layoutMode ===
-					'list'
-						? 'grid grid-cols-[6rem_minmax(0,1fr)]'
-						: ''} {selectedMediaIds.has(media.id) ? 'ring-2 ring-primary' : ''}"
-				>
-					<div
-						class="relative overflow-hidden bg-muted/30 {layoutMode === 'grid'
-							? 'aspect-square'
-							: 'aspect-square h-24'}"
-					>
-						{#if isVideo(media.mime_type)}
-							<video
-								src={getAuthenticatedMediaURL(media.url)}
-								class="size-full object-cover"
-								muted
-								playsinline
-								preload="metadata"
-							></video>
-							<div class="pointer-events-none absolute inset-0 flex items-center justify-center">
+				<ContextMenu.Root>
+					<ContextMenu.Trigger disabled={isSelectionMode}>
+						{#snippet child({ props })}
+							<div
+								{...props}
+								data-library-kind="asset"
+								class="group relative overflow-hidden rounded-xl border bg-card transition-colors hover:border-foreground/20 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none {layoutMode ===
+								'list'
+									? 'grid grid-cols-[6rem_minmax(0,1fr)]'
+									: ''} {selectedMediaIds.has(media.id) ? 'ring-2 ring-primary' : ''}"
+							>
 								<div
-									class="flex size-10 items-center justify-center rounded-full bg-background/80 backdrop-blur-sm"
+									class="relative overflow-hidden bg-muted/30 {layoutMode === 'grid'
+										? 'aspect-square'
+										: 'aspect-square h-24'}"
 								>
-									<VideoIcon class="size-5 text-foreground" />
+									{#if isVideo(media.mime_type)}
+										<video
+											src={getAuthenticatedMediaURL(media.url)}
+											class="size-full object-cover"
+											muted
+											playsinline
+											preload="metadata"
+										></video>
+										<div
+											class="pointer-events-none absolute inset-0 flex items-center justify-center"
+										>
+											<div
+												class="flex size-10 items-center justify-center rounded-full bg-background/80 backdrop-blur-sm"
+											>
+												<VideoIcon class="size-5 text-foreground" />
+											</div>
+										</div>
+									{:else if isImage(media.mime_type)}
+										<img
+											src={getAuthenticatedMediaURL(media.thumbnail_url || media.url)}
+											alt={media.alt_text || media.original_filename || m.media_library_title()}
+											loading="lazy"
+											class="size-full object-cover transition-transform duration-200 group-hover:scale-[1.02]"
+										/>
+									{:else}
+										<div class="flex size-full items-center justify-center">
+											<VideoIcon class="size-10 text-muted-foreground/40" />
+										</div>
+									{/if}
+
+									<button
+										type="button"
+										class="absolute inset-0 z-[1]"
+										onclick={() => (isSelectionMode ? toggleSelection(media.id) : showUsage(media))}
+										aria-label={isSelectionMode
+											? selectedMediaIds.has(media.id)
+												? m.media_deselect_item({ name: media.original_filename || media.id })
+												: m.media_select_item({ name: media.original_filename || media.id })
+											: m.media_open_details({ name: media.original_filename || media.id })}
+										aria-pressed={isSelectionMode ? selectedMediaIds.has(media.id) : undefined}
+									></button>
+
+									{#if isSelectionMode}
+										<span
+											class="media-card-control absolute top-2 left-2 z-10 flex items-center justify-center rounded-lg bg-background/95 shadow-sm"
+										>
+											{#if selectedMediaIds.has(media.id)}
+												<CheckIcon class="size-4 text-primary" />
+											{:else}
+												<div class="size-4 rounded-sm border-2 border-muted-foreground"></div>
+											{/if}
+										</span>
+									{/if}
+
+									{#if media.is_favorite}
+										<div
+											class="absolute bottom-2 left-2 rounded-full bg-background/90 p-1.5 shadow-sm"
+										>
+											<HeartIcon class="size-3.5 fill-red-500 text-red-500" />
+										</div>
+									{/if}
+								</div>
+
+								<div class="p-2.5">
+									{#if media.original_filename}
+										<p class="truncate text-sm font-medium" title={media.original_filename}>
+											{media.original_filename}
+										</p>
+									{/if}
+									<p class="mt-0.5 truncate text-xs text-muted-foreground">
+										{formatSize(media.size)} · {formatDate(media.created_at)}
+									</p>
 								</div>
 							</div>
-						{:else if isImage(media.mime_type)}
-							<img
-								src={getAuthenticatedMediaURL(media.thumbnail_url || media.url)}
-								alt={media.alt_text || media.original_filename || m.media_library_title()}
-								loading="lazy"
-								class="size-full object-cover transition-transform duration-200 group-hover:scale-[1.02]"
-							/>
-						{:else}
-							<div class="flex size-full items-center justify-center">
-								<VideoIcon class="size-10 text-muted-foreground/40" />
-							</div>
-						{/if}
-
-						<button
-							type="button"
-							class="absolute inset-0 z-[1]"
-							onclick={() => (isSelectionMode ? toggleSelection(media.id) : showUsage(media))}
-							aria-label={isSelectionMode
-								? selectedMediaIds.has(media.id)
-									? m.media_deselect_item({ name: media.original_filename || media.id })
-									: m.media_select_item({ name: media.original_filename || media.id })
-								: m.media_open_details({ name: media.original_filename || media.id })}
-							aria-pressed={isSelectionMode ? selectedMediaIds.has(media.id) : undefined}
-						></button>
-
-						{#if isSelectionMode}
-							<span
-								class="media-card-control absolute top-2 left-2 z-10 flex items-center justify-center rounded-lg bg-background/95 shadow-sm"
+						{/snippet}
+					</ContextMenu.Trigger>
+					<ContextMenu.Portal>
+						<ContextMenu.Content class={libraryContextContentClass}>
+							<ContextMenu.Item class={libraryContextItemClass} onclick={() => showUsage(media)}>
+								<ExternalLinkIcon class="size-4" />
+								{m.media_details()}
+							</ContextMenu.Item>
+							{#if isImage(media.mime_type) && mediaCanEdit && studioEnabled}
+								<ContextMenu.Item
+									class={libraryContextItemClass}
+									onclick={() => openMediaInStudio(media)}
+								>
+									<PaletteIcon class="size-4" />
+									{m.media_edit_studio()}
+								</ContextMenu.Item>
+								<ContextMenu.Item
+									class={libraryContextItemClass}
+									onclick={() => openMediaInStudio(media, 'remove-background')}
+								>
+									<ImageIcon class="size-4" />
+									{m.studio_remove_background()}
+								</ContextMenu.Item>
+							{/if}
+							{#if mediaCanEdit}
+								<ContextMenu.Item
+									class={libraryContextItemClass}
+									onclick={() => duplicateMedia(media)}
+								>
+									<Grid2X2Icon class="size-4" />
+									{m.studio_duplicate()}
+								</ContextMenu.Item>
+							{/if}
+							<ContextMenu.Item
+								class={libraryContextItemClass}
+								onclick={() => downloadMedia(media)}
 							>
-								{#if selectedMediaIds.has(media.id)}
-									<CheckIcon class="size-4 text-primary" />
-								{:else}
-									<div class="size-4 rounded-sm border-2 border-muted-foreground"></div>
-								{/if}
-							</span>
-						{/if}
-
-						{#if !isSelectionMode}
-							<div class="absolute top-2 right-2 z-10">
-								<DropdownMenu.Root>
-									<DropdownMenu.Trigger>
-										{#snippet child({ props })}
-											<Button
-												{...props}
-												variant="outline"
-												size="icon-sm"
-												class="media-card-control bg-background/90 shadow-sm backdrop-blur-sm"
-												aria-label={m.media_actions_for({
-													name: media.original_filename || media.id
-												})}
-											>
-												<MoreHorizontalIcon class="size-4" />
-											</Button>
-										{/snippet}
-									</DropdownMenu.Trigger>
-									<DropdownMenu.Content align="end" class="w-48">
-										<DropdownMenu.Item onclick={() => showUsage(media)} class="gap-2">
-											<ExternalLinkIcon class="size-4" />
-											{m.media_details()}
-										</DropdownMenu.Item>
-										{#if isImage(media.mime_type) && mediaCanEdit && studioEnabled}
-											<DropdownMenu.Item onclick={() => openMediaInStudio(media)} class="gap-2">
-												<PaletteIcon class="size-4" />
-												{m.media_edit_studio()}
-											</DropdownMenu.Item>
-											<DropdownMenu.Item
-												onclick={() => openMediaInStudio(media, 'remove-background')}
-												class="gap-2"
-											>
-												<ImageIcon class="size-4" />
-												{m.studio_remove_background()}
-											</DropdownMenu.Item>
-										{/if}
-										{#if mediaCanEdit}
-											<DropdownMenu.Item onclick={() => duplicateMedia(media)} class="gap-2">
-												<Grid2X2Icon class="size-4" />
-												{m.studio_duplicate()}
-											</DropdownMenu.Item>
-										{/if}
-										<DropdownMenu.Item onclick={() => downloadMedia(media)} class="gap-2">
-											<DownloadIcon class="size-4" />
-											{m.media_download()}
-										</DropdownMenu.Item>
-										{#if mediaCanEdit}
-											<DropdownMenu.Item onclick={() => toggleFavorite(media.id)} class="gap-2">
-												<HeartIcon
-													class="size-4"
-													fill={media.is_favorite ? 'currentColor' : 'none'}
-												/>
-												{media.is_favorite ? m.media_unfavorite() : m.media_favorite()}
-											</DropdownMenu.Item>
-										{/if}
-										{#if mediaCanEdit && canDeleteMedia(media)}
-											<DropdownMenu.Separator />
-											<DropdownMenu.Item
-												class="gap-2 text-destructive"
-												onclick={() => requestDeleteMedia(media)}
-											>
-												<TrashIcon class="size-4" />
-												{m.common_delete()}
-											</DropdownMenu.Item>
-										{/if}
-									</DropdownMenu.Content>
-								</DropdownMenu.Root>
-							</div>
-						{/if}
-
-						{#if media.is_favorite}
-							<div class="absolute bottom-2 left-2 rounded-full bg-background/90 p-1.5 shadow-sm">
-								<HeartIcon class="size-3.5 fill-red-500 text-red-500" />
-							</div>
-						{/if}
-					</div>
-
-					<div class="p-2.5">
-						{#if media.original_filename}
-							<p class="truncate text-sm font-medium" title={media.original_filename}>
-								{media.original_filename}
-							</p>
-						{/if}
-						<p class="mt-0.5 truncate text-xs text-muted-foreground">
-							{formatSize(media.size)} · {formatDate(media.created_at)}
-						</p>
-					</div>
-				</div>
+								<DownloadIcon class="size-4" />
+								{m.media_download()}
+							</ContextMenu.Item>
+							{#if mediaCanEdit}
+								<ContextMenu.Item
+									class={libraryContextItemClass}
+									onclick={() => toggleFavorite(media.id)}
+								>
+									<HeartIcon class="size-4" fill={media.is_favorite ? 'currentColor' : 'none'} />
+									{media.is_favorite ? m.media_unfavorite() : m.media_favorite()}
+								</ContextMenu.Item>
+							{/if}
+							{#if mediaCanEdit && canDeleteMedia(media)}
+								<ContextMenu.Separator class="my-1 h-px bg-border" />
+								<ContextMenu.Item
+									class="{libraryContextItemClass} text-destructive data-highlighted:text-destructive"
+									onclick={() => requestDeleteMedia(media)}
+								>
+									<TrashIcon class="size-4" />
+									{m.common_delete()}
+								</ContextMenu.Item>
+							{/if}
+						</ContextMenu.Content>
+					</ContextMenu.Portal>
+				</ContextMenu.Root>
 			{/each}
 		</div>
 
@@ -1436,18 +1522,6 @@
 			<Dialog.Description>{m.media_filters_body()}</Dialog.Description>
 		</Dialog.Header>
 		<div class="grid gap-4 py-2 sm:grid-cols-2">
-			<label class="grid gap-1.5 text-sm font-medium">
-				<span>{m.media_status()}</span>
-				<select
-					class="h-11 rounded-lg border border-input bg-background px-3 text-sm"
-					bind:value={filter}
-				>
-					<option value="all">{m.media_filter_all()}</option>
-					<option value="used">{m.media_filter_used()}</option>
-					<option value="unused">{m.media_filter_unused()}</option>
-					<option value="favorites">{m.media_filter_favorites()}</option>
-				</select>
-			</label>
 			<label class="grid gap-1.5 text-sm font-medium">
 				<span>{m.media_type()}</span>
 				<select
@@ -1666,13 +1740,9 @@
 
 <DestructiveConfirmDialog
 	bind:open={deleteDialogOpen}
-	title={deletionRequest?.kind === 'batch' ? m.media_delete_batch_title() : m.media_delete_title()}
-	description={deletionRequest?.kind === 'batch'
-		? deletionRequest.ids.length === 1
-			? m.media_delete_batch_body_one()
-			: m.media_delete_batch_body_many({ count: deletionRequest.ids.length })
-		: m.media_delete_body()}
-	onConfirm={confirmMediaDeletion}
+	title={deletionTitle(deletionRequest)}
+	description={deletionDescription(deletionRequest)}
+	onConfirm={confirmLibraryDeletion}
 />
 
 <MediaOrganizationDialog

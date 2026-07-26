@@ -343,7 +343,7 @@ test("Portuguese page chrome stays readable across compact portrait widths", asy
   }
 });
 
-test("media card controls are available on a portrait screen without hover", async ({
+test("media card actions use a context menu on a portrait screen", async ({
   page,
   request,
 }, testInfo) => {
@@ -370,12 +370,8 @@ test("media card controls are available on a portrait screen without hover", asy
   const selectControl = page.getByRole("button", {
     name: `Select ${filename}`,
   });
-  const actionsControl = page.getByRole("button", {
-    name: `Actions for ${filename}`,
-  });
-  await expect(actionsControl).toBeVisible();
-
-  await actionsControl.click();
+  const assetCard = page.locator('[data-library-kind="asset"]');
+  await assetCard.click({ button: "right" });
   await expect(
     page.getByRole("menuitem", { name: "Media details" }),
   ).toBeVisible();

@@ -99,6 +99,22 @@ export async function listStudioDesigns(
 	return data as unknown as { designs: StudioDesignSummary[]; total: number; can_edit: boolean };
 }
 
+export async function deleteStudioDesign(id: string): Promise<void> {
+	const { error } = await client.DELETE('/studio/designs/{id}', {
+		params: { path: { id } }
+	});
+	if (error) throw new Error(problemMessage(error, 'Could not delete the design.'));
+}
+
+export async function toggleStudioDesignFavorite(id: string): Promise<boolean> {
+	const { data, error } = await client.PATCH('/studio/designs/{id}/favorite', {
+		params: { path: { id } }
+	});
+	if (error || !data)
+		throw new Error(problemMessage(error, 'Could not update the design favorite.'));
+	return data.is_favorite;
+}
+
 export async function listStudioTemplates(workspaceID: string): Promise<StudioTemplate[]> {
 	const { data, error } = await client.GET('/studio/templates', {
 		params: { query: { workspace_id: workspaceID } }

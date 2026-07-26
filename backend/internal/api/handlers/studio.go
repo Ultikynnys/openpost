@@ -263,6 +263,7 @@ type StudioDesignSummary struct {
 	PageCount           int    `json:"page_count"`
 	Revision            int    `json:"revision"`
 	CoverPreviewMediaID string `json:"cover_preview_media_id,omitempty"`
+	IsFavorite          bool   `json:"is_favorite"`
 	CreatedAt           string `json:"created_at"`
 	UpdatedAt           string `json:"updated_at"`
 }
@@ -351,6 +352,16 @@ type DeleteStudioDesignInput struct {
 type DeleteStudioDesignOutput struct {
 	Body struct {
 		Deleted bool `json:"deleted"`
+	}
+}
+
+type ToggleStudioDesignFavoriteInput struct {
+	PathID string `path:"id"`
+}
+
+type ToggleStudioDesignFavoriteOutput struct {
+	Body struct {
+		IsFavorite bool `json:"is_favorite"`
 	}
 }
 
@@ -559,6 +570,16 @@ func (h *StudioHandler) registerDesigns(api huma.API) {
 		Middlewares: huma.Middlewares{middleware.AuthMiddleware(api, h.auth)},
 		Errors:      []int{403, 404},
 	}, h.deleteDesign)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "toggle-studio-design-favorite",
+		Method:      http.MethodPatch,
+		Path:        "/studio/designs/{id}/favorite",
+		Summary:     "Toggle a Studio design favorite",
+		Tags:        []string{tagStudio},
+		Middlewares: huma.Middlewares{middleware.AuthMiddleware(api, h.auth)},
+		Errors:      []int{403, 404},
+	}, h.toggleDesignFavorite)
 
 	huma.Register(api, huma.Operation{
 		OperationID: "duplicate-studio-design",
@@ -903,6 +924,31 @@ func (h *StudioHandler) deleteDesign(ctx context.Context, input *DeleteStudioDes
 	return &DeleteStudioDesignOutput{Body: struct {
 		Deleted bool `json:"deleted"`
 	}{Deleted: true}}, nil
+}
+
+func (h *StudioHandler) toggleDesignFavorite(ctx context.Context, input *ToggleStudioDesignFavoriteInput) (*ToggleStudioDesignFavoriteOutput, error) {
+	if err := h.ensureEnabled(); err != nil {
+		return nil, err
+	}
+	document, err := h.loadDocument(ctx, input.PathID)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := h.requireAccess(ctx, document.WorkspaceID, true); err != nil {
+		return nil, err
+	}
+	document.IsFavorite = !document.IsFavorite
+	_, err = h.db.NewUpdate().
+		Model(document).
+		Column("is_favorite").
+		WherePK().
+		Exec(ctx)
+	if err != nil {
+		return nil, huma.Error500InternalServerError("failed to update Studio design favorite")
+	}
+	out := &ToggleStudioDesignFavoriteOutput{}
+	out.Body.IsFavorite = document.IsFavorite
+	return out, nil
 }
 
 func (h *StudioHandler) duplicateDesign(ctx context.Context, input *DuplicateStudioDesignInput) (*DuplicateStudioDesignOutput, error) {
@@ -1996,6 +2042,7 @@ func designSummary(document models.DesignDocument, pageCount int) StudioDesignSu
 		PageCount:           pageCount,
 		Revision:            document.Revision,
 		CoverPreviewMediaID: document.CoverPreviewMediaID,
+		IsFavorite:          document.IsFavorite,
 		CreatedAt:           document.CreatedAt.UTC().Format(time.RFC3339),
 		UpdatedAt:           document.UpdatedAt.UTC().Format(time.RFC3339),
 	}

@@ -51,7 +51,7 @@ test("media library uploads and lists a local media file", async ({
   await expect(
     page
       .getByTestId("page-header")
-      .getByText("1 assets · 0 designs", { exact: true }),
+      .getByText(/1 assets · 0 designs · .* stored/, { exact: true }),
   ).toBeVisible();
   await expect(page.getByText("Studio edits")).toHaveCount(0);
 
@@ -88,6 +88,21 @@ test("media library uploads and lists a local media file", async ({
     can_delete: true,
     processing_status: "ready",
   });
+
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
+  const assetCard = page.locator('[data-library-kind="asset"]');
+  await assetCard.click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Favorite", exact: true }).click();
+  await expect(assetCard.locator("svg.fill-red-500")).toBeVisible();
+
+  await assetCard.click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Delete", exact: true }).click();
+  const deleteDialog = page.getByRole("dialog", { name: "Delete media?" });
+  await expect(deleteDialog).toBeVisible();
+  await deleteDialog
+    .getByRole("button", { name: "Delete", exact: true })
+    .click();
+  await expect(page.getByText("No media found")).toBeVisible();
 });
 
 test("brand kit inputs keep focus while editing", async ({ page, request }) => {

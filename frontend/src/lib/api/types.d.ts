@@ -1923,6 +1923,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/studio/designs/{id}/favorite": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Toggle a Studio design favorite */
+        patch: operations["toggle-studio-design-favorite"];
+        trace?: never;
+    };
     "/studio/designs/{id}/revisions": {
         parameters: {
             query?: never;
@@ -5365,6 +5382,7 @@ export interface components {
             /** Format: int64 */
             height_px: number;
             id: string;
+            is_favorite: boolean;
             /** Format: int64 */
             page_count: number;
             preset_key: string;
@@ -5774,6 +5792,15 @@ export interface components {
             content: string;
             /** @description Media attachment IDs */
             media_ids?: string[] | null;
+        };
+        ToggleStudioDesignFavoriteOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ToggleStudioDesignFavoriteOutputBody.json
+             */
+            readonly $schema?: string;
+            is_favorite: boolean;
         };
         UpdateAccountInputBody: {
             /**
@@ -13573,6 +13600,64 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StudioDocumentResponse"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "toggle-studio-design-favorite": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ToggleStudioDesignFavoriteOutputBody"];
                 };
             };
             /** @description Forbidden */

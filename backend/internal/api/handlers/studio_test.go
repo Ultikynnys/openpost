@@ -252,6 +252,39 @@ func TestStudioViewerCanReadButCannotEdit(t *testing.T) {
 	require.Contains(t, err.Error(), "read-only")
 }
 
+func TestStudioDesignFavoriteIsListedAndRequiresEditAccess(t *testing.T) {
+	t.Parallel()
+	handler, adminCtx := newStudioHandlerTest(t)
+	create := &CreateStudioDesignInput{}
+	create.Body.WorkspaceID = "workspace-1"
+	create.Body.Title = "Favorite design"
+	create.Body.PresetKey = "instagram-square"
+	created, err := handler.createDesign(adminCtx, create)
+	require.NoError(t, err)
+
+	listed, err := handler.listDesigns(adminCtx, &ListStudioDesignsInput{WorkspaceID: "workspace-1"})
+	require.NoError(t, err)
+	require.Len(t, listed.Body.Designs, 1)
+	require.False(t, listed.Body.Designs[0].IsFavorite)
+
+	favorite, err := handler.toggleDesignFavorite(adminCtx, &ToggleStudioDesignFavoriteInput{
+		PathID: created.Body.ID,
+	})
+	require.NoError(t, err)
+	require.True(t, favorite.Body.IsFavorite)
+
+	listed, err = handler.listDesigns(adminCtx, &ListStudioDesignsInput{WorkspaceID: "workspace-1"})
+	require.NoError(t, err)
+	require.True(t, listed.Body.Designs[0].IsFavorite)
+
+	viewerCtx := context.WithValue(context.Background(), middleware.UserIDKey, "viewer-1")
+	_, err = handler.toggleDesignFavorite(viewerCtx, &ToggleStudioDesignFavoriteInput{
+		PathID: created.Body.ID,
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "read-only")
+}
+
 func TestStudioReturnTokenIsOrderedAndOneTime(t *testing.T) {
 	t.Parallel()
 	handler, ctx := newStudioHandlerTest(t)

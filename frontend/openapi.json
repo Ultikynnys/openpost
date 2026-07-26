@@ -7032,6 +7032,9 @@
 					"id": {
 						"type": "string"
 					},
+					"is_favorite": {
+						"type": "boolean"
+					},
 					"page_count": {
 						"format": "int64",
 						"type": "integer"
@@ -7062,6 +7065,7 @@
 					"height_px",
 					"page_count",
 					"revision",
+					"is_favorite",
 					"created_at",
 					"updated_at"
 				],
@@ -8081,6 +8085,23 @@
 					}
 				},
 				"required": ["content"],
+				"type": "object"
+			},
+			"ToggleStudioDesignFavoriteOutputBody": {
+				"additionalProperties": false,
+				"properties": {
+					"$schema": {
+						"description": "A URL to the JSON Schema for this object.",
+						"examples": ["https://example.com/schemas/ToggleStudioDesignFavoriteOutputBody.json"],
+						"format": "uri",
+						"readOnly": true,
+						"type": "string"
+					},
+					"is_favorite": {
+						"type": "boolean"
+					}
+				},
+				"required": ["is_favorite"],
 				"type": "object"
 			},
 			"UpdateAccountInputBody": {
@@ -18399,6 +18420,75 @@
 					}
 				},
 				"summary": "Duplicate a Studio design",
+				"tags": ["Studio"]
+			}
+		},
+		"/studio/designs/{id}/favorite": {
+			"patch": {
+				"operationId": "toggle-studio-design-favorite",
+				"parameters": [
+					{
+						"in": "path",
+						"name": "id",
+						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/ToggleStudioDesignFavoriteOutputBody"
+								}
+							}
+						},
+						"description": "OK"
+					},
+					"403": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Forbidden"
+					},
+					"404": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Not Found"
+					},
+					"422": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Unprocessable Entity"
+					},
+					"500": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Internal Server Error"
+					}
+				},
+				"summary": "Toggle a Studio design favorite",
 				"tags": ["Studio"]
 			}
 		},

@@ -260,17 +260,10 @@ test("desktop planning sidebar resumes drafts and stays out of mobile navigation
   const draftDocumentColors = await draftDocumentIcons.evaluateAll((icons) =>
     icons.map((icon) => getComputedStyle(icon).color),
   );
-  const deleteDraftButtons = draftList.getByRole("button", {
-    name: /^Delete draft:/,
-  });
-  const deleteDraftButton = page.getByRole("button", {
-    name: "Delete draft: Sidebar draft 2",
-  });
-
   await planner.getByRole("button", { name: "View all" }).hover();
-  for (const button of await deleteDraftButtons.all()) {
-    await expect(button).toHaveCSS("opacity", "0");
-  }
+  await expect(
+    draftList.getByRole("button", { name: /^Delete draft:/ }),
+  ).toHaveCount(0);
   await expect(calendarExpandIcon).toHaveCSS("color", calendarExpandColor);
   await expect
     .poll(() =>
@@ -280,17 +273,8 @@ test("desktop planning sidebar resumes drafts and stays out of mobile navigation
     )
     .toEqual(draftDocumentColors);
 
-  await draftToDelete.hover();
-  await expect(deleteDraftButton).toHaveCSS("opacity", "1");
-  for (const button of await deleteDraftButtons.all()) {
-    if (
-      (await button.getAttribute("aria-label")) ===
-      "Delete draft: Sidebar draft 2"
-    )
-      continue;
-    await expect(button).toHaveCSS("opacity", "0");
-  }
-  await deleteDraftButton.click();
+  await draftToDelete.click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Delete", exact: true }).click();
   await expect(
     page.getByText("Delete this draft?", { exact: true }),
   ).toBeVisible();

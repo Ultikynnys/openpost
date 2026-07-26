@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { ContextMenu } from 'bits-ui';
 	import { page } from '$app/state';
 	import { getLocalTimeZone, today, type DateValue } from '@internationalized/date';
 	import { SvelteMap } from 'svelte/reactivity';
@@ -46,6 +47,8 @@
 	let draftDeleteError = $state('');
 	let overviewRequest = 0;
 	let draftsRequest = 0;
+	const draftContextItemClass =
+		'flex min-h-9 cursor-default items-center gap-2 rounded-md px-2 text-sm outline-none data-highlighted:bg-muted data-disabled:pointer-events-none data-disabled:opacity-45';
 
 	const workspaceId = $derived(workspaceCtx.currentWorkspace?.id ?? '');
 	const monthString = $derived.by(() => {
@@ -278,7 +281,7 @@
 		/>
 	</section>
 
-	<section class="flex min-h-0 flex-1 flex-col border-b border-sidebar-border px-2 py-3">
+	<section class="flex min-h-0 flex-1 flex-col px-2 py-3">
 		<div class="mb-1 flex h-7 shrink-0 items-center justify-between px-2">
 			<div class="flex items-center gap-1.5">
 				<span class="text-xs font-medium tracking-[0.1em] text-sidebar-foreground/52 uppercase"
@@ -320,44 +323,64 @@
 		{:else}
 			<ul class="min-h-0 flex-1 space-y-0.5 overflow-y-auto" data-testid="sidebar-draft-list">
 				{#each drafts as draft (draft.id)}
-					<li class="group/draft relative">
-						<button
-							type="button"
-							class="flex min-h-9 w-full items-center gap-2 rounded-md py-1.5 pr-10 pl-2 text-left hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-none"
-							onclick={() => onNavigate(draft.href)}
-							aria-label={m.sidebar_resume_draft({ title: draft.title })}
-						>
-							<span
-								class="flex size-6 shrink-0 items-center justify-center rounded-md bg-sidebar-accent/70 text-sidebar-foreground/58 group-hover/draft:text-sidebar-foreground"
-							>
-								<FileTextIcon class="size-3.5" />
-							</span>
-							<span class="min-w-0 flex-1">
-								<span class="block truncate text-xs font-medium text-sidebar-foreground/88"
-									>{draft.title}</span
-								>
-								{#if draft.isThread}
-									<span class="block text-xs leading-4 text-sidebar-foreground/45"
-										>{m.sidebar_thread_count({ count: draft.postCount })}</span
+					<li>
+						<ContextMenu.Root>
+							<ContextMenu.Trigger>
+								{#snippet child({ props })}
+									<button
+										{...props}
+										type="button"
+										class="group/draft flex min-h-9 w-full items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-none"
+										onclick={() => onNavigate(draft.href)}
+										aria-label={m.sidebar_resume_draft({ title: draft.title })}
 									>
-								{/if}
-							</span>
-							{#if draft.hasMedia}
-								<ImageIcon
-									class="size-3 shrink-0 text-sidebar-foreground/38"
-									aria-label={m.sidebar_has_media()}
-								/>
-							{/if}
-						</button>
-						<button
-							type="button"
-							class="absolute top-1/2 right-1 flex size-7 -translate-y-1/2 items-center justify-center rounded-md text-sidebar-foreground/48 opacity-0 transition-[color,background-color,opacity] group-focus-within/draft:opacity-100 group-hover/draft:opacity-100 hover:bg-destructive/12 hover:text-destructive focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-none"
-							disabled={deletingDraftId === draft.id}
-							onclick={() => requestDraftDelete(draft)}
-							aria-label={m.sidebar_delete_draft({ title: draft.title })}
-						>
-							<TrashIcon class="size-3.5" aria-hidden="true" />
-						</button>
+										<span
+											class="flex size-6 shrink-0 items-center justify-center rounded-md bg-sidebar-accent/70 text-sidebar-foreground/58 group-hover/draft:text-sidebar-foreground"
+										>
+											<FileTextIcon class="size-3.5" />
+										</span>
+										<span class="min-w-0 flex-1">
+											<span class="block truncate text-xs font-medium text-sidebar-foreground/88"
+												>{draft.title}</span
+											>
+											{#if draft.isThread}
+												<span class="block text-xs leading-4 text-sidebar-foreground/45"
+													>{m.sidebar_thread_count({ count: draft.postCount })}</span
+												>
+											{/if}
+										</span>
+										{#if draft.hasMedia}
+											<ImageIcon
+												class="size-3 shrink-0 text-sidebar-foreground/38"
+												aria-label={m.sidebar_has_media()}
+											/>
+										{/if}
+									</button>
+								{/snippet}
+							</ContextMenu.Trigger>
+							<ContextMenu.Portal>
+								<ContextMenu.Content
+									class="z-50 min-w-48 rounded-lg bg-popover/95 p-1 text-popover-foreground shadow-md ring-1 ring-foreground/10 backdrop-blur outline-none"
+								>
+									<ContextMenu.Item
+										class={draftContextItemClass}
+										onclick={() => onNavigate(draft.href)}
+									>
+										<FileTextIcon class="size-4" />
+										{m.sidebar_resume_draft({ title: draft.title })}
+									</ContextMenu.Item>
+									<ContextMenu.Separator class="my-1 h-px bg-border" />
+									<ContextMenu.Item
+										class="{draftContextItemClass} text-destructive data-highlighted:text-destructive"
+										disabled={deletingDraftId === draft.id}
+										onclick={() => requestDraftDelete(draft)}
+									>
+										<TrashIcon class="size-4" aria-hidden="true" />
+										{m.common_delete()}
+									</ContextMenu.Item>
+								</ContextMenu.Content>
+							</ContextMenu.Portal>
+						</ContextMenu.Root>
 					</li>
 				{/each}
 			</ul>

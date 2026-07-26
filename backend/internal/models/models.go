@@ -662,6 +662,7 @@ type DesignDocument struct {
 	BrandKitID          string    `bun:"brand_kit_id,nullzero" json:"brand_kit_id,omitempty"`
 	BrandKitRevision    int       `bun:"brand_kit_revision,notnull,default:0" json:"brand_kit_revision"`
 	CoverPreviewMediaID string    `bun:"cover_preview_media_id,nullzero" json:"cover_preview_media_id,omitempty"`
+	IsFavorite          bool      `bun:"is_favorite,notnull,default:false" json:"is_favorite"`
 	CreatedAt           time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"created_at"`
 	UpdatedAt           time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"updated_at"`
 	DeletedAt           time.Time `bun:",nullzero" json:"deleted_at,omitempty"`

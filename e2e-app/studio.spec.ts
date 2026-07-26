@@ -615,6 +615,24 @@ test("Studio creates from an original template, adapts to mobile, and exports to
   await expect(libraryGrid.locator('[data-library-kind="asset"]')).toHaveCount(
     1,
   );
+  const designCard = libraryGrid.locator('[data-library-kind="design"]');
+  await designCard.click({ button: "right" });
+  await expect(
+    page.getByRole("menuitem", { name: "Open design", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("menuitem", { name: "Duplicate design", exact: true }),
+  ).toBeVisible();
+  await page.getByRole("menuitem", { name: "Favorite", exact: true }).click();
+  await expect(designCard.locator("svg.fill-red-500")).toBeVisible();
+
+  const favoriteDesigns = await request.get(
+    `/api/v1/studio/designs?workspace_id=${workspace.id}&limit=100&offset=0`,
+    { headers: { Authorization: `Bearer ${auth.token}` } },
+  );
+  expect(favoriteDesigns.ok()).toBeTruthy();
+  expect((await favoriteDesigns.json()).designs[0].is_favorite).toBe(true);
+
   await expect(page.getByText("quick-announcement-page-01.png")).toBeVisible();
   const exportedImage = page.getByRole("img", {
     name: "quick-announcement-page-01.png",
@@ -642,6 +660,20 @@ test("Studio creates from an original template, adapts to mobile, and exports to
       }),
     )
     .toBeGreaterThanOrEqual(8);
+
+  await designCard.click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Delete", exact: true }).click();
+  const deleteDesignDialog = page.getByRole("dialog", {
+    name: "Delete design?",
+  });
+  await expect(deleteDesignDialog).toBeVisible();
+  await deleteDesignDialog
+    .getByRole("button", { name: "Delete", exact: true })
+    .click();
+  await expect(libraryGrid.locator('[data-library-kind="design"]')).toHaveCount(
+    0,
+  );
+
   expect({ browserErrors, failedResponses }).toEqual({
     browserErrors: [],
     failedResponses: [],
