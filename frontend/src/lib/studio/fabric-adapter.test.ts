@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { computeImageGeometry, studioLayerRenderOrder } from './fabric-adapter';
-import type { StudioLayer } from './types';
+import {
+	computeImageGeometry,
+	OpenPostFabricAdapter,
+	studioLayerRenderOrder
+} from './fabric-adapter';
+import type { StudioDocument, StudioLayer, StudioPage } from './types';
 
 function imageLayer(
 	width: number,
@@ -69,7 +73,7 @@ describe('Studio image geometry', () => {
 });
 
 describe('Studio layer render order', () => {
-	it('keeps every grouped child inside the group stacking slot', () => {
+	function interleavedGroupLayers(): StudioLayer[] {
 		const rectangle: StudioLayer = {
 			...imageLayer(400, 300),
 			id: 'rectangle',
@@ -81,8 +85,11 @@ describe('Studio layer render order', () => {
 		const group: StudioLayer = { ...imageLayer(500, 400), id: 'group', type: 'group' };
 		rectangle.parent_id = group.id;
 		text.parent_id = group.id;
+		return [rectangle, circle, text, image, group];
+	}
 
-		const order = studioLayerRenderOrder([rectangle, circle, text, image, group]);
+	it('keeps every grouped child inside the group stacking slot', () => {
+		const order = studioLayerRenderOrder(interleavedGroupLayers());
 
 		expect(order.map((layer) => layer.id)).toEqual([
 			'circle',
@@ -91,5 +98,47 @@ describe('Studio layer render order', () => {
 			'text',
 			'group'
 		]);
+	});
+
+	it('reapplies the grouped stacking order during incremental canvas sync', () => {
+		const layers = interleavedGroupLayers();
+		const page: StudioPage = {
+			id: 'page',
+			name: 'Page 1',
+			background_color: '#ffffff',
+			layers
+		};
+		const document = {
+			width_px: 1080,
+			height_px: 1080
+		} as StudioDocument;
+		const adapter = new OpenPostFabricAdapter({
+			canvas: {} as HTMLCanvasElement,
+			document,
+			page,
+			readOnly: false,
+			onSelection: () => undefined,
+			onTransform: () => undefined,
+			onTextChange: () => undefined
+		});
+		const objects = new Map(layers.map((layer) => [layer.id, { id: layer.id }]));
+		const moved: string[] = [];
+		const internals = adapter as unknown as {
+			canvas: { moveObjectTo(object: { id: string }, index: number): void };
+			objectByLayerID: Map<string, { id: string }>;
+			decorationsByLayerID: Map<string, { id: string }[]>;
+			syncObjectOrder(): void;
+		};
+		internals.canvas = {
+			moveObjectTo(object, index) {
+				moved[index] = object.id;
+			}
+		};
+		internals.objectByLayerID = objects;
+		internals.decorationsByLayerID = new Map();
+
+		internals.syncObjectOrder();
+
+		expect(moved).toEqual(['circle', 'image', 'rectangle', 'text', 'group']);
 	});
 });

@@ -25,7 +25,7 @@ All notable changes to this project are documented in this file.
 - Redirected marketing-site documentation paths to the canonical docs site and restored real 404 responses for unknown paths.
 - Made Studio layer reordering work with touch drag handles on mobile, corrected one-direction drop placement, and kept keyboard reordering one step at a time.
 - Preserved image aspect ratios when Studio media metadata arrives before or after insertion, made stretch the default image fit, and enlarged canvas resize handles for touch.
-- Kept every grouped Studio child inside its group stacking slot so unrelated circles, images, and other layers cannot render between grouped text and shapes.
+- Kept every grouped Studio child inside its group stacking slot during initial renders and later canvas syncs so unrelated circles, images, and other layers cannot render between grouped text and shapes.
 - Kept Android Studio text editing anchored above the keyboard without refitting the canvas or panning the document, and made long mobile Settings menus scroll within the visible viewport.
 - Kept release artifact packaging on the pinned Node, pnpm, and Go toolchains after Devenv preflight so transient Nix store references cannot strand frontend, server, or CLI release assets.
 - Kept Brand kit text fields and color controls mounted while their values change so keyboard focus, selection, and color-picker state no longer reset during editing.

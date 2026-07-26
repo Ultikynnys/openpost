@@ -1080,7 +1080,7 @@ export class OpenPostFabricAdapter {
 	private syncObjectOrder(): void {
 		if (!this.canvas) return;
 		let index = 0;
-		for (const layer of this.page.layers) {
+		for (const layer of studioLayerRenderOrder(this.page.layers)) {
 			const object = this.objectByLayerID.get(layer.id);
 			if (object) this.canvas.moveObjectTo(object, index++);
 			for (const decoration of this.decorationsByLayerID.get(layer.id) ?? []) {
