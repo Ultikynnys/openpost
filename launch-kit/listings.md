@@ -23,7 +23,7 @@ every active row.
 | Documentation | <https://docs.openpost.social> |
 | Managed app | <https://app.openpost.social> |
 | Supported networks | Bluesky, LinkedIn, Mastodon, Threads, and X |
-| Install methods | Docker Compose, GHCR container, or a single Go binary |
+| Install methods | Docker Compose, GHCR container, a single Go binary, or the Android APK from each GitHub release |
 | Remote MCP endpoint | `https://app.openpost.social/mcp` (Streamable HTTP, OAuth 2.0 with PKCE) |
 | First tagged release | `v0.1.0`, 2026-03-29 22:06 UTC |
 | License | [AGPL-3.0-only](../LICENSE) |
