@@ -67,10 +67,15 @@
 	let blueskyAppPassword = $state('');
 	let blueskyLoading = $state(false);
 	let blueskyError = $state('');
+	let discordModalOpen = $state(false);
+	let discordWebhookUrl = $state('');
+	let discordLoading = $state(false);
+	let discordError = $state('');
 
 	let editAccountDialogOpen = $state(false);
 	let editingAccount = $state<SocialAccount | null>(null);
 	let editAccountSlug = $state('');
+	let editMessagesEnabled = $state(false);
 	let editAccountLoading = $state(false);
 	let editAccountError = $state('');
 	let disconnectDialogOpen = $state(false);
@@ -205,6 +210,7 @@
 	function openEditAccount(account: SocialAccount) {
 		editingAccount = account;
 		editAccountSlug = account.slug ?? '';
+		editMessagesEnabled = account.messages_enabled ?? false;
 		editAccountError = '';
 		editAccountDialogOpen = true;
 	}
@@ -216,9 +222,17 @@
 		try {
 			const { error: err } = await client.PATCH('/accounts/{account_id}', {
 				params: { path: { account_id: editingAccount.id } },
-				body: { slug: editAccountSlug.trim() }
+				body: {
+					slug: editAccountSlug.trim(),
+					messages_enabled: editingAccount.messaging_supported ? editMessagesEnabled : undefined
+				}
 			});
 			if (err) throw new Error(err.detail || m.accounts_update_slug_failed());
+			if (editingAccount.messaging_supported && editMessagesEnabled && selectedWorkspaceId) {
+				await client.POST('/communications/refresh', {
+					body: { workspace_id: selectedWorkspaceId }
+				});
+			}
 			editAccountDialogOpen = false;
 			editingAccount = null;
 			await loadAccounts();
@@ -356,6 +370,41 @@
 		}
 	}
 
+	function connectDiscord() {
+		if (!selectedWorkspaceId) {
+			showToast(m.accounts_create_workspace_first());
+			return;
+		}
+		clearToast();
+		discordWebhookUrl = '';
+		discordError = '';
+		discordModalOpen = true;
+	}
+
+	async function submitDiscordWebhook() {
+		if (!discordWebhookUrl.trim()) {
+			discordError = m.accounts_discord_url_required();
+			return;
+		}
+		discordLoading = true;
+		discordError = '';
+		try {
+			const { error: err } = await client.POST('/accounts/discord/webhook', {
+				body: {
+					workspace_id: selectedWorkspaceId,
+					webhook_url: discordWebhookUrl.trim()
+				}
+			});
+			if (err) throw new Error(err.detail || m.accounts_connect_failed());
+			discordModalOpen = false;
+			await loadAccounts();
+		} catch (requestError) {
+			discordError = connectErrorMessage(requestError, m.accounts_discord_verify_failed());
+		} finally {
+			discordLoading = false;
+		}
+	}
+
 	async function connectOAuthProvider(platform: string) {
 		if (!selectedWorkspaceId) {
 			showToast(m.accounts_create_workspace_first());
@@ -404,6 +453,8 @@
 				return m.accounts_provider_threads();
 			case 'bluesky':
 				return m.accounts_provider_bluesky();
+			case 'discord':
+				return m.accounts_provider_discord();
 			case 'linkedin':
 				return m.accounts_provider_linkedin();
 			case 'instagram':
@@ -569,6 +620,9 @@
 				break;
 			case 'bluesky':
 				connectBluesky();
+				break;
+			case 'discord':
+				connectDiscord();
 				break;
 			case 'linkedin':
 				connectLinkedIn();
@@ -968,6 +1022,55 @@
 	</Dialog.Content>
 </Dialog.Root>
 
+<Dialog.Root bind:open={discordModalOpen}>
+	<Dialog.Content class="sm:max-w-lg">
+		<Dialog.Header>
+			<Dialog.Title>{m.accounts_connect_discord()}</Dialog.Title>
+			<Dialog.Description>{m.accounts_discord_description()}</Dialog.Description>
+		</Dialog.Header>
+		<form
+			class="space-y-4"
+			onsubmit={(event) => {
+				event.preventDefault();
+				void submitDiscordWebhook();
+			}}
+		>
+			<div class="space-y-2">
+				<Label for="discord-webhook-url">{m.accounts_discord_webhook_url()}</Label>
+				<Input
+					id="discord-webhook-url"
+					type="password"
+					bind:value={discordWebhookUrl}
+					placeholder="https://discord.com/api/webhooks/…"
+					autocomplete="off"
+					autocapitalize="none"
+					spellcheck="false"
+					required
+				/>
+				<p class="text-sm text-muted-foreground">{m.accounts_discord_url_help()}</p>
+			</div>
+			{#if discordError}
+				<InlineNotice
+					tone="error"
+					message={discordError}
+					dismissLabel={m.common_dismiss()}
+					onDismiss={() => (discordError = '')}
+				/>
+			{/if}
+			<div class="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+				<Dialog.Close>
+					{#snippet child({ props })}
+						<Button {...props} variant="outline" type="button">{m.common_cancel()}</Button>
+					{/snippet}
+				</Dialog.Close>
+				<Button type="submit" disabled={discordLoading}>
+					{discordLoading ? m.accounts_discord_verifying() : m.common_connect()}
+				</Button>
+			</div>
+		</form>
+	</Dialog.Content>
+</Dialog.Root>
+
 <Dialog.Root bind:open={editAccountDialogOpen}>
 	<Dialog.Content class="sm:max-w-md">
 		<Dialog.Header>
@@ -987,12 +1090,44 @@
 				<div class="rounded-md bg-muted/40 p-3 text-sm">
 					<div class="font-medium">{accountDisplayName(editingAccount)}</div>
 					<div class="text-muted-foreground">{getPlatformName(editingAccount.platform)}</div>
+					{#if editingAccount.account_kind}
+						<div class="mt-1 text-xs text-muted-foreground capitalize">
+							{editingAccount.account_kind.replaceAll('_', ' ')}
+						</div>
+					{/if}
 					{#if accountServer(editingAccount)}
 						<div class="mt-1 text-xs text-muted-foreground">
 							{m.accounts_server()}: {accountServer(editingAccount)}
 						</div>
 					{/if}
 				</div>
+				{#if editingAccount.messaging_supported}
+					<div class="space-y-3 rounded-md border p-3">
+						<div class="flex items-start gap-3">
+							<input
+								id="account-messages-enabled"
+								class="mt-1 size-4 accent-primary"
+								type="checkbox"
+								bind:checked={editMessagesEnabled}
+							/>
+							<div class="space-y-1">
+								<Label for="account-messages-enabled">{m.accounts_inbox_sync()}</Label>
+								<p class="text-xs text-muted-foreground">
+									{m.accounts_inbox_sync_description()}
+								</p>
+							</div>
+						</div>
+						{#if editingAccount.platform === 'facebook' || editingAccount.platform === 'instagram'}
+							<p class="text-xs text-muted-foreground">
+								{m.accounts_inbox_meta_window()}
+							</p>
+						{:else if editingAccount.platform === 'mastodon'}
+							<p class="text-xs text-muted-foreground">
+								{m.accounts_inbox_mastodon_notice()}
+							</p>
+						{/if}
+					</div>
+				{/if}
 				<div class="space-y-3 rounded-md border p-3">
 					<h3 class="text-sm font-medium">{m.accounts_developer_shortcut()}</h3>
 					<p class="text-xs text-muted-foreground">

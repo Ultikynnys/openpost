@@ -656,6 +656,10 @@
 						"description": "Platform-specific account ID",
 						"type": "string"
 					},
+					"account_kind": {
+						"description": "Normalized identity kind, such as person, organization, creator, or business",
+						"type": "string"
+					},
 					"account_username": {
 						"description": "Account username",
 						"type": "string"
@@ -682,6 +686,14 @@
 						"enum": ["standard", "x-premium"],
 						"type": "string"
 					},
+					"messages_enabled": {
+						"description": "Whether this account opted in to inbox synchronization",
+						"type": "boolean"
+					},
+					"messaging_supported": {
+						"description": "Whether OpenPost has a messaging connector for this provider",
+						"type": "boolean"
+					},
 					"platform": {
 						"description": "Platform name",
 						"type": "string"
@@ -704,7 +716,9 @@
 					"account_avatar_url",
 					"instance_url",
 					"is_active",
-					"thread_replies_supported"
+					"thread_replies_supported",
+					"messaging_supported",
+					"messages_enabled"
 				],
 				"type": "object"
 			},
@@ -1252,6 +1266,30 @@
 				],
 				"type": "object"
 			},
+			"ChangeNotificationsInputBody": {
+				"additionalProperties": false,
+				"properties": {
+					"$schema": {
+						"description": "A URL to the JSON Schema for this object.",
+						"examples": ["https://example.com/schemas/ChangeNotificationsInputBody.json"],
+						"format": "uri",
+						"readOnly": true,
+						"type": "string"
+					},
+					"all": {
+						"description": "Apply to every notification for this user",
+						"type": "boolean"
+					},
+					"ids": {
+						"description": "Notification IDs",
+						"items": {
+							"type": "string"
+						},
+						"type": ["array", "null"]
+					}
+				},
+				"type": "object"
+			},
 			"ChangePasswordInputBody": {
 				"additionalProperties": false,
 				"properties": {
@@ -1295,6 +1333,16 @@
 					}
 				},
 				"required": ["message", "revoked_sessions"],
+				"type": "object"
+			},
+			"ChannelPreference": {
+				"additionalProperties": false,
+				"properties": {
+					"in_app": {
+						"type": "boolean"
+					}
+				},
+				"required": ["in_app"],
 				"type": "object"
 			},
 			"ClientError": {
@@ -1434,11 +1482,17 @@
 						"type": "string"
 					},
 					"selection_id": {
-						"description": "Selected account, page, or channel ID",
+						"description": "Selected account, page, or channel ID. Retained for single-selection clients.",
 						"type": "string"
+					},
+					"selection_ids": {
+						"description": "Selected account, Page, or organization IDs. LinkedIn supports connecting several identities from one grant.",
+						"items": {
+							"type": "string"
+						},
+						"type": ["array", "null"]
 					}
 				},
-				"required": ["selection_id"],
 				"type": "object"
 			},
 			"CompleteMediaUploadSessionInputBody": {
@@ -1629,6 +1683,123 @@
 					"metrics",
 					"engagement"
 				],
+				"type": "object"
+			},
+			"Conversation": {
+				"additionalProperties": false,
+				"properties": {
+					"archived_at": {
+						"format": "date-time",
+						"type": "string"
+					},
+					"counterpart_avatar_url": {
+						"type": "string"
+					},
+					"counterpart_handle": {
+						"type": "string"
+					},
+					"counterpart_name": {
+						"type": "string"
+					},
+					"counterpart_remote_id": {
+						"type": "string"
+					},
+					"created_at": {
+						"format": "date-time",
+						"type": "string"
+					},
+					"id": {
+						"type": "string"
+					},
+					"last_message_at": {
+						"format": "date-time",
+						"type": "string"
+					},
+					"last_message_preview": {
+						"type": "string"
+					},
+					"last_remote_message_id": {
+						"type": "string"
+					},
+					"messaging_window_expires_at": {
+						"format": "date-time",
+						"type": "string"
+					},
+					"platform": {
+						"type": "string"
+					},
+					"read_at": {
+						"format": "date-time",
+						"type": "string"
+					},
+					"remote_conversation_id": {
+						"type": "string"
+					},
+					"social_account_id": {
+						"type": "string"
+					},
+					"unread_count": {
+						"format": "int64",
+						"type": "integer"
+					},
+					"updated_at": {
+						"format": "date-time",
+						"type": "string"
+					},
+					"workspace_id": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"id",
+					"workspace_id",
+					"social_account_id",
+					"platform",
+					"remote_conversation_id",
+					"counterpart_remote_id",
+					"counterpart_name",
+					"counterpart_handle",
+					"counterpart_avatar_url",
+					"last_message_at",
+					"last_message_preview",
+					"last_remote_message_id",
+					"unread_count",
+					"read_at",
+					"archived_at",
+					"messaging_window_expires_at",
+					"created_at",
+					"updated_at"
+				],
+				"type": "object"
+			},
+			"ConversationPage": {
+				"additionalProperties": false,
+				"properties": {
+					"$schema": {
+						"description": "A URL to the JSON Schema for this object.",
+						"examples": ["https://example.com/schemas/ConversationPage.json"],
+						"format": "uri",
+						"readOnly": true,
+						"type": "string"
+					},
+					"items": {
+						"items": {
+							"$ref": "#/components/schemas/Conversation"
+						},
+						"type": ["array", "null"]
+					},
+					"sync_states": {
+						"items": {
+							"$ref": "#/components/schemas/MessageSyncState"
+						},
+						"type": ["array", "null"]
+					},
+					"total": {
+						"format": "int64",
+						"type": "integer"
+					}
+				},
+				"required": ["items", "total", "sync_states"],
 				"type": "object"
 			},
 			"CreateAPITokenInputBody": {
@@ -2905,6 +3076,76 @@
 				"required": ["method", "url", "headers", "expires_at", "object_key"],
 				"type": "object"
 			},
+			"DirectMessage": {
+				"additionalProperties": false,
+				"properties": {
+					"$schema": {
+						"description": "A URL to the JSON Schema for this object.",
+						"examples": ["https://example.com/schemas/DirectMessage.json"],
+						"format": "uri",
+						"readOnly": true,
+						"type": "string"
+					},
+					"attachments_json": {
+						"type": "string"
+					},
+					"author_remote_id": {
+						"type": "string"
+					},
+					"body": {
+						"type": "string"
+					},
+					"conversation_id": {
+						"type": "string"
+					},
+					"created_at": {
+						"format": "date-time",
+						"type": "string"
+					},
+					"direction": {
+						"type": "string"
+					},
+					"error_message": {
+						"type": "string"
+					},
+					"id": {
+						"type": "string"
+					},
+					"remote_created_at": {
+						"format": "date-time",
+						"type": "string"
+					},
+					"remote_message_id": {
+						"type": "string"
+					},
+					"send_status": {
+						"type": "string"
+					},
+					"updated_at": {
+						"format": "date-time",
+						"type": "string"
+					},
+					"workspace_id": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"id",
+					"workspace_id",
+					"conversation_id",
+					"remote_message_id",
+					"direction",
+					"author_remote_id",
+					"body",
+					"attachments_json",
+					"send_status",
+					"error_message",
+					"remote_created_at",
+					"created_at",
+					"updated_at"
+				],
+				"type": "object"
+			},
 			"DisableTOTPInputBody": {
 				"additionalProperties": false,
 				"properties": {
@@ -2921,6 +3162,186 @@
 					}
 				},
 				"required": ["current_password"],
+				"type": "object"
+			},
+			"DiscordWebhookLoginInputBody": {
+				"additionalProperties": false,
+				"properties": {
+					"$schema": {
+						"description": "A URL to the JSON Schema for this object.",
+						"examples": ["https://example.com/schemas/DiscordWebhookLoginInputBody.json"],
+						"format": "uri",
+						"readOnly": true,
+						"type": "string"
+					},
+					"webhook_url": {
+						"description": "Discord incoming webhook URL",
+						"type": "string"
+					},
+					"workspace_id": {
+						"description": "Workspace ID",
+						"type": "string"
+					}
+				},
+				"required": ["workspace_id", "webhook_url"],
+				"type": "object"
+			},
+			"EngagementActionInputBody": {
+				"additionalProperties": false,
+				"properties": {
+					"$schema": {
+						"description": "A URL to the JSON Schema for this object.",
+						"examples": ["https://example.com/schemas/EngagementActionInputBody.json"],
+						"format": "uri",
+						"readOnly": true,
+						"type": "string"
+					},
+					"action": {
+						"enum": ["reply", "hide", "delete"],
+						"type": "string"
+					},
+					"message": {
+						"type": "string"
+					},
+					"workspace_id": {
+						"type": "string"
+					}
+				},
+				"required": ["workspace_id", "action"],
+				"type": "object"
+			},
+			"EngagementItem": {
+				"additionalProperties": false,
+				"properties": {
+					"archived_at": {
+						"format": "date-time",
+						"type": "string"
+					},
+					"author_avatar_url": {
+						"type": "string"
+					},
+					"author_handle": {
+						"type": "string"
+					},
+					"author_name": {
+						"type": "string"
+					},
+					"author_remote_id": {
+						"type": "string"
+					},
+					"body": {
+						"type": "string"
+					},
+					"can_delete": {
+						"type": "boolean"
+					},
+					"can_hide": {
+						"type": "boolean"
+					},
+					"can_reply": {
+						"type": "boolean"
+					},
+					"conversation_remote_id": {
+						"type": "string"
+					},
+					"created_at": {
+						"format": "date-time",
+						"type": "string"
+					},
+					"hidden": {
+						"type": "boolean"
+					},
+					"id": {
+						"type": "string"
+					},
+					"is_ours": {
+						"type": "boolean"
+					},
+					"last_seen_at": {
+						"format": "date-time",
+						"type": "string"
+					},
+					"parent_remote_id": {
+						"type": "string"
+					},
+					"platform": {
+						"type": "string"
+					},
+					"read_at": {
+						"format": "date-time",
+						"type": "string"
+					},
+					"remote_created_at": {
+						"format": "date-time",
+						"type": "string"
+					},
+					"remote_id": {
+						"type": "string"
+					},
+					"rendition_id": {
+						"type": "string"
+					},
+					"social_account_id": {
+						"type": "string"
+					},
+					"updated_at": {
+						"format": "date-time",
+						"type": "string"
+					},
+					"workspace_id": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"id",
+					"workspace_id",
+					"rendition_id",
+					"social_account_id",
+					"platform",
+					"remote_id",
+					"parent_remote_id",
+					"conversation_remote_id",
+					"author_remote_id",
+					"author_name",
+					"author_handle",
+					"author_avatar_url",
+					"body",
+					"is_ours",
+					"can_reply",
+					"can_hide",
+					"can_delete",
+					"hidden",
+					"read_at",
+					"archived_at",
+					"remote_created_at",
+					"last_seen_at",
+					"created_at",
+					"updated_at"
+				],
+				"type": "object"
+			},
+			"EngagementPage": {
+				"additionalProperties": false,
+				"properties": {
+					"$schema": {
+						"description": "A URL to the JSON Schema for this object.",
+						"examples": ["https://example.com/schemas/EngagementPage.json"],
+						"format": "uri",
+						"readOnly": true,
+						"type": "string"
+					},
+					"items": {
+						"items": {
+							"$ref": "#/components/schemas/EngagementItem"
+						},
+						"type": ["array", "null"]
+					},
+					"total": {
+						"format": "int64",
+						"type": "integer"
+					}
+				},
+				"required": ["items", "total"],
 				"type": "object"
 			},
 			"ErrorDetail": {
@@ -4159,6 +4580,46 @@
 				"required": ["message"],
 				"type": "object"
 			},
+			"MessageSyncState": {
+				"additionalProperties": false,
+				"properties": {
+					"error_code": {
+						"type": "string"
+					},
+					"error_message": {
+						"type": "string"
+					},
+					"id": {
+						"type": "string"
+					},
+					"last_success_at": {
+						"format": "date-time",
+						"type": "string"
+					},
+					"next_sync_at": {
+						"format": "date-time",
+						"type": "string"
+					},
+					"platform": {
+						"type": "string"
+					},
+					"social_account_id": {
+						"type": "string"
+					},
+					"status": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"id",
+					"social_account_id",
+					"platform",
+					"status",
+					"error_code",
+					"error_message"
+				],
+				"type": "object"
+			},
 			"MetricSummary": {
 				"additionalProperties": false,
 				"properties": {
@@ -4202,6 +4663,33 @@
 					}
 				},
 				"required": ["slot_time", "message"],
+				"type": "object"
+			},
+			"NotificationPage": {
+				"additionalProperties": false,
+				"properties": {
+					"$schema": {
+						"description": "A URL to the JSON Schema for this object.",
+						"examples": ["https://example.com/schemas/NotificationPage.json"],
+						"format": "uri",
+						"readOnly": true,
+						"type": "string"
+					},
+					"items": {
+						"items": {
+							"$ref": "#/components/schemas/UserNotification"
+						},
+						"type": ["array", "null"]
+					},
+					"next_cursor": {
+						"type": "string"
+					},
+					"unread_count": {
+						"format": "int64",
+						"type": "integer"
+					}
+				},
+				"required": ["items", "unread_count"],
 				"type": "object"
 			},
 			"Option": {
@@ -5559,6 +6047,41 @@
 				"required": ["queued", "message"],
 				"type": "object"
 			},
+			"RefreshCommunicationsInputBody": {
+				"additionalProperties": false,
+				"properties": {
+					"$schema": {
+						"description": "A URL to the JSON Schema for this object.",
+						"examples": ["https://example.com/schemas/RefreshCommunicationsInputBody.json"],
+						"format": "uri",
+						"readOnly": true,
+						"type": "string"
+					},
+					"workspace_id": {
+						"type": "string"
+					}
+				},
+				"required": ["workspace_id"],
+				"type": "object"
+			},
+			"RefreshCommunicationsOutputBody": {
+				"additionalProperties": false,
+				"properties": {
+					"$schema": {
+						"description": "A URL to the JSON Schema for this object.",
+						"examples": ["https://example.com/schemas/RefreshCommunicationsOutputBody.json"],
+						"format": "uri",
+						"readOnly": true,
+						"type": "string"
+					},
+					"queued": {
+						"format": "int64",
+						"type": "integer"
+					}
+				},
+				"required": ["queued"],
+				"type": "object"
+			},
 			"RegisterInputBody": {
 				"additionalProperties": false,
 				"properties": {
@@ -6770,6 +7293,28 @@
 				"required": ["user", "totp_enabled", "passkeys", "methods"],
 				"type": "object"
 			},
+			"SendMessageInputBody": {
+				"additionalProperties": false,
+				"properties": {
+					"$schema": {
+						"description": "A URL to the JSON Schema for this object.",
+						"examples": ["https://example.com/schemas/SendMessageInputBody.json"],
+						"format": "uri",
+						"readOnly": true,
+						"type": "string"
+					},
+					"message": {
+						"maxLength": 10000,
+						"minLength": 1,
+						"type": "string"
+					},
+					"workspace_id": {
+						"type": "string"
+					}
+				},
+				"required": ["workspace_id", "message"],
+				"type": "object"
+			},
 			"SeriesPoint": {
 				"additionalProperties": false,
 				"properties": {
@@ -6782,6 +7327,58 @@
 					}
 				},
 				"required": ["date", "value"],
+				"type": "object"
+			},
+			"SetConversationStateInputBody": {
+				"additionalProperties": false,
+				"properties": {
+					"$schema": {
+						"description": "A URL to the JSON Schema for this object.",
+						"examples": ["https://example.com/schemas/SetConversationStateInputBody.json"],
+						"format": "uri",
+						"readOnly": true,
+						"type": "string"
+					},
+					"archived": {
+						"type": "boolean"
+					},
+					"read": {
+						"type": "boolean"
+					},
+					"workspace_id": {
+						"type": "string"
+					}
+				},
+				"required": ["workspace_id"],
+				"type": "object"
+			},
+			"SetEngagementStateInputBody": {
+				"additionalProperties": false,
+				"properties": {
+					"$schema": {
+						"description": "A URL to the JSON Schema for this object.",
+						"examples": ["https://example.com/schemas/SetEngagementStateInputBody.json"],
+						"format": "uri",
+						"readOnly": true,
+						"type": "string"
+					},
+					"archived": {
+						"type": "boolean"
+					},
+					"ids": {
+						"items": {
+							"type": "string"
+						},
+						"type": ["array", "null"]
+					},
+					"read": {
+						"type": "boolean"
+					},
+					"workspace_id": {
+						"type": "string"
+					}
+				},
+				"required": ["workspace_id", "ids"],
 				"type": "object"
 			},
 			"SettingCondition": {
@@ -8405,6 +9002,10 @@
 						"readOnly": true,
 						"type": "string"
 					},
+					"messages_enabled": {
+						"description": "Opt this account in or out of inbox synchronization",
+						"type": "boolean"
+					},
 					"slug": {
 						"description": "New account slug. Use lowercase letters, numbers, and hyphens.",
 						"type": "string"
@@ -8901,6 +9502,56 @@
 					}
 				},
 				"required": ["variants"],
+				"type": "object"
+			},
+			"UserNotification": {
+				"additionalProperties": false,
+				"properties": {
+					"body": {
+						"type": "string"
+					},
+					"created_at": {
+						"format": "date-time",
+						"type": "string"
+					},
+					"href": {
+						"type": "string"
+					},
+					"id": {
+						"type": "string"
+					},
+					"payload_json": {
+						"type": "string"
+					},
+					"read_at": {
+						"format": "date-time",
+						"type": "string"
+					},
+					"title": {
+						"type": "string"
+					},
+					"type": {
+						"type": "string"
+					},
+					"user_id": {
+						"type": "string"
+					},
+					"workspace_id": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"id",
+					"user_id",
+					"workspace_id",
+					"type",
+					"title",
+					"body",
+					"href",
+					"payload_json",
+					"read_at",
+					"created_at"
+				],
 				"type": "object"
 			},
 			"UserProfile": {
@@ -9472,6 +10123,68 @@
 					}
 				},
 				"summary": "Connect Bluesky account using app password",
+				"tags": ["Accounts"]
+			}
+		},
+		"/accounts/discord/webhook": {
+			"post": {
+				"operationId": "discord-webhook-login",
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/DiscordWebhookLoginInputBody"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"204": {
+						"description": "No Content"
+					},
+					"400": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Bad Request"
+					},
+					"403": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Forbidden"
+					},
+					"422": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Unprocessable Entity"
+					},
+					"500": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Internal Server Error"
+					}
+				},
+				"summary": "Connect a Discord channel using an incoming webhook",
 				"tags": ["Accounts"]
 			}
 		},
@@ -13387,6 +14100,214 @@
 				"tags": ["Publications"]
 			}
 		},
+		"/communications/refresh": {
+			"post": {
+				"operationId": "refresh-communications",
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/RefreshCommunicationsInputBody"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"200": {
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/RefreshCommunicationsOutputBody"
+								}
+							}
+						},
+						"description": "OK"
+					},
+					"default": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Error"
+					}
+				},
+				"summary": "Queue engagement and message collection",
+				"tags": ["Communications"]
+			}
+		},
+		"/engagement": {
+			"get": {
+				"operationId": "list-engagement",
+				"parameters": [
+					{
+						"explode": false,
+						"in": "query",
+						"name": "workspace_id",
+						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					},
+					{
+						"explode": false,
+						"in": "query",
+						"name": "platform",
+						"schema": {
+							"type": "string"
+						}
+					},
+					{
+						"explode": false,
+						"in": "query",
+						"name": "account_id",
+						"schema": {
+							"type": "string"
+						}
+					},
+					{
+						"explode": false,
+						"in": "query",
+						"name": "unread_only",
+						"schema": {
+							"type": "boolean"
+						}
+					},
+					{
+						"explode": false,
+						"in": "query",
+						"name": "archived",
+						"schema": {
+							"type": "boolean"
+						}
+					},
+					{
+						"explode": false,
+						"in": "query",
+						"name": "limit",
+						"schema": {
+							"default": 50,
+							"format": "int64",
+							"maximum": 100,
+							"minimum": 1,
+							"type": "integer"
+						}
+					},
+					{
+						"explode": false,
+						"in": "query",
+						"name": "offset",
+						"schema": {
+							"default": 0,
+							"format": "int64",
+							"minimum": 0,
+							"type": "integer"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/EngagementPage"
+								}
+							}
+						},
+						"description": "OK"
+					},
+					"default": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Error"
+					}
+				},
+				"summary": "List stored replies and comments",
+				"tags": ["Communications"]
+			}
+		},
+		"/engagement/state": {
+			"post": {
+				"operationId": "set-engagement-state",
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/SetEngagementStateInputBody"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"204": {
+						"description": "No Content"
+					},
+					"default": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Error"
+					}
+				},
+				"summary": "Mark engagement read or archived",
+				"tags": ["Communications"]
+			}
+		},
+		"/engagement/{item_id}/actions": {
+			"post": {
+				"operationId": "queue-engagement-action",
+				"parameters": [
+					{
+						"in": "path",
+						"name": "item_id",
+						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					}
+				],
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/EngagementActionInputBody"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"204": {
+						"description": "No Content"
+					},
+					"default": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Error"
+					}
+				},
+				"summary": "Queue a reply or moderation action",
+				"tags": ["Communications"]
+			}
+		},
 		"/feedback": {
 			"post": {
 				"description": "Only the message and optional screenshot and diagnostics selected by the user are queued.",
@@ -15070,6 +15991,480 @@
 				},
 				"summary": "Get posts that use a media attachment",
 				"tags": ["Media"]
+			}
+		},
+		"/messages": {
+			"get": {
+				"operationId": "list-conversations",
+				"parameters": [
+					{
+						"explode": false,
+						"in": "query",
+						"name": "workspace_id",
+						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					},
+					{
+						"explode": false,
+						"in": "query",
+						"name": "platform",
+						"schema": {
+							"type": "string"
+						}
+					},
+					{
+						"explode": false,
+						"in": "query",
+						"name": "account_id",
+						"schema": {
+							"type": "string"
+						}
+					},
+					{
+						"explode": false,
+						"in": "query",
+						"name": "archived",
+						"schema": {
+							"type": "boolean"
+						}
+					},
+					{
+						"explode": false,
+						"in": "query",
+						"name": "limit",
+						"schema": {
+							"default": 50,
+							"format": "int64",
+							"maximum": 100,
+							"minimum": 1,
+							"type": "integer"
+						}
+					},
+					{
+						"explode": false,
+						"in": "query",
+						"name": "offset",
+						"schema": {
+							"default": 0,
+							"format": "int64",
+							"minimum": 0,
+							"type": "integer"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/ConversationPage"
+								}
+							}
+						},
+						"description": "OK"
+					},
+					"default": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Error"
+					}
+				},
+				"summary": "List stored social conversations",
+				"tags": ["Communications"]
+			}
+		},
+		"/messages/{conversation_id}": {
+			"get": {
+				"operationId": "list-conversation-messages",
+				"parameters": [
+					{
+						"in": "path",
+						"name": "conversation_id",
+						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					},
+					{
+						"explode": false,
+						"in": "query",
+						"name": "workspace_id",
+						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					},
+					{
+						"explode": false,
+						"in": "query",
+						"name": "limit",
+						"schema": {
+							"default": 100,
+							"format": "int64",
+							"maximum": 200,
+							"minimum": 1,
+							"type": "integer"
+						}
+					},
+					{
+						"explode": false,
+						"in": "query",
+						"name": "offset",
+						"schema": {
+							"default": 0,
+							"format": "int64",
+							"minimum": 0,
+							"type": "integer"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"content": {
+							"application/json": {
+								"schema": {
+									"items": {
+										"$ref": "#/components/schemas/DirectMessage"
+									},
+									"type": ["array", "null"]
+								}
+							}
+						},
+						"description": "OK"
+					},
+					"default": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Error"
+					}
+				},
+				"summary": "List messages in a stored conversation",
+				"tags": ["Communications"]
+			}
+		},
+		"/messages/{conversation_id}/send": {
+			"post": {
+				"operationId": "send-conversation-message",
+				"parameters": [
+					{
+						"in": "path",
+						"name": "conversation_id",
+						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					}
+				],
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/SendMessageInputBody"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"200": {
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/DirectMessage"
+								}
+							}
+						},
+						"description": "OK"
+					},
+					"default": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Error"
+					}
+				},
+				"summary": "Queue a social direct message",
+				"tags": ["Communications"]
+			}
+		},
+		"/messages/{conversation_id}/state": {
+			"post": {
+				"operationId": "set-conversation-state",
+				"parameters": [
+					{
+						"in": "path",
+						"name": "conversation_id",
+						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					}
+				],
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/SetConversationStateInputBody"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"204": {
+						"description": "No Content"
+					},
+					"default": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Error"
+					}
+				},
+				"summary": "Mark a conversation read or archived",
+				"tags": ["Communications"]
+			}
+		},
+		"/notifications": {
+			"get": {
+				"operationId": "list-notifications",
+				"parameters": [
+					{
+						"description": "Current workspace ID",
+						"explode": false,
+						"in": "query",
+						"name": "workspace_id",
+						"schema": {
+							"description": "Current workspace ID",
+							"type": "string"
+						}
+					},
+					{
+						"description": "Opaque pagination cursor",
+						"explode": false,
+						"in": "query",
+						"name": "cursor",
+						"schema": {
+							"description": "Opaque pagination cursor",
+							"type": "string"
+						}
+					},
+					{
+						"explode": false,
+						"in": "query",
+						"name": "limit",
+						"schema": {
+							"default": 30,
+							"format": "int64",
+							"maximum": 100,
+							"minimum": 1,
+							"type": "integer"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/NotificationPage"
+								}
+							}
+						},
+						"description": "OK"
+					},
+					"403": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Forbidden"
+					},
+					"422": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Unprocessable Entity"
+					},
+					"500": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Internal Server Error"
+					}
+				},
+				"summary": "List the current user's stored notifications",
+				"tags": ["Notifications"]
+			}
+		},
+		"/notifications/delete": {
+			"post": {
+				"operationId": "delete-notifications",
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/ChangeNotificationsInputBody"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"204": {
+						"description": "No Content"
+					},
+					"default": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Error"
+					}
+				},
+				"summary": "Delete one or all notifications",
+				"tags": ["Notifications"]
+			}
+		},
+		"/notifications/preferences": {
+			"get": {
+				"operationId": "get-notification-preferences",
+				"responses": {
+					"200": {
+						"content": {
+							"application/json": {
+								"schema": {
+									"additionalProperties": {
+										"$ref": "#/components/schemas/ChannelPreference"
+									},
+									"type": "object"
+								}
+							}
+						},
+						"description": "OK"
+					},
+					"default": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Error"
+					}
+				},
+				"summary": "Get notification delivery preferences",
+				"tags": ["Notifications"]
+			},
+			"put": {
+				"operationId": "update-notification-preferences",
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": {
+								"additionalProperties": {
+									"$ref": "#/components/schemas/ChannelPreference"
+								},
+								"type": "object"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"200": {
+						"content": {
+							"application/json": {
+								"schema": {
+									"additionalProperties": {
+										"$ref": "#/components/schemas/ChannelPreference"
+									},
+									"type": "object"
+								}
+							}
+						},
+						"description": "OK"
+					},
+					"default": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Error"
+					}
+				},
+				"summary": "Update notification delivery preferences",
+				"tags": ["Notifications"]
+			}
+		},
+		"/notifications/read": {
+			"post": {
+				"operationId": "mark-notifications-read",
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/ChangeNotificationsInputBody"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"204": {
+						"description": "No Content"
+					},
+					"default": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Error"
+					}
+				},
+				"summary": "Mark one or all notifications read",
+				"tags": ["Notifications"]
 			}
 		},
 		"/organizations": {

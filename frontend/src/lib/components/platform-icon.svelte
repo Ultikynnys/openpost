@@ -3,6 +3,7 @@
 	import mastodon from '../../../../assets/logos/mastodon.svg?raw';
 	import threads from '../../../../assets/logos/threads.svg?raw';
 	import bluesky from '../../../../assets/logos/bluesky.svg?raw';
+	import discord from '../../../../assets/logos/discord.svg?raw';
 	import linkedin from '../../../../assets/logos/linkedin.svg?raw';
 	import instagram from '../../../../assets/logos/instagram.svg?raw';
 	import facebook from '../../../../assets/logos/facebook.svg?raw';
@@ -22,6 +23,7 @@
 		mastodon,
 		threads,
 		bluesky,
+		discord,
 		linkedin,
 		instagram,
 		facebook,

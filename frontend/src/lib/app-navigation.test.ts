@@ -7,6 +7,7 @@ describe('primary application navigation', () => {
 			'New post',
 			'Calendar',
 			'Posts',
+			'Communications',
 			'Analytics',
 			'Media',
 			'Social accounts',

@@ -38,6 +38,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/accounts/discord/webhook": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Connect a Discord channel using an incoming webhook */
+        post: operations["discord-webhook-login"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/accounts/mastodon/exchange": {
         parameters: {
             query?: never;
@@ -959,6 +976,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/communications/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Queue engagement and message collection */
+        post: operations["refresh-communications"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/engagement": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List stored replies and comments */
+        get: operations["list-engagement"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/engagement/state": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Mark engagement read or archived */
+        post: operations["set-engagement-state"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/engagement/{item_id}/actions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Queue a reply or moderation action */
+        post: operations["queue-engagement-action"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/feedback": {
         parameters: {
             query?: never;
@@ -1301,6 +1386,143 @@ export interface paths {
         get: operations["get-media-usage"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List stored social conversations */
+        get: operations["list-conversations"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/messages/{conversation_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List messages in a stored conversation */
+        get: operations["list-conversation-messages"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/messages/{conversation_id}/send": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Queue a social direct message */
+        post: operations["send-conversation-message"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/messages/{conversation_id}/state": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Mark a conversation read or archived */
+        post: operations["set-conversation-state"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/notifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the current user's stored notifications */
+        get: operations["list-notifications"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/notifications/delete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Delete one or all notifications */
+        post: operations["delete-notifications"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/notifications/preferences": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get notification delivery preferences */
+        get: operations["get-notification-preferences"];
+        /** Update notification delivery preferences */
+        put: operations["update-notification-preferences"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/notifications/read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Mark one or all notifications read */
+        post: operations["mark-notifications-read"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2473,6 +2695,8 @@ export interface components {
             account_avatar_url: string;
             /** @description Platform-specific account ID */
             account_id: string;
+            /** @description Normalized identity kind, such as person, organization, creator, or business */
+            account_kind?: string;
             /** @description Account username */
             account_username: string;
             /**
@@ -2491,6 +2715,10 @@ export interface components {
              * @enum {string}
              */
             limit_profile?: "standard" | "x-premium";
+            /** @description Whether this account opted in to inbox synchronization */
+            messages_enabled: boolean;
+            /** @description Whether OpenPost has a messaging connector for this provider */
+            messaging_supported: boolean;
             /** @description Platform name */
             platform: string;
             /** @description User-editable account slug for CLI selectors */
@@ -2739,6 +2967,18 @@ export interface components {
             unavailable_reason?: string;
             validation_categories?: string[] | null;
         };
+        ChangeNotificationsInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ChangeNotificationsInputBody.json
+             */
+            readonly $schema?: string;
+            /** @description Apply to every notification for this user */
+            all?: boolean;
+            /** @description Notification IDs */
+            ids?: string[] | null;
+        };
         ChangePasswordInputBody: {
             /**
              * Format: uri
@@ -2761,6 +3001,9 @@ export interface components {
             message: string;
             /** Format: int64 */
             revoked_sessions: number;
+        };
+        ChannelPreference: {
+            in_app: boolean;
         };
         ClientError: {
             message: string;
@@ -2817,8 +3060,10 @@ export interface components {
              * @example https://example.com/schemas/CompleteAccountSelectionInputBody.json
              */
             readonly $schema?: string;
-            /** @description Selected account, page, or channel ID */
-            selection_id: string;
+            /** @description Selected account, page, or channel ID. Retained for single-selection clients. */
+            selection_id?: string;
+            /** @description Selected account, Page, or organization IDs. LinkedIn supports connecting several identities from one grant. */
+            selection_ids?: string[] | null;
         };
         CompleteMediaUploadSessionInputBody: {
             /**
@@ -2896,6 +3141,45 @@ export interface components {
             status: string;
             title: string;
             username: string;
+        };
+        Conversation: {
+            /** Format: date-time */
+            archived_at: string;
+            counterpart_avatar_url: string;
+            counterpart_handle: string;
+            counterpart_name: string;
+            counterpart_remote_id: string;
+            /** Format: date-time */
+            created_at: string;
+            id: string;
+            /** Format: date-time */
+            last_message_at: string;
+            last_message_preview: string;
+            last_remote_message_id: string;
+            /** Format: date-time */
+            messaging_window_expires_at: string;
+            platform: string;
+            /** Format: date-time */
+            read_at: string;
+            remote_conversation_id: string;
+            social_account_id: string;
+            /** Format: int64 */
+            unread_count: number;
+            /** Format: date-time */
+            updated_at: string;
+            workspace_id: string;
+        };
+        ConversationPage: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ConversationPage.json
+             */
+            readonly $schema?: string;
+            items: components["schemas"]["Conversation"][] | null;
+            sync_states: components["schemas"]["MessageSyncState"][] | null;
+            /** Format: int64 */
+            total: number;
         };
         CreateAPITokenInputBody: {
             /**
@@ -3552,6 +3836,30 @@ export interface components {
             /** @description Presigned or authenticated upload target URL */
             url: string;
         };
+        DirectMessage: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/DirectMessage.json
+             */
+            readonly $schema?: string;
+            attachments_json: string;
+            author_remote_id: string;
+            body: string;
+            conversation_id: string;
+            /** Format: date-time */
+            created_at: string;
+            direction: string;
+            error_message: string;
+            id: string;
+            /** Format: date-time */
+            remote_created_at: string;
+            remote_message_id: string;
+            send_status: string;
+            /** Format: date-time */
+            updated_at: string;
+            workspace_id: string;
+        };
         DisableTOTPInputBody: {
             /**
              * Format: uri
@@ -3561,6 +3869,73 @@ export interface components {
             readonly $schema?: string;
             /** @description Current password for re-authentication */
             current_password: string;
+        };
+        DiscordWebhookLoginInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/DiscordWebhookLoginInputBody.json
+             */
+            readonly $schema?: string;
+            /** @description Discord incoming webhook URL */
+            webhook_url: string;
+            /** @description Workspace ID */
+            workspace_id: string;
+        };
+        EngagementActionInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/EngagementActionInputBody.json
+             */
+            readonly $schema?: string;
+            /** @enum {string} */
+            action: "reply" | "hide" | "delete";
+            message?: string;
+            workspace_id: string;
+        };
+        EngagementItem: {
+            /** Format: date-time */
+            archived_at: string;
+            author_avatar_url: string;
+            author_handle: string;
+            author_name: string;
+            author_remote_id: string;
+            body: string;
+            can_delete: boolean;
+            can_hide: boolean;
+            can_reply: boolean;
+            conversation_remote_id: string;
+            /** Format: date-time */
+            created_at: string;
+            hidden: boolean;
+            id: string;
+            is_ours: boolean;
+            /** Format: date-time */
+            last_seen_at: string;
+            parent_remote_id: string;
+            platform: string;
+            /** Format: date-time */
+            read_at: string;
+            /** Format: date-time */
+            remote_created_at: string;
+            remote_id: string;
+            rendition_id: string;
+            social_account_id: string;
+            /** Format: date-time */
+            updated_at: string;
+            workspace_id: string;
+        };
+        EngagementPage: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/EngagementPage.json
+             */
+            readonly $schema?: string;
+            items: components["schemas"]["EngagementItem"][] | null;
+            /** Format: int64 */
+            total: number;
         };
         ErrorDetail: {
             /** @description Where the error occurred, e.g. 'body.items[3].tags' or 'path.thing-id' */
@@ -4165,6 +4540,18 @@ export interface components {
             readonly $schema?: string;
             message: string;
         };
+        MessageSyncState: {
+            error_code: string;
+            error_message: string;
+            id: string;
+            /** Format: date-time */
+            last_success_at?: string;
+            /** Format: date-time */
+            next_sync_at?: string;
+            platform: string;
+            social_account_id: string;
+            status: string;
+        };
         MetricSummary: {
             /** Format: int64 */
             delta?: number;
@@ -4186,6 +4573,18 @@ export interface components {
             slot?: components["schemas"]["PostingScheduleResponse"];
             /** @description The suggested time in ISO 8601 format */
             slot_time: string;
+        };
+        NotificationPage: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/NotificationPage.json
+             */
+            readonly $schema?: string;
+            items: components["schemas"]["UserNotification"][] | null;
+            next_cursor?: string;
+            /** Format: int64 */
+            unread_count: number;
         };
         Option: {
             label: string;
@@ -4801,6 +5200,25 @@ export interface components {
             /** Format: int64 */
             queued: number;
         };
+        RefreshCommunicationsInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/RefreshCommunicationsInputBody.json
+             */
+            readonly $schema?: string;
+            workspace_id: string;
+        };
+        RefreshCommunicationsOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/RefreshCommunicationsOutputBody.json
+             */
+            readonly $schema?: string;
+            /** Format: int64 */
+            queued: number;
+        };
         RegisterInputBody: {
             /**
              * Format: uri
@@ -5332,10 +5750,43 @@ export interface components {
             totp_enabled: boolean;
             user: components["schemas"]["UserProfile"];
         };
+        SendMessageInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/SendMessageInputBody.json
+             */
+            readonly $schema?: string;
+            message: string;
+            workspace_id: string;
+        };
         SeriesPoint: {
             date: string;
             /** Format: int64 */
             value: number;
+        };
+        SetConversationStateInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/SetConversationStateInputBody.json
+             */
+            readonly $schema?: string;
+            archived?: boolean;
+            read?: boolean;
+            workspace_id: string;
+        };
+        SetEngagementStateInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/SetEngagementStateInputBody.json
+             */
+            readonly $schema?: string;
+            archived?: boolean;
+            ids: string[] | null;
+            read?: boolean;
+            workspace_id: string;
         };
         SettingCondition: {
             key: string;
@@ -5954,6 +6405,8 @@ export interface components {
              * @example https://example.com/schemas/UpdateAccountInputBody.json
              */
             readonly $schema?: string;
+            /** @description Opt this account in or out of inbox synchronization */
+            messages_enabled?: boolean;
             /** @description New account slug. Use lowercase letters, numbers, and hyphens. */
             slug: string;
         };
@@ -6191,6 +6644,20 @@ export interface components {
             readonly $schema?: string;
             /** @description Updated variants */
             variants: components["schemas"]["VariantResponse"][] | null;
+        };
+        UserNotification: {
+            body: string;
+            /** Format: date-time */
+            created_at: string;
+            href: string;
+            id: string;
+            payload_json: string;
+            /** Format: date-time */
+            read_at: string;
+            title: string;
+            type: string;
+            user_id: string;
+            workspace_id: string;
         };
         UserProfile: {
             /**
@@ -6444,6 +6911,64 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["BlueskyLoginInputBody"];
+            };
+        };
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "discord-webhook-login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DiscordWebhookLoginInputBody"];
             };
         };
         responses: {
@@ -9734,6 +10259,140 @@ export interface operations {
             };
         };
     };
+    "refresh-communications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RefreshCommunicationsInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RefreshCommunicationsOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "list-engagement": {
+        parameters: {
+            query: {
+                workspace_id: string;
+                platform?: string;
+                account_id?: string;
+                unread_only?: boolean;
+                archived?: boolean;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EngagementPage"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "set-engagement-state": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetEngagementStateInputBody"];
+            };
+        };
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "queue-engagement-action": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EngagementActionInputBody"];
+            };
+        };
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     "submit-feedback": {
         parameters: {
             query?: never;
@@ -10944,6 +11603,328 @@ export interface operations {
             };
             /** @description Internal Server Error */
             500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "list-conversations": {
+        parameters: {
+            query: {
+                workspace_id: string;
+                platform?: string;
+                account_id?: string;
+                archived?: boolean;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConversationPage"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "list-conversation-messages": {
+        parameters: {
+            query: {
+                workspace_id: string;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path: {
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DirectMessage"][] | null;
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "send-conversation-message": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SendMessageInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DirectMessage"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "set-conversation-state": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetConversationStateInputBody"];
+            };
+        };
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "list-notifications": {
+        parameters: {
+            query?: {
+                /** @description Current workspace ID */
+                workspace_id?: string;
+                /** @description Opaque pagination cursor */
+                cursor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationPage"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "delete-notifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangeNotificationsInputBody"];
+            };
+        };
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "get-notification-preferences": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: components["schemas"]["ChannelPreference"];
+                    };
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "update-notification-preferences": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: components["schemas"]["ChannelPreference"];
+                };
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: components["schemas"]["ChannelPreference"];
+                    };
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "mark-notifications-read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangeNotificationsInputBody"];
+            };
+        };
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error */
+            default: {
                 headers: {
                     [name: string]: unknown;
                 };

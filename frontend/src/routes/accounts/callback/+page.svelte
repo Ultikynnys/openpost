@@ -24,6 +24,7 @@
 	let viewState = $state<CallbackState>('loading');
 	let selection = $state.raw<Selection | null>(null);
 	let selectedId = $state('');
+	let selectedIds = $state<string[]>([]);
 	let loadingSelection = $state(false);
 	let submitting = $state(false);
 	let error = $state('');
@@ -34,14 +35,18 @@
 		platform ? getPlatformName(platform) : m.accounts_callback_social_account()
 	);
 	let options = $derived(selection?.options ?? []);
+	let allowsMultiple = $derived(platform === 'linkedin');
+	let selectedCount = $derived(allowsMultiple ? selectedIds.length : selectedId ? 1 : 0);
 	let shellTitle = $derived(
 		viewState === 'selection'
 			? m.accounts_callback_choose_heading({ platform: platformName })
-			: viewState === 'error'
-				? m.accounts_callback_attention_heading()
-				: viewState === 'loading'
-					? m.accounts_callback_finishing_heading()
-					: m.accounts_callback_connected_heading()
+			: viewState === 'selection_success' && selectedCount > 1
+				? m.accounts_callback_connected_many_heading({ count: selectedCount })
+				: viewState === 'error'
+					? m.accounts_callback_attention_heading()
+					: viewState === 'loading'
+						? m.accounts_callback_finishing_heading()
+						: m.accounts_callback_connected_heading()
 	);
 	let shellDescription = $derived(
 		viewState === 'selection'
@@ -141,6 +146,7 @@
 			platform = data.platform || platform;
 			selection = data;
 			selectedId = '';
+			selectedIds = [];
 			viewState = 'selection';
 		} catch (requestError) {
 			showError(transportErrorMessage(requestError, m.accounts_callback_selection_load_failed()));
@@ -150,7 +156,7 @@
 	}
 
 	async function completeSelection() {
-		if (!selectedId) {
+		if (selectedCount === 0) {
 			error = m.accounts_callback_choose_required();
 			return;
 		}
@@ -163,7 +169,7 @@
 				'/accounts/selections/{connection_id}/complete',
 				{
 					params: { path: { connection_id: connectionId } },
-					body: { selection_id: selectedId }
+					body: allowsMultiple ? { selection_ids: selectedIds } : { selection_id: selectedId }
 				}
 			);
 
@@ -214,6 +220,10 @@
 	function metadataEntries(option: SelectionOption) {
 		return Object.entries(option.extra ?? {}).filter(([, value]) => value);
 	}
+
+	function isSelected(optionId: string) {
+		return allowsMultiple ? selectedIds.includes(optionId) : selectedId === optionId;
+	}
 </script>
 
 <svelte:head>
@@ -232,7 +242,9 @@
 	{#if viewState === 'selection'}
 		<form class="space-y-5" onsubmit={(event) => event.preventDefault()}>
 			<p class="text-sm text-muted-foreground">
-				{#if expiresAtLabel}
+				{#if allowsMultiple}
+					{m.accounts_callback_choose_many({ platform: platformName })}
+				{:else if expiresAtLabel}
 					{m.accounts_callback_expires({ date: expiresAtLabel })}
 				{:else}
 					{m.accounts_callback_choose_one({ platform: platformName })}
@@ -245,19 +257,29 @@
 					<label
 						class={[
 							'flex cursor-pointer gap-3 rounded-md border p-4 transition-colors',
-							selectedId === option.id
+							isSelected(option.id)
 								? 'border-primary bg-primary/5 ring-2 ring-primary/20'
 								: 'border-border hover:bg-muted/40'
 						]}
 					>
-						<input
-							class="mt-1 size-4 accent-primary"
-							type="radio"
-							name="selection_id"
-							value={option.id}
-							bind:group={selectedId}
-							required
-						/>
+						{#if allowsMultiple}
+							<input
+								class="mt-1 size-4 accent-primary"
+								type="checkbox"
+								name="selection_ids"
+								value={option.id}
+								bind:group={selectedIds}
+							/>
+						{:else}
+							<input
+								class="mt-1 size-4 accent-primary"
+								type="radio"
+								name="selection_id"
+								value={option.id}
+								bind:group={selectedId}
+								required
+							/>
+						{/if}
 						{#if option.avatar_url}
 							<img
 								class="size-12 rounded-full border object-cover"
@@ -303,8 +325,12 @@
 				<Button variant="outline" onclick={goToAccounts} disabled={submitting}
 					>{m.common_cancel()}</Button
 				>
-				<Button onclick={completeSelection} disabled={submitting || !selectedId}>
-					{submitting ? m.accounts_callback_saving() : m.accounts_callback_connect_selected()}
+				<Button onclick={completeSelection} disabled={submitting || selectedCount === 0}>
+					{submitting
+						? m.accounts_callback_saving()
+						: allowsMultiple
+							? m.accounts_callback_connect_selected_many({ count: selectedCount })
+							: m.accounts_callback_connect_selected()}
 				</Button>
 			</div>
 		</form>
@@ -317,7 +343,9 @@
 					: m.accounts_callback_redirect_many({ count: countdown })}
 			</p>
 			<p class="max-w-md text-sm text-muted-foreground">
-				{m.accounts_callback_completed()}
+				{selectedCount > 1
+					? m.accounts_callback_completed_many({ count: selectedCount })
+					: m.accounts_callback_completed()}
 			</p>
 			<Button onclick={goToAccounts}>{m.accounts_callback_go_now()}</Button>
 		</div>

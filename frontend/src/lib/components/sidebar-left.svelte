@@ -21,12 +21,14 @@
 	import CalendarIcon from 'lucide-svelte/icons/calendar-days';
 	import ComposeIcon from 'lucide-svelte/icons/square-pen';
 	import PostsIcon from 'lucide-svelte/icons/files';
+	import CommunicationsIcon from 'lucide-svelte/icons/messages-square';
 	import AnalyticsIcon from 'lucide-svelte/icons/chart-no-axes-combined';
 	import MediaIcon from 'lucide-svelte/icons/images';
 	import AccountsIcon from 'lucide-svelte/icons/users';
 	import SettingsIcon from 'lucide-svelte/icons/settings';
 	import ChevronsUpDownIcon from 'lucide-svelte/icons/chevrons-up-down';
 	import type { Workspace } from '$lib/api/client';
+	import NotificationBell from './notification-bell.svelte';
 
 	let authState = $derived($auth);
 	const sidebar = Sidebar.useSidebar();
@@ -51,7 +53,7 @@
 	const sidebarNavigationItems = $derived(navigationItems.filter((item) => item.id !== 'new'));
 	const workspaceNavigationItems = $derived(
 		navigationItems.filter((item) =>
-			['posts', 'analytics', 'media', 'accounts', 'settings'].includes(item.id)
+			['posts', 'communications', 'analytics', 'media', 'accounts', 'settings'].includes(item.id)
 		)
 	);
 	const showDesktopPlanner = $derived(!sidebar.isMobile && sidebar.state === 'expanded');
@@ -67,6 +69,8 @@
 				return PostsIcon;
 			case 'analytics':
 				return AnalyticsIcon;
+			case 'communications':
+				return CommunicationsIcon;
 			case 'media':
 				return MediaIcon;
 			case 'accounts':
@@ -86,6 +90,8 @@
 				return m.sidebar_activity();
 			case 'analytics':
 				return m.sidebar_analytics();
+			case 'communications':
+				return m.sidebar_communications();
 			case 'media':
 				return m.sidebar_media();
 			case 'accounts':
@@ -253,6 +259,7 @@
 			</div>
 		{/if}
 		<Sidebar.Menu class={showDesktopPlanner ? 'border-t border-sidebar-border pt-1' : ''}>
+			<NotificationBell />
 			<Sidebar.MenuItem>
 				<DropdownMenu.Root>
 					<DropdownMenu.Trigger>
