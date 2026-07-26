@@ -104,6 +104,12 @@ describe('Studio document contracts', () => {
 				},
 				effects: {
 					blend_mode: 'overlay',
+					stroke: {
+						color: '#f97316',
+						opacity: 1,
+						width: 8,
+						position: 'outside'
+					},
 					drop_shadow: {
 						color: '#000000',
 						opacity: 0.3,

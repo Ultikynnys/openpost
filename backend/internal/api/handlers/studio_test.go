@@ -95,6 +95,12 @@ func TestStudioDesignSaveUsesOptimisticConcurrencyAndTracksMedia(t *testing.T) {
 				Angle:    135,
 				Distance: 8,
 			},
+			Stroke: &StudioStrokeEffect{
+				Color:    "#f97316",
+				Opacity:  1,
+				Width:    6,
+				Position: "outside",
+			},
 		},
 		Mask: &StudioLayerMask{Shape: "circle", Inset: 4},
 	})
@@ -125,6 +131,37 @@ func TestStudioDesignSaveUsesOptimisticConcurrencyAndTracksMedia(t *testing.T) {
 		},
 		Effects: &StudioLayerEffects{BlendMode: "normal"},
 	})
+	payload.Pages[0].Layers = append(payload.Pages[0].Layers, StudioLayer{
+		ID:      "paint-layer-2",
+		Type:    "paint",
+		Name:    "Gradient",
+		Visible: true,
+		Opacity: 1,
+		Transform: StudioTransform{
+			Width:  240,
+			Height: 120,
+		},
+		Paint: &StudioPaintValue{
+			Kind:         "gradient",
+			Color:        "#f97316",
+			Size:         1,
+			Opacity:      1,
+			SourceWidth:  240,
+			SourceHeight: 120,
+			Points:       []StudioPaintPoint{},
+			Spans:        []StudioPaintSpan{{X: 0, Y: 0, Width: 240}},
+			Gradient: &StudioGradientValue{
+				Type:  "linear",
+				Start: StudioPaintPoint{X: 0, Y: 0},
+				End:   StudioPaintPoint{X: 240, Y: 0},
+				Stops: []StudioGradientStop{
+					{Offset: 0, Color: "#f97316"},
+					{Offset: 1, Color: "#7c3aed"},
+				},
+			},
+		},
+		Effects: &StudioLayerEffects{BlendMode: "normal"},
+	})
 	update := &UpdateStudioDesignInput{PathID: created.Body.ID}
 	update.Body.ExpectedRevision = 1
 	update.Body.Document = payload
@@ -136,6 +173,8 @@ func TestStudioDesignSaveUsesOptimisticConcurrencyAndTracksMedia(t *testing.T) {
 	require.Equal(t, "circle", saved.Body.Document.Pages[0].Layers[0].Mask.Shape)
 	require.Equal(t, "paint", saved.Body.Document.Pages[0].Layers[1].Type)
 	require.Equal(t, "stroke", saved.Body.Document.Pages[0].Layers[1].Paint.Kind)
+	require.Equal(t, "gradient", saved.Body.Document.Pages[0].Layers[2].Paint.Kind)
+	require.Equal(t, "outside", saved.Body.Document.Pages[0].Layers[0].Effects.Stroke.Position)
 
 	count, err := handler.db.NewSelect().Model((*models.DesignMediaReference)(nil)).
 		Where("design_document_id = ? AND media_id = ?", created.Body.ID, "media-1").

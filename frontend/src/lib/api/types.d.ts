@@ -5414,6 +5414,19 @@ export interface components {
             /** Format: double */
             quality: number;
         };
+        StudioGradientStop: {
+            color: string;
+            /** Format: double */
+            offset: number;
+        };
+        StudioGradientValue: {
+            end: components["schemas"]["StudioPaintPoint"];
+            reverse: boolean;
+            start: components["schemas"]["StudioPaintPoint"];
+            stops: components["schemas"]["StudioGradientStop"][] | null;
+            /** @enum {string} */
+            type: "linear" | "radial" | "angle" | "reflected" | "diamond";
+        };
         StudioImageAdjustments: {
             /** Format: double */
             blur: number;
@@ -5437,6 +5450,7 @@ export interface components {
             crop: components["schemas"]["StudioCrop"];
             /** @enum {string} */
             fit: "cover" | "contain" | "stretch";
+            intrinsic_pending?: boolean;
             media_id: string;
             /** Format: int64 */
             source_height: number;
@@ -5466,6 +5480,7 @@ export interface components {
             blend_mode: "normal" | "multiply" | "screen" | "overlay" | "darken" | "lighten" | "soft_light";
             drop_shadow?: components["schemas"]["StudioShadowEffect"];
             inner_shadow?: components["schemas"]["StudioShadowEffect"];
+            stroke?: components["schemas"]["StudioStrokeEffect"];
         };
         StudioLayerMask: {
             /** Format: double */
@@ -5499,8 +5514,9 @@ export interface components {
         };
         StudioPaintValue: {
             color: string;
+            gradient?: components["schemas"]["StudioGradientValue"];
             /** @enum {string} */
-            kind: "stroke" | "fill";
+            kind: "stroke" | "fill" | "gradient";
             /** Format: double */
             opacity: number;
             points: components["schemas"]["StudioPaintPoint"][] | null;
@@ -5583,6 +5599,15 @@ export interface components {
             stroke: string;
             /** Format: double */
             stroke_width: number;
+        };
+        StudioStrokeEffect: {
+            color: string;
+            /** Format: double */
+            opacity: number;
+            /** @enum {string} */
+            position: "inside" | "center" | "outside";
+            /** Format: double */
+            width: number;
         };
         StudioTemplateResponse: {
             /**

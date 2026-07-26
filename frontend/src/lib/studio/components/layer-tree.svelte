@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onDestroy } from 'svelte';
 	import { ContextMenu } from 'bits-ui';
 	import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 	import { useStudioEditor } from '../editor.svelte';
@@ -18,6 +19,8 @@
 	import TrashIcon from 'lucide-svelte/icons/trash-2';
 	import BringToFrontIcon from 'lucide-svelte/icons/bring-to-front';
 	import SendToBackIcon from 'lucide-svelte/icons/send-to-back';
+	import ArrowUpIcon from 'lucide-svelte/icons/arrow-up';
+	import ArrowDownIcon from 'lucide-svelte/icons/arrow-down';
 	import UngroupIcon from 'lucide-svelte/icons/ungroup';
 	import type { StudioLayer, StudioPage } from '../types';
 	import { m } from '$lib/paraglide/messages';
@@ -30,8 +33,18 @@
 
 	const editor = useStudioEditor();
 	let draggingID = $state('');
+	let pointerDraggingID = $state('');
+	let pointerTargetID = $state('');
+	let pointerTargetPosition = $state<'above' | 'below'>('above');
 	let renamingID = $state('');
 	let renameDraft = $state('');
+	let scrollContainer: HTMLDivElement | null = null;
+	let pointerID = -1;
+	let pointerStartX = 0;
+	let pointerStartY = 0;
+	let pointerDragActive = $state(false);
+	let pointerCaptureElement: HTMLElement | null = null;
+	let touchIdentifier = -1;
 	const collapsedGroups = new SvelteSet<string>();
 	let items = $derived(flattenLayers(editor.activePage, collapsedGroups));
 
@@ -47,26 +60,169 @@
 						: SquareIcon;
 	}
 
-	function reorder(droppedID: string, targetID: string): void {
-		if (!editor.activePage || droppedID === targetID) return;
-		const targetIndex = editor.activePage.layers.findIndex((layer) => layer.id === targetID);
-		editor.mutate('Reorder layer', (document) => {
-			const page = document.pages.find((item) => item.id === editor.activePageID);
-			if (!page) return;
-			const sourceIndex = page.layers.findIndex((layer) => layer.id === droppedID);
-			if (sourceIndex < 0 || targetIndex < 0) return;
-			const [layer] = page.layers.splice(sourceIndex, 1);
-			page.layers.splice(targetIndex, 0, layer);
-		});
+	function reorder(droppedID: string, targetID: string, position: 'above' | 'below'): void {
+		editor.moveLayerRelative(droppedID, targetID, position);
 	}
 
 	function moveWithKeyboard(id: string, delta: number): void {
-		if (!editor.activePage) return;
-		const index = editor.activePage.layers.findIndex((layer) => layer.id === id);
-		const target = Math.max(0, Math.min(editor.activePage.layers.length - 1, index + delta));
-		const targetID = editor.activePage.layers[target]?.id;
-		if (targetID) reorder(id, targetID);
+		editor.reorderLayer(id, delta > 0 ? 'forward' : 'backward');
 	}
+
+	function layerAtPoint(
+		x: number,
+		y: number,
+		sourceID: string
+	): { id: string; position: 'above' | 'below' } | null {
+		const rows = scrollContainer?.querySelectorAll<HTMLElement>('[data-studio-layer-id]');
+		const source = editor.activePage?.layers.find((layer) => layer.id === sourceID);
+		if (!rows?.length || !source) return null;
+		let nearest: { id: string; position: 'above' | 'below' } | null = null;
+		let nearestDistance = Number.POSITIVE_INFINITY;
+		for (const row of rows) {
+			const id = row.dataset.studioLayerId ?? '';
+			const candidate = editor.activePage?.layers.find((layer) => layer.id === id);
+			if (!candidate || candidate.parent_id !== source.parent_id || id === sourceID) continue;
+			const bounds = row.getBoundingClientRect();
+			const position = y < (bounds.top + bounds.bottom) / 2 ? 'above' : 'below';
+			if (x >= bounds.left && x <= bounds.right && y >= bounds.top && y <= bounds.bottom) {
+				return { id, position };
+			}
+			const distance = Math.abs(y - (bounds.top + bounds.bottom) / 2);
+			if (distance < nearestDistance) {
+				nearestDistance = distance;
+				nearest = { id, position };
+			}
+		}
+		return nearest;
+	}
+
+	function attachScrollContainer(node: HTMLDivElement): () => void {
+		scrollContainer = node;
+		return () => {
+			if (scrollContainer === node) scrollContainer = null;
+		};
+	}
+
+	function startPointerReorder(event: PointerEvent, id: string): void {
+		if (!editor.canEdit || renamingID === id || touchIdentifier >= 0) return;
+		event.preventDefault();
+		event.stopPropagation();
+		editor.selectLayer(id);
+		pointerID = event.pointerId;
+		pointerStartX = event.clientX;
+		pointerStartY = event.clientY;
+		pointerDragActive = false;
+		pointerDraggingID = id;
+		pointerTargetID = id;
+		pointerCaptureElement = event.currentTarget instanceof HTMLElement ? event.currentTarget : null;
+		try {
+			pointerCaptureElement?.setPointerCapture(event.pointerId);
+		} catch {
+			// Synthetic pointer events may not create an active pointer capture.
+		}
+	}
+
+	function continuePointerReorder(event: PointerEvent): void {
+		if (event.pointerId !== pointerID || !pointerDraggingID) return;
+		event.preventDefault();
+		const distance = Math.hypot(event.clientX - pointerStartX, event.clientY - pointerStartY);
+		if (distance < 6 && !pointerDragActive) return;
+		pointerDragActive = true;
+		const target = layerAtPoint(event.clientX, event.clientY, pointerDraggingID);
+		if (target) {
+			pointerTargetID = target.id;
+			pointerTargetPosition = target.position;
+		}
+
+		autoScroll(event.clientY);
+	}
+
+	function finishPointerReorder(event: PointerEvent, cancelled = false): void {
+		if (event.pointerId !== pointerID || !pointerDraggingID) return;
+		event.preventDefault();
+		event.stopPropagation();
+		if (!cancelled && pointerDragActive && pointerTargetID) {
+			reorder(pointerDraggingID, pointerTargetID, pointerTargetPosition);
+		}
+		try {
+			pointerCaptureElement?.releasePointerCapture(event.pointerId);
+		} catch {
+			// Pointer capture is already gone.
+		}
+		pointerID = -1;
+		pointerCaptureElement = null;
+		pointerDragActive = false;
+		pointerDraggingID = '';
+		pointerTargetID = '';
+	}
+
+	function startTouchReorder(event: TouchEvent, id: string): void {
+		const touch = event.changedTouches[0];
+		if (!touch || !editor.canEdit || renamingID === id) return;
+		event.stopPropagation();
+		touchIdentifier = touch.identifier;
+		pointerID = -1;
+		pointerStartX = touch.clientX;
+		pointerStartY = touch.clientY;
+		pointerDragActive = false;
+		pointerDraggingID = id;
+		pointerTargetID = '';
+		editor.selectLayer(id);
+		window.addEventListener('touchmove', continueTouchReorder, { passive: false });
+		window.addEventListener('touchend', finishTouchReorder, { passive: false });
+		window.addEventListener('touchcancel', cancelTouchReorder, { passive: false });
+	}
+
+	function continueTouchReorder(event: TouchEvent): void {
+		const touch = [...event.changedTouches].find(
+			(candidate) => candidate.identifier === touchIdentifier
+		);
+		if (!touch || !pointerDraggingID) return;
+		event.preventDefault();
+		const distance = Math.hypot(touch.clientX - pointerStartX, touch.clientY - pointerStartY);
+		if (distance < 6 && !pointerDragActive) return;
+		pointerDragActive = true;
+		const target = layerAtPoint(touch.clientX, touch.clientY, pointerDraggingID);
+		if (target) {
+			pointerTargetID = target.id;
+			pointerTargetPosition = target.position;
+		}
+		autoScroll(touch.clientY);
+	}
+
+	function finishTouchReorder(event: TouchEvent): void {
+		if (![...event.changedTouches].some((touch) => touch.identifier === touchIdentifier)) return;
+		event.preventDefault();
+		if (pointerDragActive && pointerTargetID) {
+			reorder(pointerDraggingID, pointerTargetID, pointerTargetPosition);
+		}
+		resetTouchReorder();
+	}
+
+	function cancelTouchReorder(event: TouchEvent): void {
+		if (![...event.changedTouches].some((touch) => touch.identifier === touchIdentifier)) return;
+		resetTouchReorder();
+	}
+
+	function resetTouchReorder(): void {
+		window.removeEventListener('touchmove', continueTouchReorder);
+		window.removeEventListener('touchend', finishTouchReorder);
+		window.removeEventListener('touchcancel', cancelTouchReorder);
+		touchIdentifier = -1;
+		pointerDragActive = false;
+		pointerDraggingID = '';
+		pointerTargetID = '';
+	}
+
+	function autoScroll(clientY: number): void {
+		const container = scrollContainer;
+		if (!container) return;
+		const bounds = container.getBoundingClientRect();
+		if (clientY < bounds.top + 48) container.scrollTop -= 14;
+		if (clientY > bounds.bottom - 48) container.scrollTop += 14;
+	}
+
+	onDestroy(resetTouchReorder);
 
 	function startRename(layer: StudioLayer): void {
 		if (!editor.canEdit) return;
@@ -117,6 +273,12 @@
 	}
 </script>
 
+<svelte:window
+	onpointermove={continuePointerReorder}
+	onpointerupcapture={finishPointerReorder}
+	onpointercancelcapture={(event) => finishPointerReorder(event, true)}
+/>
+
 <div class="flex h-full min-h-0 flex-col" role="tree" aria-label={m.studio_layers()}>
 	<div class="flex min-h-10 items-center border-b px-3">
 		<h2 class="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
@@ -128,7 +290,7 @@
 			</span>
 		{/if}
 	</div>
-	<div class="min-h-0 flex-1 overflow-y-auto p-2">
+	<div {@attach attachScrollContainer} class="min-h-0 flex-1 overflow-y-auto p-2">
 		{#if items.length}
 			{#each items as item (item.layer.id)}
 				{@const layer = item.layer}
@@ -146,6 +308,10 @@
 								aria-level={item.depth + 1}
 								aria-expanded={item.hasChildren ? !collapsedGroups.has(layer.id) : undefined}
 								aria-selected={editor.selectedLayerIDs.includes(layer.id)}
+								data-studio-layer-id={layer.id}
+								data-drop-position={pointerTargetID === layer.id && pointerDraggingID !== layer.id
+									? pointerTargetPosition
+									: undefined}
 								aria-label={m.studio_layer_accessible({
 									name: layer.name,
 									type: layer.type,
@@ -157,7 +323,9 @@
 									layer.id
 								)
 									? 'bg-primary/10 text-foreground'
-									: 'hover:bg-muted'}"
+									: 'hover:bg-muted'} {pointerDraggingID === layer.id && pointerDragActive
+									? 'opacity-60'
+									: ''}"
 								style:padding-left={`${item.depth * 14 + 4}px`}
 								onclick={(event) =>
 									editor.selectLayer(
@@ -166,10 +334,27 @@
 									)}
 								ondblclick={() => startRename(layer)}
 								ondragstart={() => (draggingID = layer.id)}
-								ondragover={(event) => event.preventDefault()}
-								ondrop={() => {
-									if (draggingID) reorder(draggingID, layer.id);
+								ondragover={(event) => {
+									event.preventDefault();
+									pointerTargetID = layer.id;
+									pointerTargetPosition =
+										event.clientY <
+										event.currentTarget.getBoundingClientRect().top +
+											event.currentTarget.getBoundingClientRect().height / 2
+											? 'above'
+											: 'below';
+								}}
+								ondrop={(event) => {
+									if (draggingID) {
+										const bounds = event.currentTarget.getBoundingClientRect();
+										reorder(
+											draggingID,
+											layer.id,
+											event.clientY < bounds.top + bounds.height / 2 ? 'above' : 'below'
+										);
+									}
 									draggingID = '';
+									pointerTargetID = '';
 								}}
 								onkeydown={(event) => {
 									if ((event.key === 'Enter' || event.key === 'F2') && renamingID !== layer.id) {
@@ -205,9 +390,24 @@
 												: 'rotate-90'}"
 										/>
 									</Button>
-								{:else}
-									<GripIcon class="mx-1 size-3.5 shrink-0 text-muted-foreground" />
 								{/if}
+								<button
+									type="button"
+									class="studio-layer-grip flex size-6 shrink-0 cursor-grab touch-none items-center justify-center rounded-sm text-muted-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring active:cursor-grabbing"
+									aria-label={m.studio_reorder_layer({ name: layer.name })}
+									title={m.studio_reorder_layer({ name: layer.name })}
+									disabled={!editor.canEdit || renamingID === layer.id}
+									data-testid="studio-layer-drag-handle"
+									onclick={(event) => event.stopPropagation()}
+									oncontextmenu={(event) => event.preventDefault()}
+									ondragstart={(event) => event.preventDefault()}
+									onpointerdown={(event) => startPointerReorder(event, layer.id)}
+									onpointerup={finishPointerReorder}
+									onpointercancel={(event) => finishPointerReorder(event, true)}
+									ontouchstart={(event) => startTouchReorder(event, layer.id)}
+								>
+									<GripIcon class="size-3.5" />
+								</button>
 								<Icon class="size-3.5 shrink-0" />
 								{#if renamingID === layer.id}
 									<input
@@ -232,6 +432,34 @@
 									/>
 								{:else}
 									<span class="min-w-0 flex-1 truncate">{layer.name}</span>
+								{/if}
+								{#if editor.selectedLayerIDs.includes(layer.id)}
+									<Button
+										variant="ghost"
+										size="icon-xs"
+										class="studio-mobile-order-button"
+										aria-label={m.studio_move_layer_up({ name: layer.name })}
+										title={m.studio_move_layer_up({ name: layer.name })}
+										onclick={(event) => {
+											event.stopPropagation();
+											editor.reorderLayer(layer.id, 'forward');
+										}}
+									>
+										<ArrowUpIcon />
+									</Button>
+									<Button
+										variant="ghost"
+										size="icon-xs"
+										class="studio-mobile-order-button"
+										aria-label={m.studio_move_layer_down({ name: layer.name })}
+										title={m.studio_move_layer_down({ name: layer.name })}
+										onclick={(event) => {
+											event.stopPropagation();
+											editor.reorderLayer(layer.id, 'backward');
+										}}
+									>
+										<ArrowDownIcon />
+									</Button>
 								{/if}
 								<Button
 									variant="ghost"
@@ -349,8 +577,52 @@
 
 <style>
 	.studio-layer-row {
+		position: relative;
 		content-visibility: auto;
 		contain-intrinsic-size: 40px;
+	}
+
+	.studio-layer-row[data-drop-position='above']::before,
+	.studio-layer-row[data-drop-position='below']::after {
+		position: absolute;
+		right: 0.25rem;
+		left: 0.25rem;
+		z-index: 2;
+		height: 2px;
+		border-radius: 999px;
+		background: var(--primary);
+		content: '';
+	}
+
+	.studio-layer-row[data-drop-position='above']::before {
+		top: -1px;
+	}
+
+	.studio-layer-row[data-drop-position='below']::after {
+		bottom: -1px;
+	}
+
+	.studio-mobile-order-button {
+		display: none;
+	}
+
+	@media (pointer: coarse) {
+		.studio-layer-row {
+			min-height: 48px;
+			contain-intrinsic-size: 48px;
+		}
+
+		.studio-layer-grip {
+			width: 44px;
+			height: 44px;
+		}
+
+		.studio-mobile-order-button {
+			display: inline-flex;
+			width: 36px;
+			height: 36px;
+			flex: none;
+		}
 	}
 
 	:global(.studio-context-item) {

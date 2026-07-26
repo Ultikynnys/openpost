@@ -48,10 +48,11 @@ describe('Studio area selection geometry', () => {
 });
 
 describe('Studio selection composition', () => {
-	it('supports replace, add, subtract, and toggle without duplicate IDs', () => {
+	it('supports replace, add, subtract, intersect, and toggle without duplicate IDs', () => {
 		expect(mergeSelectionIDs(['a'], ['b', 'b'], 'replace')).toEqual(['b']);
 		expect(mergeSelectionIDs(['a'], ['a', 'b'], 'add')).toEqual(['a', 'b']);
 		expect(mergeSelectionIDs(['a', 'b'], ['b'], 'subtract')).toEqual(['a']);
+		expect(mergeSelectionIDs(['a', 'b'], ['b', 'c'], 'intersect')).toEqual(['b']);
 		expect(mergeSelectionIDs(['a', 'b'], ['b', 'c'], 'toggle')).toEqual(['a', 'c']);
 	});
 
@@ -59,10 +60,15 @@ describe('Studio selection composition', () => {
 		const rectangle = rectanglePixelMask(8, 8, { x: 1, y: 1, width: 5, height: 4 });
 		const ellipse = ellipsePixelMask(8, 8, { x: 2, y: 2, width: 4, height: 4 });
 		const subtracted = combinePixelMasks(rectangle, ellipse, 'subtract');
+		const intersected = combinePixelMasks(rectangle, ellipse, 'intersect');
 
 		expect(rectangle.reduce((total, value) => total + value, 0)).toBe(20);
 		expect(ellipse.reduce((total, value) => total + value, 0)).toBeGreaterThan(8);
 		expect(subtracted.reduce((total, value) => total + value, 0)).toBeLessThan(20);
+		expect(intersected.reduce((total, value) => total + value, 0)).toBeGreaterThan(0);
+		expect(intersected.reduce((total, value) => total + value, 0)).toBeLessThan(
+			ellipse.reduce((total, value) => total + value, 0)
+		);
 		expect(pixelMaskBounds(ellipse, 8, 8)).toEqual({ x: 2, y: 2, width: 4, height: 4 });
 	});
 

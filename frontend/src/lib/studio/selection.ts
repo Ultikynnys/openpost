@@ -100,6 +100,7 @@ export function mergeSelectionIDs(
 	if (mode === 'replace') return uniqueCandidates;
 	const candidateSet = new Set(uniqueCandidates);
 	if (mode === 'subtract') return uniqueCurrent.filter((id) => !candidateSet.has(id));
+	if (mode === 'intersect') return uniqueCurrent.filter((id) => candidateSet.has(id));
 	if (mode === 'add') {
 		return [...uniqueCurrent, ...uniqueCandidates.filter((id) => !uniqueCurrent.includes(id))];
 	}
@@ -290,6 +291,7 @@ export function combinePixelMasks(
 	for (let index = 0; index < combined.length; index++) {
 		if (mode === 'add') combined[index] = current[index] || incoming[index] ? 1 : 0;
 		else if (mode === 'subtract') combined[index] = current[index] && !incoming[index] ? 1 : 0;
+		else if (mode === 'intersect') combined[index] = current[index] && incoming[index] ? 1 : 0;
 		else combined[index] = Boolean(current[index]) !== Boolean(incoming[index]) ? 1 : 0;
 	}
 	return combined;

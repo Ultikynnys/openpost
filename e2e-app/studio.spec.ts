@@ -5,7 +5,7 @@ test("Studio creates from an original template, adapts to mobile, and exports to
   page,
   request,
 }) => {
-  test.setTimeout(60_000);
+  test.setTimeout(120_000);
   const browserErrors: string[] = [];
   const failedResponses: string[] = [];
   page.on("pageerror", (error) => browserErrors.push(error.message));
@@ -67,9 +67,12 @@ test("Studio creates from an original template, adapts to mobile, and exports to
   await page.getByRole("button", { name: "Glow" }).click();
   await textSaved;
 
-  await page.getByRole("button", { name: "Shape", exact: true }).click();
-  await page.getByRole("menuitem", { name: "Rectangle", exact: true }).click();
+  await page.getByRole("treeitem", { name: /Accent, shape/ }).click();
   await page.getByRole("combobox", { name: "Mask" }).selectOption("diamond");
+  await page.getByRole("button", { name: "Add border" }).click();
+  await page
+    .getByRole("combobox", { name: "Border position" })
+    .selectOption("outside");
   await page.getByRole("button", { name: "Add drop shadow" }).click();
   await page.getByRole("button", { name: "Add inner shadow" }).click();
   const shapeSaved = page.waitForResponse(
@@ -84,7 +87,7 @@ test("Studio creates from an original template, adapts to mobile, and exports to
   await shapeSaved;
 
   await page.reload();
-  await page.getByRole("treeitem", { name: /Rectangle, shape/ }).click();
+  await page.getByRole("treeitem", { name: /Accent, shape/ }).click();
   await expect(page.getByRole("combobox", { name: "Mask" })).toHaveValue(
     "diamond",
   );
@@ -97,6 +100,10 @@ test("Studio creates from an original template, adapts to mobile, and exports to
   await expect(
     page.getByRole("button", { name: "Remove inner shadow" }),
   ).toBeVisible();
+  await expect(page.getByTestId("studio-layer-border")).toContainText("Border");
+  await expect(
+    page.getByRole("combobox", { name: "Border position" }),
+  ).toHaveValue("outside");
 
   await page.getByRole("treeitem", { name: /A clear update, text/ }).click();
   await expect(page.getByRole("combobox", { name: "Text curve" })).toHaveValue(
@@ -106,7 +113,7 @@ test("Studio creates from an original template, adapts to mobile, and exports to
     page.getByRole("button", { name: "Remove drop shadow" }),
   ).toBeVisible();
 
-  await page.getByRole("button", { name: "Select", exact: true }).click();
+  await page.getByRole("button", { name: "Select pixels" }).click();
   await page.getByRole("menuitem", { name: /Magic select/ }).click();
   await expect(
     page.getByTestId("studio-selection-options").getByText("Tolerance 32"),
@@ -349,9 +356,25 @@ test("Studio creates from an original template, adapts to mobile, and exports to
 
   await page.getByRole("treeitem", { name: /Accent, shape/ }).click();
   await page.keyboard.press("g");
+  await page.mouse.move(
+    lassoBounds.x + lassoBounds.width * 0.3,
+    lassoBounds.y + lassoBounds.height * 0.4,
+  );
+  await page.mouse.down();
+  await page.mouse.move(
+    lassoBounds.x + lassoBounds.width * 0.7,
+    lassoBounds.y + lassoBounds.height * 0.68,
+    { steps: 8 },
+  );
+  await page.mouse.up();
+  await expect(
+    page.getByRole("treeitem", { name: /Gradient, paint/ }),
+  ).toBeVisible();
+
+  await page.keyboard.press("Shift+g");
   await page.mouse.click(
-    lassoBounds.x + lassoBounds.width * 0.15,
-    lassoBounds.y + lassoBounds.height * 0.18,
+    lassoBounds.x + lassoBounds.width * 0.5,
+    lassoBounds.y + lassoBounds.height * 0.72,
   );
   await expect(
     page.getByRole("treeitem", { name: /Paint bucket, paint/ }),
@@ -360,7 +383,14 @@ test("Studio creates from an original template, adapts to mobile, and exports to
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(page.getByRole("button", { name: "Export" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Text" })).toBeVisible();
-  await page.getByRole("button", { name: "Select", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "Select objects" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Select objects" }).click();
+  await expect(
+    page.getByRole("menuitem", { name: "Magic select" }),
+  ).not.toBeVisible();
+  await page.getByRole("button", { name: "Select pixels" }).click();
   await expect(
     page.getByRole("menuitem", { name: "Magic select" }),
   ).toBeVisible();
@@ -406,6 +436,94 @@ test("Studio creates from an original template, adapts to mobile, and exports to
     });
   await page.keyboard.press("Escape");
   await page.setViewportSize({ width: 390, height: 844 });
+
+  await page.getByRole("button", { name: "Layers", exact: true }).click();
+  const layersDialog = page.getByRole("dialog", { name: "Layers" });
+  await expect(layersDialog).toBeVisible();
+  const paintBucketRow = layersDialog.getByRole("treeitem", {
+    name: /Paint bucket, paint/,
+  });
+  const pencilRow = layersDialog.getByRole("treeitem", {
+    name: /Pencil, paint/,
+  });
+  const bucketHandle = paintBucketRow.getByTestId("studio-layer-drag-handle");
+  const [handleBounds, pencilBounds] = await Promise.all([
+    bucketHandle.boundingBox(),
+    pencilRow.boundingBox(),
+  ]);
+  if (!handleBounds || !pencilBounds) {
+    throw new Error("Mobile layer reorder controls were not measurable");
+  }
+  const touch = await page.context().newCDPSession(page);
+  await touch.send("Emulation.setTouchEmulationEnabled", {
+    enabled: true,
+    maxTouchPoints: 1,
+  });
+  await touch.send("Input.dispatchTouchEvent", {
+    type: "touchStart",
+    touchPoints: [
+      {
+        id: 1,
+        x: handleBounds.x + handleBounds.width / 2,
+        y: handleBounds.y + handleBounds.height / 2,
+        radiusX: 1,
+        radiusY: 1,
+        force: 1,
+      },
+    ],
+  });
+  await page.waitForTimeout(60);
+  await touch.send("Input.dispatchTouchEvent", {
+    type: "touchMove",
+    touchPoints: [
+      {
+        id: 1,
+        x: (handleBounds.x + pencilBounds.x) / 2 + handleBounds.width / 2,
+        y: (handleBounds.y + pencilBounds.y) / 2 + handleBounds.height / 2,
+        radiusX: 1,
+        radiusY: 1,
+        force: 1,
+      },
+    ],
+  });
+  await expect(paintBucketRow).toHaveClass(/opacity-60/);
+  await page.waitForTimeout(60);
+  await touch.send("Input.dispatchTouchEvent", {
+    type: "touchMove",
+    touchPoints: [
+      {
+        id: 1,
+        x: pencilBounds.x + pencilBounds.width / 2,
+        y: pencilBounds.y + pencilBounds.height * 0.75,
+        radiusX: 1,
+        radiusY: 1,
+        force: 1,
+      },
+    ],
+  });
+  await expect(pencilRow).toHaveAttribute("data-drop-position", "below");
+  await page.waitForTimeout(60);
+  await touch.send("Input.dispatchTouchEvent", {
+    type: "touchEnd",
+    touchPoints: [],
+  });
+  await expect
+    .poll(async () => {
+      const labels = await layersDialog
+        .getByRole("treeitem")
+        .evaluateAll((rows) =>
+          rows.map((row) => row.getAttribute("aria-label") ?? ""),
+        );
+      const pencilIndex = labels.findIndex((label) =>
+        label.startsWith("Pencil, paint"),
+      );
+      const bucketIndex = labels.findIndex((label) =>
+        label.startsWith("Paint bucket, paint"),
+      );
+      return pencilIndex >= 0 && bucketIndex >= 0 && pencilIndex < bucketIndex;
+    })
+    .toBe(true);
+  await page.keyboard.press("Escape");
 
   expect(
     await page.evaluate(
@@ -466,7 +584,22 @@ test("Studio creates from an original template, adapts to mobile, and exports to
   const paintLayers = savedDocument.document.pages[0].layers.filter(
     (layer: { type: string }) => layer.type === "paint",
   );
-  expect(paintLayers).toHaveLength(2);
+  expect(paintLayers).toHaveLength(3);
+  expect(
+    paintLayers.some(
+      (layer: { paint?: { kind?: string; gradient?: unknown } }) =>
+        layer.paint?.kind === "gradient" && Boolean(layer.paint.gradient),
+    ),
+  ).toBeTruthy();
+  expect(
+    savedDocument.document.pages[0].layers.findIndex(
+      (layer: { name: string }) => layer.name === "Paint bucket",
+    ),
+  ).toBeLessThan(
+    savedDocument.document.pages[0].layers.findIndex(
+      (layer: { name: string }) => layer.name === "Pencil",
+    ),
+  );
   expect(
     paintLayers.every(
       (layer: { paint?: { spans?: unknown[] } }) =>

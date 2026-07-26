@@ -10,7 +10,8 @@ export const STUDIO_LIMITS = {
 
 export type StudioLayerType = 'text' | 'image' | 'shape' | 'paint' | 'group';
 export type StudioSelectionTool = 'select' | 'marquee' | 'ellipse_marquee' | 'lasso' | 'magic_wand';
-export type StudioSelectionMode = 'replace' | 'add' | 'subtract' | 'toggle';
+export type StudioSelectionMode = 'replace' | 'add' | 'subtract' | 'intersect' | 'toggle';
+export type StudioGradientType = 'linear' | 'radial' | 'angle' | 'reflected' | 'diamond';
 export type StudioTool =
 	| StudioSelectionTool
 	| 'crop'
@@ -21,6 +22,7 @@ export type StudioTool =
 	| 'eyedropper'
 	| 'pencil'
 	| 'bucket'
+	| 'gradient'
 	| 'hand'
 	| 'zoom';
 export type StudioSaveState =
@@ -92,6 +94,7 @@ export interface StudioImageValue {
 	media_id: string;
 	source_width: number;
 	source_height: number;
+	intrinsic_pending?: boolean;
 	fit: 'cover' | 'contain' | 'stretch';
 	crop: StudioCrop;
 	adjustments: StudioImageAdjustments;
@@ -116,8 +119,21 @@ export interface StudioPaintSpan {
 	width: number;
 }
 
+export interface StudioGradientStop {
+	offset: number;
+	color: string;
+}
+
+export interface StudioGradientValue {
+	type: StudioGradientType;
+	start: StudioPaintPoint;
+	end: StudioPaintPoint;
+	stops: StudioGradientStop[];
+	reverse: boolean;
+}
+
 export interface StudioPaintValue {
-	kind: 'stroke' | 'fill';
+	kind: 'stroke' | 'fill' | 'gradient';
 	color: string;
 	size: number;
 	opacity: number;
@@ -125,6 +141,7 @@ export interface StudioPaintValue {
 	source_height: number;
 	points: StudioPaintPoint[];
 	spans: StudioPaintSpan[];
+	gradient?: StudioGradientValue;
 }
 
 export type StudioBlendMode =
@@ -138,10 +155,18 @@ export interface StudioShadowEffect {
 	distance: number;
 }
 
+export interface StudioLayerStrokeEffect {
+	color: string;
+	opacity: number;
+	width: number;
+	position: 'inside' | 'center' | 'outside';
+}
+
 export interface StudioLayerEffects {
 	blend_mode: StudioBlendMode;
 	drop_shadow?: StudioShadowEffect;
 	inner_shadow?: StudioShadowEffect;
+	stroke?: StudioLayerStrokeEffect;
 }
 
 export interface StudioLayerMask {

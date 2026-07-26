@@ -186,7 +186,7 @@ export function validateStudioDocument(document: StudioDocument): string[] {
 			if (layer.type === 'paint' && !layer.paint) errors.push(`${layer.name} has no paint data.`);
 			if (
 				layer.paint &&
-				(!['stroke', 'fill'].includes(layer.paint.kind) ||
+				(!['stroke', 'fill', 'gradient'].includes(layer.paint.kind) ||
 					!HEX_COLOR.test(layer.paint.color) ||
 					!Number.isFinite(layer.paint.size) ||
 					layer.paint.size <= 0 ||
@@ -209,7 +209,27 @@ export function validateStudioDocument(document: StudioDocument): string[] {
 							!Number.isFinite(span.y) ||
 							!Number.isFinite(span.width) ||
 							span.width <= 0
-					))
+					) ||
+					(layer.paint.kind === 'gradient' &&
+						(!layer.paint.gradient ||
+							!['linear', 'radial', 'angle', 'reflected', 'diamond'].includes(
+								layer.paint.gradient.type
+							) ||
+							![
+								layer.paint.gradient.start.x,
+								layer.paint.gradient.start.y,
+								layer.paint.gradient.end.x,
+								layer.paint.gradient.end.y
+							].every(Number.isFinite) ||
+							layer.paint.gradient.stops.length < 2 ||
+							layer.paint.gradient.stops.length > 32 ||
+							layer.paint.gradient.stops.some(
+								(stop) =>
+									!Number.isFinite(stop.offset) ||
+									stop.offset < 0 ||
+									stop.offset > 1 ||
+									!HEX_COLOR.test(stop.color)
+							))))
 			) {
 				errors.push(`${layer.name} has invalid paint data.`);
 			}
@@ -251,6 +271,20 @@ export function validateStudioDocument(document: StudioDocument): string[] {
 						errors.push(`${layer.name} has an invalid shadow effect.`);
 						break;
 					}
+				}
+				const stroke = layer.effects.stroke;
+				if (
+					stroke &&
+					(!HEX_COLOR.test(stroke.color) ||
+						!Number.isFinite(stroke.opacity) ||
+						stroke.opacity < 0 ||
+						stroke.opacity > 1 ||
+						!Number.isFinite(stroke.width) ||
+						stroke.width <= 0 ||
+						stroke.width > 500 ||
+						!['inside', 'center', 'outside'].includes(stroke.position))
+				) {
+					errors.push(`${layer.name} has an invalid stroke effect.`);
 				}
 			}
 		}

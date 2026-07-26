@@ -2,13 +2,19 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Slider } from '$lib/components/ui/slider';
 	import { m } from '$lib/paraglide/messages';
-	import { defaultLayerEffects, defaultLayerMask, DEFAULT_SHADOW_EFFECT } from '../effects';
+	import {
+		defaultLayerEffects,
+		defaultLayerMask,
+		DEFAULT_SHADOW_EFFECT,
+		DEFAULT_STROKE_EFFECT
+	} from '../effects';
 	import { useStudioEditor } from '../editor.svelte';
 	import type {
 		StudioBlendMode,
 		StudioLayer,
 		StudioLayerEffects,
 		StudioLayerMask,
+		StudioLayerStrokeEffect,
 		StudioShadowEffect
 	} from '../types';
 	import StudioColorPicker from './studio-color-picker.svelte';
@@ -22,6 +28,7 @@
 		(layer.type === 'image' || layer.type === 'shape') && layer.shape?.kind !== 'line'
 	);
 	let canUseInnerShadow = $derived(canMask);
+	let canUseStroke = $derived(layer.type !== 'group' && layer.shape?.kind !== 'line');
 
 	type ShadowKind = 'drop_shadow' | 'inner_shadow';
 
@@ -61,6 +68,27 @@
 			{
 				...currentEffects(),
 				[kind]: { ...(shadowFor(kind) ?? DEFAULT_SHADOW_EFFECT), ...updates }
+			},
+			coalesceKey
+		);
+	}
+
+	function toggleStroke(): void {
+		const effects = currentEffects();
+		if (effects.stroke) {
+			const next = { ...effects };
+			delete next.stroke;
+			updateEffects(next);
+			return;
+		}
+		updateEffects({ ...effects, stroke: { ...DEFAULT_STROKE_EFFECT } });
+	}
+
+	function updateStroke(updates: Partial<StudioLayerStrokeEffect>, coalesceKey?: string): void {
+		updateEffects(
+			{
+				...currentEffects(),
+				stroke: { ...(currentEffects().stroke ?? DEFAULT_STROKE_EFFECT), ...updates }
 			},
 			coalesceKey
 		);
@@ -246,6 +274,80 @@
 			{/each}
 		</select>
 	</label>
+
+	{#if canUseStroke}
+		{@const stroke = currentEffects().stroke}
+		<div class="rounded-md border" data-testid="studio-layer-border">
+			<div class="flex min-h-10 items-center gap-2 px-2">
+				<span class="min-w-0 flex-1 text-xs font-medium">{m.studio_border()}</span>
+				<Button
+					variant={stroke ? 'secondary' : 'ghost'}
+					size="icon-xs"
+					disabled={!editor.canEdit}
+					onclick={toggleStroke}
+					aria-label={stroke ? m.studio_remove_border() : m.studio_add_border()}
+					title={stroke ? m.studio_remove_border() : m.studio_add_border()}
+				>
+					{#if stroke}<XIcon />{:else}<PlusIcon />{/if}
+				</Button>
+			</div>
+			{#if stroke}
+				<div class="space-y-3 border-t p-2">
+					<StudioColorPicker
+						label={m.studio_border_color()}
+						value={stroke.color}
+						disabled={!editor.canEdit}
+						{brandColors}
+						recentColors={editor.recentColors}
+						onChange={(color) => updateStroke({ color }, `stroke-color:${layer.id}`)}
+						onCommit={(color) => editor.rememberColor(color)}
+					/>
+					<label class="grid gap-1 text-xs">
+						<span>{m.studio_border_position()}</span>
+						<select
+							class="h-9 rounded-md border border-input bg-background px-2"
+							value={stroke.position}
+							disabled={!editor.canEdit}
+							onchange={(event) =>
+								updateStroke({
+									position: event.currentTarget.value as StudioLayerStrokeEffect['position']
+								})}
+						>
+							<option value="inside">{m.studio_border_inside()}</option>
+							<option value="center">{m.studio_border_center()}</option>
+							<option value="outside">{m.studio_border_outside()}</option>
+						</select>
+					</label>
+					<label class="grid gap-1 text-xs">
+						<span>{m.studio_stroke_width()} · {Math.round(stroke.width)}</span>
+						<Slider
+							value={stroke.width}
+							min={1}
+							max={200}
+							step={1}
+							disabled={!editor.canEdit}
+							ariaLabel={m.studio_stroke_width()}
+							onValueChange={(width) => updateStroke({ width }, `stroke-width:${layer.id}`)}
+						/>
+					</label>
+					<label class="grid gap-1 text-xs">
+						<span>{m.studio_opacity({ value: Math.round(stroke.opacity * 100) })}</span>
+						<Slider
+							value={stroke.opacity}
+							min={0}
+							max={1}
+							step={0.01}
+							disabled={!editor.canEdit}
+							ariaLabel={m.studio_opacity({
+								value: Math.round(stroke.opacity * 100)
+							})}
+							onValueChange={(opacity) => updateStroke({ opacity }, `stroke-opacity:${layer.id}`)}
+						/>
+					</label>
+				</div>
+			{/if}
+		</div>
+	{/if}
 
 	{#if canMask}
 		<div class="space-y-2">

@@ -1,5 +1,6 @@
 import type {
 	StudioLayerEffects,
+	StudioLayerStrokeEffect,
 	StudioLayerMask,
 	StudioShadowEffect,
 	StudioTextCurve
@@ -11,6 +12,13 @@ export const DEFAULT_SHADOW_EFFECT: StudioShadowEffect = {
 	blur: 24,
 	angle: 45,
 	distance: 16
+};
+
+export const DEFAULT_STROKE_EFFECT: StudioLayerStrokeEffect = {
+	color: '#f97316',
+	opacity: 1,
+	width: 4,
+	position: 'inside'
 };
 
 export function defaultLayerEffects(): StudioLayerEffects {

@@ -24,6 +24,7 @@ import {
 import type {
 	StudioDocument,
 	StudioDocumentResponse,
+	StudioGradientType,
 	StudioBrandKit,
 	StudioLayer,
 	StudioPage,
@@ -46,8 +47,12 @@ export class StudioEditor {
 	selectionMode = $state<StudioSelectionMode>('replace');
 	magicSelectTolerance = $state(32);
 	magicSelectContiguous = $state(true);
+	sampleAllLayers = $state(false);
 	pixelSelection = $state.raw<StudioPixelSelection | null>(null);
 	paintColor = $state('#f97316');
+	gradientEndColor = $state('#7c3aed');
+	gradientType = $state<StudioGradientType>('linear');
+	gradientReverse = $state(false);
 	pencilSize = $state(12);
 	paintOpacity = $state(1);
 	bucketTolerance = $state(32);
@@ -194,8 +199,7 @@ export class StudioEditor {
 		if (!this.document) return;
 		const current =
 			this.pixelSelection?.width === this.document.width_px &&
-			this.pixelSelection.height === this.document.height_px &&
-			sameStringSet(this.pixelSelection.targetLayerIDs, targetLayerIDs)
+			this.pixelSelection.height === this.document.height_px
 				? this.pixelSelection.data
 				: null;
 		const combined = combinePixelMasks(current, data, mode);
@@ -204,7 +208,9 @@ export class StudioEditor {
 					width: this.document.width_px,
 					height: this.document.height_px,
 					data: combined,
-					targetLayerIDs: [...targetLayerIDs]
+					targetLayerIDs: [
+						...new SvelteSet([...(this.pixelSelection?.targetLayerIDs ?? []), ...targetLayerIDs])
+					]
 				}
 			: null;
 	}
@@ -214,6 +220,23 @@ export class StudioEditor {
 	}
 
 	selectAll(): void {
+		if (
+			this.document &&
+			[
+				'marquee',
+				'ellipse_marquee',
+				'lasso',
+				'magic_wand',
+				'pencil',
+				'bucket',
+				'gradient'
+			].includes(this.activeTool)
+		) {
+			const mask = new Uint8Array(this.document.width_px * this.document.height_px);
+			mask.fill(1);
+			this.applyPixelSelection(mask, this.selectedLayerIDs.slice(-1), 'replace');
+			return;
+		}
 		this.selectedLayerIDs = this.layerSelectionOrder().filter(
 			(id) => !this.activePage?.layers.find((layer) => layer.id === id)?.locked
 		);
@@ -330,6 +353,48 @@ export class StudioEditor {
 		});
 	}
 
+	addGradientFill(
+		mask: Uint8Array,
+		start: SelectionPoint,
+		end: SelectionPoint,
+		name = m.studio_gradient()
+	): void {
+		if (!this.document) return;
+		const bounds = pixelMaskBounds(mask, this.document.width_px, this.document.height_px);
+		if (!bounds) return;
+		const spans = pixelMaskToSpans(
+			mask,
+			this.document.width_px,
+			this.document.height_px,
+			bounds.x,
+			bounds.y
+		);
+		this.addPaintLayer({
+			name,
+			transform: defaultTransform(bounds.width, bounds.height, bounds.x, bounds.y),
+			paint: {
+				kind: 'gradient',
+				color: this.paintColor,
+				size: 1,
+				opacity: this.paintOpacity,
+				source_width: bounds.width,
+				source_height: bounds.height,
+				points: [],
+				spans,
+				gradient: {
+					type: this.gradientType,
+					start: { x: start.x - bounds.x, y: start.y - bounds.y },
+					end: { x: end.x - bounds.x, y: end.y - bounds.y },
+					stops: [
+						{ offset: 0, color: this.paintColor },
+						{ offset: 1, color: this.gradientEndColor }
+					],
+					reverse: this.gradientReverse
+				}
+			}
+		});
+	}
+
 	private addPaintLayer({
 		name,
 		transform,
@@ -362,13 +427,17 @@ export class StudioEditor {
 
 	addImage(media: { id: string; width?: number; height?: number; name?: string }): void {
 		if (!this.document) return;
-		const sourceWidth = media.width || this.document.width_px;
-		const sourceHeight = media.height || this.document.height_px;
+		const hasIntrinsicSize = Boolean(media.width && media.height);
+		const sourceWidth = hasIntrinsicSize ? media.width! : 1;
+		const sourceHeight = hasIntrinsicSize ? media.height! : 1;
 		const maxWidth = this.document.width_px * 0.72;
 		const maxHeight = this.document.height_px * 0.72;
-		const scale = Math.min(maxWidth / sourceWidth, maxHeight / sourceHeight, 1);
-		const width = Math.max(80, sourceWidth * scale);
-		const height = Math.max(80, sourceHeight * scale);
+		const { width, height } = hasIntrinsicSize
+			? fitImageSize(sourceWidth, sourceHeight, maxWidth, maxHeight)
+			: {
+					width: Math.min(320, maxWidth),
+					height: Math.min(320, maxHeight)
+				};
 		const layer: StudioLayer = {
 			id: studioID('layer'),
 			type: 'image',
@@ -386,13 +455,38 @@ export class StudioEditor {
 				media_id: media.id,
 				source_width: sourceWidth,
 				source_height: sourceHeight,
-				fit: 'cover',
+				intrinsic_pending: !hasIntrinsicSize,
+				fit: 'stretch',
 				crop: { x: 0, y: 0, width: 1, height: 1 },
 				adjustments: defaultImageAdjustments()
 			},
 			effects: defaultLayerEffects()
 		};
 		this.addLayer(layer);
+	}
+
+	resolveImageDimensions(id: string, sourceWidth: number, sourceHeight: number): void {
+		if (!this.document || sourceWidth <= 0 || sourceHeight <= 0) return;
+		const layer = this.activePage?.layers.find((candidate) => candidate.id === id);
+		if (!layer?.image?.intrinsic_pending) return;
+		const maxWidth = this.document.width_px * 0.72;
+		const maxHeight = this.document.height_px * 0.72;
+		const { width, height } = fitImageSize(sourceWidth, sourceHeight, maxWidth, maxHeight);
+		this.updateLayer(id, {
+			transform: {
+				...layer.transform,
+				x: (this.document.width_px - width) / 2,
+				y: (this.document.height_px - height) / 2,
+				width,
+				height
+			},
+			image: {
+				...layer.image,
+				source_width: sourceWidth,
+				source_height: sourceHeight,
+				intrinsic_pending: false
+			}
+		});
 	}
 
 	addLayer(layer: StudioLayer): void {
@@ -603,6 +697,24 @@ export class StudioEditor {
 							? Math.min(page.layers.length, index + 1)
 							: Math.max(0, index - 1);
 			page.layers.splice(nextIndex, 0, layer);
+		});
+	}
+
+	moveLayerRelative(id: string, targetID: string, position: 'above' | 'below'): void {
+		if (id === targetID) return;
+		const page = this.activePage;
+		const source = page?.layers.find((layer) => layer.id === id);
+		const target = page?.layers.find((layer) => layer.id === targetID);
+		if (!source || !target || source.parent_id !== target.parent_id) return;
+		this.mutate('Reorder layer', (document) => {
+			const activePage = document.pages.find((item) => item.id === this.activePageID);
+			if (!activePage) return;
+			const sourceIndex = activePage.layers.findIndex((layer) => layer.id === id);
+			if (sourceIndex < 0) return;
+			const [layer] = activePage.layers.splice(sourceIndex, 1);
+			const targetIndex = activePage.layers.findIndex((candidate) => candidate.id === targetID);
+			if (targetIndex < 0) return;
+			activePage.layers.splice(position === 'above' ? targetIndex + 1 : targetIndex, 0, layer);
 		});
 	}
 
@@ -850,6 +962,21 @@ function boundsForLayers(
 	return { x, y, width: right - x, height: bottom - y };
 }
 
+function fitImageSize(
+	sourceWidth: number,
+	sourceHeight: number,
+	maxWidth: number,
+	maxHeight: number
+): { width: number; height: number } {
+	const fitScale = Math.min(maxWidth / sourceWidth, maxHeight / sourceHeight);
+	const minimumScale = 80 / Math.min(sourceWidth, sourceHeight);
+	const scale = Math.min(fitScale, Math.max(1, minimumScale));
+	return {
+		width: Math.max(1, sourceWidth * scale),
+		height: Math.max(1, sourceHeight * scale)
+	};
+}
+
 export function provideStudioEditor(editor: StudioEditor): StudioEditor {
 	setContext(STUDIO_EDITOR_CONTEXT, editor);
 	return editor;
@@ -859,10 +986,4 @@ export function useStudioEditor(): StudioEditor {
 	const editor = getContext<StudioEditor>(STUDIO_EDITOR_CONTEXT);
 	if (!editor) throw new Error('Studio editor context is missing.');
 	return editor;
-}
-
-function sameStringSet(left: string[], right: string[]): boolean {
-	if (left.length !== right.length) return false;
-	const values = new Set(left);
-	return right.every((value) => values.has(value));
 }

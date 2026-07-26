@@ -10,6 +10,7 @@ All notable changes to this project are documented in this file.
 - Added CLI commands for provider readiness and capabilities, reusable posting slots, media storage and usage, alt-text updates and deletion, and publication retry and deletion.
 - Added reusable image and shape masks, drop and inner shadows, glow presets, curved text paths, and layer blend modes to Studio, with the same rendering in the canvas, saved previews, and exports.
 - Added pixel-based rectangle, ellipse, lasso, and color-aware magic selections to Studio, plus persistent hard-edge Pencil and tolerance-aware Paint Bucket tools with selection clipping, brand colors, touch controls, and keyboard shortcuts.
+- Added selection-clipped linear, radial, angle, reflected, and diamond gradients to Studio, plus reusable inside, center, and outside borders for visual layers.
 
 ### Changed
 
@@ -17,9 +18,13 @@ All notable changes to this project are documented in this file.
 - Kept the Settings navigation available while managing social accounts so moving between workspace settings no longer opens a disconnected page.
 - Moved CLI and MCP text-post and publication mutations onto the current revision-aware authoring contract, kept linked publications and publish jobs synchronized, and reserved `--profile` for CLI profiles by naming content filters `--content-profile`.
 - Reworked Studio around a media-first asset panel, brand-aware color and font pickers, custom sliders, richer shape and crop controls, transient save feedback, native range selection, inline layer naming, hierarchical groups, and contextual layer and design actions.
+- Separated Studio object selection from pixel selections, moved Pencil, Paint Bucket, and Gradient into one paint menu, and removed shape creation from the main tool rails.
 
 ### Fixed
 
+- Made Studio layer reordering work with touch drag handles on mobile, corrected one-direction drop placement, and kept keyboard reordering one step at a time.
+- Preserved image aspect ratios when Studio media metadata arrives before or after insertion, made stretch the default image fit, and enlarged canvas resize handles for touch.
+- Kept every grouped Studio child inside its group stacking slot so unrelated circles, images, and other layers cannot render between grouped text and shapes.
 - Kept Android Studio text editing anchored above the keyboard without refitting the canvas or panning the document, and made long mobile Settings menus scroll within the visible viewport.
 - Kept release artifact packaging on the pinned Node, pnpm, and Go toolchains after Devenv preflight so transient Nix store references cannot strand frontend, server, or CLI release assets.
 - Kept Brand kit text fields and color controls mounted while their values change so keyboard focus, selection, and color-picker state no longer reset during editing.

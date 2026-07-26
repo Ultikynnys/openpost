@@ -118,12 +118,13 @@ type StudioCrop struct {
 }
 
 type StudioImageValue struct {
-	MediaID      string                 `json:"media_id"`
-	SourceWidth  int                    `json:"source_width"`
-	SourceHeight int                    `json:"source_height"`
-	Fit          string                 `json:"fit" enum:"cover,contain,stretch"`
-	Crop         StudioCrop             `json:"crop"`
-	Adjustments  StudioImageAdjustments `json:"adjustments"`
+	MediaID          string                 `json:"media_id"`
+	SourceWidth      int                    `json:"source_width"`
+	SourceHeight     int                    `json:"source_height"`
+	IntrinsicPending bool                   `json:"intrinsic_pending,omitempty"`
+	Fit              string                 `json:"fit" enum:"cover,contain,stretch"`
+	Crop             StudioCrop             `json:"crop"`
+	Adjustments      StudioImageAdjustments `json:"adjustments"`
 }
 
 type StudioShapeValue struct {
@@ -145,15 +146,29 @@ type StudioPaintSpan struct {
 	Width float64 `json:"width"`
 }
 
+type StudioGradientStop struct {
+	Offset float64 `json:"offset" minimum:"0" maximum:"1"`
+	Color  string  `json:"color"`
+}
+
+type StudioGradientValue struct {
+	Type    string               `json:"type" enum:"linear,radial,angle,reflected,diamond"`
+	Start   StudioPaintPoint     `json:"start"`
+	End     StudioPaintPoint     `json:"end"`
+	Stops   []StudioGradientStop `json:"stops"`
+	Reverse bool                 `json:"reverse"`
+}
+
 type StudioPaintValue struct {
-	Kind         string             `json:"kind" enum:"stroke,fill"`
-	Color        string             `json:"color"`
-	Size         float64            `json:"size" minimum:"0" maximum:"512"`
-	Opacity      float64            `json:"opacity" minimum:"0" maximum:"1"`
-	SourceWidth  float64            `json:"source_width" minimum:"0"`
-	SourceHeight float64            `json:"source_height" minimum:"0"`
-	Points       []StudioPaintPoint `json:"points"`
-	Spans        []StudioPaintSpan  `json:"spans"`
+	Kind         string               `json:"kind" enum:"stroke,fill,gradient"`
+	Color        string               `json:"color"`
+	Size         float64              `json:"size" minimum:"0" maximum:"512"`
+	Opacity      float64              `json:"opacity" minimum:"0" maximum:"1"`
+	SourceWidth  float64              `json:"source_width" minimum:"0"`
+	SourceHeight float64              `json:"source_height" minimum:"0"`
+	Points       []StudioPaintPoint   `json:"points"`
+	Spans        []StudioPaintSpan    `json:"spans"`
+	Gradient     *StudioGradientValue `json:"gradient,omitempty"`
 }
 
 type StudioShadowEffect struct {
@@ -168,6 +183,14 @@ type StudioLayerEffects struct {
 	BlendMode   string              `json:"blend_mode" enum:"normal,multiply,screen,overlay,darken,lighten,soft_light"`
 	DropShadow  *StudioShadowEffect `json:"drop_shadow,omitempty"`
 	InnerShadow *StudioShadowEffect `json:"inner_shadow,omitempty"`
+	Stroke      *StudioStrokeEffect `json:"stroke,omitempty"`
+}
+
+type StudioStrokeEffect struct {
+	Color    string  `json:"color"`
+	Opacity  float64 `json:"opacity" minimum:"0" maximum:"1"`
+	Width    float64 `json:"width" minimum:"0" maximum:"500"`
+	Position string  `json:"position" enum:"inside,center,outside"`
 }
 
 type StudioLayerMask struct {
@@ -1505,6 +1528,9 @@ func validateStudioLayer(layer StudioLayer) error {
 		if err := validateStudioShadowEffect(layer.Effects.InnerShadow); err != nil {
 			return err
 		}
+		if err := validateStudioStrokeEffect(layer.Effects.Stroke); err != nil {
+			return err
+		}
 	}
 	switch layer.Type {
 	case "text":
@@ -1601,7 +1627,7 @@ func validateStudioLayer(layer StudioLayer) error {
 		if layer.Paint == nil || layer.Text != nil || layer.Image != nil || layer.Shape != nil {
 			return fmt.Errorf("paint layers require only paint properties")
 		}
-		if !oneOfStudioString(layer.Paint.Kind, "stroke", "fill") ||
+		if !oneOfStudioString(layer.Paint.Kind, "stroke", "fill", "gradient") ||
 			!studioHexColor.MatchString(layer.Paint.Color) ||
 			!finiteStudioNumber(layer.Paint.Size) ||
 			layer.Paint.Size <= 0 ||
@@ -1629,6 +1655,13 @@ func validateStudioLayer(layer StudioLayer) error {
 				span.Width <= 0 {
 				return fmt.Errorf("paint layer spans are invalid")
 			}
+		}
+		if layer.Paint.Kind == "gradient" {
+			if err := validateStudioGradient(layer.Paint.Gradient); err != nil {
+				return err
+			}
+		} else if layer.Paint.Gradient != nil {
+			return fmt.Errorf("only gradient paint layers can include gradient properties")
 		}
 	case "group":
 		if layer.Text != nil || layer.Image != nil || layer.Shape != nil || layer.Paint != nil || layer.Effects != nil || layer.Mask != nil {
@@ -1658,6 +1691,45 @@ func validateStudioShadowEffect(effect *StudioShadowEffect) error {
 		effect.Distance < 0 ||
 		effect.Distance > 500 {
 		return fmt.Errorf("studio layer shadow effect is invalid")
+	}
+	return nil
+}
+
+func validateStudioStrokeEffect(effect *StudioStrokeEffect) error {
+	if effect == nil {
+		return nil
+	}
+	if !studioHexColor.MatchString(effect.Color) ||
+		!finiteStudioNumber(effect.Opacity) ||
+		effect.Opacity < 0 ||
+		effect.Opacity > 1 ||
+		!finiteStudioNumber(effect.Width) ||
+		effect.Width <= 0 ||
+		effect.Width > 500 ||
+		!oneOfStudioString(effect.Position, "inside", "center", "outside") {
+		return fmt.Errorf("studio layer stroke effect is invalid")
+	}
+	return nil
+}
+
+func validateStudioGradient(gradient *StudioGradientValue) error {
+	if gradient == nil ||
+		!oneOfStudioString(gradient.Type, "linear", "radial", "angle", "reflected", "diamond") ||
+		!finiteStudioNumber(gradient.Start.X) ||
+		!finiteStudioNumber(gradient.Start.Y) ||
+		!finiteStudioNumber(gradient.End.X) ||
+		!finiteStudioNumber(gradient.End.Y) ||
+		len(gradient.Stops) < 2 ||
+		len(gradient.Stops) > 32 {
+		return fmt.Errorf("studio gradient is invalid")
+	}
+	for _, stop := range gradient.Stops {
+		if !finiteStudioNumber(stop.Offset) ||
+			stop.Offset < 0 ||
+			stop.Offset > 1 ||
+			!studioHexColor.MatchString(stop.Color) {
+			return fmt.Errorf("studio gradient is invalid")
+		}
 	}
 	return nil
 }

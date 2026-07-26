@@ -60,10 +60,6 @@
 	import RectangleSelectIcon from 'lucide-svelte/icons/square-dashed-mouse-pointer';
 	import LassoSelectIcon from 'lucide-svelte/icons/lasso-select';
 	import TypeIcon from 'lucide-svelte/icons/type';
-	import SquareIcon from 'lucide-svelte/icons/square';
-	import CircleIcon from 'lucide-svelte/icons/circle';
-	import RectangleHorizontalIcon from 'lucide-svelte/icons/rectangle-horizontal';
-	import MinusIcon from 'lucide-svelte/icons/minus';
 	import HandIcon from 'lucide-svelte/icons/hand';
 	import ZoomInIcon from 'lucide-svelte/icons/zoom-in';
 	import LayersIcon from 'lucide-svelte/icons/layers-3';
@@ -74,6 +70,7 @@
 	import CircleDashedIcon from 'lucide-svelte/icons/circle-dashed';
 	import PencilIcon from 'lucide-svelte/icons/pencil';
 	import PaintBucketIcon from 'lucide-svelte/icons/paint-bucket';
+	import BlendIcon from 'lucide-svelte/icons/blend';
 	import GroupIcon from 'lucide-svelte/icons/group';
 	import UngroupIcon from 'lucide-svelte/icons/ungroup';
 	import MoreIcon from 'lucide-svelte/icons/ellipsis';
@@ -758,16 +755,10 @@
 	function setTool(tool: StudioTool): void {
 		editor.activeTool = tool;
 		if (tool === 'text') editor.addText();
-		if (tool === 'shape') editor.addShape();
 		if (tool === 'image' || tool === 'camera') {
 			editor.leftPanel = 'media';
 			if (window.innerWidth < 1024) mobileSheet = 'assets';
 		}
-	}
-
-	function addShape(kind: NonNullable<StudioLayer['shape']>['kind']): void {
-		editor.activeTool = 'shape';
-		editor.addShape(kind);
 	}
 
 	function editableTarget(target: EventTarget | null): boolean {
@@ -853,9 +844,8 @@
 			l: 'lasso',
 			w: 'magic_wand',
 			p: 'pencil',
-			g: 'bucket',
+			g: event.shiftKey ? 'bucket' : 'gradient',
 			t: 'text',
-			u: 'shape',
 			h: 'hand',
 			z: 'zoom'
 		};
@@ -1114,16 +1104,15 @@
 
 	const tools: Array<{ key: StudioTool; label: string; icon: typeof MousePointerIcon }> = [
 		{ key: 'select', label: m.studio_select(), icon: MousePointerIcon },
+		{ key: 'marquee', label: m.studio_pixel_select(), icon: RectangleSelectIcon },
 		{ key: 'text', label: m.studio_text(), icon: TypeIcon },
-		{ key: 'shape', label: m.studio_shape(), icon: SquareIcon },
 		{ key: 'pencil', label: m.studio_pencil(), icon: PencilIcon },
-		{ key: 'bucket', label: m.studio_paint_bucket(), icon: PaintBucketIcon },
 		{ key: 'hand', label: m.studio_hand(), icon: HandIcon },
 		{ key: 'zoom', label: m.studio_zoom(), icon: ZoomInIcon }
 	];
 
-	function isSelectionTool(tool: StudioTool): tool is StudioSelectionTool {
-		return ['select', 'marquee', 'ellipse_marquee', 'lasso', 'magic_wand'].includes(tool);
+	function isPixelSelectionTool(tool: StudioTool): tool is StudioSelectionTool {
+		return ['marquee', 'ellipse_marquee', 'lasso', 'magic_wand'].includes(tool);
 	}
 
 	function selectionToolLabel(tool: StudioTool): string {
@@ -1131,7 +1120,7 @@
 		if (tool === 'ellipse_marquee') return m.studio_ellipse_select();
 		if (tool === 'lasso') return m.studio_lasso_select();
 		if (tool === 'magic_wand') return m.studio_magic_select();
-		return m.studio_select();
+		return m.studio_pixel_select();
 	}
 </script>
 
@@ -1433,6 +1422,24 @@
 			{#each tools as tool (tool.key)}
 				{@const Icon = tool.icon}
 				{#if tool.key === 'select'}
+					<Tooltip.Root>
+						<Tooltip.Trigger>
+							{#snippet child({ props })}
+								<Button
+									{...props}
+									variant={editor.activeTool === 'select' ? 'secondary' : 'ghost'}
+									size="icon-sm"
+									onclick={() => setTool('select')}
+									aria-label={m.studio_select_objects()}
+									aria-pressed={editor.activeTool === 'select'}
+								>
+									<MousePointerIcon />
+								</Button>
+							{/snippet}
+						</Tooltip.Trigger>
+						<Tooltip.Content side="right">{m.studio_select_objects()} · V</Tooltip.Content>
+					</Tooltip.Root>
+				{:else if tool.key === 'marquee'}
 					<DropdownMenu.Root>
 						<Tooltip.Root>
 							<Tooltip.Trigger>
@@ -1442,10 +1449,10 @@
 											<Button
 												{...tooltipProps}
 												{...menuProps}
-												variant={isSelectionTool(editor.activeTool) ? 'secondary' : 'ghost'}
+												variant={isPixelSelectionTool(editor.activeTool) ? 'secondary' : 'ghost'}
 												size="icon-sm"
 												aria-label={selectionToolLabel(editor.activeTool)}
-												aria-pressed={isSelectionTool(editor.activeTool)}
+												aria-pressed={isPixelSelectionTool(editor.activeTool)}
 											>
 												{#if editor.activeTool === 'marquee'}
 													<RectangleSelectIcon />
@@ -1456,7 +1463,7 @@
 												{:else if editor.activeTool === 'magic_wand'}
 													<WandIcon />
 												{:else}
-													<MousePointerIcon />
+													<RectangleSelectIcon />
 												{/if}
 											</Button>
 										{/snippet}
@@ -1468,11 +1475,6 @@
 							</Tooltip.Content>
 						</Tooltip.Root>
 						<DropdownMenu.Content side="right" align="start" class="min-w-52">
-							<DropdownMenu.Item onclick={() => setTool('select')}>
-								<MousePointerIcon />
-								{m.studio_select()}
-								<span class="ml-auto text-xs text-muted-foreground">V</span>
-							</DropdownMenu.Item>
 							<DropdownMenu.Item onclick={() => setTool('marquee')}>
 								<RectangleSelectIcon />
 								{m.studio_rectangle_select()}
@@ -1495,7 +1497,7 @@
 							</DropdownMenu.Item>
 						</DropdownMenu.Content>
 					</DropdownMenu.Root>
-				{:else if tool.key === 'shape'}
+				{:else if tool.key === 'pencil'}
 					<DropdownMenu.Root>
 						<Tooltip.Root>
 							<Tooltip.Trigger>
@@ -1505,35 +1507,41 @@
 											<Button
 												{...tooltipProps}
 												{...menuProps}
-												variant={editor.activeTool === 'shape' ? 'secondary' : 'ghost'}
+												variant={['pencil', 'bucket', 'gradient'].includes(editor.activeTool)
+													? 'secondary'
+													: 'ghost'}
 												size="icon-sm"
-												aria-label={tool.label}
+												aria-label={m.studio_paint()}
 												disabled={!editor.canEdit}
 											>
-												<SquareIcon />
+												{#if editor.activeTool === 'bucket'}
+													<PaintBucketIcon />
+												{:else if editor.activeTool === 'gradient'}
+													<BlendIcon />
+												{:else}
+													<PencilIcon />
+												{/if}
 											</Button>
 										{/snippet}
 									</DropdownMenu.Trigger>
 								{/snippet}
 							</Tooltip.Trigger>
-							<Tooltip.Content side="right">{tool.label}</Tooltip.Content>
+							<Tooltip.Content side="right">{m.studio_paint()}</Tooltip.Content>
 						</Tooltip.Root>
 						<DropdownMenu.Content side="right" align="start" class="min-w-44">
-							<DropdownMenu.Item onclick={() => addShape('rectangle')}>
-								<SquareIcon />
-								{m.studio_rectangle()}
+							<DropdownMenu.Item onclick={() => setTool('pencil')}>
+								<PencilIcon />
+								{m.studio_pencil()}
 							</DropdownMenu.Item>
-							<DropdownMenu.Item onclick={() => addShape('rounded_rectangle')}>
-								<RectangleHorizontalIcon />
-								{m.studio_rounded_rectangle()}
+							<DropdownMenu.Item onclick={() => setTool('bucket')}>
+								<PaintBucketIcon />
+								{m.studio_paint_bucket()}
+								<span class="ml-auto text-xs text-muted-foreground">⇧G</span>
 							</DropdownMenu.Item>
-							<DropdownMenu.Item onclick={() => addShape('ellipse')}>
-								<CircleIcon />
-								{m.studio_ellipse()}
-							</DropdownMenu.Item>
-							<DropdownMenu.Item onclick={() => addShape('line')}>
-								<MinusIcon />
-								{m.studio_line()}
+							<DropdownMenu.Item onclick={() => setTool('gradient')}>
+								<BlendIcon />
+								{m.studio_gradient()}
+								<span class="ml-auto text-xs text-muted-foreground">G</span>
 							</DropdownMenu.Item>
 						</DropdownMenu.Content>
 					</DropdownMenu.Root>
@@ -1663,17 +1671,28 @@
 			<PanelLeftIcon />
 			{m.studio_add()}
 		</Button>
-		{#each tools.filter( (tool) => ['select', 'text', 'shape', 'pencil', 'hand'].includes(tool.key) ) as tool (tool.key)}
+		{#each tools.filter( (tool) => ['select', 'marquee', 'text', 'pencil', 'hand'].includes(tool.key) ) as tool (tool.key)}
 			{@const Icon = tool.icon}
 			{#if tool.key === 'select'}
+				<Button
+					variant={editor.activeTool === 'select' ? 'secondary' : 'ghost'}
+					class="h-12 w-16 shrink-0 snap-start flex-col gap-0 px-0 text-[11px] md:h-12"
+					onclick={() => setTool('select')}
+					aria-label={m.studio_select_objects()}
+					aria-pressed={editor.activeTool === 'select'}
+				>
+					<MousePointerIcon />
+					{m.studio_select()}
+				</Button>
+			{:else if tool.key === 'marquee'}
 				<DropdownMenu.Root>
 					<DropdownMenu.Trigger>
 						{#snippet child({ props })}
 							<Button
 								{...props}
-								variant={isSelectionTool(editor.activeTool) ? 'secondary' : 'ghost'}
+								variant={isPixelSelectionTool(editor.activeTool) ? 'secondary' : 'ghost'}
 								class="h-12 w-16 shrink-0 snap-start flex-col gap-0 px-0 text-[11px] md:h-12"
-								aria-label={m.studio_select()}
+								aria-label={m.studio_pixel_select()}
 							>
 								{#if editor.activeTool === 'marquee'}
 									<RectangleSelectIcon />
@@ -1684,17 +1703,13 @@
 								{:else if editor.activeTool === 'magic_wand'}
 									<WandIcon />
 								{:else}
-									<MousePointerIcon />
+									<RectangleSelectIcon />
 								{/if}
-								{m.studio_select()}
+								{m.studio_pixels()}
 							</Button>
 						{/snippet}
 					</DropdownMenu.Trigger>
 					<DropdownMenu.Content side="top" align="start" class="min-w-52">
-						<DropdownMenu.Item onclick={() => setTool('select')}>
-							<MousePointerIcon />
-							{m.studio_select()}
-						</DropdownMenu.Item>
 						<DropdownMenu.Item onclick={() => setTool('marquee')}>
 							<RectangleSelectIcon />
 							{m.studio_rectangle_select()}
@@ -1713,55 +1728,27 @@
 						</DropdownMenu.Item>
 					</DropdownMenu.Content>
 				</DropdownMenu.Root>
-			{:else if tool.key === 'shape'}
-				<DropdownMenu.Root>
-					<DropdownMenu.Trigger>
-						{#snippet child({ props })}
-							<Button
-								{...props}
-								variant={editor.activeTool === 'shape' ? 'secondary' : 'ghost'}
-								class="h-12 w-16 shrink-0 snap-start flex-col gap-0 px-0 text-[11px] md:h-12"
-								disabled={!editor.canEdit}
-							>
-								<SquareIcon />
-								{tool.label}
-							</Button>
-						{/snippet}
-					</DropdownMenu.Trigger>
-					<DropdownMenu.Content side="top" align="start" class="min-w-44">
-						<DropdownMenu.Item onclick={() => addShape('rectangle')}>
-							<SquareIcon />
-							{m.studio_rectangle()}
-						</DropdownMenu.Item>
-						<DropdownMenu.Item onclick={() => addShape('rounded_rectangle')}>
-							<RectangleHorizontalIcon />
-							{m.studio_rounded_rectangle()}
-						</DropdownMenu.Item>
-						<DropdownMenu.Item onclick={() => addShape('ellipse')}>
-							<CircleIcon />
-							{m.studio_ellipse()}
-						</DropdownMenu.Item>
-						<DropdownMenu.Item onclick={() => addShape('line')}>
-							<MinusIcon />
-							{m.studio_line()}
-						</DropdownMenu.Item>
-					</DropdownMenu.Content>
-				</DropdownMenu.Root>
 			{:else if tool.key === 'pencil'}
 				<DropdownMenu.Root>
 					<DropdownMenu.Trigger>
 						{#snippet child({ props })}
 							<Button
 								{...props}
-								variant={['pencil', 'bucket'].includes(editor.activeTool) ? 'secondary' : 'ghost'}
+								variant={['pencil', 'bucket', 'gradient'].includes(editor.activeTool)
+									? 'secondary'
+									: 'ghost'}
 								class="h-12 w-16 shrink-0 snap-start flex-col gap-0 px-0 text-[11px] md:h-12"
 								disabled={!editor.canEdit}
 								aria-label={editor.activeTool === 'bucket'
 									? m.studio_paint_bucket()
-									: m.studio_pencil()}
+									: editor.activeTool === 'gradient'
+										? m.studio_gradient()
+										: m.studio_pencil()}
 							>
 								{#if editor.activeTool === 'bucket'}
 									<PaintBucketIcon />
+								{:else if editor.activeTool === 'gradient'}
+									<BlendIcon />
 								{:else}
 									<PencilIcon />
 								{/if}
@@ -1777,6 +1764,10 @@
 						<DropdownMenu.Item onclick={() => setTool('bucket')}>
 							<PaintBucketIcon />
 							{m.studio_paint_bucket()}
+						</DropdownMenu.Item>
+						<DropdownMenu.Item onclick={() => setTool('gradient')}>
+							<BlendIcon />
+							{m.studio_gradient()}
 						</DropdownMenu.Item>
 					</DropdownMenu.Content>
 				</DropdownMenu.Root>

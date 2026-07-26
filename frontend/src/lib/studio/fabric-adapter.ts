@@ -1,6 +1,7 @@
 import { getAuthenticatedMediaURL } from '$lib/media-url';
 import type { StudioDocument, StudioLayer, StudioPage, StudioTool } from './types';
 import { createTextCurvePath, shadowColor, shadowOffset, textCurveStartOffset } from './effects';
+import { createStudioCanvasGradient, gradientColorAt } from './gradient';
 import {
 	boundsIntersect,
 	colorsWithinTolerance,
@@ -54,9 +55,33 @@ interface FabricAdapterOptions {
 	onTransform(id: string, updates: Partial<StudioLayer['transform']>): void;
 	onTextChange(id: string, text: string): void;
 	onTextEditingChange?(editing: boolean): void;
+	onImageDimensions?(id: string, width: number, height: number): void;
 }
 
 const SNAP_SCREEN_PX = 7;
+
+export function studioLayerRenderOrder(layers: StudioLayer[]): StudioLayer[] {
+	const layerIDs = new Set(layers.map((layer) => layer.id));
+	const childrenByParent = new Map<string, StudioLayer[]>();
+	for (const layer of layers) {
+		const parentID = layer.parent_id && layerIDs.has(layer.parent_id) ? layer.parent_id : '';
+		const children = childrenByParent.get(parentID) ?? [];
+		children.push(layer);
+		childrenByParent.set(parentID, children);
+	}
+
+	const ordered: StudioLayer[] = [];
+	const visited = new Set<string>();
+	const appendLayer = (layer: StudioLayer): void => {
+		if (visited.has(layer.id)) return;
+		visited.add(layer.id);
+		for (const child of childrenByParent.get(layer.id) ?? []) appendLayer(child);
+		ordered.push(layer);
+	};
+	for (const layer of childrenByParent.get('') ?? []) appendLayer(layer);
+	for (const layer of layers) appendLayer(layer);
+	return ordered;
+}
 
 export class OpenPostFabricAdapter {
 	private fabric: FabricModule | null = null;
@@ -81,6 +106,7 @@ export class OpenPostFabricAdapter {
 	private onTransform: FabricAdapterOptions['onTransform'];
 	private onTextChange: FabricAdapterOptions['onTextChange'];
 	private onTextEditingChange: NonNullable<FabricAdapterOptions['onTextEditingChange']>;
+	private onImageDimensions: NonNullable<FabricAdapterOptions['onImageDimensions']>;
 
 	constructor(options: FabricAdapterOptions) {
 		this.element = options.canvas;
@@ -93,6 +119,7 @@ export class OpenPostFabricAdapter {
 		this.onTransform = options.onTransform;
 		this.onTextChange = options.onTextChange;
 		this.onTextEditingChange = options.onTextEditingChange ?? (() => undefined);
+		this.onImageDimensions = options.onImageDimensions ?? (() => undefined);
 	}
 
 	async mount(): Promise<void> {
@@ -138,7 +165,7 @@ export class OpenPostFabricAdapter {
 		});
 		if (this.staticMode) this.canvas.setZoom(this.renderScale);
 		this.canvas.backgroundColor = page.background_color;
-		for (const layer of page.layers) {
+		for (const layer of studioLayerRenderOrder(page.layers)) {
 			const object = await this.createObject(layer);
 			if (sequence !== this.renderSequence) {
 				if (object) this.releaseObjectURL(object);
@@ -181,7 +208,7 @@ export class OpenPostFabricAdapter {
 				this.objectByLayerID.delete(id);
 				this.layerSnapshots.delete(id);
 			}
-			for (const layer of page.layers) {
+			for (const layer of studioLayerRenderOrder(page.layers)) {
 				const previous = this.layerSnapshots.get(layer.id);
 				let object = this.objectByLayerID.get(layer.id);
 				if (!previous || !object || this.requiresObjectRebuild(previous, layer)) {
@@ -207,7 +234,7 @@ export class OpenPostFabricAdapter {
 				this.layerSnapshots.set(layer.id, structuredClone(layer));
 			}
 			this.objectByLayerID = new Map(
-				page.layers
+				studioLayerRenderOrder(page.layers)
 					.map((layer) => [layer.id, this.objectByLayerID.get(layer.id)] as const)
 					.filter((entry): entry is readonly [string, FabricObject] => Boolean(entry[1]))
 			);
@@ -262,7 +289,7 @@ export class OpenPostFabricAdapter {
 
 	topmostLayerIDAtPoint(point: SelectionPoint): string | null {
 		if (!this.fabric) return null;
-		for (const layer of [...this.page.layers].reverse()) {
+		for (const layer of studioLayerRenderOrder(this.page.layers).reverse()) {
 			if (layer.type === 'group' || !this.layerCanBeSelected(layer)) continue;
 			const object = this.objectByLayerID.get(layer.id);
 			if (!object || !this.objectContainsPoint(object, point)) continue;
@@ -274,7 +301,7 @@ export class OpenPostFabricAdapter {
 	magicLayerIDsAtPoint(point: SelectionPoint, tolerance: number): string[] {
 		if (!this.fabric) return [];
 		let hitLayer: StudioLayer | null = null;
-		for (const layer of [...this.page.layers].reverse()) {
+		for (const layer of studioLayerRenderOrder(this.page.layers).reverse()) {
 			if (layer.type === 'group' || !this.layerCanBeSelected(layer)) continue;
 			const object = this.objectByLayerID.get(layer.id);
 			if (object && this.objectContainsPoint(object, point)) {
@@ -286,7 +313,7 @@ export class OpenPostFabricAdapter {
 		const hitColor = this.layerFlatColor(hitLayer);
 		if (!hitColor) return [this.selectionRootID(hitLayer)];
 		const matches: string[] = [];
-		for (const layer of this.page.layers) {
+		for (const layer of studioLayerRenderOrder(this.page.layers)) {
 			if (layer.type === 'group' || !this.layerCanBeSelected(layer)) continue;
 			const color = this.layerFlatColor(layer);
 			if (!color || !colorsWithinTolerance(hitColor, color, tolerance)) continue;
@@ -626,6 +653,8 @@ export class OpenPostFabricAdapter {
 			const paint = structuredClone(layer.paint);
 			const width = Math.max(1, layer.transform.width);
 			const height = Math.max(1, layer.transform.height);
+			const gradientBitmap =
+				paint.kind === 'gradient' && paint.gradient ? createGradientBitmap(paint) : null;
 			object = new this.fabric.FabricObject({
 				...options,
 				width,
@@ -639,6 +668,12 @@ export class OpenPostFabricAdapter {
 					width / Math.max(1, paint.source_width),
 					height / Math.max(1, paint.source_height)
 				);
+				if (gradientBitmap) {
+					context.globalAlpha = paint.opacity;
+					context.drawImage(gradientBitmap, 0, 0);
+					context.restore();
+					return;
+				}
 				context.fillStyle = paint.color;
 				context.strokeStyle = paint.color;
 				context.globalAlpha = paint.opacity;
@@ -679,6 +714,9 @@ export class OpenPostFabricAdapter {
 			}
 			const sourceWidth = Math.max(1, image.width);
 			const sourceHeight = Math.max(1, image.height);
+			if (layer.image.intrinsic_pending) {
+				queueMicrotask(() => this.onImageDimensions(layer.id, sourceWidth, sourceHeight));
+			}
 			const geometry = computeImageGeometry(layer, sourceWidth, sourceHeight);
 			image.set({
 				...options,
@@ -907,11 +945,68 @@ export class OpenPostFabricAdapter {
 			this.canvas.remove(decoration);
 		}
 		this.decorationsByLayerID.delete(layer.id);
-		if (!layer.effects?.inner_shadow || layer.type === 'group') return;
-		const decoration = this.createInnerShadowDecoration(layer, object, layer.effects.inner_shadow);
-		if (!decoration) return;
-		this.decorationsByLayerID.set(layer.id, [decoration]);
-		this.canvas.add(decoration);
+		if (layer.type === 'group') return;
+		const decorations = [
+			layer.effects?.stroke
+				? this.createStrokeDecoration(layer, object, layer.effects.stroke)
+				: null,
+			layer.effects?.inner_shadow
+				? this.createInnerShadowDecoration(layer, object, layer.effects.inner_shadow)
+				: null
+		].filter((decoration): decoration is FabricObject => Boolean(decoration));
+		if (decorations.length === 0) return;
+		this.decorationsByLayerID.set(layer.id, decorations);
+		for (const decoration of decorations) this.canvas.add(decoration);
+	}
+
+	private createStrokeDecoration(
+		layer: StudioLayer,
+		object: FabricObject,
+		effect: NonNullable<NonNullable<StudioLayer['effects']>['stroke']>
+	): FabricObject | null {
+		if (!this.fabric || layer.shape?.kind === 'line') return null;
+		const width = Math.max(1, object.width ?? layer.transform.width);
+		const height = Math.max(1, object.height ?? layer.transform.height);
+		const decoration = new this.fabric.FabricObject({
+			left: object.left,
+			top: object.top,
+			width,
+			height,
+			scaleX: object.scaleX,
+			scaleY: object.scaleY,
+			angle: object.angle,
+			flipX: object.flipX,
+			flipY: object.flipY,
+			originX: object.originX,
+			originY: object.originY,
+			opacity: layer.opacity * effect.opacity,
+			visible: this.layerIsVisible(layer),
+			selectable: false,
+			evented: false,
+			objectCaching: false
+		}) as FabricCustomObject;
+		const mask = effectiveMask(layer, object);
+		decoration._render = (context: CanvasRenderingContext2D) => {
+			context.save();
+			if (effect.position === 'inside') {
+				context.beginPath();
+				appendMaskPath(context, width, height, mask);
+				context.clip();
+			} else if (effect.position === 'outside') {
+				context.beginPath();
+				context.rect(-width * 2, -height * 2, width * 4, height * 4);
+				appendMaskPath(context, width, height, mask);
+				context.clip('evenodd');
+			}
+			context.strokeStyle = effect.color;
+			context.lineWidth = effect.position === 'center' ? effect.width : effect.width * 2;
+			context.lineJoin = 'round';
+			context.beginPath();
+			appendMaskPath(context, width, height, mask);
+			context.stroke();
+			context.restore();
+		};
+		return decoration;
 	}
 
 	private createInnerShadowDecoration(
@@ -1019,9 +1114,15 @@ export class OpenPostFabricAdapter {
 	}
 
 	private usesAreaSelection(): boolean {
-		return ['marquee', 'ellipse_marquee', 'lasso', 'magic_wand', 'pencil', 'bucket'].includes(
-			this.interactionTool
-		);
+		return [
+			'marquee',
+			'ellipse_marquee',
+			'lasso',
+			'magic_wand',
+			'pencil',
+			'bucket',
+			'gradient'
+		].includes(this.interactionTool);
 	}
 
 	private layerCanBeSelected(layer: StudioLayer): boolean {
@@ -1086,7 +1187,7 @@ export class OpenPostFabricAdapter {
 			cornerStrokeColor: '#ffffff',
 			borderColor: '#f97316',
 			cornerSize: 12,
-			touchCornerSize: 28,
+			touchCornerSize: 44,
 			padding: 1
 		};
 	}
@@ -1281,6 +1382,34 @@ function appendMaskPath(
 	context.lineTo(left, top + radius);
 	context.quadraticCurveTo(left, top, left + radius, top);
 	context.closePath();
+}
+
+function createGradientBitmap(paint: NonNullable<StudioLayer['paint']>): HTMLCanvasElement | null {
+	if (!paint.gradient || typeof globalThis.document === 'undefined') return null;
+	const width = Math.max(1, Math.ceil(paint.source_width));
+	const height = Math.max(1, Math.ceil(paint.source_height));
+	const canvas = globalThis.document.createElement('canvas');
+	canvas.width = width;
+	canvas.height = height;
+	const context = canvas.getContext('2d');
+	if (!context) return null;
+	if (paint.gradient.type !== 'diamond') {
+		context.fillStyle = createStudioCanvasGradient(context, paint.gradient);
+		for (const span of paint.spans) context.fillRect(span.x, span.y, span.width, 1);
+		return canvas;
+	}
+
+	const sampleStep = Math.max(1, Math.ceil(Math.max(width, height) / 1024));
+	for (const span of paint.spans) {
+		for (let x = span.x; x < span.x + span.width; x += sampleStep) {
+			context.fillStyle = gradientColorAt(paint.gradient, {
+				x: x + sampleStep / 2,
+				y: span.y + 0.5
+			});
+			context.fillRect(x, span.y, Math.min(sampleStep, span.x + span.width - x), 1);
+		}
+	}
+	return canvas;
 }
 
 function clamp(value: number, min: number, max: number): number {

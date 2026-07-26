@@ -7185,6 +7185,48 @@
 				"required": ["format", "quality"],
 				"type": "object"
 			},
+			"StudioGradientStop": {
+				"additionalProperties": false,
+				"properties": {
+					"color": {
+						"type": "string"
+					},
+					"offset": {
+						"format": "double",
+						"maximum": 1,
+						"minimum": 0,
+						"type": "number"
+					}
+				},
+				"required": ["offset", "color"],
+				"type": "object"
+			},
+			"StudioGradientValue": {
+				"additionalProperties": false,
+				"properties": {
+					"end": {
+						"$ref": "#/components/schemas/StudioPaintPoint"
+					},
+					"reverse": {
+						"type": "boolean"
+					},
+					"start": {
+						"$ref": "#/components/schemas/StudioPaintPoint"
+					},
+					"stops": {
+						"items": {
+							"$ref": "#/components/schemas/StudioGradientStop"
+						},
+						"type": ["array", "null"]
+					},
+					"type": {
+						"enum": ["linear", "radial", "angle", "reflected", "diamond"],
+						"type": "string"
+					}
+				},
+				"required": ["type", "start", "end", "stops", "reverse"],
+				"type": "object"
+			},
 			"StudioImageAdjustments": {
 				"additionalProperties": false,
 				"properties": {
@@ -7245,6 +7287,9 @@
 					"fit": {
 						"enum": ["cover", "contain", "stretch"],
 						"type": "string"
+					},
+					"intrinsic_pending": {
+						"type": "boolean"
 					},
 					"media_id": {
 						"type": "string"
@@ -7324,6 +7369,9 @@
 					},
 					"inner_shadow": {
 						"$ref": "#/components/schemas/StudioShadowEffect"
+					},
+					"stroke": {
+						"$ref": "#/components/schemas/StudioStrokeEffect"
 					}
 				},
 				"required": ["blend_mode"],
@@ -7418,8 +7466,11 @@
 					"color": {
 						"type": "string"
 					},
+					"gradient": {
+						"$ref": "#/components/schemas/StudioGradientValue"
+					},
 					"kind": {
-						"enum": ["stroke", "fill"],
+						"enum": ["stroke", "fill", "gradient"],
 						"type": "string"
 					},
 					"opacity": {
@@ -7626,6 +7677,32 @@
 					}
 				},
 				"required": ["kind", "fill", "stroke", "stroke_width", "radius"],
+				"type": "object"
+			},
+			"StudioStrokeEffect": {
+				"additionalProperties": false,
+				"properties": {
+					"color": {
+						"type": "string"
+					},
+					"opacity": {
+						"format": "double",
+						"maximum": 1,
+						"minimum": 0,
+						"type": "number"
+					},
+					"position": {
+						"enum": ["inside", "center", "outside"],
+						"type": "string"
+					},
+					"width": {
+						"format": "double",
+						"maximum": 500,
+						"minimum": 0,
+						"type": "number"
+					}
+				},
+				"required": ["color", "opacity", "width", "position"],
 				"type": "object"
 			},
 			"StudioTemplateResponse": {

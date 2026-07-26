@@ -116,4 +116,68 @@ describe('Studio editor layer interactions', () => {
 		expect(bucket?.paint?.kind).toBe('fill');
 		expect(bucket?.paint?.spans).toEqual([{ x: 0, y: 0, width: 20 }]);
 	});
+
+	it('moves layers precisely above or below a sibling', () => {
+		const editor = new StudioEditor();
+		editor.load(response());
+
+		editor.moveLayerRelative('back', 'front', 'above');
+		expect(editor.activePage?.layers.map((candidate) => candidate.id)).toEqual([
+			'middle',
+			'front',
+			'back'
+		]);
+
+		editor.moveLayerRelative('back', 'middle', 'below');
+		expect(editor.activePage?.layers.map((candidate) => candidate.id)).toEqual([
+			'back',
+			'middle',
+			'front'
+		]);
+	});
+
+	it('preserves imported image aspect ratio and defaults to stretch', () => {
+		const editor = new StudioEditor();
+		editor.load(response());
+
+		editor.addImage({ id: 'media', width: 1600, height: 900, name: 'Wide image' });
+
+		const image = editor.selectedLayers[0];
+		expect(image.image?.fit).toBe('stretch');
+		expect(image.transform.width / image.transform.height).toBeCloseTo(16 / 9);
+		expect(image.image?.intrinsic_pending).toBe(false);
+	});
+
+	it('resolves an image aspect ratio when media dimensions arrive after insertion', () => {
+		const editor = new StudioEditor();
+		editor.load(response());
+
+		editor.addImage({ id: 'media', name: 'Deferred image' });
+		const pending = editor.selectedLayers[0];
+		expect(pending.image?.intrinsic_pending).toBe(true);
+
+		editor.resolveImageDimensions(pending.id, 1200, 800);
+
+		const image = editor.selectedLayers[0];
+		expect(image.transform.width / image.transform.height).toBeCloseTo(3 / 2);
+		expect(image.image?.source_width).toBe(1200);
+		expect(image.image?.source_height).toBe(800);
+		expect(image.image?.intrinsic_pending).toBe(false);
+	});
+
+	it('adds gradients as selection-clipped paint layers', () => {
+		const editor = new StudioEditor();
+		editor.load(response());
+		const mask = new Uint8Array(1080 * 1080);
+		mask.fill(1, 20 * 1080 + 30, 20 * 1080 + 50);
+
+		editor.addGradientFill(mask, { x: 30, y: 20 }, { x: 50, y: 20 });
+
+		const layer = editor.selectedLayers[0];
+		expect(layer.paint?.kind).toBe('gradient');
+		expect(layer.paint?.gradient?.type).toBe('linear');
+		expect(layer.paint?.gradient?.start).toEqual({ x: 0, y: 0 });
+		expect(layer.paint?.gradient?.end).toEqual({ x: 20, y: 0 });
+		expect(layer.paint?.spans).toEqual([{ x: 0, y: 0, width: 20 }]);
+	});
 });

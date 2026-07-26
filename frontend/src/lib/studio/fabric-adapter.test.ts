@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computeImageGeometry } from './fabric-adapter';
+import { computeImageGeometry, studioLayerRenderOrder } from './fabric-adapter';
 import type { StudioLayer } from './types';
 
 function imageLayer(
@@ -65,5 +65,31 @@ describe('Studio image geometry', () => {
 		expect(second.scaleX).toBe(0.75);
 		expect(second.width * second.scaleX).toBe(1440);
 		expect(second.height * second.scaleY).toBe(810);
+	});
+});
+
+describe('Studio layer render order', () => {
+	it('keeps every grouped child inside the group stacking slot', () => {
+		const rectangle: StudioLayer = {
+			...imageLayer(400, 300),
+			id: 'rectangle',
+			type: 'shape'
+		};
+		const circle: StudioLayer = { ...imageLayer(160, 160), id: 'circle', type: 'shape' };
+		const text: StudioLayer = { ...imageLayer(360, 120), id: 'text', type: 'text' };
+		const image: StudioLayer = { ...imageLayer(240, 320), id: 'image' };
+		const group: StudioLayer = { ...imageLayer(500, 400), id: 'group', type: 'group' };
+		rectangle.parent_id = group.id;
+		text.parent_id = group.id;
+
+		const order = studioLayerRenderOrder([rectangle, circle, text, image, group]);
+
+		expect(order.map((layer) => layer.id)).toEqual([
+			'circle',
+			'image',
+			'rectangle',
+			'text',
+			'group'
+		]);
 	});
 });

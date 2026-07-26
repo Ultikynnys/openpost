@@ -5,7 +5,7 @@
 	import { Slider } from '$lib/components/ui/slider';
 	import { OpenPostFabricAdapter } from '../fabric-adapter';
 	import { useStudioEditor } from '../editor.svelte';
-	import StudioColorPicker from './studio-color-picker.svelte';
+	import PaintColorControls from './paint-color-controls.svelte';
 	import { m } from '$lib/paraglide/messages';
 	import { startStudioMetric } from '../telemetry';
 	import {
@@ -18,10 +18,10 @@
 		type SelectionBounds,
 		type SelectionPoint
 	} from '../selection';
-	import type { StudioSelectionMode, StudioSelectionTool } from '../types';
+	import type { StudioGradientType, StudioSelectionMode, StudioSelectionTool } from '../types';
 
 	type AreaSelectionTool = Extract<StudioSelectionTool, 'marquee' | 'ellipse_marquee' | 'lasso'>;
-	type CanvasGestureTool = AreaSelectionTool | 'pencil';
+	type CanvasGestureTool = AreaSelectionTool | 'pencil' | 'gradient';
 	interface SelectionGesture {
 		tool: CanvasGestureTool;
 		pointerID: number;
@@ -81,6 +81,9 @@
 				},
 				onTextEditingChange(editing) {
 					textEditing = editing;
+				},
+				onImageDimensions(id, width, height) {
+					editor.resolveImageDimensions(id, width, height);
 				}
 			});
 			mountedAdapter = next;
@@ -228,7 +231,10 @@
 
 	function usesCanvasSurface(): boolean {
 		return (
-			isAreaSelectionTool() || editor.activeTool === 'pencil' || editor.activeTool === 'bucket'
+			isAreaSelectionTool() ||
+			editor.activeTool === 'pencil' ||
+			editor.activeTool === 'bucket' ||
+			editor.activeTool === 'gradient'
 		);
 	}
 
@@ -236,7 +242,7 @@
 		event: PointerEvent,
 		tool: StudioSelectionTool
 	): StudioSelectionMode {
-		if (event.metaKey || event.ctrlKey) return 'toggle';
+		if (event.shiftKey && event.altKey) return 'intersect';
 		if (event.altKey) return 'subtract';
 		if (event.shiftKey && !['marquee', 'ellipse_marquee'].includes(tool)) return 'add';
 		return editor.selectionMode;
@@ -268,7 +274,8 @@
 	}
 
 	function selectionTargetIDs(point: SelectionPoint): string[] {
-		if (editor.selectedLayerIDs.length > 0) return editor.selectedLayerIDs;
+		const activeID = editor.selectedLayerIDs.at(-1);
+		if (activeID) return [activeID];
 		const hitID = adapter?.topmostLayerIDAtPoint(point);
 		if (!hitID) return [];
 		editor.selectLayer(hitID);
@@ -279,7 +286,11 @@
 		image: ImageData;
 		targetLayerIDs: string[];
 	} | null {
-		const targetLayerIDs = selectionTargetIDs(point);
+		const targetLayerIDs = editor.sampleAllLayers
+			? (editor.activePage?.layers
+					.filter((layer) => layer.visible && layer.type !== 'group')
+					.map((layer) => layer.id) ?? [])
+			: selectionTargetIDs(point);
 		const image = adapter?.rasterizeLayerIDs(targetLayerIDs);
 		return image ? { image, targetLayerIDs } : null;
 	}
@@ -297,11 +308,29 @@
 		};
 	}
 
+	function constrainGradientPoint(
+		start: SelectionPoint,
+		point: SelectionPoint,
+		event: PointerEvent
+	): SelectionPoint {
+		if (!event.shiftKey) return point;
+		const distance = Math.hypot(point.x - start.x, point.y - start.y);
+		const angle = Math.atan2(point.y - start.y, point.x - start.x);
+		const snapped = Math.round(angle / (Math.PI / 4)) * (Math.PI / 4);
+		return {
+			x: start.x + Math.cos(snapped) * distance,
+			y: start.y + Math.sin(snapped) * distance
+		};
+	}
+
 	function startAreaSelection(event: PointerEvent): boolean {
 		const tool = editor.activeTool;
 		if (!(event.target instanceof Node) || !stageElement?.contains(event.target)) return false;
 		if (
-			(!isAreaSelectionTool(tool) && tool !== 'pencil' && tool !== 'bucket') ||
+			(!isAreaSelectionTool(tool) &&
+				tool !== 'pencil' &&
+				tool !== 'bucket' &&
+				tool !== 'gradient') ||
 			!adapter ||
 			event.button !== 0
 		)
@@ -342,6 +371,12 @@
 					mask = intersectPixelMasks(mask, editor.pixelSelection.data);
 				}
 				editor.addPaintFill(mask);
+			} else if (editor.pixelSelection) {
+				editor.addPaintFill(editor.pixelSelection.data);
+			} else if (editor.document) {
+				const mask = new Uint8Array(editor.document.width_px * editor.document.height_px);
+				mask.fill(1);
+				editor.addPaintFill(mask);
 			}
 			showMagicPulse(point);
 			event.preventDefault();
@@ -369,6 +404,8 @@
 		if (!point) return false;
 		if (['marquee', 'ellipse_marquee'].includes(gesture.tool)) {
 			point = constrainMarqueePoint(gesture.start, point, event);
+		} else if (gesture.tool === 'gradient') {
+			point = constrainGradientPoint(gesture.start, point, event);
 		}
 		const points =
 			(gesture.tool === 'lasso' || gesture.tool === 'pencil') &&
@@ -390,6 +427,8 @@
 		let point = documentPoint(event, true) ?? gesture.current;
 		if (['marquee', 'ellipse_marquee'].includes(gesture.tool)) {
 			point = constrainMarqueePoint(gesture.start, point, event);
+		} else if (gesture.tool === 'gradient') {
+			point = constrainGradientPoint(gesture.start, point, event);
 		}
 		const distance =
 			gesture.tool === 'lasso'
@@ -412,7 +451,30 @@
 			event.preventDefault();
 			return true;
 		}
-		const targetLayerIDs = selectionTargetIDs(gesture.start);
+		if (gesture.tool === 'gradient') {
+			const document = editor.document;
+			if (document) {
+				const mask =
+					editor.pixelSelection?.data ??
+					rectanglePixelMask(document.width_px, document.height_px, {
+						x: 0,
+						y: 0,
+						width: document.width_px,
+						height: document.height_px
+					});
+				editor.addGradientFill(mask, gesture.start, point);
+			}
+			selectionGesture = null;
+			if (
+				event.currentTarget instanceof HTMLDivElement &&
+				event.currentTarget.hasPointerCapture(event.pointerId)
+			) {
+				event.currentTarget.releasePointerCapture(event.pointerId);
+			}
+			event.preventDefault();
+			return true;
+		}
+		const targetLayerIDs = editor.selectedLayerIDs.slice(-1);
 		let mask: Uint8Array | null = null;
 		if (distance < 5 / Math.max(editor.zoom, 0.1)) {
 			if (gesture.mode === 'replace') editor.clearPixelSelection();
@@ -438,9 +500,7 @@
 				);
 			}
 		}
-		if (mask && targetLayerIDs.length > 0) {
-			editor.applyPixelSelection(mask, targetLayerIDs, gesture.mode);
-		}
+		if (mask) editor.applyPixelSelection(mask, targetLayerIDs, gesture.mode);
 		selectionGesture = null;
 		if (
 			event.currentTarget instanceof HTMLDivElement &&
@@ -598,7 +658,7 @@
 	aria-label={m.studio_design_canvas()}
 >
 	{#if editor.document}
-		{#if isAreaSelectionTool() || editor.activeTool === 'pencil' || editor.activeTool === 'bucket'}
+		{#if isAreaSelectionTool() || editor.activeTool === 'pencil' || editor.activeTool === 'bucket' || editor.activeTool === 'gradient'}
 			<div
 				class="absolute top-3 left-1/2 z-30 flex max-w-[calc(100%-1.5rem)] -translate-x-1/2 flex-wrap items-center justify-center gap-1 rounded-lg border border-white/10 bg-neutral-950/88 p-1.5 text-neutral-100 shadow-lg backdrop-blur"
 				data-testid="studio-selection-options"
@@ -614,7 +674,9 @@
 									? m.studio_magic_select()
 									: editor.activeTool === 'pencil'
 										? m.studio_pencil()
-										: m.studio_paint_bucket()}
+										: editor.activeTool === 'gradient'
+											? m.studio_gradient()
+											: m.studio_paint_bucket()}
 				</span>
 				{#if isAreaSelectionTool()}
 					<div
@@ -622,7 +684,7 @@
 						role="group"
 						aria-label={m.studio_selection_mode()}
 					>
-						{#each [{ value: 'replace', label: m.studio_selection_replace() }, { value: 'add', label: m.studio_selection_add() }, { value: 'subtract', label: m.studio_selection_subtract() }] as mode (mode.value)}
+						{#each [{ value: 'replace', label: m.studio_selection_replace() }, { value: 'add', label: m.studio_selection_add() }, { value: 'subtract', label: m.studio_selection_subtract() }, { value: 'intersect', label: m.studio_selection_intersect() }] as mode (mode.value)}
 							<Button
 								variant={editor.selectionMode === mode.value ? 'secondary' : 'ghost'}
 								size="sm"
@@ -688,18 +750,54 @@
 					>
 						{m.studio_contiguous()}
 					</Button>
+					<Button
+						variant={editor.sampleAllLayers ? 'secondary' : 'ghost'}
+						size="sm"
+						class="h-8 px-2 text-xs text-neutral-100 hover:text-foreground"
+						aria-pressed={editor.sampleAllLayers}
+						onclick={() => (editor.sampleAllLayers = !editor.sampleAllLayers)}
+					>
+						{m.studio_sample_all_layers()}
+					</Button>
 				{/if}
-				{#if editor.activeTool === 'pencil' || editor.activeTool === 'bucket'}
-					<div class="w-34">
-						<StudioColorPicker
-							label={m.studio_foreground_color()}
-							value={editor.paintColor}
-							brandColors={editor.brandKit?.colors ?? []}
-							recentColors={editor.recentColors}
-							onChange={(value) => (editor.paintColor = value)}
-							onCommit={(value) => editor.rememberColor(value)}
-						/>
-					</div>
+				{#if ['pencil', 'bucket', 'gradient'].includes(editor.activeTool)}
+					<PaintColorControls
+						primary={editor.paintColor}
+						secondary={editor.gradientEndColor}
+						gradient={editor.activeTool === 'gradient'}
+						brandColors={editor.brandKit?.colors ?? []}
+						recentColors={editor.recentColors}
+						onPrimaryChange={(value) => (editor.paintColor = value)}
+						onSecondaryChange={(value) => (editor.gradientEndColor = value)}
+						onCommit={(value) => editor.rememberColor(value)}
+					/>
+				{/if}
+				{#if editor.activeTool === 'gradient'}
+					<label class="grid gap-0.5 text-xs">
+						<span class="sr-only">{m.studio_gradient_style()}</span>
+						<select
+							class="h-8 rounded-md border border-white/15 bg-neutral-900 px-2"
+							value={editor.gradientType}
+							aria-label={m.studio_gradient_style()}
+							onchange={(event) =>
+								(editor.gradientType = event.currentTarget.value as StudioGradientType)}
+						>
+							<option value="linear">{m.studio_gradient_linear()}</option>
+							<option value="radial">{m.studio_gradient_radial()}</option>
+							<option value="angle">{m.studio_gradient_angle()}</option>
+							<option value="reflected">{m.studio_gradient_reflected()}</option>
+							<option value="diamond">{m.studio_gradient_diamond()}</option>
+						</select>
+					</label>
+					<Button
+						variant={editor.gradientReverse ? 'secondary' : 'ghost'}
+						size="sm"
+						class="h-8 px-2 text-xs text-neutral-100 hover:text-foreground"
+						aria-pressed={editor.gradientReverse}
+						onclick={() => (editor.gradientReverse = !editor.gradientReverse)}
+					>
+						{m.studio_gradient_reverse()}
+					</Button>
 				{/if}
 				{#if editor.activeTool === 'pencil'}
 					<label class="flex min-w-36 items-center gap-2 px-1 text-xs">
@@ -717,7 +815,7 @@
 						/>
 					</label>
 				{/if}
-				{#if editor.activeTool === 'pencil' || editor.activeTool === 'bucket'}
+				{#if ['pencil', 'bucket', 'gradient'].includes(editor.activeTool)}
 					<label class="flex min-w-34 items-center gap-2 px-1 text-xs">
 						<span class="whitespace-nowrap">
 							{m.studio_opacity({ value: Math.round(editor.paintOpacity * 100) })}
@@ -813,6 +911,26 @@
 								points={lassoPoints(selectionGesture)}
 								stroke-width={editor.pencilSize}
 							/>
+						{:else if selectionGesture.tool === 'gradient'}
+							<line
+								class="studio-gradient-preview"
+								x1={selectionGesture.start.x}
+								y1={selectionGesture.start.y}
+								x2={selectionGesture.current.x}
+								y2={selectionGesture.current.y}
+							/>
+							<circle
+								class="studio-gradient-preview-point"
+								cx={selectionGesture.start.x}
+								cy={selectionGesture.start.y}
+								r={5 / Math.max(editor.zoom, 0.1)}
+							/>
+							<circle
+								class="studio-gradient-preview-point"
+								cx={selectionGesture.current.x}
+								cy={selectionGesture.current.y}
+								r={5 / Math.max(editor.zoom, 0.1)}
+							/>
 						{:else}
 							<polygon class="studio-selection-outline" points={lassoPoints(selectionGesture)} />
 						{/if}
@@ -878,6 +996,20 @@
 		stroke-width: 2;
 		vector-effect: non-scaling-stroke;
 		animation: studio-magic-pulse 0.42s ease-out forwards;
+	}
+
+	.studio-gradient-preview {
+		stroke: #fff;
+		stroke-width: calc(2 / var(--studio-zoom));
+		vector-effect: non-scaling-stroke;
+		filter: drop-shadow(0 0 1px #000);
+	}
+
+	.studio-gradient-preview-point {
+		fill: #f97316;
+		stroke: #fff;
+		stroke-width: calc(1.5 / var(--studio-zoom));
+		vector-effect: non-scaling-stroke;
 	}
 
 	.studio-pencil-preview {
