@@ -3283,7 +3283,11 @@ func (h *MCPHandler) createPublication(ctx context.Context, userID string, args 
 		if err != nil {
 			return err
 		}
-		return publicationHandler.insertRenditions(txCtx, tx, publication, segments, segmentInputs, renditions, defaultMedia, accountMap)
+		if err := publicationHandler.insertRenditions(txCtx, tx, publication, segments, segmentInputs, renditions, defaultMedia, accountMap); err != nil {
+			return err
+		}
+		_, err = postservice.EnsurePublicationEditorTx(txCtx, tx, publication)
+		return err
 	})
 	if err != nil {
 		return nil, &mcpError{Code: -32603, Message: "failed to create publication"}
@@ -3497,6 +3501,10 @@ func (h *MCPHandler) updatePublication(ctx context.Context, userID string, args 
 		if currentPublication.Revision != input.ExpectedRevision {
 			return handler.publicationRevisionConflict(txCtx, tx, currentPublication, input.ExpectedRevision)
 		}
+		editor, err := postservice.EnsurePublicationEditorTx(txCtx, tx, currentPublication)
+		if err != nil {
+			return err
+		}
 		clearQueuedSchedule, rescheduleQueuedJob, err := applyMCPPublicationUpdate(currentPublication, input, time.Now().UTC())
 		if err != nil {
 			return err
@@ -3534,6 +3542,14 @@ func (h *MCPHandler) updatePublication(ctx context.Context, userID string, args 
 			ClearSchedule:  input.ClearSchedule,
 			Metadata:       mcpMetadataValue(input.Metadata),
 		})
+		if err := postservice.SyncPublicationEditorTx(
+			txCtx,
+			tx,
+			currentPublication,
+			editor,
+		); err != nil {
+			return err
+		}
 		if err := handler.syncTextPostRevisionsTx(
 			txCtx,
 			tx,
@@ -3633,6 +3649,10 @@ func (h *MCPHandler) setPublicationRenditions(ctx context.Context, userID string
 		if currentPublication.Revision != input.ExpectedRevision {
 			return handler.publicationRevisionConflict(txCtx, tx, currentPublication, input.ExpectedRevision)
 		}
+		editor, err := postservice.EnsurePublicationEditorTx(txCtx, tx, currentPublication)
+		if err != nil {
+			return err
+		}
 		var IDs []string
 		if err := tx.NewSelect().Model((*models.Rendition)(nil)).Column("id").Where("publication_id = ?", publication.ID).Scan(txCtx, &IDs); err != nil {
 			return err
@@ -3665,6 +3685,16 @@ func (h *MCPHandler) setPublicationRenditions(ctx context.Context, userID string
 		}
 		if affected, _ := result.RowsAffected(); affected == 0 {
 			return handler.publicationRevisionConflict(txCtx, tx, currentPublication, input.ExpectedRevision)
+		}
+		currentPublication.Revision = nextRevision
+		currentPublication.UpdatedAt = now
+		if err := postservice.SyncPublicationEditorTx(
+			txCtx,
+			tx,
+			currentPublication,
+			editor,
+		); err != nil {
+			return err
 		}
 		changedDomains := []string{"destinations", "destination overrides", "media"}
 		if err := handler.syncTextPostRevisionsTx(

@@ -25,6 +25,22 @@ func createHandlerTestDB(t *testing.T, modelsToCreate ...interface{}) *bun.DB {
 		IfNotExists().
 		Exec(context.Background())
 	require.NoError(t, err)
+	editorModels := []interface{}{
+		(*models.Post)(nil),
+		(*models.PostDestination)(nil),
+		(*models.PostMedia)(nil),
+		(*models.PostVariant)(nil),
+		(*models.ThreadDraft)(nil),
+		(*models.PublicationSegment)(nil),
+		(*models.PublicationSegmentMedia)(nil),
+		(*models.Rendition)(nil),
+		(*models.RenditionSegment)(nil),
+		(*models.RenditionSegmentMedia)(nil),
+	}
+	for _, model := range editorModels {
+		_, err := db.NewCreateTable().Model(model).IfNotExists().Exec(context.Background())
+		require.NoError(t, err)
+	}
 	for _, model := range modelsToCreate {
 		_, err := db.NewCreateTable().Model(model).IfNotExists().Exec(context.Background())
 		require.NoError(t, err)

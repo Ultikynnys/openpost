@@ -412,6 +412,10 @@ func (h *PublicationHandler) deleteRendition(api huma.API) {
 			if current.Revision != input.ExpectedRevision {
 				return h.publicationRevisionConflict(txCtx, tx, current, input.ExpectedRevision)
 			}
+			editor, err := postservice.EnsurePublicationEditorTx(txCtx, tx, current)
+			if err != nil {
+				return err
+			}
 			result, err := tx.NewDelete().
 				Model((*models.Rendition)(nil)).
 				Where("publication_id = ? AND social_account_id = ?", publication.ID, input.AccountID).
@@ -437,11 +441,16 @@ func (h *PublicationHandler) deleteRendition(api huma.API) {
 				Exec(txCtx); err != nil {
 				return err
 			}
+			current.Revision = nextRevision
+			current.UpdatedAt = now
+			if err := postservice.SyncPublicationEditorTx(txCtx, tx, current, editor); err != nil {
+				return err
+			}
 			if err := h.syncTextPostRevisionsTx(
 				txCtx,
 				tx,
 				current.ID,
-				current.Revision,
+				input.ExpectedRevision,
 				nextRevision,
 				[]string{"destinations", "destination overrides", "media"},
 				userID,
@@ -557,7 +566,11 @@ func (h *PublicationHandler) createPublication(api huma.API) {
 			if err != nil {
 				return err
 			}
-			return h.insertRenditions(txCtx, tx, publication, segments, input.Body.Segments, input.Body.Renditions, input.Body.Media, accountMap)
+			if err := h.insertRenditions(txCtx, tx, publication, segments, input.Body.Segments, input.Body.Renditions, input.Body.Media, accountMap); err != nil {
+				return err
+			}
+			_, err = postservice.EnsurePublicationEditorTx(txCtx, tx, publication)
+			return err
 		})
 		if err != nil {
 			return nil, huma.Error500InternalServerError("failed to create publication")
@@ -777,6 +790,10 @@ func (h *PublicationHandler) updatePublication(api huma.API) {
 			if publication.Revision != input.Body.ExpectedRevision {
 				return h.publicationRevisionConflict(txCtx, tx, publication, input.Body.ExpectedRevision)
 			}
+			editor, err := postservice.EnsurePublicationEditorTx(txCtx, tx, publication)
+			if err != nil {
+				return err
+			}
 			clearQueuedSchedule, rescheduleQueuedJob, err := applyPublicationScheduleUpdate(
 				publication,
 				input.Body.ScheduledAt,
@@ -827,6 +844,9 @@ func (h *PublicationHandler) updatePublication(api huma.API) {
 				if err != nil {
 					return err
 				}
+			}
+			if err := postservice.SyncPublicationEditorTx(txCtx, tx, publication, editor); err != nil {
+				return err
 			}
 			if err := h.syncTextPostRevisionsTx(
 				txCtx,
@@ -1129,6 +1149,10 @@ func (h *PublicationHandler) upsertRenditions(api huma.API) {
 			if currentPublication.Revision != input.Body.ExpectedRevision {
 				return h.publicationRevisionConflict(txCtx, tx, currentPublication, input.Body.ExpectedRevision)
 			}
+			editor, err := postservice.EnsurePublicationEditorTx(txCtx, tx, currentPublication)
+			if err != nil {
+				return err
+			}
 			if len(input.Body.Renditions) == 0 {
 				return nil
 			}
@@ -1178,11 +1202,21 @@ func (h *PublicationHandler) upsertRenditions(api huma.API) {
 			if affected, _ := result.RowsAffected(); affected == 0 {
 				return h.publicationRevisionConflict(txCtx, tx, currentPublication, input.Body.ExpectedRevision)
 			}
+			currentPublication.Revision = nextRevision
+			currentPublication.UpdatedAt = now
+			if err := postservice.SyncPublicationEditorTx(
+				txCtx,
+				tx,
+				currentPublication,
+				editor,
+			); err != nil {
+				return err
+			}
 			if err := h.syncTextPostRevisionsTx(
 				txCtx,
 				tx,
 				currentPublication.ID,
-				currentPublication.Revision,
+				input.Body.ExpectedRevision,
 				nextRevision,
 				[]string{"destinations", "destination overrides", "media"},
 				userID,

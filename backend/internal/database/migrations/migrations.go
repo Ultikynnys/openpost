@@ -127,6 +127,10 @@ func prepareMigration(ctx context.Context, db *bun.DB, migration migration) erro
 		if err := addPublishingFailureColumnsToPostDestinations(ctx, db); err != nil {
 			return fmt.Errorf("migration %s post destination preparation failed: %w", migration.name, err)
 		}
+	case 41:
+		if err := backfillPublicationTextEditors(ctx, db); err != nil {
+			return fmt.Errorf("migration %s publication editor backfill failed: %w", migration.name, err)
+		}
 	}
 	return nil
 }
