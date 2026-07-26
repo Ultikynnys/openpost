@@ -787,8 +787,24 @@ func TestMCPPublicationLifecycleOperationsStayInParity(t *testing.T) {
 	publication := loaded.(map[string]any)["structuredContent"].(map[string]any)["publication"].(PublicationResponse)
 	require.Equal(t, "Updated title", publication.Title)
 	require.Equal(t, "Updated copy", publication.SourceText)
+	require.NotEmpty(t, publication.TextPostID)
 	require.Len(t, publication.Renditions, 1)
 	require.Equal(t, "X-native copy", publication.Renditions[0].Body)
+
+	var editor models.Post
+	require.NoError(t, srv.db.NewSelect().
+		Model(&editor).
+		Where("id = ?", publication.TextPostID).
+		Scan(ctx))
+	require.Equal(t, publicationID, editor.PublicationID)
+	require.Equal(t, "Updated copy", editor.Content)
+	require.Equal(t, 3, editor.Revision)
+
+	var destination models.PostDestination
+	require.NoError(t, srv.db.NewSelect().
+		Model(&destination).
+		Where("post_id = ? AND social_account_id = ?", editor.ID, "account-1").
+		Scan(ctx))
 }
 
 func TestMCPSearchReturnsRelevantOperationSchemas(t *testing.T) {

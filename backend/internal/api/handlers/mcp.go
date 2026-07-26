@@ -3526,6 +3526,17 @@ func (h *MCPHandler) updatePublication(ctx context.Context, userID string, args 
 		if affected, _ := result.RowsAffected(); affected == 0 {
 			return handler.publicationRevisionConflict(txCtx, tx, currentPublication, input.ExpectedRevision)
 		}
+		if input.SourceText != nil {
+			if err := syncPublicationFirstSegmentBodyTx(
+				txCtx,
+				tx,
+				currentPublication.ID,
+				*input.SourceText,
+				currentPublication.UpdatedAt,
+			); err != nil {
+				return err
+			}
+		}
 		if rescheduleQueuedJob {
 			if _, err := handler.replacePublicationJobTx(txCtx, tx, currentPublication.ID, currentPublication.ScheduledAt); err != nil {
 				return err
