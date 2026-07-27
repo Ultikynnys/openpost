@@ -523,24 +523,7 @@ func (i *InstagramAdapter) ListComments(ctx context.Context, accessToken, _ stri
 }
 
 func (i *InstagramAdapter) ResolveContentURL(ctx context.Context, accessToken, _ string, externalID string) (string, error) {
-	query := url.Values{
-		"fields":              {"permalink"},
-		oauthParamAccessToken: {accessToken},
-	}
-	body, err := DoRequest(ctx, http.MethodGet, i.graphURL(externalID)+"?"+query.Encode(), nil, nil)
-	if err != nil {
-		return "", fmt.Errorf("instagram post permalink: %w", err)
-	}
-	var response struct {
-		Permalink string `json:"permalink"`
-	}
-	if err := json.Unmarshal(body, &response); err != nil {
-		return "", fmt.Errorf("decoding instagram post permalink: %w", err)
-	}
-	if strings.TrimSpace(response.Permalink) == "" {
-		return "", fmt.Errorf("instagram post permalink is missing")
-	}
-	return response.Permalink, nil
+	return resolveMetaContentURL(ctx, i.graphURL, accessToken, externalID, "permalink", "instagram")
 }
 
 func (i *InstagramAdapter) ReplyToComment(ctx context.Context, accessToken, _ string, commentID, message string) (string, error) {

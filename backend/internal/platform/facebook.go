@@ -534,25 +534,35 @@ func (f *FacebookAdapter) ListComments(ctx context.Context, accessToken, _ strin
 	return comments, nil
 }
 
-func (f *FacebookAdapter) ResolveContentURL(ctx context.Context, accessToken, _ string, externalID string) (string, error) {
+func resolveMetaContentURL(
+	ctx context.Context,
+	graphURL func(string) string,
+	accessToken string,
+	externalID string,
+	field string,
+	providerName string,
+) (string, error) {
 	query := url.Values{
-		"fields":              {"permalink_url"},
+		"fields":              {field},
 		oauthParamAccessToken: {accessToken},
 	}
-	body, err := DoRequest(ctx, http.MethodGet, f.graphURL(externalID)+"?"+query.Encode(), nil, nil)
+	body, err := DoRequest(ctx, http.MethodGet, graphURL(externalID)+"?"+query.Encode(), nil, nil)
 	if err != nil {
-		return "", fmt.Errorf("facebook post permalink: %w", err)
+		return "", fmt.Errorf("%s post permalink: %w", providerName, err)
 	}
-	var response struct {
-		PermalinkURL string `json:"permalink_url"`
-	}
+	var response map[string]string
 	if err := json.Unmarshal(body, &response); err != nil {
-		return "", fmt.Errorf("decoding facebook post permalink: %w", err)
+		return "", fmt.Errorf("decoding %s post permalink: %w", providerName, err)
 	}
-	if strings.TrimSpace(response.PermalinkURL) == "" {
-		return "", fmt.Errorf("facebook post permalink is missing")
+	permalink := strings.TrimSpace(response[field])
+	if permalink == "" {
+		return "", fmt.Errorf("%s post permalink is missing", providerName)
 	}
-	return response.PermalinkURL, nil
+	return permalink, nil
+}
+
+func (f *FacebookAdapter) ResolveContentURL(ctx context.Context, accessToken, _ string, externalID string) (string, error) {
+	return resolveMetaContentURL(ctx, f.graphURL, accessToken, externalID, "permalink_url", "facebook")
 }
 
 func (f *FacebookAdapter) ReplyToComment(ctx context.Context, accessToken, _ string, commentID, message string) (string, error) {

@@ -246,8 +246,35 @@ func (s *Service) syncEngagement(ctx context.Context, renditionID string) error 
 		return s.recordState(ctx, capabilityEngagement, subjectRendition, rendition.ID, account, "failed", "provider_error", "OpenPost could not collect engagement from this provider.", "", true, time.Hour, 0)
 	}
 	now := s.now()
+	newItems, err := s.persistEngagementComments(ctx, rendition, account, comments, now)
+	if err != nil {
+		return err
+	}
+	var publication models.Publication
+	_ = s.db.NewSelect().Model(&publication).Where("id = ?", rendition.PublicationID).Scan(ctx)
+	for _, item := range newItems {
+		_ = s.notify(ctx, publication.CreatedByID, account.WorkspaceID, notifications.TypeNewEngagement,
+			"New "+providerLabel(account.Platform)+" engagement",
+			firstNonEmpty(item.AuthorName, item.AuthorHandle, "Someone")+" replied to your post.",
+			"/engagement?item="+item.ID)
+	}
+	publishedAt := publication.ActualRunAt
+	if publishedAt.IsZero() {
+		publishedAt = firstNonZeroTime(publication.UpdatedAt, publication.CreatedAt)
+	}
+	cadence := engagementCadence(publishedAt, now, len(comments) == 0)
+	return s.recordState(ctx, capabilityEngagement, subjectRendition, rendition.ID, account, "ok", "", "", "", true, cadence, boolToInt(len(comments) == 0))
+}
+
+func (s *Service) persistEngagementComments(
+	ctx context.Context,
+	rendition models.Rendition,
+	account models.SocialAccount,
+	comments []platform.Comment,
+	now time.Time,
+) ([]models.EngagementItem, error) {
 	newItems := make([]models.EngagementItem, 0)
-	err = s.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
+	err := s.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
 		for _, comment := range comments {
 			if strings.TrimSpace(comment.ID) == "" {
 				continue
@@ -309,23 +336,7 @@ func (s *Service) syncEngagement(ctx context.Context, renditionID string) error 
 		}
 		return nil
 	})
-	if err != nil {
-		return err
-	}
-	var publication models.Publication
-	_ = s.db.NewSelect().Model(&publication).Where("id = ?", rendition.PublicationID).Scan(ctx)
-	for _, item := range newItems {
-		_ = s.notify(ctx, publication.CreatedByID, account.WorkspaceID, notifications.TypeNewEngagement,
-			"New "+providerLabel(account.Platform)+" engagement",
-			firstNonEmpty(item.AuthorName, item.AuthorHandle, "Someone")+" replied to your post.",
-			"/engagement?item="+item.ID)
-	}
-	publishedAt := publication.ActualRunAt
-	if publishedAt.IsZero() {
-		publishedAt = firstNonZeroTime(publication.UpdatedAt, publication.CreatedAt)
-	}
-	cadence := engagementCadence(publishedAt, now, len(comments) == 0)
-	return s.recordState(ctx, capabilityEngagement, subjectRendition, rendition.ID, account, "ok", "", "", "", true, cadence, boolToInt(len(comments) == 0))
+	return newItems, err
 }
 
 func (s *Service) resolveAndStoreContentURL(
@@ -795,34 +806,56 @@ func providerPostURL(rendition models.Rendition, account models.SocialAccount) s
 	username := strings.TrimPrefix(strings.TrimSpace(account.AccountUsername), "@")
 	switch rendition.Platform {
 	case "x":
-		if username != "" {
-			return "https://x.com/" + url.PathEscape(username) + "/status/" + url.PathEscape(externalID)
-		}
+		return xPostURL(username, externalID)
 	case "mastodon":
-		instanceURL := strings.TrimRight(strings.TrimSpace(account.InstanceURL), "/")
-		if at := strings.Index(username, "@"); at >= 0 {
-			username = username[:at]
-		}
-		if strings.HasPrefix(instanceURL, "https://") && username != "" {
-			return instanceURL + "/@" + url.PathEscape(username) + "/" + url.PathEscape(externalID)
-		}
+		return mastodonPostURL(account.InstanceURL, username, externalID)
 	case "bluesky":
-		if uri := blueskyPostURI(externalID); uri != "" {
-			parts := strings.Split(strings.TrimPrefix(uri, "at://"), "/")
-			if len(parts) >= 3 && parts[0] != "" && parts[2] != "" {
-				return "https://bsky.app/profile/" + url.PathEscape(parts[0]) + "/post/" + url.PathEscape(parts[2])
-			}
-		}
+		return blueskyPostURL(externalID)
 	case "linkedin":
-		if strings.HasPrefix(externalID, "urn:li:") {
-			return "https://www.linkedin.com/feed/update/" + externalID + "/"
-		}
+		return linkedinPostURL(externalID)
 	case "facebook":
 		return "https://www.facebook.com/" + url.PathEscape(externalID)
 	case "youtube":
 		return "https://www.youtube.com/watch?v=" + url.QueryEscape(externalID)
 	}
 	return ""
+}
+
+func xPostURL(username, externalID string) string {
+	if username == "" {
+		return ""
+	}
+	return "https://x.com/" + url.PathEscape(username) + "/status/" + url.PathEscape(externalID)
+}
+
+func mastodonPostURL(instanceURL, username, externalID string) string {
+	instanceURL = strings.TrimRight(strings.TrimSpace(instanceURL), "/")
+	if at := strings.Index(username, "@"); at >= 0 {
+		username = username[:at]
+	}
+	if !strings.HasPrefix(instanceURL, "https://") || username == "" {
+		return ""
+	}
+	return instanceURL + "/@" + url.PathEscape(username) + "/" + url.PathEscape(externalID)
+}
+
+func blueskyPostURL(externalID string) string {
+	uri := blueskyPostURI(externalID)
+	if uri == "" {
+		return ""
+	}
+	parts := strings.Split(strings.TrimPrefix(uri, "at://"), "/")
+	if len(parts) < 3 || parts[0] == "" || parts[2] == "" {
+		return ""
+	}
+	return "https://bsky.app/profile/" + url.PathEscape(parts[0]) + "/post/" + url.PathEscape(parts[2])
+}
+
+func linkedinPostURL(externalID string) string {
+	if !strings.HasPrefix(externalID, "urn:li:") {
+		return ""
+	}
+	return "https://www.linkedin.com/feed/update/" + externalID + "/"
 }
 
 // resolveRenditionAccount preserves comment collection for renditions created
