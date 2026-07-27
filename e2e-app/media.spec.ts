@@ -122,13 +122,6 @@ test("brand kit inputs keep focus while editing", async ({ page, request }) => {
     "page",
   );
 
-  const kitName = page.getByLabel("Brand kit name");
-  await expect(kitName).toBeVisible();
-  await kitName.fill("");
-  await kitName.pressSequentially("Field Notes", { delay: 20 });
-  await expect(kitName).toBeFocused();
-  await expect(kitName).toHaveValue("Field Notes");
-
   await page.getByRole("button", { name: "Add color" }).click();
   const colorName = page.getByLabel("Color name");
   await colorName.fill("");

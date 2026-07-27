@@ -44,7 +44,8 @@ All notable changes to this project are documented in this file.
 ### Fixed
 
 - Fixed Studio color picks falling back to black, first-drag layer movement and Alt duplication, unstable paint erasing, and save validation for erase masks and color adjustments.
-- Kept page widths stable when vertical scrollbars appear, shortened the draft context action, and made Engagement archive, restore, read, and provider-delete actions update without a loading flash or false “Move to inbox” state.
+- Persisted each Studio design's export format and quality so PNG and WebP selections no longer reset to the preset default after autosave.
+- Kept desktop page widths stable when vertical scrollbars appear without narrowing phone drawers, shortened the draft context action, and made Engagement archive, restore, read, and provider-delete actions update without a loading flash or false “Move to inbox” state.
 - Used the configured public media or S3/R2 URL consistently for verification and provider publishing, refreshed stale failed checks before validation, and removed duplicate HTTPS errors from destination account menus.
 - Made Studio transforms undoable, made Shift-rotation snap stably to 15-degree steps, assigned Space-drag to panning and Alt-drag to duplication, and allowed pasteboard clicks to clear selection.
 - Kept the sidebar calendar and full Calendar on one canonical occurrence rule so scheduled and published items appear consistently.

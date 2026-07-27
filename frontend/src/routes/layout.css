@@ -131,7 +131,9 @@
 	}
 	html {
 		@apply font-sans;
-		scrollbar-gutter: stable;
+		@media (min-width: 48rem) {
+			scrollbar-gutter: stable;
+		}
 	}
 }
 
