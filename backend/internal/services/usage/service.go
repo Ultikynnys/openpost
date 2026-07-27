@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/openpost/backend/internal/models"
@@ -12,7 +13,9 @@ import (
 )
 
 type Service struct {
-	db *bun.DB
+	db                   *bun.DB
+	providerCostPolicyMu sync.RWMutex
+	providerCostPolicy   ProviderCostPolicy
 }
 
 func NewService(db *bun.DB) *Service {

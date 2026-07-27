@@ -43,6 +43,12 @@ func NewBillingHandler(billingService *billing.Service, deps ...any) *BillingHan
 	return handler
 }
 
+func (h *BillingHandler) SetUsage(service *usage.Service) {
+	if service != nil {
+		h.usage = service
+	}
+}
+
 type PolarWebhookOutput struct {
 	OK        bool   `json:"ok"`
 	Duplicate bool   `json:"duplicate"`
@@ -147,16 +153,17 @@ type GetBillingStatusInput struct {
 }
 
 type BillingStatusResponse struct {
-	OrganizationID    string           `json:"organization_id" doc:"Organization ID"`
-	WorkspaceID       string           `json:"workspace_id" doc:"Workspace ID"`
-	Provider          string           `json:"provider,omitempty" doc:"Billing provider"`
-	Status            string           `json:"status" doc:"Subscription status"`
-	PlanID            string           `json:"plan_id,omitempty" doc:"Plan ID"`
-	CurrentPeriodEnd  string           `json:"current_period_end,omitempty" doc:"Current billing period end"`
-	CancelAtPeriodEnd bool             `json:"cancel_at_period_end" doc:"Whether the subscription cancels at period end"`
-	Limits            map[string]int64 `json:"limits" doc:"Entitlement limits from the local subscription snapshot"`
-	Usage             map[string]int64 `json:"usage" doc:"Current-month usage counters"`
-	PeriodStart       string           `json:"period_start" doc:"UTC month start for the usage counters"`
+	OrganizationID    string                      `json:"organization_id" doc:"Organization ID"`
+	WorkspaceID       string                      `json:"workspace_id" doc:"Workspace ID"`
+	Provider          string                      `json:"provider,omitempty" doc:"Billing provider"`
+	Status            string                      `json:"status" doc:"Subscription status"`
+	PlanID            string                      `json:"plan_id,omitempty" doc:"Plan ID"`
+	CurrentPeriodEnd  string                      `json:"current_period_end,omitempty" doc:"Current billing period end"`
+	CancelAtPeriodEnd bool                        `json:"cancel_at_period_end" doc:"Whether the subscription cancels at period end"`
+	Limits            map[string]int64            `json:"limits" doc:"Entitlement limits from the local subscription snapshot"`
+	Usage             map[string]int64            `json:"usage" doc:"Current-month product usage counters"`
+	PeriodStart       string                      `json:"period_start" doc:"UTC month start for the usage counters"`
+	ProviderCosts     []usage.ProviderCostSummary `json:"provider_costs" doc:"Confirmed hosted provider-cost estimates and unresolved reservations, separate from the product subscription"`
 }
 
 type BillingStatusOutput struct {
@@ -196,6 +203,15 @@ func (h *BillingHandler) billingStatusForOrganization(ctx context.Context, organ
 	if err != nil {
 		return nil, huma.Error500InternalServerError("failed to load billing usage")
 	}
+	var providerCosts []usage.ProviderCostSummary
+	if workspaceID != "" {
+		providerCosts, err = h.usage.SnapshotProviderCosts(ctx, workspaceID, now)
+	} else {
+		providerCosts, err = h.usage.SnapshotOrganizationProviderCosts(ctx, organizationID, now)
+	}
+	if err != nil {
+		return nil, huma.Error500InternalServerError("failed to load provider cost usage")
+	}
 	response := BillingStatusResponse{
 		OrganizationID: organizationID,
 		WorkspaceID:    workspaceID,
@@ -203,6 +219,7 @@ func (h *BillingHandler) billingStatusForOrganization(ctx context.Context, organ
 		Limits:         map[string]int64{},
 		Usage:          usageSnapshotToStrings(usageSnapshot),
 		PeriodStart:    usage.MonthStart(now).Format(time.RFC3339),
+		ProviderCosts:  providerCosts,
 	}
 
 	var sub models.BillingSubscription

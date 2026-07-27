@@ -42,6 +42,161 @@ test("settings shows billing plan controls for an authenticated workspace", asyn
   ).toBeVisible();
 });
 
+test("settings keeps hosted X costs separate from product usage", async ({
+  page,
+  request,
+}) => {
+  const unique = Date.now().toString(36);
+  const email = `provider-cost-${unique}@example.com`;
+
+  const auth = await registerUser(request, email);
+  const workspace = await createWorkspace(
+    request,
+    auth.token,
+    "Provider Cost E2E",
+  );
+  let billingStatusRequests = 0;
+
+  await page.route("**/api/v1/billing/status?**", async (route) => {
+    billingStatusRequests += 1;
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        organization_id: workspace.organization_id,
+        workspace_id: workspace.id,
+        status: "active",
+        plan_id: "creator",
+        cancel_at_period_end: false,
+        limits: {},
+        usage: {},
+        period_start: "2026-07-01T00:00:00Z",
+        provider_costs: [
+          {
+            provider: "x",
+            currency: "USD",
+            period_start: "2026-07-01T00:00:00Z",
+            event_count: 2,
+            units: 2,
+            cost_microusd: 215000,
+            reserved_event_count: 1,
+            reserved_units: 1,
+            reserved_cost_microusd: 200000,
+            budget_microusd: 5000000,
+            pricing_source_url:
+              "https://docs.x.com/x-api/getting-started/pricing",
+            operations: [
+              {
+                operation: "post_create",
+                event_count: 1,
+                units: 1,
+                cost_microusd: 15000,
+                reserved_event_count: 0,
+                reserved_units: 0,
+                reserved_cost_microusd: 0,
+              },
+              {
+                operation: "post_create_with_url",
+                event_count: 1,
+                units: 1,
+                cost_microusd: 200000,
+                reserved_event_count: 1,
+                reserved_units: 1,
+                reserved_cost_microusd: 200000,
+              },
+            ],
+          },
+        ],
+      },
+    });
+  });
+
+  await authenticatePage(page, auth.token);
+  await page.goto("/settings?tab=plan");
+
+  await expect.poll(() => billingStatusRequests).toBeGreaterThan(0);
+  const visibleBillingStatus = await page.evaluate(async (workspaceID) => {
+    const response = await fetch(
+      `/api/v1/billing/status?workspace_id=${encodeURIComponent(workspaceID)}`,
+    );
+    return response.json();
+  }, workspace.id);
+  expect(visibleBillingStatus.provider_costs).toHaveLength(1);
+
+  const costs = page.getByTestId("provider-cost-usage");
+  await expect(costs).toBeVisible();
+  await expect(costs).toContainText("Variable provider usage");
+  await expect(costs).toContainText(
+    "$0.215 confirmed + $0.20 reserved of the $5.00 monthly safety limit",
+  );
+  await expect(costs).toContainText("Posts without links");
+  await expect(costs).toContainText("Posts with links");
+  await expect(costs).toContainText("1 unresolved reservation");
+  await expect(
+    costs.getByRole("link", { name: "View X pricing" }),
+  ).toHaveAttribute("href", "https://docs.x.com/x-api/getting-started/pricing");
+});
+
+test("instance admins can review update status without an update action", async ({
+  page,
+  request,
+}) => {
+  const unique = Date.now().toString(36);
+  const email = `update-status-${unique}@example.com`;
+
+  const auth = await registerUser(request, email);
+  await createWorkspace(request, auth.token, "Update Status E2E");
+  const meResponse = await request.get("/api/v1/auth/me", {
+    headers: { Authorization: `Bearer ${auth.token}` },
+  });
+  expect(meResponse.ok()).toBeTruthy();
+  const me = await meResponse.json();
+  let profileRequests = 0;
+  let updateStatusRequests = 0;
+
+  await page.route("**/api/v1/auth/me", async (route) => {
+    profileRequests += 1;
+    await route.fulfill({
+      contentType: "application/json",
+      json: { ...me, is_admin: true },
+    });
+  });
+  await page.route("**/api/v1/admin/update-status", async (route) => {
+    updateStatusRequests += 1;
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        state: "update_available",
+        running_version: "v1.27.9",
+        running_build: "0123456789abcdef",
+        latest_version: "v1.28.0",
+        release_url: "https://github.com/rodrgds/openpost/releases/tag/v1.28.0",
+        published_at: "2026-07-27T10:00:00Z",
+        checked_at: "2026-07-27T12:00:00Z",
+      },
+    });
+  });
+
+  await authenticatePage(page, auth.token);
+  await page.goto("/settings?tab=instance");
+
+  await expect.poll(() => profileRequests).toBeGreaterThan(0);
+  await expect.poll(() => updateStatusRequests).toBeGreaterThan(0);
+  await expect(
+    page.getByRole("heading", { name: "Instance", level: 1 }),
+  ).toBeVisible();
+  const status = page.getByTestId("instance-update-status");
+  await expect(status).toContainText("OpenPost v1.28.0 is available.");
+  await expect(status).toContainText("v1.27.9");
+  await expect(status).toContainText("OpenPost never installs updates");
+  await expect(
+    status.getByRole("link", { name: "View release" }),
+  ).toHaveAttribute(
+    "href",
+    "https://github.com/rodrgds/openpost/releases/tag/v1.28.0",
+  );
+  await expect(status.getByRole("button", { name: /update/i })).toHaveCount(0);
+});
+
 test("settings shows recent MCP activity for an authenticated user", async ({
   page,
   request,

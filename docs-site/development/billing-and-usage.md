@@ -20,6 +20,28 @@ OpenPost Cloud billing is built around local entitlement snapshots and durable u
 - Media uploads check `media_bytes_uploaded_monthly` and `media_bytes_stored`; successful new uploads increment monthly uploaded-byte usage.
 - Scheduled single posts and threads check `scheduled_posts_monthly` before inserting posts or jobs; successful scheduled creates increment monthly scheduled-post usage.
 - The publishing worker checks `published_posts_monthly` and `provider_write_calls_monthly` before publishing. It records provider write attempts when a provider request is sent and records published posts only after the provider returns success.
+- When cloud mode has X configured, the publisher creates a durable cost reservation before each X post-create request. It classifies posts with and without URLs using operator-configured prices, then atomically checks confirmed cost plus reservations against a per-workspace monthly safety limit.
+- A confirmed provider success turns the reservation into an immutable estimated-cost event. A definite provider error releases it. A network, timeout, response-decoding, or other ambiguous result remains reserved without being reported as confirmed billed cost.
+- `provider_usage_period_counters` keeps reconciled UTC-month confirmed and reserved totals for fast workspace-visible reads. Startup reconciliation rebuilds the open month from immutable events and active reservations; bounded pruning never removes open-month events or reservations.
+- Provider cost estimates are separate from product subscriptions and entitlement counters. They are a guardrail, not an invoice. X pricing and the X Developer Console remain authoritative.
+- Self-hosted mode never installs a provider-cost policy, so these counters cannot block self-hosted publishing.
+
+## Hosted X cost guardrail
+
+The X guardrail is active only when both conditions are true:
+
+1. `OPENPOST_EDITION=cloud`
+2. An X adapter is configured
+
+Each reservation and confirmed event uses a hashed idempotency key derived from the workspace, durable job execution, subject, and request phase. Both store the provider, priced operation, units, unit price, estimated cost, and UTC occurrence time. They do not store post text, provider tokens, or provider response bodies.
+
+The default per-workspace budget is $5.00 per UTC month. A request that would make confirmed cost plus reservations exceed the budget is rejected before the provider call. `0` blocks all hosted X publishing. Prices and budgets use millionths of a US dollar so calculations stay integer-only:
+
+- `OPENPOST_X_MONTHLY_BUDGET_MICROUSD=5000000`
+- `OPENPOST_X_POST_CREATE_COST_MICROUSD=15000`
+- `OPENPOST_X_POST_CREATE_WITH_URL_COST_MICROUSD=200000`
+
+Review these prices when X changes its pay-per-use catalog. OpenPost exposes confirmed cost estimates and unresolved reserved exposure under **Settings → Plan & usage**. Reserved exposure protects the safety limit after an ambiguous result, but it is not presented as billed cost. X pricing and the X Developer Console remain authoritative.
 
 ## Monthly metrics
 

@@ -170,6 +170,67 @@ func (s *Service) HandlePublishJob(ctx context.Context, jobPayload string) error
 	return s.publishSinglePost(ctx, post)
 }
 
+// UpdateJobRetryAt keeps user-visible destination retry metadata aligned with
+// the worker's final bounded and jittered run time.
+func (s *Service) UpdateJobRetryAt(ctx context.Context, jobType, jobPayload string, retryAt time.Time) error {
+	retryAt = retryAt.UTC()
+	switch jobType {
+	case "publish_publication":
+		var payload struct {
+			PublicationID string `json:"publication_id"`
+			RenditionID   string `json:"rendition_id"`
+		}
+		if err := json.Unmarshal([]byte(jobPayload), &payload); err != nil {
+			return err
+		}
+		if payload.PublicationID == "" {
+			return nil
+		}
+		renditions := s.db.NewUpdate().
+			Model((*models.Rendition)(nil)).
+			Set("error_retry_at = ?", retryAt).
+			Where("publication_id = ? AND status = ? AND error_retryable = ?", payload.PublicationID, models.RenditionStatusFailed, true)
+		if payload.RenditionID != "" {
+			renditions = renditions.Where("id = ?", payload.RenditionID)
+		}
+		if _, err := renditions.Exec(ctx); err != nil {
+			return err
+		}
+		if _, err := s.db.NewUpdate().
+			Model((*models.RenditionSegment)(nil)).
+			Set("error_retry_at = ?", retryAt).
+			Where("rendition_id IN (SELECT id FROM renditions WHERE publication_id = ?)", payload.PublicationID).
+			Where("status = ? AND error_retryable = ?", "failed", true).
+			Exec(ctx); err != nil {
+			return err
+		}
+		_, err := s.db.NewUpdate().
+			Model((*models.PostDestination)(nil)).
+			Set("error_retry_at = ?", retryAt).
+			Where("post_id IN (SELECT id FROM posts WHERE publication_id = ?)", payload.PublicationID).
+			Where("status = ? AND error_retryable = ?", "failed", true).
+			Exec(ctx)
+		return err
+	case "publish_post":
+		var payload struct {
+			PostID string `json:"post_id"`
+		}
+		if err := json.Unmarshal([]byte(jobPayload), &payload); err != nil {
+			return err
+		}
+		if payload.PostID == "" {
+			return nil
+		}
+		_, err := s.db.NewUpdate().
+			Model((*models.PostDestination)(nil)).
+			Set("error_retry_at = ?", retryAt).
+			Where("post_id = ? AND status = ? AND error_retryable = ?", payload.PostID, "failed", true).
+			Exec(ctx)
+		return err
+	}
+	return nil
+}
+
 //nolint:gocyclo // One handler preserves publication, rendition, media, lifecycle, and retry state across every job action.
 func (s *Service) HandlePublishPublicationJob(ctx context.Context, jobPayload string) error {
 	var payload struct {
@@ -408,8 +469,18 @@ func (s *Service) publishRendition(ctx context.Context, publication *models.Publ
 		"platform":     rendition.Platform,
 		"provider_key": providerKey,
 	})
-	s.recordProviderWriteCall(ctx, publication.WorkspaceID)
-	externalID, err := s.publishProvider(ctx, provider, token, account.AccountID, req, mediaAttachments)
+	externalID, err := s.publishProviderWithUsage(
+		ctx,
+		publication.WorkspaceID,
+		account.Platform,
+		rendition.ID,
+		"publish",
+		provider,
+		token,
+		account.AccountID,
+		req,
+		mediaAttachments,
+	)
 	if err != nil && isExpiredTokenError(err) {
 		refreshedToken, refreshErr := s.tm.ForceRefreshAccessToken(ctx, account.ID)
 		if refreshErr != nil {
@@ -422,8 +493,18 @@ func (s *Service) publishRendition(ctx context.Context, publication *models.Publ
 		if quotaErr := s.checkMonthlyQuota(ctx, publication.WorkspaceID, entitlements.LimitProviderWriteCallsMonthly); quotaErr != nil {
 			return quotaErr
 		}
-		s.recordProviderWriteCall(ctx, publication.WorkspaceID)
-		externalID, err = s.publishProvider(ctx, provider, refreshedToken, account.AccountID, req, mediaAttachments)
+		externalID, err = s.publishProviderWithUsage(
+			ctx,
+			publication.WorkspaceID,
+			account.Platform,
+			rendition.ID,
+			"publish-token-refresh",
+			provider,
+			refreshedToken,
+			account.AccountID,
+			req,
+			mediaAttachments,
+		)
 	}
 	if err != nil {
 		return err
@@ -570,8 +651,18 @@ func (s *Service) publishRenditionSegments(
 			"segment_id":   segment.ID,
 			"position":     segment.Position,
 		})
-		s.recordProviderWriteCall(ctx, publication.WorkspaceID)
-		externalID, publishErr := s.publishProvider(ctx, provider, token, account.AccountID, req, mediaAttachments)
+		externalID, publishErr := s.publishProviderWithUsage(
+			ctx,
+			publication.WorkspaceID,
+			account.Platform,
+			segment.ID,
+			"publish",
+			provider,
+			token,
+			account.AccountID,
+			req,
+			mediaAttachments,
+		)
 		if publishErr != nil && isExpiredTokenError(publishErr) {
 			token, err = s.tm.ForceRefreshAccessToken(ctx, account.ID)
 			if err != nil {
@@ -580,8 +671,18 @@ func (s *Service) publishRenditionSegments(
 			if quotaErr := s.checkMonthlyQuota(ctx, publication.WorkspaceID, entitlements.LimitProviderWriteCallsMonthly); quotaErr != nil {
 				return s.failRenditionSegment(ctx, segment, quotaErr)
 			}
-			s.recordProviderWriteCall(ctx, publication.WorkspaceID)
-			externalID, publishErr = s.publishProvider(ctx, provider, token, account.AccountID, req, mediaAttachments)
+			externalID, publishErr = s.publishProviderWithUsage(
+				ctx,
+				publication.WorkspaceID,
+				account.Platform,
+				segment.ID,
+				"publish-token-refresh",
+				provider,
+				token,
+				account.AccountID,
+				req,
+				mediaAttachments,
+			)
 		}
 		if publishErr != nil {
 			return s.failRenditionSegment(ctx, segment, publishErr)
@@ -786,8 +887,18 @@ func (s *Service) publishRenditionReply(ctx context.Context, renditionID, body, 
 	if err := s.checkMonthlyQuota(ctx, publication.WorkspaceID, entitlements.LimitProviderWriteCallsMonthly); err != nil {
 		return err
 	}
-	s.recordProviderWriteCall(ctx, publication.WorkspaceID)
-	_, err = provider.Publish(ctx, token, account.AccountID, req)
+	_, err = s.publishProviderWithUsage(
+		ctx,
+		publication.WorkspaceID,
+		account.Platform,
+		rendition.ID,
+		"reply",
+		provider,
+		token,
+		account.AccountID,
+		req,
+		nil,
+	)
 	return err
 }
 
@@ -1085,8 +1196,18 @@ func (s *Service) publishToDestination(ctx context.Context, post *models.Post, d
 	if err := s.checkMonthlyQuota(ctx, post.WorkspaceID, entitlements.LimitProviderWriteCallsMonthly); err != nil {
 		return err
 	}
-	s.recordProviderWriteCall(ctx, post.WorkspaceID)
-	externalID, err := s.publishProvider(ctx, provider, token, account.AccountID, req, mediaAttachments)
+	externalID, err := s.publishProviderWithUsage(
+		ctx,
+		post.WorkspaceID,
+		account.Platform,
+		dest.ID,
+		"publish",
+		provider,
+		token,
+		account.AccountID,
+		req,
+		mediaAttachments,
+	)
 	if err != nil {
 		if isExpiredTokenError(err) {
 			log.Printf("[Publisher] Token expired for %s account %s, forcing refresh and retry", account.Platform, account.ID)
@@ -1097,8 +1218,18 @@ func (s *Service) publishToDestination(ctx context.Context, post *models.Post, d
 			if quotaErr := s.checkMonthlyQuota(ctx, post.WorkspaceID, entitlements.LimitProviderWriteCallsMonthly); quotaErr != nil {
 				return quotaErr
 			}
-			s.recordProviderWriteCall(ctx, post.WorkspaceID)
-			externalID, err = s.publishProvider(ctx, provider, refreshedToken, account.AccountID, req, mediaAttachments)
+			externalID, err = s.publishProviderWithUsage(
+				ctx,
+				post.WorkspaceID,
+				account.Platform,
+				dest.ID,
+				"publish-token-refresh",
+				provider,
+				refreshedToken,
+				account.AccountID,
+				req,
+				mediaAttachments,
+			)
 			if err != nil {
 				return err
 			}
@@ -1420,6 +1551,24 @@ func (s *Service) publishProvider(
 	return direct.PublishWithMedia(ctx, token, accountID, req, inputs)
 }
 
+func (s *Service) publishProviderWithUsage(
+	ctx context.Context,
+	workspaceID, providerName, subject, phase string,
+	provider platform.Adapter,
+	token, accountID string,
+	req *platform.PublishRequest,
+	media []models.MediaAttachment,
+) (string, error) {
+	reservation, err := s.reserveProviderPublishCost(ctx, workspaceID, providerName, subject, phase, req)
+	if err != nil {
+		return "", err
+	}
+	s.recordProviderWriteCall(ctx, workspaceID)
+	externalID, publishErr := s.publishProvider(ctx, provider, token, accountID, req, media)
+	s.settleProviderPublishCost(ctx, reservation, publishErr)
+	return externalID, publishErr
+}
+
 func (s *Service) uploadMediaToPlatform(ctx context.Context, account *models.SocialAccount, provider platform.Adapter, token string, media models.MediaAttachment, content string) (string, error) {
 	if requiresPublicMedia(account.Platform, "") {
 		return s.getPublicMediaURL(media), nil
@@ -1639,13 +1788,7 @@ func (s *Service) finalizePublication(ctx context.Context, publication *models.P
 	case hasFailed:
 		status = models.PublicationStatusFailed
 	}
-	if _, err := s.db.NewUpdate().Model(publication).
-		Set("status = ?", status).
-		Set("updated_at = ?", time.Now().UTC()).
-		Where("id = ?", publication.ID).
-		Exec(ctx); err != nil {
-		log.Printf("[Publisher] Failed to finalize publication %s: %v", publication.ID, err)
-	}
+	now := time.Now().UTC()
 	postStatus := models.PostStatusScheduled
 	switch status {
 	case models.PublicationStatusPublished:
@@ -1653,66 +1796,41 @@ func (s *Service) finalizePublication(ctx context.Context, publication *models.P
 	case models.PublicationStatusFailed:
 		postStatus = models.PostStatusFailed
 	}
-	query := s.db.NewUpdate().
-		Model((*models.Post)(nil)).
-		Set("status = ?", postStatus).
-		Where("publication_id = ?", publication.ID)
-	if postStatus == models.PostStatusPublished {
-		query = query.Set("published_at = ?", time.Now().UTC())
-	}
-	if _, err := query.Exec(ctx); err != nil {
-		log.Printf(
-			"[Publisher] Failed to finalize compatibility posts for %s: %v",
-			publication.ID,
-			err,
-		)
-		return
-	}
-	if err := s.syncPublicationPostDestinations(ctx, publication.ID, renditions); err != nil {
-		log.Printf(
-			"[Publisher] Failed to sync destination outcomes for publication %s: %v",
-			publication.ID,
-			err,
-		)
-	}
-	s.notifyPublicationResult(ctx, publication, status)
-}
-
-func (s *Service) notifyPublicationResult(ctx context.Context, publication *models.Publication, status string) {
-	if s.notifications == nil || publication.CreatedByID == "" {
-		return
-	}
-	input := notifications.CreateInput{
-		UserID:      publication.CreatedByID,
-		WorkspaceID: publication.WorkspaceID,
-		Href:        "/activity?publication=" + publication.ID,
-		Payload:     map[string]any{"publication_id": publication.ID},
-	}
-	switch status {
-	case models.PublicationStatusPublished:
-		input.Type = notifications.TypePostPublished
-		input.Title = "Publication completed"
-		input.Body = firstNonEmptyPublisherString(publication.Title, "Your publication was published.")
-		input.DedupKey = fmt.Sprintf("publication:%s:revision:%d:published", publication.ID, publication.Revision)
-	case models.PublicationStatusFailed:
-		input.Type = notifications.TypePublishFailed
-		input.Title = "Publication needs attention"
-		input.Body = firstNonEmptyPublisherString(publication.Title, "One or more destinations failed.")
-		input.DedupKey = fmt.Sprintf("publication:%s:revision:%d:failed", publication.ID, publication.Revision)
-	default:
-		return
-	}
-	if err := s.notifications.Create(ctx, input); err != nil {
-		log.Printf("[Publisher] Failed to notify publication result for %s: %v", publication.ID, err)
+	err := s.db.RunInTx(ctx, &sql.TxOptions{}, func(txCtx context.Context, tx bun.Tx) error {
+		if _, err := tx.NewUpdate().Model((*models.Publication)(nil)).
+			Set("status = ?", status).
+			Set("updated_at = ?", now).
+			Where("id = ?", publication.ID).
+			Exec(txCtx); err != nil {
+			return err
+		}
+		query := tx.NewUpdate().
+			Model((*models.Post)(nil)).
+			Set("status = ?", postStatus).
+			Where("publication_id = ?", publication.ID)
+		if postStatus == models.PostStatusPublished {
+			query = query.Set("published_at = ?", now)
+		}
+		if _, err := query.Exec(txCtx); err != nil {
+			return err
+		}
+		if err := s.syncPublicationPostDestinations(txCtx, tx, publication.ID, renditions); err != nil {
+			return err
+		}
+		return s.createPublicationResultNotifications(txCtx, tx, publication, status, renditions)
+	})
+	if err != nil {
+		log.Printf("[Publisher] Failed to finalize publication %s: %v", publication.ID, err)
 	}
 }
 
 func (s *Service) syncPublicationPostDestinations(
 	ctx context.Context,
+	db bun.IDB,
 	publicationID string,
 	renditions []models.Rendition,
 ) error {
-	postIDs := s.db.NewSelect().
+	postIDs := db.NewSelect().
 		Model((*models.Post)(nil)).
 		Column("id").
 		Where("publication_id = ?", publicationID)
@@ -1724,7 +1842,7 @@ func (s *Service) syncPublicationPostDestinations(
 		case models.RenditionStatusFailed:
 			status = "failed"
 		}
-		query := s.db.NewUpdate().
+		query := db.NewUpdate().
 			Model((*models.PostDestination)(nil)).
 			Set("status = ?", status).
 			Set("external_id = ?", rendition.ExternalID).
@@ -1746,6 +1864,292 @@ func (s *Service) syncPublicationPostDestinations(
 		}
 	}
 	return nil
+}
+
+func (s *Service) createPublicationResultNotifications(
+	ctx context.Context,
+	db bun.IDB,
+	publication *models.Publication,
+	status string,
+	renditions []models.Rendition,
+) error {
+	if s.notifications == nil || publication.CreatedByID == "" {
+		return nil
+	}
+	result, err := collectPublicationNotificationResult(ctx, db, renditions)
+	if err != nil {
+		return err
+	}
+	input, ok := publicationResultNotificationInput(
+		publication,
+		status,
+		result,
+		publicationNotificationCohort(ctx, publication),
+	)
+	if !ok {
+		return nil
+	}
+	if err := s.notifications.CreateWithDB(ctx, db, input); err != nil {
+		return err
+	}
+	if !result.reconnect {
+		return nil
+	}
+	return s.createReconnectNotifications(ctx, db, publication, result)
+}
+
+type publicationNotificationResult struct {
+	accounts         map[string]models.SocialAccount
+	successful       []string
+	failed           []string
+	failedAccountIDs []string
+	failureActions   []string
+	retryable        bool
+	reconnect        bool
+	retryAt          time.Time
+}
+
+func collectPublicationNotificationResult(
+	ctx context.Context,
+	db bun.IDB,
+	renditions []models.Rendition,
+) (publicationNotificationResult, error) {
+	accountIDs := make([]string, 0, len(renditions))
+	for _, rendition := range renditions {
+		accountIDs = append(accountIDs, rendition.SocialAccountID)
+	}
+	var accounts []models.SocialAccount
+	if len(accountIDs) > 0 {
+		if err := db.NewSelect().Model(&accounts).Where("id IN (?)", bun.List(accountIDs)).Scan(ctx); err != nil &&
+			!errors.Is(err, sql.ErrNoRows) {
+			return publicationNotificationResult{}, err
+		}
+	}
+	result := publicationNotificationResult{
+		accounts:         make(map[string]models.SocialAccount, len(accounts)),
+		successful:       make([]string, 0, len(renditions)),
+		failed:           make([]string, 0, len(renditions)),
+		failedAccountIDs: make([]string, 0, len(renditions)),
+		failureActions:   make([]string, 0, len(renditions)),
+	}
+	for _, account := range accounts {
+		result.accounts[account.ID] = account
+	}
+	for _, rendition := range renditions {
+		result.addRendition(rendition)
+	}
+	return result, nil
+}
+
+func (result *publicationNotificationResult) addRendition(rendition models.Rendition) {
+	label := publisherDestinationLabel(rendition, result.accounts[rendition.SocialAccountID])
+	switch rendition.Status {
+	case models.RenditionStatusPublished:
+		result.successful = append(result.successful, label)
+	case models.RenditionStatusFailed:
+		result.failed = append(result.failed, label)
+		result.failedAccountIDs = append(result.failedAccountIDs, rendition.SocialAccountID)
+		result.failureActions = append(result.failureActions, rendition.ErrorAction)
+		result.retryable = result.retryable || rendition.ErrorRetryable
+		result.reconnect = result.reconnect || rendition.ErrorAction == FailureActionReconnect
+		if !rendition.ErrorRetryAt.IsZero() &&
+			(result.retryAt.IsZero() || rendition.ErrorRetryAt.Before(result.retryAt)) {
+			result.retryAt = rendition.ErrorRetryAt
+		}
+	}
+}
+
+func publicationResultNotificationInput(
+	publication *models.Publication,
+	status string,
+	result publicationNotificationResult,
+	dedupCohort string,
+) (notifications.CreateInput, bool) {
+	input := notifications.CreateInput{
+		UserID:      publication.CreatedByID,
+		WorkspaceID: publication.WorkspaceID,
+		Href:        "/activity?publication=" + publication.ID,
+		Payload: map[string]any{
+			"publication_id":          publication.ID,
+			"successful_destinations": result.successful,
+			"failed_destinations":     result.failed,
+			"failure_actions":         result.failureActions,
+		},
+		Actions: []models.NotificationAction{{
+			Label: "View results", Href: "/activity?publication=" + publication.ID, Kind: "secondary",
+		}},
+	}
+	if !result.retryAt.IsZero() {
+		input.Payload["retry_at"] = result.retryAt.UTC().Format(time.RFC3339)
+	}
+	if status == models.PublicationStatusPublished {
+		input.Type = notifications.TypePostPublished
+		input.Title = "Publication completed"
+		input.Body = publishedDestinationSummary(result.successful)
+		input.DedupKey = fmt.Sprintf("publication:%s:%s:published", publication.ID, dedupCohort)
+		return input, true
+	}
+	if status != models.PublicationStatusFailed {
+		return notifications.CreateInput{}, false
+	}
+	input.Type = notifications.TypePublishFailed
+	input.Title = publicationFailureTitle(result.successful, result.failed)
+	input.Body = publicationFailureSummary(result.successful, result.failed, result.retryAt)
+	input.DedupKey = fmt.Sprintf("publication:%s:%s:failed", publication.ID, dedupCohort)
+	input.Actions = append(
+		[]models.NotificationAction{publicationFailurePrimaryAction(publication.ID, result)},
+		input.Actions...,
+	)
+	return input, true
+}
+
+func publicationNotificationCohort(ctx context.Context, publication *models.Publication) string {
+	execution, _ := ctx.Value(jobExecutionContextKey{}).(jobExecution)
+	if execution.ID != "" {
+		return "job:" + execution.ID
+	}
+	return fmt.Sprintf("revision:%d", publication.Revision)
+}
+
+func publicationFailurePrimaryAction(
+	publicationID string,
+	result publicationNotificationResult,
+) models.NotificationAction {
+	if result.reconnect {
+		return models.NotificationAction{Label: "Reconnect account", Href: "/accounts", Kind: "primary"}
+	}
+	if result.retryable {
+		return models.NotificationAction{
+			Label: "Retry failed destinations", Kind: "primary",
+			Operation: "retry_failed_publication", TargetID: publicationID,
+		}
+	}
+	return models.NotificationAction{
+		Label: "Edit publication", Href: "/publications/" + publicationID, Kind: "primary",
+	}
+}
+
+func (s *Service) createReconnectNotifications(
+	ctx context.Context,
+	db bun.IDB,
+	publication *models.Publication,
+	result publicationNotificationResult,
+) error {
+	for _, accountID := range result.failedAccountIDs {
+		account := result.accounts[accountID]
+		if account.ID == "" {
+			continue
+		}
+		if err := s.notifications.CreateWithDB(ctx, db, notifications.CreateInput{
+			UserID:      publication.CreatedByID,
+			WorkspaceID: publication.WorkspaceID,
+			Type:        notifications.TypeAccountNeedsAttention,
+			Title:       publisherProviderLabel(account.Platform) + " needs to be reconnected",
+			Body:        "Publishing is paused for " + publisherAccountLabel(account) + " until it is reconnected.",
+			Href:        "/accounts",
+			DedupKey: fmt.Sprintf(
+				"account:%s:publication:%s:revision:%d:reconnect",
+				account.ID,
+				publication.ID,
+				publication.Revision,
+			),
+			Payload: map[string]any{"social_account_id": account.ID, "publication_id": publication.ID},
+			Actions: []models.NotificationAction{{
+				Label: "Reconnect account", Href: "/accounts", Kind: "primary",
+			}},
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func publisherDestinationLabel(rendition models.Rendition, account models.SocialAccount) string {
+	label := publisherProviderLabel(rendition.Platform)
+	username := strings.TrimSpace(account.AccountUsername)
+	if username == "" {
+		username = strings.TrimSpace(account.Slug)
+	}
+	if username == "" {
+		return label
+	}
+	if !strings.HasPrefix(username, "@") {
+		username = "@" + username
+	}
+	return label + " " + username
+}
+
+func publisherAccountLabel(account models.SocialAccount) string {
+	return publisherDestinationLabel(models.Rendition{Platform: account.Platform}, account)
+}
+
+func publisherProviderLabel(provider string) string {
+	switch strings.ToLower(strings.TrimSpace(provider)) {
+	case "x":
+		return "X"
+	case "youtube":
+		return "YouTube"
+	case "tiktok":
+		return "TikTok"
+	case "linkedin":
+		return "LinkedIn"
+	case "bluesky":
+		return "Bluesky"
+	case "mastodon":
+		return "Mastodon"
+	case "instagram":
+		return "Instagram"
+	case "facebook":
+		return "Facebook"
+	case "threads":
+		return "Threads"
+	default:
+		return "Destination"
+	}
+}
+
+func summarizedDestinations(items []string) string {
+	switch len(items) {
+	case 0:
+		return ""
+	case 1:
+		return items[0]
+	case 2:
+		return items[0] + " and " + items[1]
+	default:
+		return strings.Join(items[:2], ", ") + fmt.Sprintf(" and %d more", len(items)-2)
+	}
+}
+
+func publishedDestinationSummary(successful []string) string {
+	if len(successful) == 0 {
+		return "The publication completed."
+	}
+	return summarizedDestinations(successful) + " published successfully."
+}
+
+func publicationFailureTitle(successful, failed []string) string {
+	if len(successful) > 0 && len(failed) > 0 {
+		return "Publication partially completed"
+	}
+	return "Publication needs attention"
+}
+
+func publicationFailureSummary(successful, failed []string, retryAt time.Time) string {
+	parts := make([]string, 0, 3)
+	if len(failed) > 0 {
+		parts = append(parts, summarizedDestinations(failed)+" failed.")
+	}
+	if len(successful) > 0 {
+		parts = append(parts, summarizedDestinations(successful)+" published successfully.")
+	}
+	if !retryAt.IsZero() {
+		parts = append(parts, "OpenPost will not retry before "+retryAt.UTC().Format("15:04 UTC")+".")
+	}
+	if len(parts) == 0 {
+		return "One or more destinations need attention."
+	}
+	return strings.Join(parts, " ")
 }
 
 func mustPublisherJSON(value interface{}) string {

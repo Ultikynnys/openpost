@@ -21,6 +21,7 @@ import (
 	"github.com/openpost/backend/internal/models"
 	"github.com/openpost/backend/internal/services/billing"
 	"github.com/openpost/backend/internal/services/entitlements"
+	usageservice "github.com/openpost/backend/internal/services/usage"
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/bun"
 )
@@ -29,6 +30,7 @@ type billingTestServer struct {
 	echo   *echo.Echo
 	db     *bun.DB
 	client *billingHTTPClient
+	usage  *usageservice.Service
 }
 
 type billingHTTPClient struct {
@@ -117,6 +119,9 @@ func newBillingAPITestServerWithPolarConfig(t *testing.T, client *billingHTTPCli
 		(*models.WorkspaceMember)(nil),
 		(*models.BillingSubscription)(nil),
 		(*models.UsageCounter)(nil),
+		(*models.ProviderUsageEvent)(nil),
+		(*models.ProviderUsageReservation)(nil),
+		(*models.ProviderUsagePeriodCounter)(nil),
 	)
 	ctx := context.Background()
 	_, err := db.NewInsert().Model(&models.User{
@@ -147,8 +152,11 @@ func newBillingAPITestServerWithPolarConfig(t *testing.T, client *billingHTTPCli
 
 	e := echo.New()
 	api := humaecho.NewWithGroup(e, e.Group("/api/v1"), huma.DefaultConfig("Test", "1.0.0"))
-	NewBillingHandler(service, db, testAuthenticator{}).RegisterAPIRoutes(api)
-	return &billingTestServer{echo: e, db: db, client: client}
+	handler := NewBillingHandler(service, db, testAuthenticator{})
+	usageService := usageservice.NewService(db)
+	handler.SetUsage(usageService)
+	handler.RegisterAPIRoutes(api)
+	return &billingTestServer{echo: e, db: db, client: client, usage: usageService}
 }
 
 func (s *billingTestServer) postWebhook(t *testing.T, body []byte, headers billing.WebhookHeaders) *httptest.ResponseRecorder {
@@ -367,6 +375,53 @@ func TestGetBillingStatusRouteWithSubscriptionAndUsage(t *testing.T) {
 	require.Equal(t, float64(6), limits["social_accounts"])
 	usage := out["usage"].(map[string]any)
 	require.Equal(t, float64(42), usage["scheduled_posts_monthly"])
+}
+
+func TestGetBillingStatusSeparatesHostedProviderCostFromProductUsage(t *testing.T) {
+	t.Parallel()
+
+	srv := newBillingAPITestServer(t)
+	require.NoError(t, srv.usage.SetProviderCostPolicy(usageservice.NewXProviderCostPolicy(
+		500_000,
+		15_000,
+		200_000,
+	)))
+	_, err := srv.usage.RecordProviderCost(context.Background(), usageservice.ProviderCostEventInput{
+		WorkspaceID:  "ws-1",
+		Provider:     usageservice.ProviderX,
+		Operation:    usageservice.XOperationPostCreate,
+		OperationKey: "billing-status",
+		Units:        1,
+		OccurredAt:   time.Now().UTC(),
+	})
+	require.NoError(t, err)
+	_, err = srv.usage.ReserveProviderCost(context.Background(), usageservice.ProviderCostEventInput{
+		WorkspaceID:  "ws-1",
+		Provider:     usageservice.ProviderX,
+		Operation:    usageservice.XOperationPostCreateWithURL,
+		OperationKey: "billing-status-unknown",
+		Units:        1,
+		OccurredAt:   time.Now().UTC(),
+	})
+	require.NoError(t, err)
+	require.NoError(t, srv.usage.MarkProviderCostUnknown(context.Background(), "billing-status-unknown"))
+
+	resp := srv.getJSON(t, "/api/v1/billing/status?workspace_id=ws-1")
+
+	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
+	var out map[string]any
+	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &out))
+	require.Equal(t, map[string]any{}, out["usage"])
+	providerCosts := out["provider_costs"].([]any)
+	require.Len(t, providerCosts, 1)
+	xCost := providerCosts[0].(map[string]any)
+	require.Equal(t, "x", xCost["provider"])
+	require.Equal(t, "USD", xCost["currency"])
+	require.Equal(t, float64(15_000), xCost["cost_microusd"])
+	require.Equal(t, float64(1), xCost["reserved_event_count"])
+	require.Equal(t, float64(200_000), xCost["reserved_cost_microusd"])
+	require.Equal(t, float64(500_000), xCost["budget_microusd"])
+	require.Equal(t, usageservice.XPricingSourceURL, xCost["pricing_source_url"])
 }
 
 func TestCreateBillingPortalRoute(t *testing.T) {

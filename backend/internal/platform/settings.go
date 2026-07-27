@@ -70,7 +70,9 @@ func settingInt(settings map[string]interface{}, key string) int {
 	return 0
 }
 
-func contentWithSettingURL(content string, settings map[string]interface{}) string {
+// ContentWithSettingURL returns the exact text sent by text-based adapters
+// that append a configured destination URL.
+func ContentWithSettingURL(content string, settings map[string]interface{}) string {
 	content = strings.TrimSpace(content)
 	link := firstNonEmptyString(settingString(settings, "url"), settingString(settings, "link_url"))
 	if link == "" || strings.Contains(content, link) {

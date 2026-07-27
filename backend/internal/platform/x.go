@@ -679,7 +679,7 @@ func (x *XAdapter) Publish(ctx context.Context, accessToken, _ string, req *Publ
 
 func buildXTweetPayload(req *PublishRequest) (map[string]interface{}, error) {
 	payload := map[string]interface{}{
-		jsonFieldText: contentWithSettingURL(req.Content, req.Settings),
+		jsonFieldText: ContentWithSettingURL(req.Content, req.Settings),
 	}
 
 	attachmentKinds := 0

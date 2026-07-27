@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/openpost/backend/internal/models"
+	"github.com/openpost/backend/internal/platform"
 	"github.com/openpost/backend/internal/services/crypto"
 	"github.com/openpost/backend/internal/services/entitlements"
 	"github.com/openpost/backend/internal/services/tokenmanager"
@@ -44,6 +45,9 @@ func newPublisherUsageTestServer(t *testing.T, adapter *fakePublisherAdapter) *p
 		(*models.PostVariant)(nil),
 		(*models.MediaAttachment)(nil),
 		(*models.UsageCounter)(nil),
+		(*models.ProviderUsageEvent)(nil),
+		(*models.ProviderUsageReservation)(nil),
+		(*models.ProviderUsagePeriodCounter)(nil),
 	} {
 		_, err = db.NewCreateTable().Model(model).IfNotExists().Exec(context.Background())
 		require.NoError(t, err)
@@ -225,4 +229,152 @@ func TestPublisherRecordsProviderWriteUsageOnPublishFailure(t *testing.T) {
 	require.NoError(t, srv.db.NewSelect().Model(&destination).Where("post_id = ?", "post-2").Scan(context.Background()))
 	require.Equal(t, FailureUnknown, destination.ErrorKind)
 	require.False(t, destination.ErrorRetryable)
+}
+
+func TestPublisherRecordsHostedXCostWithoutRetainingPostText(t *testing.T) {
+	t.Parallel()
+
+	adapter := &fakePublisherAdapter{externalID: "external-cost"}
+	srv := newPublisherUsageTestServer(t, adapter)
+	require.NoError(t, srv.usage.SetProviderCostPolicy(usage.NewXProviderCostPolicy(
+		1_000_000,
+		15_000,
+		200_000,
+	)))
+	srv.seedPost(t, "post-cost")
+	_, err := srv.db.NewUpdate().
+		Model((*models.Post)(nil)).
+		Set("content = ?", "Read openpost.social/launch").
+		Where("id = ?", "post-cost").
+		Exec(context.Background())
+	require.NoError(t, err)
+
+	require.NoError(t, srv.publishPost(t, "post-cost"))
+
+	var event models.ProviderUsageEvent
+	require.NoError(t, srv.db.NewSelect().Model(&event).Scan(context.Background()))
+	require.Equal(t, usage.ProviderX, event.Provider)
+	require.Equal(t, usage.XOperationPostCreateWithURL, event.Operation)
+	require.Equal(t, int64(200_000), event.CostMicrousd)
+	require.NotContains(t, event.OperationKey, "post-cost")
+	require.NotContains(t, event.OperationKey, "openpost.social")
+	reservationCount, err := srv.db.NewSelect().Model((*models.ProviderUsageReservation)(nil)).Count(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, 0, reservationCount)
+}
+
+func TestPublisherPricesXURLFromRenderedSettings(t *testing.T) {
+	t.Parallel()
+
+	adapter := &fakePublisherAdapter{externalID: "external-setting-url"}
+	srv := newPublisherUsageTestServer(t, adapter)
+	require.NoError(t, srv.usage.SetProviderCostPolicy(usage.NewXProviderCostPolicy(
+		1_000_000,
+		15_000,
+		200_000,
+	)))
+
+	_, err := srv.service.publishProviderWithUsage(
+		context.Background(),
+		"ws-1",
+		usage.ProviderX,
+		"rendition-setting-url",
+		"publish",
+		adapter,
+		"access-token",
+		"x-account",
+		&platform.PublishRequest{
+			Content:  "Launch update",
+			Settings: map[string]interface{}{"url": "https://openpost.social/launch"},
+		},
+		nil,
+	)
+
+	require.NoError(t, err)
+	var event models.ProviderUsageEvent
+	require.NoError(t, srv.db.NewSelect().Model(&event).Scan(context.Background()))
+	require.Equal(t, usage.XOperationPostCreateWithURL, event.Operation)
+	require.Equal(t, int64(200_000), event.CostMicrousd)
+}
+
+func TestPublisherDoesNotBillDefiniteXFailure(t *testing.T) {
+	t.Parallel()
+
+	adapter := &fakePublisherAdapter{publishErr: &platform.HTTPError{StatusCode: 400, Code: "invalid_request"}}
+	srv := newPublisherUsageTestServer(t, adapter)
+	require.NoError(t, srv.usage.SetProviderCostPolicy(usage.NewXProviderCostPolicy(
+		1_000_000,
+		15_000,
+		200_000,
+	)))
+	srv.seedPost(t, "post-definite-failure")
+
+	require.NoError(t, srv.publishPost(t, "post-definite-failure"))
+	require.Equal(t, 1, adapter.publishCalls)
+
+	eventCount, err := srv.db.NewSelect().Model((*models.ProviderUsageEvent)(nil)).Count(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, 0, eventCount)
+	reservationCount, err := srv.db.NewSelect().Model((*models.ProviderUsageReservation)(nil)).Count(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, 0, reservationCount)
+	summary, err := srv.usage.SnapshotProviderCosts(context.Background(), "ws-1", time.Now().UTC())
+	require.NoError(t, err)
+	require.Equal(t, int64(0), summary[0].CostMicrousd)
+	require.Equal(t, int64(0), summary[0].ReservedMicrousd)
+}
+
+func TestPublisherKeepsAmbiguousXFailureReservedWithoutBillingIt(t *testing.T) {
+	t.Parallel()
+
+	adapter := &fakePublisherAdapter{publishErr: errFakePublishFailed}
+	srv := newPublisherUsageTestServer(t, adapter)
+	require.NoError(t, srv.usage.SetProviderCostPolicy(usage.NewXProviderCostPolicy(
+		1_000_000,
+		15_000,
+		200_000,
+	)))
+	srv.seedPost(t, "post-ambiguous-failure")
+
+	require.NoError(t, srv.publishPost(t, "post-ambiguous-failure"))
+	require.Equal(t, 1, adapter.publishCalls)
+
+	eventCount, err := srv.db.NewSelect().Model((*models.ProviderUsageEvent)(nil)).Count(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, 0, eventCount)
+	var reservation models.ProviderUsageReservation
+	require.NoError(t, srv.db.NewSelect().Model(&reservation).Scan(context.Background()))
+	require.Equal(t, "unknown", reservation.State)
+	summary, err := srv.usage.SnapshotProviderCosts(context.Background(), "ws-1", time.Now().UTC())
+	require.NoError(t, err)
+	require.Equal(t, int64(0), summary[0].CostMicrousd)
+	require.Equal(t, int64(15_000), summary[0].ReservedMicrousd)
+}
+
+func TestPublisherHostedXBudgetStopsRequestButDisabledPolicyDoesNot(t *testing.T) {
+	t.Parallel()
+
+	adapter := &fakePublisherAdapter{externalID: "external-budget"}
+	srv := newPublisherUsageTestServer(t, adapter)
+	require.NoError(t, srv.usage.SetProviderCostPolicy(usage.NewXProviderCostPolicy(
+		0,
+		15_000,
+		200_000,
+	)))
+	srv.seedPost(t, "post-budget")
+
+	require.NoError(t, srv.publishPost(t, "post-budget"))
+	require.Equal(t, 0, adapter.publishCalls)
+
+	var destination models.PostDestination
+	require.NoError(t, srv.db.NewSelect().
+		Model(&destination).
+		Where("post_id = ?", "post-budget").
+		Scan(context.Background()))
+	require.Equal(t, FailureBillingRequired, destination.ErrorKind)
+
+	require.NoError(t, srv.usage.SetProviderCostPolicy(usage.ProviderCostPolicy{}))
+	srv.seedPost(t, "post-selfhost")
+	require.NoError(t, srv.publishPost(t, "post-selfhost"))
+	require.Equal(t, 1, adapter.publishCalls)
 }

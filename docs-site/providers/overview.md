@@ -17,6 +17,7 @@ These providers have adapter code in OpenPost today. The Accounts page discovers
 | Instagram | Meta OAuth             | Provider app registry                           | Configurable | Business or Creator account; public media URL required.                    |
 | TikTok    | OAuth 2.0              | Provider app registry                           | Configurable | Video and photo paths; provider approval and public media required.        |
 | YouTube   | Google OAuth           | Provider app registry                           | Configurable | One-video upload with configurable privacy; live verification recommended. |
+| Discord   | Incoming webhook       | None                                            | Built-in     | Users connect a webhook URL; text and streamed attachments are supported.  |
 
 Start with one provider, confirm the callback works, then expand.
 
@@ -45,6 +46,7 @@ This matrix reflects current OpenPost support, not the full theoretical capabili
 | Instagram | No         | Yes         | Yes, via comments                | Yes             | Partial, public HTTPS carousel, Story, and Reel paths implemented     | Yes                        | Requires insights permission              |
 | TikTok    | No         | Yes         | No                               | Yes             | Partial, public HTTPS video and photo-post paths implemented          | Yes                        | Requires stats and video-list permissions |
 | YouTube   | No         | No          | No                               | Yes             | Partial, one video upload path with privacy settings implemented      | Yes                        | Channel and video counters                |
+| Discord   | Yes        | Yes         | Yes, via webhook references      | Yes             | Yes, within the webhook's file-size limit                             | Yes                        | No provider analytics                     |
 
 ## Provider-specific caveats
 
@@ -57,6 +59,7 @@ This matrix reflects current OpenPost support, not the full theoretical capabili
 - **Instagram:** Configure through the provider app registry with provider `instagram`. The adapter connects a selected Instagram Business or Creator account behind a Facebook Page and implements single-image, carousel, Story, Reel, and comment-reply paths. Provider access and live verification still apply.
 - **TikTok:** Configure through the provider app registry with provider `tiktok`. The adapter implements direct and inbox video paths plus photo posts using public HTTPS media. App review and live verification still apply.
 - **YouTube:** Configure through the provider app registry with provider `youtube`. The adapter connects a selected channel and uploads one video with privacy, metadata, thumbnail, and playlist settings. Live verification is still recommended.
+- **Discord:** Connect an incoming webhook URL directly. OpenPost streams attachments and uses a safe 10 MiB file limit because Discord's actual limit can vary by server and account.
 
 Provider API policies, scopes, rate limits, and review requirements can change. Re-check provider docs if a previously working flow starts failing.
 

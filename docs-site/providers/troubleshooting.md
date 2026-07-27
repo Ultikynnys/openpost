@@ -42,10 +42,10 @@ Activity shows each destination separately. A publication can succeed on one acc
 | Invalid content, unsupported media, or duplicate content | Stops automatic retries for that destination                              | Edit the draft, then publish again    |
 | Expired or revoked authentication                        | Stops automatic retries                                                   | Reconnect the account                 |
 | Provider permission or billing restriction               | Stops automatic retries                                                   | Open the provider or billing settings |
-| Rate limit, network failure, or provider outage          | Retries with bounded backoff and the provider's retry time when available | Wait, or use **Retry destination**    |
+| Rate limit, network failure, or provider outage          | Retries with bounded backoff and the provider's retry time when available | Wait, use **Retry destination**, or retry all failed destinations from the notification |
 | Unknown rejection                                        | Keeps a safe generic message and does not guess that retrying is safe     | Review the draft and provider status  |
 
-OpenPost stores only a safe failure category, status, provider code when it is suitable to expose, retry time, and direct action. Provider response bodies and credentials are not shown. Manual retry uses the existing publication job with one rendition target; Pass 1 does not migrate the whole queue to one job per destination.
+OpenPost stores only a safe failure category, status, provider code when it is suitable to expose, retry time, and direct action. Provider response bodies and credentials are not shown. Manual retry uses the existing publication job. It can target one rendition or every retryable failed rendition while skipping successful destinations; OpenPost does not migrate the whole queue to one job per destination.
 
 ## X
 
