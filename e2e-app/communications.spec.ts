@@ -94,7 +94,9 @@ test("communications and notifications stay usable across desktop and phone layo
       unread_count: 1,
       read_at: "",
       archived_at: "",
-      messaging_window_expires_at: "2026-07-27T11:55:00Z",
+      messaging_window_expires_at: new Date(
+        Date.now() + 24 * 60 * 60 * 1000,
+      ).toISOString(),
       created_at: "2026-07-26T11:55:00Z",
       updated_at: "2026-07-26T11:55:00Z",
     };

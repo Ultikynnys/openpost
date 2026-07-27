@@ -23,7 +23,9 @@ test("media library uploads and lists a local media file", async ({
   await authenticatePage(page, auth.token);
   await page.goto("/media");
 
-  await expect(page.getByRole("heading", { name: "Media" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Media", exact: true }),
+  ).toBeVisible();
   await expect(
     page.getByRole("navigation", { name: "Media sections" }),
   ).toHaveCount(0);

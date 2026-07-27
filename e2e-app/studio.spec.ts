@@ -82,10 +82,15 @@ test("Studio creates from an original template, adapts to mobile, and exports to
     (response) =>
       response.request().method() === "PATCH" &&
       response.url().includes("/api/v1/studio/designs/") &&
+      response.request().postData()?.includes('"blend_mode":"multiply"') ===
+        true &&
       response.ok(),
   );
   await page.getByRole("button", { name: "Blend mode" }).click();
   await page.getByRole("option", { name: "Multiply", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Blend mode" })).toHaveText(
+    "Multiply",
+  );
   await shapeSaved;
 
   await page.reload();
