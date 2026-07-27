@@ -209,20 +209,3 @@ func addStringMetric(values AnalyticsValues, metric, raw string) {
 		values[metric] += count
 	}
 }
-
-func (l *LinkedInAdapter) AnalyticsSupport() AnalyticsSupport {
-	return AnalyticsSupport{
-		Account:            false,
-		Content:            false,
-		AccountUnavailable: "LinkedIn does not expose personal profile analytics to this connection type.",
-		ContentUnavailable: "LinkedIn member post analytics require restricted read access that OpenPost cannot request by default.",
-	}
-}
-
-func (l *LinkedInAdapter) FetchAccountAnalytics(context.Context, string, AccountAnalyticsRequest) (AnalyticsValues, error) {
-	return nil, NewAnalyticsError(AnalyticsStatusUnsupported, "linkedin_personal_analytics")
-}
-
-func (l *LinkedInAdapter) FetchContentAnalytics(context.Context, string, ContentAnalyticsRequest) (AnalyticsValues, error) {
-	return nil, NewAnalyticsError(AnalyticsStatusUnsupported, "linkedin_member_post_analytics")
-}

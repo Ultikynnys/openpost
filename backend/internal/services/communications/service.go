@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -162,8 +163,11 @@ func (s *Service) RefreshWorkspace(ctx context.Context, workspaceID string, forc
 		return 0, err
 	}
 	for _, rendition := range renditions {
-		var account models.SocialAccount
-		if err := s.db.NewSelect().Model(&account).Where("id = ? AND is_active = ?", rendition.SocialAccountID, true).Scan(ctx); err != nil {
+		account, err := s.resolveRenditionAccount(ctx, rendition.SocialAccountID)
+		if err != nil {
+			return queued, err
+		}
+		if account.ID == "" {
 			continue
 		}
 		adapter := s.adapter(account)
@@ -221,9 +225,12 @@ func (s *Service) syncEngagement(ctx context.Context, renditionID string) error 
 	if err := s.db.NewSelect().Model(&rendition).Where("id = ?", renditionID).Scan(ctx); err != nil {
 		return err
 	}
-	var account models.SocialAccount
-	if err := s.db.NewSelect().Model(&account).Where("id = ?", rendition.SocialAccountID).Scan(ctx); err != nil {
+	account, err := s.resolveRenditionAccount(ctx, rendition.SocialAccountID)
+	if err != nil {
 		return err
+	}
+	if account.ID == "" {
+		return nil
 	}
 	commenter, ok := s.adapter(account).(platform.CommentAdapter)
 	if !ok {
@@ -233,6 +240,7 @@ func (s *Service) syncEngagement(ctx context.Context, renditionID string) error 
 	if err != nil {
 		return s.recordState(ctx, capabilityEngagement, subjectRendition, rendition.ID, account, "failed", "authentication", "Reconnect this account to resume engagement collection.", "", true, time.Hour, 0)
 	}
+	s.resolveAndStoreContentURL(ctx, commenter, token, account, &rendition)
 	comments, err := commenter.ListComments(ctx, token, account.AccountID, rendition.ExternalID)
 	if err != nil {
 		return s.recordState(ctx, capabilityEngagement, subjectRendition, rendition.ID, account, "failed", "provider_error", "OpenPost could not collect engagement from this provider.", "", true, time.Hour, 0)
@@ -318,6 +326,33 @@ func (s *Service) syncEngagement(ctx context.Context, renditionID string) error 
 	}
 	cadence := engagementCadence(publishedAt, now, len(comments) == 0)
 	return s.recordState(ctx, capabilityEngagement, subjectRendition, rendition.ID, account, "ok", "", "", "", true, cadence, boolToInt(len(comments) == 0))
+}
+
+func (s *Service) resolveAndStoreContentURL(
+	ctx context.Context,
+	commenter platform.CommentAdapter,
+	accessToken string,
+	account models.SocialAccount,
+	rendition *models.Rendition,
+) {
+	if isSafeProviderPostURL(rendition.ExternalURL) {
+		return
+	}
+	resolver, ok := commenter.(platform.ContentURLResolver)
+	if !ok {
+		return
+	}
+	resolved, err := resolver.ResolveContentURL(ctx, accessToken, account.AccountID, rendition.ExternalID)
+	if err != nil || !isSafeProviderPostURL(resolved) {
+		return
+	}
+	if _, err := s.db.NewUpdate().
+		Model((*models.Rendition)(nil)).
+		Set("external_url = ?", resolved).
+		Where("id = ?", rendition.ID).
+		Exec(ctx); err == nil {
+		rendition.ExternalURL = resolved
+	}
 }
 
 //nolint:gocyclo // Keeps newest-page collection, bounded backfill, persistence, and health state ordered.
@@ -704,7 +739,145 @@ func (s *Service) ListEngagement(ctx context.Context, workspaceID, platformName,
 	query = s.db.NewSelect().Model(&items).Where("workspace_id = ?", workspaceID)
 	query = engagementFilters(query, platformName, accountID, unreadOnly, archived)
 	err = query.Order("remote_created_at DESC", "created_at DESC").Limit(limit).Offset(max(0, offset)).Scan(ctx)
-	return items, count, err
+	if err != nil {
+		return nil, 0, err
+	}
+	if err := s.hydrateEngagementProviderURLs(ctx, items); err != nil {
+		return nil, 0, err
+	}
+	return items, count, nil
+}
+
+func (s *Service) hydrateEngagementProviderURLs(ctx context.Context, items []models.EngagementItem) error {
+	if len(items) == 0 {
+		return nil
+	}
+	renditionIDs := make([]string, 0, len(items))
+	accountIDs := make([]string, 0, len(items))
+	for _, item := range items {
+		renditionIDs = append(renditionIDs, item.RenditionID)
+		accountIDs = append(accountIDs, item.SocialAccountID)
+	}
+	var renditions []models.Rendition
+	if err := s.db.NewSelect().Model(&renditions).Where("id IN (?)", bun.List(renditionIDs)).Scan(ctx); err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("load engagement renditions: %w", err)
+	}
+	var accounts []models.SocialAccount
+	if err := s.db.NewSelect().Model(&accounts).Where("id IN (?)", bun.List(accountIDs)).Scan(ctx); err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("load engagement accounts: %w", err)
+	}
+	renditionByID := make(map[string]models.Rendition, len(renditions))
+	for _, rendition := range renditions {
+		renditionByID[rendition.ID] = rendition
+	}
+	accountByID := make(map[string]models.SocialAccount, len(accounts))
+	for _, account := range accounts {
+		accountByID[account.ID] = account
+	}
+	for index := range items {
+		rendition, renditionOK := renditionByID[items[index].RenditionID]
+		account, accountOK := accountByID[items[index].SocialAccountID]
+		if renditionOK && accountOK {
+			items[index].ProviderPostURL = providerPostURL(rendition, account)
+		}
+	}
+	return nil
+}
+
+func providerPostURL(rendition models.Rendition, account models.SocialAccount) string {
+	if isSafeProviderPostURL(rendition.ExternalURL) {
+		return rendition.ExternalURL
+	}
+	externalID := strings.TrimSpace(rendition.ExternalID)
+	if externalID == "" {
+		return ""
+	}
+	username := strings.TrimPrefix(strings.TrimSpace(account.AccountUsername), "@")
+	switch rendition.Platform {
+	case "x":
+		if username != "" {
+			return "https://x.com/" + url.PathEscape(username) + "/status/" + url.PathEscape(externalID)
+		}
+	case "mastodon":
+		instanceURL := strings.TrimRight(strings.TrimSpace(account.InstanceURL), "/")
+		if at := strings.Index(username, "@"); at >= 0 {
+			username = username[:at]
+		}
+		if strings.HasPrefix(instanceURL, "https://") && username != "" {
+			return instanceURL + "/@" + url.PathEscape(username) + "/" + url.PathEscape(externalID)
+		}
+	case "bluesky":
+		if uri := blueskyPostURI(externalID); uri != "" {
+			parts := strings.Split(strings.TrimPrefix(uri, "at://"), "/")
+			if len(parts) >= 3 && parts[0] != "" && parts[2] != "" {
+				return "https://bsky.app/profile/" + url.PathEscape(parts[0]) + "/post/" + url.PathEscape(parts[2])
+			}
+		}
+	case "linkedin":
+		if strings.HasPrefix(externalID, "urn:li:") {
+			return "https://www.linkedin.com/feed/update/" + externalID + "/"
+		}
+	case "facebook":
+		return "https://www.facebook.com/" + url.PathEscape(externalID)
+	case "youtube":
+		return "https://www.youtube.com/watch?v=" + url.QueryEscape(externalID)
+	}
+	return ""
+}
+
+// resolveRenditionAccount preserves comment collection for renditions created
+// before an OAuth reconnect. Current reconnects reuse the provider identity,
+// while older databases can contain an inactive row and a newer active row for
+// the same remote account.
+func (s *Service) resolveRenditionAccount(ctx context.Context, accountID string) (models.SocialAccount, error) {
+	var original models.SocialAccount
+	if err := s.db.NewSelect().Model(&original).Where("id = ?", accountID).Scan(ctx); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return models.SocialAccount{}, nil
+		}
+		return models.SocialAccount{}, fmt.Errorf("load rendition account: %w", err)
+	}
+	if original.IsActive {
+		return original, nil
+	}
+
+	query := s.db.NewSelect().
+		Model((*models.SocialAccount)(nil)).
+		Where("workspace_id = ?", original.WorkspaceID).
+		Where("platform = ?", original.Platform).
+		Where("account_id = ?", original.AccountID).
+		Where("is_active = ?", true).
+		Order("created_at DESC").
+		Limit(1)
+	if original.Platform == "mastodon" {
+		query = query.Where("instance_url = ?", original.InstanceURL)
+	}
+	var replacement models.SocialAccount
+	if err := query.Scan(ctx, &replacement); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return models.SocialAccount{}, nil
+		}
+		return models.SocialAccount{}, fmt.Errorf("load replacement rendition account: %w", err)
+	}
+	return replacement, nil
+}
+
+func blueskyPostURI(externalID string) string {
+	if strings.HasPrefix(externalID, "at://") {
+		return externalID
+	}
+	var payload struct {
+		URI string `json:"uri"`
+	}
+	if json.Unmarshal([]byte(externalID), &payload) == nil {
+		return strings.TrimSpace(payload.URI)
+	}
+	return ""
+}
+
+func isSafeProviderPostURL(value string) bool {
+	parsed, err := url.Parse(strings.TrimSpace(value))
+	return err == nil && parsed.Scheme == "https" && parsed.Host != ""
 }
 
 func engagementFilters(query *bun.SelectQuery, platformName, accountID string, unreadOnly, archived bool) *bun.SelectQuery {

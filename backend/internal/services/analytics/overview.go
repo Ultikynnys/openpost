@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/openpost/backend/internal/models"
@@ -56,9 +57,11 @@ type ContentOverview struct {
 	PublicationID string                   `json:"publication_id"`
 	RenditionID   string                   `json:"rendition_id"`
 	Title         string                   `json:"title"`
+	Excerpt       string                   `json:"excerpt"`
 	Platform      string                   `json:"platform"`
 	AccountID     string                   `json:"account_id"`
 	Username      string                   `json:"username"`
+	ExternalURL   string                   `json:"external_url,omitempty"`
 	PublishedAt   time.Time                `json:"published_at"`
 	Status        string                   `json:"status"`
 	ErrorCode     string                   `json:"error_code,omitempty"`
@@ -68,13 +71,28 @@ type ContentOverview struct {
 	LastSyncedAt  time.Time                `json:"last_synced_at,omitempty"`
 }
 
+type PublicationOverview struct {
+	PublicationID      string                   `json:"publication_id"`
+	Title              string                   `json:"title"`
+	Excerpt            string                   `json:"excerpt"`
+	PublishedAt        time.Time                `json:"published_at"`
+	Metrics            platform.AnalyticsValues `json:"metrics"`
+	Measured           map[string]int           `json:"measured"`
+	Engagement         int64                    `json:"engagement"`
+	EngagementMeasured int                      `json:"engagement_measured"`
+	LastSyncedAt       time.Time                `json:"last_synced_at,omitempty"`
+	Renditions         []ContentOverview        `json:"renditions"`
+}
+
 type Overview struct {
-	GeneratedAt  time.Time         `json:"generated_at"`
-	LastSyncedAt time.Time         `json:"last_synced_at,omitempty"`
-	RangeDays    int               `json:"range_days"`
-	Summary      Summary           `json:"summary"`
-	Accounts     []AccountOverview `json:"accounts"`
-	Content      []ContentOverview `json:"content"`
+	GeneratedAt    time.Time             `json:"generated_at"`
+	LastSyncedAt   time.Time             `json:"last_synced_at,omitempty"`
+	RangeDays      int                   `json:"range_days"`
+	Summary        Summary               `json:"summary"`
+	Accounts       []AccountOverview     `json:"accounts"`
+	FollowerSeries []SeriesPoint         `json:"follower_series"`
+	Publications   []PublicationOverview `json:"publications"`
+	Content        []ContentOverview     `json:"content"`
 }
 
 func (s *Service) Overview(ctx context.Context, workspaceID string, days int) (Overview, error) {
@@ -82,10 +100,12 @@ func (s *Service) Overview(ctx context.Context, workspaceID string, days int) (O
 	now := s.now()
 	start := now.AddDate(0, 0, -days)
 	result := Overview{
-		GeneratedAt: now,
-		RangeDays:   days,
-		Accounts:    []AccountOverview{},
-		Content:     []ContentOverview{},
+		GeneratedAt:    now,
+		RangeDays:      days,
+		Accounts:       []AccountOverview{},
+		FollowerSeries: []SeriesPoint{},
+		Publications:   []PublicationOverview{},
+		Content:        []ContentOverview{},
 	}
 
 	activeAccounts, accountByID, err := s.loadOverviewAccounts(ctx, workspaceID)
@@ -103,6 +123,7 @@ func (s *Service) Overview(ctx context.Context, workspaceID string, days int) (O
 	}
 
 	result.Accounts = s.buildAccountOverviews(activeAccounts, stateByID, history, &result.Summary)
+	result.FollowerSeries = combinedFollowerSeries(result.Accounts)
 
 	publications, publicationByID, publicationIDs, err := s.loadOverviewPublications(ctx, workspaceID, start)
 	if err != nil {
@@ -117,6 +138,7 @@ func (s *Service) Overview(ctx context.Context, workspaceID string, days int) (O
 		return Overview{}, err
 	}
 	result.Content = buildContentOverviews(renditions, publicationByID, accountByID, stateByID, &result.Summary)
+	result.Publications = buildPublicationOverviews(result.Content)
 	return result, nil
 }
 
@@ -262,7 +284,7 @@ func (s *Service) buildAccountOverview(account models.SocialAccount, state model
 		overview.Status = string(platform.AnalyticsStatusUnsupported)
 		overview.ErrorMessage = "Analytics are not available for this provider."
 	} else {
-		applyAnalyticsSupport(&overview, account, adapter.AnalyticsSupport())
+		applyAnalyticsSupport(&overview, account, analyticsSupportForAccount(adapter, account))
 	}
 	if state.ID != "" {
 		overview.Status = state.Status
@@ -318,11 +340,15 @@ func buildContentOverviews(
 		if !publicationExists || !accountExists {
 			continue
 		}
+		state := stateByID[stateID(subjectRendition, rendition.ID)]
+		if state.Status == string(platform.AnalyticsStatusNotFound) {
+			continue
+		}
 		item := buildContentOverview(
 			rendition,
 			publication,
 			account,
-			stateByID[stateID(subjectRendition, rendition.ID)],
+			state,
 		)
 		item.Engagement = platform.EngagementTotal(item.Metrics)
 		summary.Engagement.Value += item.Engagement
@@ -340,9 +366,6 @@ func buildContentOverviews(
 		}
 		return content[i].Metrics[platform.MetricViews] > content[j].Metrics[platform.MetricViews]
 	})
-	if len(content) > 50 {
-		content = content[:50]
-	}
 	return content
 }
 
@@ -360,9 +383,11 @@ func buildContentOverview(
 		PublicationID: publication.ID,
 		RenditionID:   rendition.ID,
 		Title:         publication.Title,
+		Excerpt:       firstNonEmptyAnalyticsText(publication.SourceText, publication.SourceContent),
 		Platform:      rendition.Platform,
 		AccountID:     account.ID,
 		Username:      account.AccountUsername,
+		ExternalURL:   rendition.ExternalURL,
 		PublishedAt:   publishedAt,
 		Status:        string(platform.AnalyticsStatusPending),
 		Metrics:       platform.AnalyticsValues{},
@@ -375,6 +400,111 @@ func buildContentOverview(
 		item.Metrics = decodeAnalyticsValues(state.MetricsJSON)
 	}
 	return item
+}
+
+func buildPublicationOverviews(content []ContentOverview) []PublicationOverview {
+	byID := make(map[string]*PublicationOverview)
+	order := make([]string, 0)
+	for _, item := range content {
+		publication := byID[item.PublicationID]
+		if publication == nil {
+			publication = &PublicationOverview{
+				PublicationID: item.PublicationID,
+				Title:         item.Title,
+				Excerpt:       item.Excerpt,
+				PublishedAt:   item.PublishedAt,
+				Metrics:       platform.AnalyticsValues{},
+				Measured:      map[string]int{},
+				Renditions:    []ContentOverview{},
+			}
+			byID[item.PublicationID] = publication
+			order = append(order, item.PublicationID)
+		}
+		publication.Renditions = append(publication.Renditions, item)
+		publication.Engagement += item.Engagement
+		if platform.HasEngagementMetric(item.Metrics) {
+			publication.EngagementMeasured++
+		}
+		for metric, value := range item.Metrics {
+			publication.Metrics[metric] += value
+			publication.Measured[metric]++
+		}
+		if item.LastSyncedAt.After(publication.LastSyncedAt) {
+			publication.LastSyncedAt = item.LastSyncedAt
+		}
+	}
+	publications := make([]PublicationOverview, 0, len(order))
+	for _, id := range order {
+		publication := byID[id]
+		sort.SliceStable(publication.Renditions, func(i, j int) bool {
+			if publication.Renditions[i].Platform != publication.Renditions[j].Platform {
+				return publication.Renditions[i].Platform < publication.Renditions[j].Platform
+			}
+			return publication.Renditions[i].Username < publication.Renditions[j].Username
+		})
+		publications = append(publications, *publication)
+	}
+	sort.SliceStable(publications, func(i, j int) bool {
+		if publications[i].Engagement != publications[j].Engagement {
+			return publications[i].Engagement > publications[j].Engagement
+		}
+		if publications[i].Metrics[platform.MetricViews] != publications[j].Metrics[platform.MetricViews] {
+			return publications[i].Metrics[platform.MetricViews] > publications[j].Metrics[platform.MetricViews]
+		}
+		return publications[i].PublishedAt.After(publications[j].PublishedAt)
+	})
+	if len(publications) > 50 {
+		publications = publications[:50]
+	}
+	return publications
+}
+
+func combinedFollowerSeries(accounts []AccountOverview) []SeriesPoint {
+	dateSet := map[string]struct{}{}
+	for _, account := range accounts {
+		for _, point := range account.FollowerSeries {
+			dateSet[point.Date] = struct{}{}
+		}
+	}
+	dates := make([]string, 0, len(dateSet))
+	for date := range dateSet {
+		dates = append(dates, date)
+	}
+	sort.Strings(dates)
+
+	latest := make([]int64, len(accounts))
+	known := make([]bool, len(accounts))
+	indexes := make([]int, len(accounts))
+	series := make([]SeriesPoint, 0, len(dates))
+	for _, date := range dates {
+		var total int64
+		measured := 0
+		for accountIndex, account := range accounts {
+			for indexes[accountIndex] < len(account.FollowerSeries) &&
+				account.FollowerSeries[indexes[accountIndex]].Date <= date {
+				latest[accountIndex] = account.FollowerSeries[indexes[accountIndex]].Value
+				known[accountIndex] = true
+				indexes[accountIndex]++
+			}
+			if known[accountIndex] {
+				total += latest[accountIndex]
+				measured++
+			}
+		}
+		if measured > 0 {
+			series = append(series, SeriesPoint{Date: date, Value: total})
+		}
+	}
+	return series
+}
+
+func firstNonEmptyAnalyticsText(values ...string) string {
+	for _, value := range values {
+		if value = strings.TrimSpace(value); value != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func accountFollowerHistory(snapshots []models.AnalyticsAccountSnapshot) ([]SeriesPoint, *int64) {

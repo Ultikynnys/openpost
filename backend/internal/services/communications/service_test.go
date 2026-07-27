@@ -22,6 +22,34 @@ func (staticTokenSource) GetValidAccessToken(context.Context, string) (string, e
 	return "access-token", nil
 }
 
+type fakeCommenter struct {
+	platform.Adapter
+	accountIDs []string
+	comments   []platform.Comment
+	contentURL string
+}
+
+func (f *fakeCommenter) ListComments(_ context.Context, _ string, accountID, _ string) ([]platform.Comment, error) {
+	f.accountIDs = append(f.accountIDs, accountID)
+	return f.comments, nil
+}
+
+func (*fakeCommenter) ReplyToComment(context.Context, string, string, string, string) (string, error) {
+	return "", nil
+}
+
+func (*fakeCommenter) HideComment(context.Context, string, string, string) error {
+	return nil
+}
+
+func (*fakeCommenter) DeleteComment(context.Context, string, string, string) error {
+	return nil
+}
+
+func (f *fakeCommenter) ResolveContentURL(context.Context, string, string, string) (string, error) {
+	return f.contentURL, nil
+}
+
 type fakeMessenger struct {
 	platform.Adapter
 	fetches  int
@@ -54,7 +82,13 @@ func communicationsTestDB(t *testing.T) *bun.DB {
 	db := bun.NewDB(sqldb, sqlitedialect.New())
 	t.Cleanup(func() { _ = db.Close() })
 	ctx := context.Background()
-	for _, model := range []any{(*models.SocialAccount)(nil), (*models.Job)(nil)} {
+	for _, model := range []any{
+		(*models.SocialAccount)(nil),
+		(*models.Publication)(nil),
+		(*models.Rendition)(nil),
+		(*models.EngagementItem)(nil),
+		(*models.Job)(nil),
+	} {
 		_, err := db.NewCreateTable().Model(model).IfNotExists().Exec(ctx)
 		require.NoError(t, err)
 	}
@@ -80,6 +114,8 @@ CREATE TABLE direct_messages (
 );
 CREATE UNIQUE INDEX direct_messages_remote_test_idx
 	ON direct_messages (conversation_id, remote_message_id) WHERE remote_message_id <> '';
+CREATE UNIQUE INDEX engagement_items_remote_test_idx
+	ON engagement_items (social_account_id, remote_id);
 CREATE TABLE communication_sync_states (
 	id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL, capability TEXT NOT NULL,
 	subject_type TEXT NOT NULL, subject_id TEXT NOT NULL, social_account_id TEXT NOT NULL,
@@ -233,4 +269,111 @@ func TestQueueMessageEnforcesProviderWindowBeforeCreatingJob(t *testing.T) {
 	require.Equal(t, 1, job.MaxAttempts)
 	require.NoError(t, db.NewSelect().Model(conversation).Where("id = ?", "convo-1").Scan(ctx))
 	require.Equal(t, "On time", conversation.LastMessagePreview)
+}
+
+func TestProviderPostURLUsesStableProviderIdentifiers(t *testing.T) {
+	tests := []struct {
+		name      string
+		rendition models.Rendition
+		account   models.SocialAccount
+		want      string
+	}{
+		{
+			name:      "x",
+			rendition: models.Rendition{Platform: "x", ExternalID: "123"},
+			account:   models.SocialAccount{AccountUsername: "openpost"},
+			want:      "https://x.com/openpost/status/123",
+		},
+		{
+			name:      "mastodon instance",
+			rendition: models.Rendition{Platform: "mastodon", ExternalID: "456"},
+			account: models.SocialAccount{
+				AccountUsername: "openpost@social.example",
+				InstanceURL:     "https://social.example",
+			},
+			want: "https://social.example/@openpost/456",
+		},
+		{
+			name: "bluesky did and record key",
+			rendition: models.Rendition{
+				Platform:   "bluesky",
+				ExternalID: `{"uri":"at://did:plc:openpost/app.bsky.feed.post/3abc","cid":"cid"}`,
+			},
+			want: "https://bsky.app/profile/did:plc:openpost/post/3abc",
+		},
+		{
+			name:      "stored canonical URL wins",
+			rendition: models.Rendition{Platform: "threads", ExternalURL: "https://www.threads.net/@openpost/post/abc"},
+			want:      "https://www.threads.net/@openpost/post/abc",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			require.Equal(t, test.want, providerPostURL(test.rendition, test.account))
+		})
+	}
+}
+
+func TestHistoricalRenditionUsesActiveReplacementAfterReconnect(t *testing.T) {
+	db := communicationsTestDB(t)
+	ctx := context.Background()
+	now := time.Date(2026, 7, 26, 12, 0, 0, 0, time.UTC)
+	original := &models.SocialAccount{
+		ID: "account-original", WorkspaceID: "workspace-1", Platform: "x",
+		AccountID: "remote-account", AccountUsername: "openpost",
+		AccessTokenEnc: []byte("old-encrypted"), IsActive: true,
+		CreatedAt: now.Add(-24 * time.Hour),
+	}
+	replacement := *original
+	replacement.ID = "account-reconnected"
+	replacement.Slug = "openpost-reconnected"
+	replacement.AccessTokenEnc = []byte("new-encrypted")
+	replacement.IsActive = true
+	replacement.CreatedAt = now
+	_, err := db.NewInsert().Model(original).Exec(ctx)
+	require.NoError(t, err)
+	_, err = db.NewUpdate().
+		Model((*models.SocialAccount)(nil)).
+		Set("is_active = ?", false).
+		Where("id = ?", original.ID).
+		Exec(ctx)
+	require.NoError(t, err)
+	_, err = db.NewInsert().Model(&replacement).Exec(ctx)
+	require.NoError(t, err)
+	publication := &models.Publication{
+		ID: "publication-1", WorkspaceID: original.WorkspaceID, CreatedByID: "user-1",
+		Title: "Launch", SourceContent: "Launch", Status: models.PublicationStatusPublished,
+		ActualRunAt: now.Add(-time.Hour), CreatedAt: now.Add(-2 * time.Hour), UpdatedAt: now.Add(-time.Hour),
+	}
+	_, err = db.NewInsert().Model(publication).Exec(ctx)
+	require.NoError(t, err)
+	rendition := &models.Rendition{
+		ID: "rendition-1", PublicationID: publication.ID, SocialAccountID: original.ID,
+		Platform: "x", Profile: "short_text", Status: models.RenditionStatusPublished,
+		ExternalID: "provider-post-1", CreatedAt: now, UpdatedAt: now,
+	}
+	_, err = db.NewInsert().Model(rendition).Exec(ctx)
+	require.NoError(t, err)
+
+	commenter := &fakeCommenter{
+		contentURL: "https://x.com/openpost/status/provider-post-1",
+		comments: []platform.Comment{{
+			ID: "comment-1", Text: "Hello", CreatedAt: now.Format(time.RFC3339),
+		}},
+	}
+	service := NewService(db, staticTokenSource{}, nil)
+	service.now = func() time.Time { return now }
+	service.SetProvider("x", commenter)
+
+	queued, err := service.RefreshWorkspace(ctx, original.WorkspaceID, true)
+	require.NoError(t, err)
+	require.Equal(t, 1, queued)
+	require.NoError(t, service.syncEngagement(ctx, rendition.ID))
+	require.Equal(t, []string{replacement.AccountID}, commenter.accountIDs)
+
+	var item models.EngagementItem
+	require.NoError(t, db.NewSelect().Model(&item).Where("remote_id = ?", "comment-1").Scan(ctx))
+	require.Equal(t, replacement.ID, item.SocialAccountID)
+	require.NoError(t, db.NewSelect().Model(rendition).WherePK().Scan(ctx))
+	require.Equal(t, commenter.contentURL, rendition.ExternalURL)
 }

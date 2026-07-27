@@ -49,8 +49,26 @@ type AnalyticsSupport struct {
 	ContentUnavailable    string
 }
 
+// AnalyticsAccountContext lets adapters describe support that varies by the
+// selected provider identity. LinkedIn, for example, grants different
+// reporting permissions to member profiles and organization Pages.
+type AnalyticsAccountContext struct {
+	AccountID       string
+	GrantedScopes   string
+	CapabilityState map[string]string
+}
+
+// AccountAnalyticsSupportResolver is optional. Adapters with account-specific
+// analytics capabilities can implement it without widening the publishing
+// Adapter interface.
+type AccountAnalyticsSupportResolver interface {
+	AnalyticsSupportForAccount(input AnalyticsAccountContext) AnalyticsSupport
+}
+
 type AccountAnalyticsRequest struct {
-	AccountID string
+	AccountID       string
+	GrantedScopes   []string
+	CapabilityState map[string]string
 }
 
 type ContentAnalyticsRequest struct {

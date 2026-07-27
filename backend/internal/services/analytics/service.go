@@ -170,7 +170,7 @@ func (s *Service) enqueueAccountJob(ctx context.Context, account models.SocialAc
 	if adapter == nil {
 		return false, s.recordUnavailable(ctx, subjectAccount, account.ID, account, platform.AnalyticsStatusUnsupported, "analytics_not_supported", "This provider does not expose account analytics in OpenPost.")
 	}
-	support := adapter.AnalyticsSupport()
+	support := analyticsSupportForAccount(adapter, account)
 	if !support.Account {
 		return false, s.recordUnavailable(ctx, subjectAccount, account.ID, account, platform.AnalyticsStatusUnsupported, "account_analytics_not_supported", support.AccountUnavailable)
 	}
@@ -222,7 +222,14 @@ func (s *Service) enqueueRenditionJobs(
 	for _, rendition := range renditions {
 		account, ok := accountByID[rendition.SocialAccountID]
 		if !ok {
-			continue
+			var err error
+			account, err = s.resolveRenditionAnalyticsAccount(ctx, rendition.SocialAccountID)
+			if err != nil {
+				return queued, err
+			}
+			if account.ID == "" {
+				continue
+			}
 		}
 		inserted, err := s.enqueueRenditionJob(ctx, rendition, account, force, now)
 		if err != nil {
@@ -246,7 +253,7 @@ func (s *Service) enqueueRenditionJob(
 	if adapter == nil {
 		return false, s.recordUnavailable(ctx, subjectRendition, rendition.ID, account, platform.AnalyticsStatusUnsupported, "analytics_not_supported", "This provider does not expose content analytics in OpenPost.")
 	}
-	support := adapter.AnalyticsSupport()
+	support := analyticsSupportForAccount(adapter, account)
 	if !support.Content {
 		return false, s.recordUnavailable(ctx, subjectRendition, rendition.ID, account, platform.AnalyticsStatusUnsupported, "content_analytics_not_supported", support.ContentUnavailable)
 	}
@@ -290,7 +297,7 @@ func (s *Service) syncAccount(ctx context.Context, accountID string) error {
 	if adapter == nil {
 		return s.recordUnavailable(ctx, subjectAccount, account.ID, account, platform.AnalyticsStatusUnsupported, "analytics_not_supported", "")
 	}
-	support := adapter.AnalyticsSupport()
+	support := analyticsSupportForAccount(adapter, account)
 	if !support.Account {
 		return s.recordUnavailable(ctx, subjectAccount, account.ID, account, platform.AnalyticsStatusUnsupported, "account_analytics_not_supported", support.AccountUnavailable)
 	}
@@ -301,7 +308,11 @@ func (s *Service) syncAccount(ctx context.Context, accountID string) error {
 	if err != nil {
 		return s.recordFailure(ctx, subjectAccount, account.ID, account, err)
 	}
-	values, err := adapter.FetchAccountAnalytics(ctx, token, platform.AccountAnalyticsRequest{AccountID: account.AccountID})
+	values, err := adapter.FetchAccountAnalytics(ctx, token, platform.AccountAnalyticsRequest{
+		AccountID:       account.AccountID,
+		GrantedScopes:   strings.Fields(account.GrantedScopes),
+		CapabilityState: analyticsCapabilityState(account.CapabilityState),
+	})
 	if err != nil {
 		return s.recordFailure(ctx, subjectAccount, account.ID, account, err)
 	}
@@ -316,15 +327,18 @@ func (s *Service) syncRendition(ctx context.Context, renditionID string) error {
 		}
 		return fmt.Errorf("load analytics rendition: %w", err)
 	}
-	var account models.SocialAccount
-	if err := s.db.NewSelect().Model(&account).Where("id = ? AND is_active = ?", rendition.SocialAccountID, true).Scan(ctx); err != nil {
-		return fmt.Errorf("load rendition analytics account: %w", err)
+	account, err := s.resolveRenditionAnalyticsAccount(ctx, rendition.SocialAccountID)
+	if err != nil {
+		return err
+	}
+	if account.ID == "" {
+		return nil
 	}
 	adapter := s.analyticsAdapter(account)
 	if adapter == nil {
 		return s.recordUnavailable(ctx, subjectRendition, rendition.ID, account, platform.AnalyticsStatusUnsupported, "analytics_not_supported", "")
 	}
-	support := adapter.AnalyticsSupport()
+	support := analyticsSupportForAccount(adapter, account)
 	if !support.Content {
 		return s.recordUnavailable(ctx, subjectRendition, rendition.ID, account, platform.AnalyticsStatusUnsupported, "content_analytics_not_supported", support.ContentUnavailable)
 	}
@@ -617,6 +631,62 @@ func (s *Service) analyticsAdapter(account models.SocialAccount) platform.Analyt
 	}
 	analyticsAdapter, _ := adapter.(platform.AnalyticsAdapter)
 	return analyticsAdapter
+}
+
+func analyticsSupportForAccount(adapter platform.AnalyticsAdapter, account models.SocialAccount) platform.AnalyticsSupport {
+	if resolver, ok := adapter.(platform.AccountAnalyticsSupportResolver); ok {
+		return resolver.AnalyticsSupportForAccount(platform.AnalyticsAccountContext{
+			AccountID:       account.AccountID,
+			GrantedScopes:   account.GrantedScopes,
+			CapabilityState: analyticsCapabilityState(account.CapabilityState),
+		})
+	}
+	return adapter.AnalyticsSupport()
+}
+
+func analyticsCapabilityState(raw string) map[string]string {
+	state := map[string]string{}
+	if json.Unmarshal([]byte(raw), &state) != nil {
+		return map[string]string{}
+	}
+	return state
+}
+
+// resolveRenditionAnalyticsAccount preserves analytics continuity for
+// historical renditions created before an OAuth reconnect. Current reconnects
+// reuse the provider identity, but older installations may contain an inactive
+// row and a newer active row for the same remote account.
+func (s *Service) resolveRenditionAnalyticsAccount(ctx context.Context, accountID string) (models.SocialAccount, error) {
+	var original models.SocialAccount
+	if err := s.db.NewSelect().Model(&original).Where("id = ?", accountID).Scan(ctx); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return models.SocialAccount{}, nil
+		}
+		return models.SocialAccount{}, fmt.Errorf("load rendition analytics account: %w", err)
+	}
+	if original.IsActive {
+		return original, nil
+	}
+
+	query := s.db.NewSelect().
+		Model((*models.SocialAccount)(nil)).
+		Where("workspace_id = ?", original.WorkspaceID).
+		Where("platform = ?", original.Platform).
+		Where("account_id = ?", original.AccountID).
+		Where("is_active = ?", true).
+		Order("created_at DESC").
+		Limit(1)
+	if original.Platform == "mastodon" {
+		query = query.Where("instance_url = ?", original.InstanceURL)
+	}
+	var replacement models.SocialAccount
+	if err := query.Scan(ctx, &replacement); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return models.SocialAccount{}, nil
+		}
+		return models.SocialAccount{}, fmt.Errorf("load replacement analytics account: %w", err)
+	}
+	return replacement, nil
 }
 
 func (s *Service) accessToken(ctx context.Context, accountID string) (string, error) {

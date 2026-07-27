@@ -219,7 +219,125 @@ func TestOverviewAggregatesLatestProviderMetricsWithoutBlendingExposureKinds(t *
 	require.Len(t, overview.Accounts, 1)
 	require.NotNil(t, overview.Accounts[0].FollowerDelta)
 	require.Equal(t, int64(10), *overview.Accounts[0].FollowerDelta)
+	require.Equal(t, []SeriesPoint{
+		{Date: now.Add(-7 * 24 * time.Hour).Format("2006-01-02"), Value: 40},
+		{Date: now.Format("2006-01-02"), Value: 50},
+	}, overview.FollowerSeries)
 	require.Len(t, overview.Content, 1)
+	require.Len(t, overview.Publications, 1)
+	require.Len(t, overview.Publications[0].Renditions, 1)
+	require.Equal(t, int64(7), overview.Publications[0].Engagement)
+	require.Equal(t, 1, overview.Publications[0].Measured[platform.MetricViews])
+}
+
+func TestOverviewGroupsRenditionsAndOmitsProviderDeletedContent(t *testing.T) {
+	db := newAnalyticsTestDB(t)
+	ctx := context.Background()
+	now := time.Date(2026, 7, 26, 12, 0, 0, 0, time.UTC)
+	account := seedAnalyticsAccount(t, db, "")
+	second := account
+	second.ID = "account-2"
+	second.AccountID = "provider-account-2"
+	second.AccountUsername = "second"
+	second.Slug = "test-account-2"
+	_, err := db.NewInsert().Model(&second).Exec(ctx)
+	require.NoError(t, err)
+
+	publication := seedAnalyticsPublication(t, db, account.WorkspaceID, "publication-group", now)
+	for _, rendition := range []models.Rendition{
+		{
+			ID: "rendition-active", PublicationID: publication.ID, SocialAccountID: account.ID,
+			Platform: account.Platform, Profile: "short_text", Status: models.RenditionStatusPublished,
+			ExternalID: "post-active", CreatedAt: now, UpdatedAt: now,
+		},
+		{
+			ID: "rendition-deleted", PublicationID: publication.ID, SocialAccountID: second.ID,
+			Platform: second.Platform, Profile: "short_text", Status: models.RenditionStatusPublished,
+			ExternalID: "post-deleted", CreatedAt: now, UpdatedAt: now,
+		},
+	} {
+		_, err = db.NewInsert().Model(&rendition).Exec(ctx)
+		require.NoError(t, err)
+	}
+	for _, state := range []models.AnalyticsSyncState{
+		{
+			ID: stateID(subjectRendition, "rendition-active"), WorkspaceID: account.WorkspaceID,
+			SubjectType: subjectRendition, SubjectID: "rendition-active", SocialAccountID: account.ID,
+			Platform: account.Platform, Status: string(platform.AnalyticsStatusOK),
+			MetricsJSON: `{"likes":3,"views":20}`, LastSuccessAt: now,
+		},
+		{
+			ID: stateID(subjectRendition, "rendition-deleted"), WorkspaceID: account.WorkspaceID,
+			SubjectType: subjectRendition, SubjectID: "rendition-deleted", SocialAccountID: second.ID,
+			Platform: second.Platform, Status: string(platform.AnalyticsStatusNotFound),
+			MetricsJSON: `{"likes":99,"impressions":999}`, LastSuccessAt: now.Add(-time.Hour),
+		},
+	} {
+		_, err = db.NewInsert().Model(&state).Exec(ctx)
+		require.NoError(t, err)
+	}
+
+	service := NewService(db, staticTokenSource{})
+	service.now = func() time.Time { return now }
+	overview, err := service.Overview(ctx, account.WorkspaceID, 30)
+	require.NoError(t, err)
+	require.Len(t, overview.Content, 1)
+	require.Len(t, overview.Publications, 1)
+	require.Len(t, overview.Publications[0].Renditions, 1)
+	require.Equal(t, "rendition-active", overview.Publications[0].Renditions[0].RenditionID)
+	require.Equal(t, int64(3), overview.Summary.Engagement.Value)
+	require.Equal(t, int64(20), overview.Summary.Views.Value)
+	require.Zero(t, overview.Summary.Impressions.Measured)
+}
+
+func TestHistoricalRenditionUsesActiveReplacementCredentialsAfterReconnect(t *testing.T) {
+	db := newAnalyticsTestDB(t)
+	ctx := context.Background()
+	now := time.Date(2026, 7, 26, 12, 0, 0, 0, time.UTC)
+	original := seedAnalyticsAccount(t, db, "")
+	_, err := db.NewUpdate().
+		Model((*models.SocialAccount)(nil)).
+		Set("is_active = ?", false).
+		Where("id = ?", original.ID).
+		Exec(ctx)
+	require.NoError(t, err)
+	replacement := original
+	replacement.ID = "account-reconnected"
+	replacement.Slug = "test-account-reconnected"
+	replacement.IsActive = true
+	replacement.CreatedAt = now
+	_, err = db.NewInsert().Model(&replacement).Exec(ctx)
+	require.NoError(t, err)
+
+	publication := seedAnalyticsPublication(t, db, original.WorkspaceID, "publication-old", now)
+	rendition := models.Rendition{
+		ID: "rendition-old", PublicationID: publication.ID, SocialAccountID: original.ID,
+		Platform: original.Platform, Profile: "short_text", Status: models.RenditionStatusPublished,
+		ExternalID: "provider-post", CreatedAt: now, UpdatedAt: now,
+	}
+	_, err = db.NewInsert().Model(&rendition).Exec(ctx)
+	require.NoError(t, err)
+
+	service := NewService(db, staticTokenSource{})
+	service.now = func() time.Time { return now }
+	service.SetProvider("test", &fakeAnalyticsAdapter{
+		support: platform.AnalyticsSupport{Content: true},
+		content: platform.AnalyticsValues{platform.MetricViews: 12},
+	})
+
+	queued, err := service.RefreshWorkspace(ctx, original.WorkspaceID)
+	require.NoError(t, err)
+	require.Equal(t, 1, queued)
+	require.NoError(t, service.syncRendition(ctx, rendition.ID))
+
+	var state models.AnalyticsSyncState
+	require.NoError(t, db.NewSelect().
+		Model(&state).
+		Where("id = ?", stateID(subjectRendition, rendition.ID)).
+		Scan(ctx))
+	require.Equal(t, replacement.ID, state.SocialAccountID)
+	require.Equal(t, string(platform.AnalyticsStatusOK), state.Status)
+	require.JSONEq(t, `{"views":12}`, state.MetricsJSON)
 }
 
 func TestScheduleSweepKeepsOnePendingChainAcrossRestarts(t *testing.T) {
@@ -237,6 +355,19 @@ func TestScheduleSweepKeepsOnePendingChainAcrossRestarts(t *testing.T) {
 		Count(ctx)
 	require.NoError(t, err)
 	require.Equal(t, 1, count)
+}
+
+func seedAnalyticsPublication(t *testing.T, db *bun.DB, workspaceID, id string, now time.Time) models.Publication {
+	t.Helper()
+	publication := models.Publication{
+		ID: id, WorkspaceID: workspaceID, CreatedByID: "user-1", Title: "Launch",
+		Intent: "post", ContentProfile: "short_text", SourceText: "Launch",
+		SourceContent: "Launch", Status: models.PublicationStatusPublished,
+		ActualRunAt: now.Add(-time.Hour), CreatedAt: now.Add(-2 * time.Hour), UpdatedAt: now.Add(-time.Hour),
+	}
+	_, err := db.NewInsert().Model(&publication).Exec(context.Background())
+	require.NoError(t, err)
+	return publication
 }
 
 func TestRefreshCountsOnlyNewAnalyticsJobs(t *testing.T) {

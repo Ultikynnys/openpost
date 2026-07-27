@@ -2,6 +2,7 @@ package platform
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -148,6 +149,104 @@ func TestXAnalyticsUsesPublicMetricsAndKeepsMetricKindsDistinct(t *testing.T) {
 	require.Equal(t, int64(1), content[MetricQuotes])
 	require.Equal(t, int64(100), content[MetricImpressions])
 	require.Equal(t, int64(4), content[MetricSaves])
+}
+
+func TestLinkedInAnalyticsSupportsMembersAndOrganizationPages(t *testing.T) {
+	t.Setenv("LINKEDIN_API_VERSION", "202606")
+	originalClient := httpClient
+	defer func() { httpClient = originalClient }()
+
+	httpClient = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		require.Equal(t, "Bearer linkedin-token", req.Header.Get("Authorization"))
+		require.Equal(t, "202606", req.Header.Get("Linkedin-Version"))
+		switch {
+		case req.URL.Path == "/rest/memberFollowersCount":
+			require.Equal(t, "me", req.URL.Query().Get("q"))
+			return jsonResponse(req, `{"elements":[{"memberFollowersCount":120}]}`), nil
+		case strings.HasPrefix(req.URL.Path, "/rest/networkSizes/"):
+			require.Equal(t, "CompanyFollowedByMember", req.URL.Query().Get("edgeType"))
+			return jsonResponse(req, `{"firstDegreeSize":450}`), nil
+		case req.URL.Path == "/rest/memberCreatorPostAnalytics":
+			counts := map[string]int64{
+				"IMPRESSION": 200, "MEMBERS_REACHED": 150, "REACTION": 8,
+				"COMMENT": 3, "RESHARE": 2, "POST_SAVE": 4, "LINK_CLICKS": 6,
+			}
+			require.Equal(t, "entity", req.URL.Query().Get("q"))
+			require.Equal(t, "urn:li:share:123", req.URL.Query().Get("entity"))
+			return jsonResponse(req, fmt.Sprintf(
+				`{"elements":[{"count":%d}]}`,
+				counts[req.URL.Query().Get("queryType")],
+			)), nil
+		case req.URL.Path == "/rest/organizationalEntityShareStatistics":
+			require.Equal(t, "urn:li:organization:42", req.URL.Query().Get("organizationalEntity"))
+			require.Contains(t, req.URL.Query().Get("shares"), "urn:li:share:456")
+			return jsonResponse(req, `{"elements":[{"totalShareStatistics":{"clickCount":9,"commentCount":4,"impressionCount":500,"likeCount":12,"shareCount":3,"uniqueImpressionsCount":350}}]}`), nil
+		default:
+			t.Fatalf("unexpected LinkedIn analytics request %s", req.URL.String())
+			return nil, nil
+		}
+	})}
+
+	adapter := NewLinkedInAdapter("", "", "", false, true)
+	memberSupport := adapter.AnalyticsSupportForAccount(AnalyticsAccountContext{
+		AccountID:       "urn:li:person:member",
+		CapabilityState: map[string]string{"linkedin_account_type": "person"},
+	})
+	require.Equal(t, []string{linkedinScopeMemberProfileAnalytics}, memberSupport.AccountRequiredScopes)
+	require.Equal(t, []string{linkedinScopeMemberPostAnalytics}, memberSupport.ContentRequiredScopes)
+	organizationSupport := adapter.AnalyticsSupportForAccount(AnalyticsAccountContext{
+		AccountID:       "urn:li:organization:42",
+		CapabilityState: map[string]string{"linkedin_account_type": "organization"},
+	})
+	require.Equal(t, []string{linkedinScopeOrganizationAdmin}, organizationSupport.AccountRequiredScopes)
+
+	memberAccount, err := adapter.FetchAccountAnalytics(
+		context.Background(),
+		"linkedin-token",
+		AccountAnalyticsRequest{
+			AccountID:       "urn:li:person:member",
+			CapabilityState: map[string]string{"linkedin_account_type": "person"},
+		},
+	)
+	require.NoError(t, err)
+	require.Equal(t, int64(120), memberAccount[MetricFollowers])
+	organizationAccount, err := adapter.FetchAccountAnalytics(
+		context.Background(),
+		"linkedin-token",
+		AccountAnalyticsRequest{
+			AccountID:       "urn:li:organization:42",
+			CapabilityState: map[string]string{"linkedin_account_type": "organization"},
+		},
+	)
+	require.NoError(t, err)
+	require.Equal(t, int64(450), organizationAccount[MetricFollowers])
+
+	memberContent, err := adapter.FetchContentAnalytics(
+		context.Background(),
+		"linkedin-token",
+		ContentAnalyticsRequest{
+			AccountID:   "urn:li:person:member",
+			ExternalIDs: []string{"urn:li:share:123"},
+		},
+	)
+	require.NoError(t, err)
+	require.Equal(t, int64(200), memberContent[MetricImpressions])
+	require.Equal(t, int64(150), memberContent[MetricReach])
+	require.Equal(t, int64(8), memberContent[MetricLikes])
+	require.Equal(t, int64(6), memberContent[MetricClicks])
+
+	organizationContent, err := adapter.FetchContentAnalytics(
+		context.Background(),
+		"linkedin-token",
+		ContentAnalyticsRequest{
+			AccountID:   "urn:li:organization:42",
+			ExternalIDs: []string{"urn:li:share:456"},
+		},
+	)
+	require.NoError(t, err)
+	require.Equal(t, int64(500), organizationContent[MetricImpressions])
+	require.Equal(t, int64(350), organizationContent[MetricReach])
+	require.Equal(t, int64(12), organizationContent[MetricLikes])
 }
 
 func TestInstagramAnalyticsFallsBackWhenOneInsightMetricIsUnsupported(t *testing.T) {

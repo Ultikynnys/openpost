@@ -1053,7 +1053,6 @@ func validateCapability(capability Capability, body, title, description string, 
 		}
 		issues = append(issues, validateSettingDefinition(capability, field, settings, len(media))...)
 	}
-	issues = append(issues, validateProviderOperationalReadiness(capability)...)
 	issues = append(issues, validateProviderSettings(provider, profile, len(media), settings)...)
 	for index := range issues {
 		if issues[index].FallbackMessage == "" {
@@ -1331,21 +1330,6 @@ func legacySettingSupported(provider, key string) bool {
 	default:
 		return false
 	}
-}
-
-func validateProviderOperationalReadiness(capability Capability) []ValidationIssue {
-	issues := []ValidationIssue{}
-	switch capability.Provider {
-	case ProviderX, ProviderYouTube:
-		issues = append(issues, ValidationIssue{
-			Severity: "warning",
-			Code:     "quota_warning",
-			Message:  "Provider quota or account tier limits may block publishing.",
-			Provider: capability.Provider,
-			Profile:  capability.Profile,
-		})
-	}
-	return issues
 }
 
 func validateProviderSettings(provider, profile string, mediaCount int, settings map[string]any) []ValidationIssue {

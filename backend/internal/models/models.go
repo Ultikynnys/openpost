@@ -624,6 +624,7 @@ type EngagementItem struct {
 	LastSeenAt           time.Time `bun:"last_seen_at,notnull" json:"last_seen_at"`
 	CreatedAt            time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"created_at"`
 	UpdatedAt            time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"updated_at"`
+	ProviderPostURL      string    `bun:"-" json:"provider_post_url,omitempty"`
 }
 
 // Conversation is a provider DM thread. It stores only the normalized

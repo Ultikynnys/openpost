@@ -317,6 +317,72 @@ func TestSaveAccountPersistsCapabilityState(t *testing.T) {
 	require.NotZero(t, account.CapabilityCheckedAt)
 }
 
+func TestReconnectReusesProviderIdentityAndUpdatesCredentials(t *testing.T) {
+	db := createTestDB(t)
+	encryptor := crypto.NewTokenEncryptor("test-secret-key-for-testing-only")
+	saver := NewAccountSaver(db, encryptor, entitlements.NewStaticService(entitlements.PlanSnapshot{
+		Limits: map[entitlements.LimitKey]int64{
+			entitlements.LimitSocialAccounts: 1,
+		},
+	}))
+	ctx := context.Background()
+	seedWorkspaceMember(t, db, "workspace-reconnect", "user-reconnect")
+
+	first, err := saver.SaveAccount(
+		ctx,
+		"user-reconnect",
+		"threads",
+		"workspace-reconnect",
+		"threads-user",
+		"old-name",
+		"",
+		&platform.TokenResult{
+			AccessToken: "old-token",
+			Extra:       map[string]string{"user_id": "threads-user", "scope": "threads_basic"},
+		},
+	)
+	require.NoError(t, err)
+	_, err = db.NewUpdate().
+		Model((*models.SocialAccount)(nil)).
+		Set("is_active = ?", false).
+		Where("id = ?", first.ID).
+		Exec(ctx)
+	require.NoError(t, err)
+
+	reconnected, err := saver.SaveAccount(
+		ctx,
+		"user-reconnect",
+		"threads",
+		"workspace-reconnect",
+		"threads-user",
+		"new-name",
+		"",
+		&platform.TokenResult{
+			AccessToken: "new-token",
+			Extra: map[string]string{
+				"user_id": "threads-user",
+				"scope":   "threads_basic threads_manage_insights",
+			},
+		},
+	)
+	require.NoError(t, err)
+	require.Equal(t, first.ID, reconnected.ID)
+	require.WithinDuration(t, first.CreatedAt, reconnected.CreatedAt, time.Millisecond)
+	require.Equal(t, "new-name", reconnected.AccountUsername)
+	require.True(t, reconnected.IsActive)
+	require.Equal(t, "threads_basic threads_manage_insights", reconnected.GrantedScopes)
+
+	decrypted, err := encryptor.Decrypt(reconnected.AccessTokenEnc)
+	require.NoError(t, err)
+	require.Equal(t, "new-token", decrypted)
+	count, err := db.NewSelect().
+		Model((*models.SocialAccount)(nil)).
+		Where("workspace_id = ?", "workspace-reconnect").
+		Count(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 1, count)
+}
+
 func TestSaveAccountGeneratesUniqueSlugs(t *testing.T) {
 	t.Parallel()
 

@@ -372,7 +372,7 @@ func TestValidateFlagsUnsupportedProviderSettings(t *testing.T) {
 	requireIssueCode(t, issues, "unsupported_setting")
 }
 
-func TestValidateRequiresExplicitConsentAndKeepsQuotaWarnings(t *testing.T) {
+func TestValidateRequiresExplicitConsentWithoutGenericQuotaWarnings(t *testing.T) {
 	tiktokIssues := Validate(ProviderTikTok, models.ContentProfileShortVideo, "caption", "", "", []MediaItem{{
 		ID:              "video-1",
 		MimeType:        "video/mp4",
@@ -392,7 +392,7 @@ func TestValidateRequiresExplicitConsentAndKeepsQuotaWarnings(t *testing.T) {
 		AnalysisStatus: "ready",
 	}}, map[string]any{"privacy": "private"})
 
-	requireIssueCode(t, youtubeIssues, "quota_warning")
+	requireNoIssueCode(t, youtubeIssues, "quota_warning")
 	requireNoIssueCode(t, youtubeIssues, "provider_audit_required")
 }
 

@@ -326,6 +326,28 @@ func (t *ThreadsAdapter) ListComments(ctx context.Context, accessToken, _ string
 	return comments, nil
 }
 
+func (t *ThreadsAdapter) ResolveContentURL(ctx context.Context, accessToken, _ string, externalID string) (string, error) {
+	query := url.Values{
+		"fields":              {"permalink"},
+		oauthParamAccessToken: {accessToken},
+	}
+	endpoint := "https://graph.threads.net/v1.0/" + url.PathEscape(externalID) + "?" + query.Encode()
+	body, err := DoRequest(ctx, http.MethodGet, endpoint, nil, nil)
+	if err != nil {
+		return "", fmt.Errorf("threads post permalink: %w", err)
+	}
+	var response struct {
+		Permalink string `json:"permalink"`
+	}
+	if err := json.Unmarshal(body, &response); err != nil {
+		return "", fmt.Errorf("decoding threads post permalink: %w", err)
+	}
+	if strings.TrimSpace(response.Permalink) == "" {
+		return "", fmt.Errorf("threads post permalink is missing")
+	}
+	return response.Permalink, nil
+}
+
 func (t *ThreadsAdapter) ReplyToComment(ctx context.Context, accessToken, userID, commentID, message string) (string, error) {
 	req := &PublishRequest{Content: strings.TrimSpace(message), ReplyToID: commentID}
 	containerID, err := t.createContainer(ctx, accessToken, userID, req.Content, "", false, req)

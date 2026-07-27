@@ -534,6 +534,27 @@ func (f *FacebookAdapter) ListComments(ctx context.Context, accessToken, _ strin
 	return comments, nil
 }
 
+func (f *FacebookAdapter) ResolveContentURL(ctx context.Context, accessToken, _ string, externalID string) (string, error) {
+	query := url.Values{
+		"fields":              {"permalink_url"},
+		oauthParamAccessToken: {accessToken},
+	}
+	body, err := DoRequest(ctx, http.MethodGet, f.graphURL(externalID)+"?"+query.Encode(), nil, nil)
+	if err != nil {
+		return "", fmt.Errorf("facebook post permalink: %w", err)
+	}
+	var response struct {
+		PermalinkURL string `json:"permalink_url"`
+	}
+	if err := json.Unmarshal(body, &response); err != nil {
+		return "", fmt.Errorf("decoding facebook post permalink: %w", err)
+	}
+	if strings.TrimSpace(response.PermalinkURL) == "" {
+		return "", fmt.Errorf("facebook post permalink is missing")
+	}
+	return response.PermalinkURL, nil
+}
+
 func (f *FacebookAdapter) ReplyToComment(ctx context.Context, accessToken, _ string, commentID, message string) (string, error) {
 	return f.publishCommentReply(ctx, accessToken, commentID, message)
 }

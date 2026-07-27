@@ -275,6 +275,13 @@ type CommentAdapter interface {
 	DeleteComment(ctx context.Context, accessToken, accountID, commentID string) error
 }
 
+// ContentURLResolver is an optional read capability for providers whose
+// opaque published IDs cannot be converted to a public URL locally. Workers
+// persist the normalized URL so API page reads never call the provider.
+type ContentURLResolver interface {
+	ResolveContentURL(ctx context.Context, accessToken, accountID, externalID string) (string, error)
+}
+
 // MetadataMediaUploader is an optional extension for providers whose media
 // upload endpoint also creates the published object and needs post metadata.
 type MetadataMediaUploader interface {

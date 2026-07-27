@@ -84,7 +84,13 @@ func TestLinkedInOrganizationScopesAreExplicitlyEnabled(t *testing.T) {
 		t.Fatal(err)
 	}
 	scope := parsed.Query().Get("scope")
-	for _, required := range []string{"rw_organization_admin", "w_organization_social", "r_organization_social"} {
+	for _, required := range []string{
+		"rw_organization_admin",
+		"w_organization_social",
+		"r_organization_social",
+		"r_member_profileAnalytics",
+		"r_member_postAnalytics",
+	} {
 		if !strings.Contains(scope, required) {
 			t.Fatalf("missing scope %s from %q", required, scope)
 		}
