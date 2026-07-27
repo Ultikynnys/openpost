@@ -1,9 +1,9 @@
 <!--
-THESIS: Analytics is a measured operating view, not a reporting spectacle.
-OWN-WORLD: It uses OpenPost's existing warm accent, flat borders, compact controls, and provider marks.
-STORY: Read totals, inspect one account trend, then compare published content.
-FIRST VIEWPORT: The reporting window, refresh action, metric ledger, and trend context are visible without scrolling.
-FORM: A ranked account shelf controls one primary chart; content follows as a dense, responsive ledger.
+THESIS: Analytics follows one OpenPost publication across its provider renditions.
+OWN-WORLD: It uses OpenPost's flat borders, compact controls, and provider marks.
+STORY: Read exact metric totals, inspect combined or account growth, then expand a publication for provider detail.
+FIRST VIEWPORT: The reporting window, refresh action, metric ledger, and unified follower trend are visible without scrolling.
+FORM: Publications are the primary rows; provider renditions disclose in place without leaving context.
 -->
 <script lang="ts">
 	import { resolve } from '$app/paths';
@@ -19,6 +19,7 @@ FORM: A ranked account shelf controls one primary chart; content follows as a de
 	import PlatformIcon from '$lib/components/platform-icon.svelte';
 	import AnalyticsIcon from 'lucide-svelte/icons/chart-no-axes-combined';
 	import AccountsIcon from 'lucide-svelte/icons/users';
+	import ChevronDownIcon from 'lucide-svelte/icons/chevron-down';
 	import RefreshIcon from 'lucide-svelte/icons/refresh-cw';
 	import { m } from '$lib/paraglide/messages';
 	import { getLocaleTag } from '$lib/i18n';
@@ -26,12 +27,14 @@ FORM: A ranked account shelf controls one primary chart; content follows as a de
 	type AnalyticsOverview = components['schemas']['Overview'];
 	type AnalyticsAccount = components['schemas']['AccountOverview'];
 	type AnalyticsContent = components['schemas']['ContentOverview'];
+	type AnalyticsPublication = components['schemas']['PublicationOverview'];
 	type MetricSummary = components['schemas']['MetricSummary'];
 	type RangeDays = 7 | 30 | 90;
 
 	let overview = $state.raw<AnalyticsOverview | null>(null);
 	let rangeDays = $state<RangeDays>(30);
-	let selectedAccountID = $state('');
+	let selectedAccountID = $state('all');
+	let expandedPublicationID = $state('');
 	let loading = $state(true);
 	let refreshing = $state(false);
 	let error = $state('');
@@ -41,22 +44,28 @@ FORM: A ranked account shelf controls one primary chart; content follows as a de
 
 	const currentWorkspaceID = $derived(workspaceCtx.currentWorkspace?.id ?? '');
 	const accounts = $derived(overview?.accounts ?? []);
-	const content = $derived(overview?.content ?? []);
+	const publications = $derived(overview?.publications ?? []);
 	const selectedAccount = $derived(
-		accounts.find((account) => account.id === selectedAccountID) ??
-			accounts.find((account) => (account.follower_series?.length ?? 0) > 1) ??
-			accounts[0]
+		selectedAccountID === 'all'
+			? undefined
+			: (accounts.find((account) => account.id === selectedAccountID) ?? accounts[0])
+	);
+	const selectedFollowerSeries = $derived(
+		selectedAccount ? (selectedAccount.follower_series ?? []) : (overview?.follower_series ?? [])
+	);
+	const accountsNeedingReconnect = $derived(
+		accounts.filter(
+			(account) =>
+				account.status === 'permission_required' ||
+				(account.missing_account_scopes?.length ?? 0) > 0 ||
+				(account.missing_content_scopes?.length ?? 0) > 0
+		)
 	);
 	const hasMeasurements = $derived(
 		accounts.some((account) => Boolean(account.last_synced_at)) ||
-			content.some((item) => Boolean(item.last_synced_at))
-	);
-	const reconnectRequired = $derived(
-		accounts.some(
-			(account) =>
-				account.status === 'permission_required' ||
-				(account.missing_content_scopes?.length ?? 0) > 0
-		)
+			publications.some((publication) =>
+				(publication.renditions ?? []).some((rendition) => Boolean(rendition.last_synced_at))
+			)
 	);
 	const initialLoading = $derived(
 		Boolean(currentWorkspaceID) && loading && (!overview || dataWorkspaceID !== currentWorkspaceID)
@@ -103,12 +112,19 @@ FORM: A ranked account shelf controls one primary chart; content follows as a de
 			if (response.error || !response.data) throw new Error(m.analytics_failed_load());
 			overview = response.data;
 			dataWorkspaceID = workspaceID;
-			if (!response.data.accounts?.some((account) => account.id === selectedAccountID)) {
-				selectedAccountID =
-					response.data.accounts?.find((account) => (account.follower_series?.length ?? 0) > 1)
-						?.id ??
-					response.data.accounts?.[0]?.id ??
-					'';
+			if (
+				selectedAccountID !== 'all' &&
+				!response.data.accounts?.some((account) => account.id === selectedAccountID)
+			) {
+				selectedAccountID = 'all';
+			}
+			if (
+				expandedPublicationID &&
+				!response.data.publications?.some(
+					(publication) => publication.publication_id === expandedPublicationID
+				)
+			) {
+				expandedPublicationID = '';
 			}
 		} catch (cause) {
 			if (requestSequence !== dataRequestSequence) return;
@@ -165,8 +181,15 @@ FORM: A ranked account shelf controls one primary chart; content follows as a de
 	}
 
 	function accountStatus(account: AnalyticsAccount) {
-		if (account.status === 'permission_required') return m.analytics_permission_required();
-		if (account.status === 'unsupported') return m.analytics_unsupported();
+		if (
+			account.status === 'permission_required' ||
+			(account.missing_content_scopes?.length ?? 0) > 0
+		) {
+			return account.error_message || m.analytics_permission_required();
+		}
+		if (account.status === 'unsupported') {
+			return account.error_message || m.analytics_unsupported();
+		}
 		if (account.status === 'rate_limited') return m.analytics_rate_limited();
 		if (account.status === 'not_found') return m.analytics_not_found();
 		if (account.status === 'failed') return m.analytics_collection_failed();
@@ -175,18 +198,24 @@ FORM: A ranked account shelf controls one primary chart; content follows as a de
 	}
 
 	function accountStatusClass(account: AnalyticsAccount) {
-		if (account.status === 'permission_required') return 'text-amber-700 dark:text-amber-300';
+		if (
+			account.status === 'permission_required' ||
+			(account.missing_content_scopes?.length ?? 0) > 0
+		) {
+			return 'text-amber-700 dark:text-amber-300';
+		}
 		if (account.status === 'failed') return 'text-destructive';
 		if (account.status === 'rate_limited') return 'text-amber-700 dark:text-amber-300';
 		return 'text-muted-foreground';
 	}
 
 	function contentStatus(item: AnalyticsContent) {
-		if (item.status === 'permission_required') return m.analytics_permission_required();
-		if (item.status === 'unsupported') return m.analytics_unsupported();
+		if (item.status === 'permission_required')
+			return item.error_message || m.analytics_permission_required();
+		if (item.status === 'unsupported') return item.error_message || m.analytics_unsupported();
 		if (item.status === 'rate_limited') return m.analytics_rate_limited();
-		if (item.status === 'not_found') return m.analytics_not_found();
 		if (item.status === 'failed') return m.analytics_collection_failed();
+		if (!item.last_synced_at) return m.analytics_no_measurement();
 		return '';
 	}
 
@@ -196,16 +225,31 @@ FORM: A ranked account shelf controls one primary chart; content follows as a de
 		);
 	}
 
-	function exposure(item: AnalyticsContent) {
-		for (const metric of [
+	function publicationExposure(publication: AnalyticsPublication) {
+		return exposureMetrics(publication.metrics, publication.measured);
+	}
+
+	function renditionExposure(item: AnalyticsContent) {
+		const measured = Object.fromEntries(Object.keys(item.metrics).map((metric) => [metric, 1]));
+		return exposureMetrics(item.metrics, measured);
+	}
+
+	function exposureMetrics(metrics: Record<string, number>, measured: Record<string, number>) {
+		return [
 			{ key: 'views', label: m.analytics_views() },
 			{ key: 'impressions', label: m.analytics_impressions() },
 			{ key: 'reach', label: m.analytics_reach() }
-		]) {
-			if (metric.key in item.metrics)
-				return { label: metric.label, value: item.metrics[metric.key] };
-		}
-		return null;
+		]
+			.filter((metric) => (measured[metric.key] ?? 0) > 0)
+			.map((metric) => ({
+				...metric,
+				value: metrics[metric.key] ?? 0,
+				measured: measured[metric.key] ?? 0
+			}));
+	}
+
+	function publicationLabel(publication: AnalyticsPublication) {
+		return publication.title || publication.excerpt || m.analytics_untitled_publication();
 	}
 </script>
 
@@ -286,14 +330,17 @@ FORM: A ranked account shelf controls one primary chart; content follows as a de
 			size="lg"
 		/>
 	{:else}
-		<div class="space-y-8">
-			{#if reconnectRequired}
-				<InlineNotice tone="warning" message={m.analytics_permission_required()}>
+		<div class="space-y-8 transition-opacity" class:opacity-70={loading} aria-busy={loading}>
+			{#each accountsNeedingReconnect as account (account.id)}
+				<InlineNotice
+					tone="warning"
+					message={`${account.username}: ${account.error_message || m.analytics_permission_required()}`}
+				>
 					{#snippet actions()}
 						<Button href="/accounts" variant="outline" size="sm">{m.analytics_reconnect()}</Button>
 					{/snippet}
 				</InlineNotice>
-			{/if}
+			{/each}
 
 			<section aria-label={m.analytics_title()} class="border-y border-border">
 				<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6">
@@ -335,12 +382,12 @@ FORM: A ranked account shelf controls one primary chart; content follows as a de
 						<p class="mt-1 text-sm text-muted-foreground">
 							{selectedAccount
 								? `${selectedAccount.username} · ${m.analytics_trend_description()}`
-								: m.analytics_trend_description()}
+								: m.analytics_unified_trend_description()}
 						</p>
 					</div>
 					<AnalyticsTrend
-						points={selectedAccount?.follower_series ?? []}
-						label={`${m.analytics_trend_title()}: ${selectedAccount?.username ?? ''}`}
+						points={selectedFollowerSeries}
+						label={`${m.analytics_trend_title()}: ${selectedAccount?.username ?? m.analytics_all_accounts()}`}
 						emptyLabel={m.analytics_no_trend()}
 						formatValue={formatNumber}
 					/>
@@ -351,6 +398,29 @@ FORM: A ranked account shelf controls one primary chart; content follows as a de
 						{m.analytics_accounts_title()}
 					</h2>
 					<div class="mt-3 divide-y divide-border border-y border-border">
+						<button
+							type="button"
+							class={[
+								'flex min-h-16 w-full items-center gap-3 px-2 py-3 text-left transition-colors hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
+								selectedAccountID === 'all' && 'bg-muted/70'
+							]}
+							aria-pressed={selectedAccountID === 'all'}
+							onclick={() => (selectedAccountID = 'all')}
+						>
+							<span
+								class="flex size-9 shrink-0 items-center justify-center rounded-full border border-border bg-background"
+							>
+								<AccountsIcon class="size-4" />
+							</span>
+							<span class="min-w-0 flex-1">
+								<span class="block truncate text-sm font-medium">{m.analytics_all_accounts()}</span>
+								<span class="mt-0.5 block text-xs text-muted-foreground">
+									{overview?.summary.followers.measured
+										? `${formatNumber(overview.summary.followers.value)} ${m.analytics_summary_followers().toLowerCase()}`
+										: m.analytics_no_measurement()}
+								</span>
+							</span>
+						</button>
 						{#each accounts as account (account.id)}
 							<button
 								type="button"
@@ -369,7 +439,9 @@ FORM: A ranked account shelf controls one primary chart; content follows as a de
 								<span class="min-w-0 flex-1">
 									<span class="block truncate text-sm font-medium">{account.username}</span>
 									{#if accountStatus(account)}
-										<span class={['mt-0.5 block text-xs', accountStatusClass(account)]}>
+										<span
+											class={['mt-0.5 line-clamp-2 block text-xs', accountStatusClass(account)]}
+										>
 											{accountStatus(account)}
 										</span>
 									{:else if 'followers' in account.metrics}
@@ -408,94 +480,129 @@ FORM: A ranked account shelf controls one primary chart; content follows as a de
 					</h2>
 					<p class="mt-1 text-sm text-muted-foreground">{m.analytics_content_description()}</p>
 				</div>
-				{#if content.length === 0}
+				{#if publications.length === 0}
 					<p class="border-y border-dashed border-border py-8 text-sm text-muted-foreground">
 						{m.analytics_content_empty()}
 					</p>
 				{:else}
-					<div class="hidden overflow-x-auto border-y border-border md:block">
-						<table class="w-full min-w-[42rem] text-left text-sm">
-							<thead class="text-xs text-muted-foreground">
-								<tr>
-									<th scope="col" class="px-2 py-3 font-medium">{m.analytics_content_title()}</th>
-									<th scope="col" class="px-2 py-3 font-medium"
-										>{m.analytics_summary_engagement()}</th
-									>
-									<th scope="col" class="px-2 py-3 font-medium">{m.analytics_views()}</th>
-									<th scope="col" class="px-2 py-3 font-medium">{m.analytics_published()}</th>
-								</tr>
-							</thead>
-							<tbody class="divide-y divide-border">
-								{#each content as item (item.rendition_id)}
-									{@const measuredExposure = exposure(item)}
-									<tr>
-										<td class="max-w-md px-2 py-3">
-											<div class="flex items-center gap-2.5">
-												<PlatformIcon platform={item.platform} class="size-4 shrink-0" />
-												<div class="min-w-0">
-													<a
-														href={resolve('/publications/[id]', { id: item.publication_id })}
-														class="block truncate font-medium hover:underline"
-													>
-														{item.title}
-													</a>
-													<p class="truncate text-xs text-muted-foreground">{item.username}</p>
-													{#if contentStatus(item)}
-														<p class="truncate text-xs text-amber-700 dark:text-amber-300">
-															{contentStatus(item)}
-														</p>
-													{/if}
-												</div>
-											</div>
-										</td>
-										<td class="px-2 py-3 font-medium tabular-nums">
-											{hasEngagementMeasurement(item) ? formatNumber(item.engagement) : '—'}
-										</td>
-										<td class="px-2 py-3 tabular-nums">
-											{measuredExposure
-												? `${formatNumber(measuredExposure.value)} ${measuredExposure.label.toLowerCase()}`
-												: '—'}
-										</td>
-										<td class="px-2 py-3 text-muted-foreground">{formatDate(item.published_at)}</td>
-									</tr>
-								{/each}
-							</tbody>
-						</table>
-					</div>
-
-					<div class="divide-y divide-border border-y border-border md:hidden">
-						{#each content as item (item.rendition_id)}
-							{@const measuredExposure = exposure(item)}
-							<a
-								href={resolve('/publications/[id]', { id: item.publication_id })}
-								class="block px-1 py-4 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-							>
-								<div class="flex items-start gap-2.5">
-									<PlatformIcon platform={item.platform} class="mt-0.5 size-4 shrink-0" />
-									<div class="min-w-0 flex-1">
-										<p class="line-clamp-2 text-sm font-medium">{item.title}</p>
-										<p class="mt-1 text-xs text-muted-foreground">
-											{item.username} · {formatDate(item.published_at)}
-										</p>
-										{#if contentStatus(item)}
-											<p class="mt-1 text-xs text-amber-700 dark:text-amber-300">
-												{contentStatus(item)}
-											</p>
-										{/if}
-										<div class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs">
-											<span
-												>{m.analytics_summary_engagement()}: {hasEngagementMeasurement(item)
-													? formatNumber(item.engagement)
-													: '—'}</span
-											>
-											{#if measuredExposure}
-												<span>{measuredExposure.label}: {formatNumber(measuredExposure.value)}</span
-												>
-											{/if}
+					<div class="divide-y divide-border border-y border-border">
+						{#each publications as publication (publication.publication_id)}
+							{@const renditions = publication.renditions ?? []}
+							{@const exposures = publicationExposure(publication)}
+							{@const expanded = expandedPublicationID === publication.publication_id}
+							<article>
+								<div
+									class="grid min-w-0 gap-4 px-1 py-4 md:grid-cols-[minmax(0,1fr)_auto_auto] md:items-center"
+								>
+									<div class="min-w-0">
+										<a
+											href={resolve('/publications/[id]', { id: publication.publication_id })}
+											class="line-clamp-2 font-medium hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+										>
+											{publicationLabel(publication)}
+										</a>
+										<div
+											class="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground"
+										>
+											<span>{formatDate(publication.published_at)}</span>
+											<span aria-hidden="true">·</span>
+											<span>{m.analytics_destinations({ count: renditions.length })}</span>
+											<span class="flex items-center gap-1" aria-hidden="true">
+												{#each renditions.slice(0, 6) as rendition (rendition.rendition_id)}
+													<PlatformIcon platform={rendition.platform} class="size-3.5" />
+												{/each}
+											</span>
 										</div>
 									</div>
+
+									<div class="flex flex-wrap gap-x-5 gap-y-2 text-sm">
+										<div>
+											<span class="block text-xs text-muted-foreground">
+												{m.analytics_summary_engagement()}
+											</span>
+											<span class="font-medium tabular-nums">
+												{publication.engagement_measured > 0
+													? formatNumber(publication.engagement)
+													: '—'}
+											</span>
+										</div>
+										{#each exposures as metric (metric.key)}
+											<div>
+												<span class="block text-xs text-muted-foreground">{metric.label}</span>
+												<span class="font-medium tabular-nums">{formatNumber(metric.value)}</span>
+											</div>
+										{/each}
+									</div>
+
+									<Button
+										variant="ghost"
+										size="sm"
+										class="justify-self-start md:justify-self-end"
+										aria-expanded={expanded}
+										aria-controls={`analytics-publication-${publication.publication_id}`}
+										onclick={() =>
+											(expandedPublicationID = expanded ? '' : publication.publication_id)}
+									>
+										{expanded ? m.analytics_hide_details() : m.analytics_show_details()}
+										<ChevronDownIcon
+											class={`size-4 transition-transform ${expanded ? 'rotate-180' : ''}`}
+										/>
+									</Button>
 								</div>
-							</a>
+
+								{#if expanded}
+									<div
+										id={`analytics-publication-${publication.publication_id}`}
+										class="border-t border-border bg-muted/20 px-2 py-2 sm:px-4"
+									>
+										{#each renditions as rendition (rendition.rendition_id)}
+											{@const renditionExposures = renditionExposure(rendition)}
+											<div
+												class="grid min-w-0 gap-3 border-b border-border py-3 last:border-b-0 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
+											>
+												<div class="flex min-w-0 items-start gap-2.5">
+													<PlatformIcon
+														platform={rendition.platform}
+														class="mt-0.5 size-4 shrink-0"
+													/>
+													<div class="min-w-0">
+														<p class="truncate text-sm font-medium">{rendition.username}</p>
+														{#if contentStatus(rendition)}
+															<p
+																class={[
+																	'mt-0.5 line-clamp-2 text-xs',
+																	rendition.status === 'permission_required' ||
+																	rendition.status === 'rate_limited'
+																		? 'text-amber-700 dark:text-amber-300'
+																		: 'text-muted-foreground'
+																]}
+															>
+																{contentStatus(rendition)}
+															</p>
+														{/if}
+													</div>
+												</div>
+												<div class="flex flex-wrap gap-x-5 gap-y-1 text-xs">
+													<span>
+														<span class="text-muted-foreground">
+															{m.analytics_summary_engagement()}:
+														</span>
+														{hasEngagementMeasurement(rendition)
+															? formatNumber(rendition.engagement)
+															: '—'}
+													</span>
+													{#each renditionExposures as metric (metric.key)}
+														<span>
+															<span class="text-muted-foreground">{metric.label}:</span>
+															{formatNumber(metric.value)}
+														</span>
+													{/each}
+												</div>
+											</div>
+										{/each}
+									</div>
+								{/if}
+							</article>
 						{/each}
 					</div>
 				{/if}

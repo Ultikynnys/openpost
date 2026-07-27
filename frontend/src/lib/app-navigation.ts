@@ -20,7 +20,7 @@ export const primaryNavigation: PrimaryNavigationItem[] = [
 	{ id: 'posts', label: 'Posts', href: '/activity', match: ['/activity', '/posts'], mobile: true },
 	{
 		id: 'communications',
-		label: 'Communications',
+		label: 'Inbox',
 		href: '/engagement',
 		match: ['/engagement', '/messages'],
 		mobile: false

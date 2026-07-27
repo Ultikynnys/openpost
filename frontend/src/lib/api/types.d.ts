@@ -3128,6 +3128,8 @@ export interface components {
             engagement: number;
             error_code?: string;
             error_message?: string;
+            excerpt: string;
+            external_url?: string;
             /** Format: date-time */
             last_synced_at?: string;
             metrics: {
@@ -3915,6 +3917,7 @@ export interface components {
             last_seen_at: string;
             parent_remote_id: string;
             platform: string;
+            provider_post_url?: string;
             /** Format: date-time */
             read_at: string;
             /** Format: date-time */
@@ -4628,10 +4631,12 @@ export interface components {
             readonly $schema?: string;
             accounts: components["schemas"]["AccountOverview"][] | null;
             content: components["schemas"]["ContentOverview"][] | null;
+            follower_series: components["schemas"]["SeriesPoint"][] | null;
             /** Format: date-time */
             generated_at: string;
             /** Format: date-time */
             last_synced_at?: string;
+            publications: components["schemas"]["PublicationOverview"][] | null;
             /** Format: int64 */
             range_days: number;
             summary: components["schemas"]["Summary"];
@@ -5035,6 +5040,26 @@ export interface components {
              * @description Revision saved immediately before this action
              */
             expected_revision: number;
+        };
+        PublicationOverview: {
+            /** Format: int64 */
+            engagement: number;
+            /** Format: int64 */
+            engagement_measured: number;
+            excerpt: string;
+            /** Format: date-time */
+            last_synced_at?: string;
+            measured: {
+                [key: string]: number;
+            };
+            metrics: {
+                [key: string]: number;
+            };
+            publication_id: string;
+            /** Format: date-time */
+            published_at: string;
+            renditions: components["schemas"]["ContentOverview"][] | null;
+            title: string;
         };
         PublicationResponse: {
             /**

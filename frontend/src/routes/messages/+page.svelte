@@ -8,6 +8,7 @@
 	import { getLocaleTag } from '$lib/i18n';
 	import { getPlatformName } from '$lib/utils';
 	import PageContainer from '$lib/components/page-container.svelte';
+	import PageLoading from '$lib/components/page-loading.svelte';
 	import CommunicationsNavigation from '$lib/components/communications-navigation.svelte';
 	import PlatformIcon from '$lib/components/platform-icon.svelte';
 	import EmptyState from '$lib/components/empty-state.svelte';
@@ -35,6 +36,7 @@
 	let error = $state('');
 	let messageError = $state('');
 	let loadedWorkspace = $state('');
+	let dataWorkspaceId = $state('');
 	let loadingMessages = $state(false);
 	let refreshing = $state(false);
 	let sending = $state(false);
@@ -56,6 +58,9 @@
 		syncStates.filter(
 			(state) => state.status === 'permission_required' || state.status === 'failed'
 		)
+	);
+	const initialLoading = $derived(
+		Boolean(workspaceId) && loading && dataWorkspaceId !== workspaceId
 	);
 
 	onMount(() => {
@@ -95,6 +100,7 @@
 		} else {
 			conversations = data?.items ?? [];
 			syncStates = data?.sync_states ?? [];
+			dataWorkspaceId = requestedWorkspace;
 			if (selectedId && !conversations.some((conversation) => conversation.id === selectedId)) {
 				selectedId = '';
 				messages = [];
@@ -263,7 +269,7 @@
 	title={m.messages_heading()}
 	description={m.messages_description()}
 	icon={InboxIcon}
-	{loading}
+	loading={false}
 	loadingLayout="list"
 	loadingItems={6}
 >
@@ -286,8 +292,9 @@
 
 		<label class="flex min-h-11 items-center gap-2 text-sm">
 			<Checkbox
-				bind:checked={archived}
-				onCheckedChange={() => {
+				checked={archived}
+				onCheckedChange={(checked) => {
+					archived = checked;
 					selectedId = '';
 					messages = [];
 					void loadConversations();
@@ -296,7 +303,9 @@
 			{m.engagement_archived()}
 		</label>
 
-		{#if error}
+		{#if initialLoading}
+			<PageLoading layout="list" label={m.common_loading()} items={6} />
+		{:else if error}
 			<InlineNotice tone="error" message={error} />
 		{:else if conversations.length === 0}
 			<EmptyState
@@ -307,7 +316,9 @@
 			/>
 		{:else}
 			<div
-				class="min-h-[34rem] overflow-hidden rounded-lg border bg-card lg:grid lg:grid-cols-[20rem_minmax(0,1fr)]"
+				class="min-h-[34rem] overflow-hidden rounded-lg border bg-card transition-opacity lg:grid lg:grid-cols-[20rem_minmax(0,1fr)]"
+				class:opacity-70={loading}
+				aria-busy={loading}
 			>
 				<section
 					class={['border-r', selectedId ? 'hidden lg:block' : 'block']}

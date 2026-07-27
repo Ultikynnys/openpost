@@ -1637,6 +1637,12 @@
 					"error_message": {
 						"type": "string"
 					},
+					"excerpt": {
+						"type": "string"
+					},
+					"external_url": {
+						"type": "string"
+					},
 					"last_synced_at": {
 						"format": "date-time",
 						"type": "string"
@@ -1675,6 +1681,7 @@
 					"publication_id",
 					"rendition_id",
 					"title",
+					"excerpt",
 					"platform",
 					"account_id",
 					"username",
@@ -3267,6 +3274,9 @@
 					"platform": {
 						"type": "string"
 					},
+					"provider_post_url": {
+						"type": "string"
+					},
 					"read_at": {
 						"format": "date-time",
 						"type": "string"
@@ -4793,6 +4803,12 @@
 						},
 						"type": ["array", "null"]
 					},
+					"follower_series": {
+						"items": {
+							"$ref": "#/components/schemas/SeriesPoint"
+						},
+						"type": ["array", "null"]
+					},
 					"generated_at": {
 						"format": "date-time",
 						"type": "string"
@@ -4800,6 +4816,12 @@
 					"last_synced_at": {
 						"format": "date-time",
 						"type": "string"
+					},
+					"publications": {
+						"items": {
+							"$ref": "#/components/schemas/PublicationOverview"
+						},
+						"type": ["array", "null"]
 					},
 					"range_days": {
 						"format": "int64",
@@ -4809,7 +4831,15 @@
 						"$ref": "#/components/schemas/Summary"
 					}
 				},
-				"required": ["generated_at", "range_days", "summary", "accounts", "content"],
+				"required": [
+					"generated_at",
+					"range_days",
+					"summary",
+					"accounts",
+					"follower_series",
+					"publications",
+					"content"
+				],
 				"type": "object"
 			},
 			"PasskeyCeremonyOutputBody": {
@@ -5678,6 +5708,68 @@
 					}
 				},
 				"required": ["expected_revision"],
+				"type": "object"
+			},
+			"PublicationOverview": {
+				"additionalProperties": false,
+				"properties": {
+					"engagement": {
+						"format": "int64",
+						"type": "integer"
+					},
+					"engagement_measured": {
+						"format": "int64",
+						"type": "integer"
+					},
+					"excerpt": {
+						"type": "string"
+					},
+					"last_synced_at": {
+						"format": "date-time",
+						"type": "string"
+					},
+					"measured": {
+						"additionalProperties": {
+							"format": "int64",
+							"type": "integer"
+						},
+						"type": "object"
+					},
+					"metrics": {
+						"additionalProperties": {
+							"format": "int64",
+							"type": "integer"
+						},
+						"type": "object"
+					},
+					"publication_id": {
+						"type": "string"
+					},
+					"published_at": {
+						"format": "date-time",
+						"type": "string"
+					},
+					"renditions": {
+						"items": {
+							"$ref": "#/components/schemas/ContentOverview"
+						},
+						"type": ["array", "null"]
+					},
+					"title": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"publication_id",
+					"title",
+					"excerpt",
+					"published_at",
+					"metrics",
+					"measured",
+					"engagement",
+					"engagement_measured",
+					"renditions"
+				],
 				"type": "object"
 			},
 			"PublicationResponse": {

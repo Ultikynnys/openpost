@@ -13,7 +13,9 @@
 	import { workspaceCtx } from '$lib/stores/workspace.svelte';
 	import { m } from '$lib/paraglide/messages';
 	import { getLocaleTag } from '$lib/i18n';
+	import { getPlatformName } from '$lib/utils';
 	import PageContainer from '$lib/components/page-container.svelte';
+	import PageLoading from '$lib/components/page-loading.svelte';
 	import CommunicationsNavigation from '$lib/components/communications-navigation.svelte';
 	import PlatformIcon from '$lib/components/platform-icon.svelte';
 	import EmptyState from '$lib/components/empty-state.svelte';
@@ -22,10 +24,13 @@
 	import DestructiveConfirmDialog from '$lib/components/destructive-confirm-dialog.svelte';
 	import { Button } from '$lib/components/ui/button';
 	import { Checkbox } from '$lib/components/ui/checkbox';
+	import * as Select from '$lib/components/ui/select';
 	import { Textarea } from '$lib/components/ui/textarea';
 	import MessagesSquareIcon from 'lucide-svelte/icons/messages-square';
 	import RefreshIcon from 'lucide-svelte/icons/refresh-cw';
 	import ArchiveIcon from 'lucide-svelte/icons/archive';
+	import ExternalLinkIcon from 'lucide-svelte/icons/external-link';
+	import InboxIcon from 'lucide-svelte/icons/inbox';
 	import ReplyIcon from 'lucide-svelte/icons/reply';
 	import EyeOffIcon from 'lucide-svelte/icons/eye-off';
 	import TrashIcon from 'lucide-svelte/icons/trash-2';
@@ -41,6 +46,8 @@
 	let archived = $state(false);
 	let platformFilter = $state('');
 	let loadedKey = $state('');
+	let dataWorkspaceId = $state('');
+	let knownPlatforms = $state.raw<string[]>([]);
 	let replyItemId = $state('');
 	let replyBody = $state('');
 	let actionInFlight = $state('');
@@ -51,7 +58,9 @@
 	let toastTone = $state<'neutral' | 'success' | 'error'>('neutral');
 
 	const workspaceId = $derived(workspaceCtx.currentWorkspace?.id ?? '');
-	const platforms = $derived([...new Set(items.map((item) => item.platform))].sort());
+	const initialLoading = $derived(
+		Boolean(workspaceId) && loading && dataWorkspaceId !== workspaceId
+	);
 	const loadKey = $derived(
 		`${workspaceId}:${platformFilter}:${unreadOnly ? 'unread' : 'all'}:${archived ? 'archived' : 'active'}`
 	);
@@ -85,11 +94,13 @@
 		if (requestedKey !== loadKey) return;
 		if (apiError) {
 			error = apiError.detail || m.engagement_load_failed();
-			items = [];
-			total = 0;
 		} else {
 			items = data?.items ?? [];
 			total = data?.total ?? 0;
+			dataWorkspaceId = workspaceId;
+			knownPlatforms = [
+				...new Set([...knownPlatforms, ...items.map((item) => item.platform)])
+			].sort();
 		}
 		loading = false;
 	}
@@ -118,8 +129,9 @@
 			showToast(m.engagement_action_failed(), 'error');
 			return;
 		}
-		loadedKey = '';
-		await loadEngagement();
+		items = items.filter((candidate) => candidate.id !== item.id);
+		total = Math.max(0, total - 1);
+		void loadEngagement();
 	}
 
 	async function queueAction(item: EngagementItem, action: 'reply' | 'hide' | 'delete') {
@@ -195,7 +207,7 @@
 	title={m.engagement_heading()}
 	description={m.engagement_description()}
 	icon={MessagesSquareIcon}
-	{loading}
+	loading={false}
 	loadingLayout="list"
 	loadingItems={6}
 >
@@ -210,18 +222,21 @@
 		<CommunicationsNavigation active="engagement" />
 
 		<div class="flex flex-wrap items-center gap-3">
-			<label class="grid gap-1 text-sm">
-				<span class="sr-only">{m.engagement_all_platforms()}</span>
-				<select
-					class="h-11 rounded-md border bg-background px-3 text-sm sm:h-9"
-					bind:value={platformFilter}
-				>
-					<option value="">{m.engagement_all_platforms()}</option>
-					{#each platforms as provider (provider)}
-						<option value={provider}>{provider}</option>
+			<Select.Root
+				type="single"
+				value={platformFilter || 'all'}
+				onValueChange={(value) => (platformFilter = value === 'all' ? '' : value)}
+			>
+				<Select.Trigger class="h-11 w-44 sm:h-9" aria-label={m.engagement_all_platforms()}>
+					{platformFilter ? getPlatformName(platformFilter) : m.engagement_all_platforms()}
+				</Select.Trigger>
+				<Select.Content>
+					<Select.Item value="all">{m.engagement_all_platforms()}</Select.Item>
+					{#each knownPlatforms as provider (provider)}
+						<Select.Item value={provider}>{getPlatformName(provider)}</Select.Item>
 					{/each}
-				</select>
-			</label>
+				</Select.Content>
+			</Select.Root>
 			<label class="flex min-h-11 items-center gap-2 text-sm">
 				<Checkbox bind:checked={unreadOnly} />
 				{m.engagement_unread_only()}
@@ -233,17 +248,24 @@
 			<span class="ms-auto text-sm text-muted-foreground">{total}</span>
 		</div>
 
-		{#if error}
+		{#if initialLoading}
+			<PageLoading layout="list" label={m.common_loading()} items={5} />
+		{:else if error}
 			<InlineNotice tone="error" message={error} />
-		{:else if items.length === 0}
+		{/if}
+		{#if !initialLoading && items.length === 0 && !error}
 			<EmptyState
 				icon={MessagesSquareIcon}
 				title={m.engagement_empty_title()}
 				description={m.engagement_empty_description()}
 				variant="muted"
 			/>
-		{:else}
-			<div class="divide-y rounded-lg border bg-card">
+		{:else if !initialLoading && items.length > 0}
+			<div
+				class="divide-y rounded-lg border bg-card transition-opacity"
+				class:opacity-70={loading}
+				aria-busy={loading}
+			>
 				{#each items as item (item.id)}
 					<article class={['p-4 sm:p-5', !item.read_at && 'bg-primary/[0.025]']}>
 						<div class="flex min-w-0 items-start gap-3">
@@ -266,6 +288,18 @@
 								<p class="mt-2 max-w-3xl text-sm leading-6 whitespace-pre-wrap">{item.body}</p>
 
 								<div class="mt-3 flex flex-wrap gap-1">
+									{#if item.provider_post_url}
+										<Button
+											href={item.provider_post_url}
+											target="_blank"
+											rel="noreferrer"
+											variant="ghost"
+											size="sm"
+										>
+											<ExternalLinkIcon class="size-4" />
+											{m.engagement_open_provider({ platform: getPlatformName(item.platform) })}
+										</Button>
+									{/if}
 									{#if item.can_reply}
 										<Button
 											variant="ghost"
@@ -304,7 +338,11 @@
 										disabled={actionInFlight === item.id}
 										onclick={() => void setState(item, { archived: !item.archived_at })}
 									>
-										<ArchiveIcon class="size-4" />
+										{#if item.archived_at}
+											<InboxIcon class="size-4" />
+										{:else}
+											<ArchiveIcon class="size-4" />
+										{/if}
 										{item.archived_at ? m.engagement_restore() : m.engagement_archive()}
 									</Button>
 									{#if item.can_delete}

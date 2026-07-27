@@ -52,6 +52,11 @@ test("analytics keeps provider metrics distinct across desktop and phone layouts
           reach: { value: 0, measured: 0 },
           published: 2,
         },
+        follower_series: [
+          { date: "2026-07-01", value: 1200 },
+          { date: "2026-07-14", value: 1222 },
+          { date: "2026-07-26", value: 1240 },
+        ],
         accounts: [
           {
             id: "account-x",
@@ -119,6 +124,76 @@ test("analytics keeps provider metrics distinct across desktop and phone layouts
             last_synced_at: "2026-07-26T11:54:00Z",
           },
         ],
+        publications: [
+          {
+            publication_id: "publication-1",
+            title: "Launch notes",
+            excerpt: "OpenPost now keeps one result across destinations.",
+            published_at: "2026-07-25T09:00:00Z",
+            metrics: {
+              likes: 40,
+              comments: 10,
+              reposts: 8,
+              impressions: 8800,
+            },
+            measured: {
+              likes: 1,
+              comments: 1,
+              reposts: 1,
+              impressions: 1,
+            },
+            engagement: 58,
+            engagement_measured: 1,
+            renditions: [
+              {
+                publication_id: "publication-1",
+                rendition_id: "rendition-x",
+                title: "Launch notes",
+                excerpt: "OpenPost now keeps one result across destinations.",
+                platform: "x",
+                account_id: "account-x",
+                username: "@openpost",
+                external_url: "https://x.com/openpost/status/1",
+                published_at: "2026-07-25T09:00:00Z",
+                status: "ok",
+                metrics: {
+                  likes: 40,
+                  comments: 10,
+                  reposts: 8,
+                  impressions: 8800,
+                },
+                engagement: 58,
+                last_synced_at: "2026-07-26T11:55:00Z",
+              },
+            ],
+          },
+          {
+            publication_id: "publication-2",
+            title: "Product walkthrough",
+            excerpt: "A complete product walkthrough.",
+            published_at: "2026-07-24T09:00:00Z",
+            metrics: { views: 5100 },
+            measured: { views: 1 },
+            engagement: 0,
+            engagement_measured: 0,
+            renditions: [
+              {
+                publication_id: "publication-2",
+                rendition_id: "rendition-youtube",
+                title: "Product walkthrough",
+                excerpt: "A complete product walkthrough.",
+                platform: "youtube",
+                account_id: "account-x",
+                username: "OpenPost",
+                published_at: "2026-07-24T09:00:00Z",
+                status: "ok",
+                metrics: { views: 5100 },
+                engagement: 0,
+                last_synced_at: "2026-07-26T11:54:00Z",
+              },
+            ],
+          },
+        ],
       },
     });
   });
@@ -144,13 +219,17 @@ test("analytics keeps provider metrics distinct across desktop and phone layouts
       unauthorizedResponses: [],
       url: expect.stringContaining("/analytics"),
     });
-  await expect(page.getByText("8.8K impressions")).toBeVisible();
-  await expect(page.getByText("5.1K views")).toBeVisible();
+  const launch = page.getByRole("article").filter({ hasText: "Launch notes" });
+  const walkthrough = page
+    .getByRole("article")
+    .filter({ hasText: "Product walkthrough" });
+  await expect(launch.getByText("8.8K")).toBeVisible();
+  await expect(walkthrough.getByText("5.1K")).toBeVisible();
+  await expect(walkthrough.getByText("—", { exact: true })).toBeVisible();
+  await walkthrough.getByRole("button", { name: "Show details" }).click();
+  await expect(walkthrough.getByText("OpenPost")).toBeVisible();
   await expect(
-    page
-      .getByRole("row")
-      .filter({ hasText: "Product walkthrough" })
-      .getByText("—", { exact: true }),
+    walkthrough.getByRole("button", { name: "Hide details" }),
   ).toBeVisible();
   await expect(
     page.getByText("Two measurements are needed to show a trend."),
@@ -160,6 +239,9 @@ test("analytics keeps provider metrics distinct across desktop and phone layouts
     "data-chart",
     /^chart-/,
   );
+  await expect(
+    page.getByRole("button", { name: /All accounts/ }),
+  ).toHaveAttribute("aria-pressed", "true");
   await expect(page.getByText("Reconnect required").first()).toBeVisible();
   await page.getByRole("button", { name: /7 days/ }).click();
   await expect.poll(() => requestedRanges.at(-1)).toBe("7");

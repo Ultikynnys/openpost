@@ -27,6 +27,14 @@ test("communications and notifications stay usable across desktop and phone layo
   await authenticatePage(page, auth.token);
 
   await page.route("**/api/v1/engagement**", async (route) => {
+    const url = new URL(route.request().url());
+    if (route.request().method() !== "GET") {
+      await route.fulfill({ status: 204 });
+      return;
+    }
+    if (url.searchParams.get("platform")) {
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
     await route.fulfill({
       contentType: "application/json",
       json: {
@@ -57,6 +65,7 @@ test("communications and notifications stay usable across desktop and phone layo
             last_seen_at: "2026-07-26T12:00:00Z",
             created_at: "2026-07-26T12:00:00Z",
             updated_at: "2026-07-26T12:00:00Z",
+            provider_post_url: "https://www.youtube.com/watch?v=walkthrough-1",
           },
         ],
       },
@@ -90,6 +99,9 @@ test("communications and notifications stay usable across desktop and phone layo
       updated_at: "2026-07-26T11:55:00Z",
     };
     if (url.pathname.endsWith("/messages")) {
+      if (url.searchParams.get("archived") === "true") {
+        await new Promise((resolve) => setTimeout(resolve, 250));
+      }
       await route.fulfill({
         contentType: "application/json",
         json: { items: [base], total: 1, sync_states: [] },
@@ -161,9 +173,20 @@ test("communications and notifications stay usable across desktop and phone layo
     page.getByText("Could you share the setup guide?"),
   ).toBeVisible();
   await expect(page.getByRole("button", { name: "Reply" })).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Open post on YouTube" }),
+  ).toHaveAttribute("href", "https://www.youtube.com/watch?v=walkthrough-1");
+  await page.getByRole("combobox", { name: "All platforms" }).click();
+  await page.getByRole("option", { name: "YouTube" }).click();
+  await expect(
+    page.getByText("Could you share the setup guide?"),
+  ).toBeVisible();
 
   await page.goto(`/messages?workspace=${workspace.id}`);
   await expect(page.getByRole("heading", { name: "Messages" })).toBeVisible();
+  await page.getByText("Archived", { exact: true }).click();
+  await expect(page.getByRole("button", { name: /Ada/ })).toBeVisible();
+  await page.getByText("Archived", { exact: true }).click();
   await page.getByRole("button", { name: /Ada/ }).click();
   await expect(
     page.getByText("Is this available for teams?").last(),
