@@ -3,6 +3,7 @@
 	import { Checkbox } from '$lib/components/ui/checkbox';
 	import { Input } from '$lib/components/ui/input';
 	import MediaPreviewImage from '$lib/components/media-preview-image.svelte';
+	import AppSelect from '$lib/components/app-select.svelte';
 	import { uploadMediaFile } from '$lib/media-upload-client';
 	import { saveStudioBrandKit } from '../api';
 	import { loadStudioBrandFonts } from '../fonts';
@@ -426,25 +427,26 @@
 												itemIndex === index ? { ...item, name: event.currentTarget.value } : item
 											))}
 									/>
-									<select
-										class="h-10 min-w-0 rounded-md border border-input bg-background px-2 text-sm"
+									<AppSelect
 										value={asset.role}
-										aria-label={m.brand_asset_role()}
-										onchange={(event) =>
+										ariaLabel={m.brand_asset_role()}
+										onValueChange={(value) =>
 											(assets = assets.map((item, itemIndex) =>
 												itemIndex === index
 													? {
 															...item,
-															role: event.currentTarget.value as StudioBrandAsset['role']
+															role: value as StudioBrandAsset['role']
 														}
 													: item
 											))}
-									>
-										<option value="primary_logo">{m.brand_primary_logo()}</option>
-										<option value="secondary_logo">{m.brand_secondary_logo()}</option>
-										<option value="mark">{m.brand_mark()}</option>
-										<option value="watermark">{m.brand_watermark()}</option>
-									</select>
+										options={[
+											{ value: 'primary_logo', label: m.brand_primary_logo() },
+											{ value: 'secondary_logo', label: m.brand_secondary_logo() },
+											{ value: 'mark', label: m.brand_mark() },
+											{ value: 'watermark', label: m.brand_watermark() }
+										]}
+										class="h-10 min-w-0"
+									/>
 								</div>
 								<Button
 									variant="ghost"
@@ -526,27 +528,27 @@
 					</label>
 					<label class="grid gap-1.5 text-sm font-medium">
 						<span>{m.brand_font_weight()}</span>
-						<select
-							class="h-11 rounded-md border border-input bg-background px-2 text-sm"
-							bind:value={fontWeight}
-						>
-							<option value={300}>300</option>
-							<option value={400}>400</option>
-							<option value={500}>500</option>
-							<option value={600}>600</option>
-							<option value={700}>700</option>
-							<option value={800}>800</option>
-						</select>
+						<AppSelect
+							value={String(fontWeight)}
+							onValueChange={(value) => (fontWeight = Number(value))}
+							options={[300, 400, 500, 600, 700, 800].map((weight) => ({
+								value: String(weight),
+								label: String(weight)
+							}))}
+							class="h-11 w-full"
+						/>
 					</label>
 					<label class="grid gap-1.5 text-sm font-medium">
 						<span>{m.brand_font_style()}</span>
-						<select
-							class="h-11 rounded-md border border-input bg-background px-2 text-sm"
-							bind:value={fontStyle}
-						>
-							<option value="normal">{m.studio_normal()}</option>
-							<option value="italic">{m.studio_italic()}</option>
-						</select>
+						<AppSelect
+							value={fontStyle}
+							onValueChange={(value) => (fontStyle = value as 'normal' | 'italic')}
+							options={[
+								{ value: 'normal', label: m.studio_normal() },
+								{ value: 'italic', label: m.studio_italic() }
+							]}
+							class="h-11 w-full"
+						/>
 					</label>
 				</div>
 				<label class="flex items-start gap-2 text-sm">
@@ -622,28 +624,27 @@
 						</label>
 						<label class="grid gap-1 text-xs font-medium">
 							<span>{m.brand_font_weight()}</span>
-							<select
-								class="h-11 rounded-md border border-input bg-background px-2 text-sm"
-								value={style.font_weight}
-								onchange={(event) =>
-									updateTextStyle(index, 'font_weight', Number(event.currentTarget.value))}
-							>
-								{#each [100, 200, 300, 400, 500, 600, 700, 800, 900] as weight (weight)}
-									<option value={weight}>{weight}</option>
-								{/each}
-							</select>
+							<AppSelect
+								value={String(style.font_weight)}
+								onValueChange={(value) => updateTextStyle(index, 'font_weight', Number(value))}
+								options={[100, 200, 300, 400, 500, 600, 700, 800, 900].map((weight) => ({
+									value: String(weight),
+									label: String(weight)
+								}))}
+								class="h-11 w-full"
+							/>
 						</label>
 						<label class="grid gap-1 text-xs font-medium">
 							<span>{m.brand_font_style()}</span>
-							<select
-								class="h-11 rounded-md border border-input bg-background px-2 text-sm"
+							<AppSelect
 								value={style.font_style}
-								onchange={(event) =>
-									updateTextStyle(index, 'font_style', event.currentTarget.value)}
-							>
-								<option value="normal">{m.studio_normal()}</option>
-								<option value="italic">{m.studio_italic()}</option>
-							</select>
+								onValueChange={(value) => updateTextStyle(index, 'font_style', value)}
+								options={[
+									{ value: 'normal', label: m.studio_normal() },
+									{ value: 'italic', label: m.studio_italic() }
+								]}
+								class="h-11 w-full"
+							/>
 						</label>
 						<label class="grid gap-1 text-xs font-medium">
 							<span>{m.brand_font_size()}</span>

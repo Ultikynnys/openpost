@@ -30,6 +30,7 @@
 	import AppToast from '$lib/components/app-toast.svelte';
 	import DestructiveConfirmDialog from '$lib/components/destructive-confirm-dialog.svelte';
 	import CameraCapture from '$lib/components/camera-capture.svelte';
+	import AppSelect from '$lib/components/app-select.svelte';
 	import MediaOrganizationDialog from '$lib/components/media-organization-dialog.svelte';
 	import LoaderIcon from 'lucide-svelte/icons/loader-2';
 	import ImageIcon from 'lucide-svelte/icons/image';
@@ -1524,64 +1525,73 @@
 		<div class="grid gap-4 py-2 sm:grid-cols-2">
 			<label class="grid gap-1.5 text-sm font-medium">
 				<span>{m.media_type()}</span>
-				<select
-					class="h-11 rounded-lg border border-input bg-background px-3 text-sm"
+				<AppSelect
 					bind:value={mediaType}
-				>
-					<option value="all">{m.media_all_types()}</option>
-					<option value="image">{m.media_images()}</option>
-					<option value="video">{m.media_videos()}</option>
-				</select>
+					options={[
+						{ value: 'all', label: m.media_all_types() },
+						{ value: 'image', label: m.media_images() },
+						{ value: 'video', label: m.media_videos() }
+					]}
+					class="h-11 w-full"
+				/>
 			</label>
 			<label class="grid gap-1.5 text-sm font-medium">
 				<span>{m.media_source()}</span>
-				<select
-					class="h-11 rounded-lg border border-input bg-background px-3 text-sm"
+				<AppSelect
 					bind:value={source}
-				>
-					<option value="all">{m.media_all_sources()}</option>
-					<option value="upload">{m.media_uploads()}</option>
-					<option value="camera">{m.media_camera()}</option>
-					<option value="studio_export">{m.media_studio_exports()}</option>
-					<option value="studio_edit">{m.media_studio_edits()}</option>
-					<option value="background_removal">{m.media_background_removal()}</option>
-				</select>
+					options={[
+						{ value: 'all', label: m.media_all_sources() },
+						{ value: 'upload', label: m.media_uploads() },
+						{ value: 'camera', label: m.media_camera() },
+						{ value: 'studio_export', label: m.media_studio_exports() },
+						{ value: 'studio_edit', label: m.media_studio_edits() },
+						{ value: 'background_removal', label: m.media_background_removal() }
+					]}
+					class="h-11 w-full"
+				/>
 			</label>
 			<label class="grid gap-1.5 text-sm font-medium">
 				<span>{m.media_aspect_ratio()}</span>
-				<select
-					class="h-11 rounded-lg border border-input bg-background px-3 text-sm"
+				<AppSelect
 					bind:value={aspect}
-				>
-					<option value="all">{m.media_any_aspect()}</option>
-					<option value="square">{m.media_square()}</option>
-					<option value="portrait">{m.media_portrait()}</option>
-					<option value="landscape">{m.media_landscape()}</option>
-				</select>
+					options={[
+						{ value: 'all', label: m.media_any_aspect() },
+						{ value: 'square', label: m.media_square() },
+						{ value: 'portrait', label: m.media_portrait() },
+						{ value: 'landscape', label: m.media_landscape() }
+					]}
+					class="h-11 w-full"
+				/>
 			</label>
 			<label class="grid gap-1.5 text-sm font-medium">
 				<span>{m.media_collection()}</span>
-				<select
-					class="h-11 rounded-lg border border-input bg-background px-3 text-sm"
-					bind:value={collectionID}
-				>
-					<option value="">{m.media_all_collections()}</option>
-					{#each collections as collection (collection.id)}
-						<option value={collection.id}>{collection.name} ({collection.item_count})</option>
-					{/each}
-				</select>
+				<AppSelect
+					value={collectionID || 'all'}
+					onValueChange={(value) => (collectionID = value === 'all' ? '' : value)}
+					options={[
+						{ value: 'all', label: m.media_all_collections() },
+						...collections.map((collection) => ({
+							value: collection.id,
+							label: `${collection.name} (${collection.item_count})`
+						}))
+					]}
+					class="h-11 w-full"
+				/>
 			</label>
 			<label class="grid gap-1.5 text-sm font-medium">
 				<span>{m.media_tag()}</span>
-				<select
-					class="h-11 rounded-lg border border-input bg-background px-3 text-sm"
-					bind:value={tagID}
-				>
-					<option value="">{m.media_all_tags()}</option>
-					{#each tags as tag (tag.id)}
-						<option value={tag.id}>{tag.name} ({tag.item_count})</option>
-					{/each}
-				</select>
+				<AppSelect
+					value={tagID || 'all'}
+					onValueChange={(value) => (tagID = value === 'all' ? '' : value)}
+					options={[
+						{ value: 'all', label: m.media_all_tags() },
+						...tags.map((tag) => ({
+							value: tag.id,
+							label: `${tag.name} (${tag.item_count})`
+						}))
+					]}
+					class="h-11 w-full"
+				/>
 			</label>
 		</div>
 		<details class="border-y py-1">
@@ -1679,16 +1689,16 @@
 			<div class="space-y-2">
 				<label for="batch-collection" class="text-sm font-medium">{m.media_collection()}</label>
 				<div class="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-2">
-					<select
+					<AppSelect
 						id="batch-collection"
-						class="h-11 min-w-0 rounded-lg border border-input bg-background px-3 text-sm"
 						bind:value={batchCollectionID}
-					>
-						<option value="">{m.media_choose_collection()}</option>
-						{#each collections as collection (collection.id)}
-							<option value={collection.id}>{collection.name}</option>
-						{/each}
-					</select>
+						placeholder={m.media_choose_collection()}
+						options={collections.map((collection) => ({
+							value: collection.id,
+							label: collection.name
+						}))}
+						class="h-11 min-w-0"
+					/>
 					<Button
 						variant="outline"
 						disabled={!batchCollectionID || organizationSaving}
@@ -1708,16 +1718,13 @@
 			<div class="space-y-2">
 				<label for="batch-tag" class="text-sm font-medium">{m.media_tag()}</label>
 				<div class="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-2">
-					<select
+					<AppSelect
 						id="batch-tag"
-						class="h-11 min-w-0 rounded-lg border border-input bg-background px-3 text-sm"
 						bind:value={batchTagID}
-					>
-						<option value="">{m.media_choose_tag()}</option>
-						{#each tags as tag (tag.id)}
-							<option value={tag.id}>{tag.name}</option>
-						{/each}
-					</select>
+						placeholder={m.media_choose_tag()}
+						options={tags.map((tag) => ({ value: tag.id, label: tag.name }))}
+						class="h-11 min-w-0"
+					/>
 					<Button
 						variant="outline"
 						disabled={!batchTagID || organizationSaving}

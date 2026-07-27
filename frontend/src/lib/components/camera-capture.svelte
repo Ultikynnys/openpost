@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { Button } from '$lib/components/ui/button';
+	import AppSelect from '$lib/components/app-select.svelte';
 	import CameraIcon from 'lucide-svelte/icons/camera';
 	import RefreshCwIcon from 'lucide-svelte/icons/refresh-cw';
 	import SwitchCameraIcon from 'lucide-svelte/icons/switch-camera';
@@ -249,18 +250,16 @@
 		<div class="grid grid-cols-[1fr_auto] gap-2">
 			<label class="grid gap-1 text-xs text-muted-foreground">
 				<span>{m.studio_camera()}</span>
-				<select
-					class="h-11 rounded-md border border-input bg-background px-3 text-sm"
+				<AppSelect
 					bind:value={selectedDeviceID}
-					onchange={() => startCamera()}
+					onValueChange={() => void startCamera()}
 					disabled={devices.length < 2}
-				>
-					{#each devices as device, index (device.deviceId)}
-						<option value={device.deviceId}
-							>{device.label || m.camera_number({ number: index + 1 })}</option
-						>
-					{/each}
-				</select>
+					options={devices.map((device, index) => ({
+						value: device.deviceId,
+						label: device.label || m.camera_number({ number: index + 1 })
+					}))}
+					class="h-11 w-full"
+				/>
 			</label>
 			<Button
 				variant="outline"
@@ -275,14 +274,16 @@
 		</div>
 		<label class="grid gap-1 text-xs text-muted-foreground">
 			<span>{m.camera_countdown()}</span>
-			<select
-				class="h-11 rounded-md border border-input bg-background px-3 text-sm"
-				bind:value={countdown}
-			>
-				<option value={0}>{m.camera_off()}</option>
-				<option value={3}>{m.camera_seconds({ count: 3 })}</option>
-				<option value={10}>{m.camera_seconds({ count: 10 })}</option>
-			</select>
+			<AppSelect
+				value={String(countdown)}
+				onValueChange={(value) => (countdown = Number(value) as 0 | 3 | 10)}
+				options={[
+					{ value: '0', label: m.camera_off() },
+					{ value: '3', label: m.camera_seconds({ count: 3 }) },
+					{ value: '10', label: m.camera_seconds({ count: 10 }) }
+				]}
+				class="h-11 w-full"
+			/>
 		</label>
 	{/if}
 

@@ -15,6 +15,9 @@ All notable changes to this project are documented in this file.
 - Added reusable image and shape masks, drop and inner shadows, glow presets, curved text paths, and layer blend modes to Studio, with the same rendering in the canvas, saved previews, and exports.
 - Added pixel-based rectangle, ellipse, lasso, and color-aware magic selections to Studio, plus persistent hard-edge Pencil and tolerance-aware Paint Bucket tools with selection clipping, brand colors, touch controls, and keyboard shortcuts.
 - Added selection-clipped linear, radial, angle, reflected, and diamond gradients to Studio, plus reusable inside, center, and outside borders for visual layers.
+- Added account-aware LinkedIn member and Organization Page analytics for approved Community Management API applications.
+- Added a unified follower trend and publication-level content performance with expandable per-platform results.
+- Added direct provider-post links to Engagement, including instance-aware Mastodon and DID-aware Bluesky links.
 
 ### Changed
 
@@ -29,6 +32,8 @@ All notable changes to this project are documented in this file.
 - Moved CLI and MCP text-post and publication mutations onto the current revision-aware authoring contract, kept linked publications and publish jobs synchronized, and reserved `--profile` for CLI profiles by naming content filters `--content-profile`.
 - Reworked Studio around a media-first asset panel, brand-aware color and font pickers, custom sliders, richer shape and crop controls, transient save feedback, native range selection, inline layer naming, hierarchical groups, and contextual layer and design actions.
 - Separated Studio object selection from pixel selections, moved Pencil, Paint Bucket, and Gradient into one paint menu, and removed shape creation from the main tool rails.
+- Renamed the sidebar Communications destination to Inbox, clarified archived engagement actions, and kept filter changes in place without replacing the page with a loading placeholder.
+- Standardized application select controls on the shared shadcn-svelte component.
 
 ### Fixed
 
@@ -50,6 +55,9 @@ All notable changes to this project are documented in this file.
 - Kept the text-and-thread composer's compatibility draft in sync when normalized publications are created or edited through REST and MCP, including an upgrade backfill for existing publications.
 - Kept MCP source-text updates synchronized with the linked text-and-thread editor row so agent edits reopen with the current content and revision.
 - Routed uploads through the storage mode advertised by the server instead of probing an unsupported direct-upload endpoint, and raised the bounded frontend build heap to the verified bundle minimum.
+- Preserved analytics and engagement continuity when OAuth accounts are reconnected, including historical renditions linked to duplicate inactive account rows.
+- Removed content performance for posts that providers report as deleted or unavailable, while keeping the canonical OpenPost publication history.
+- Removed generic provider quota caveats from the composer when there is no actionable account problem.
 
 ## [1.27.9] - 2026-07-25
 

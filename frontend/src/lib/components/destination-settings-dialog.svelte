@@ -6,6 +6,7 @@
 	import * as Dialog from '$lib/components/ui/dialog';
 	import { Input } from '$lib/components/ui/input';
 	import { Textarea } from '$lib/components/ui/textarea';
+	import AppSelect from './app-select.svelte';
 	import { getPlatformName } from '$lib/utils';
 	import { m } from '$lib/paraglide/messages';
 	import LoaderIcon from 'lucide-svelte/icons/loader-2';
@@ -280,22 +281,24 @@
 												value={searchBySetting[setting.key] ?? ''}
 												oninput={(event) => updateOptionSearch(setting, event.currentTarget.value)}
 											/>
-											<select
+											<AppSelect
 												id="destination-setting-{setting.key}"
-												class="h-11 w-full rounded-md border bg-background px-3 text-sm"
-												value={valueAsString(setting.key)}
+												value={valueAsString(setting.key) || (setting.required ? '' : '__none__')}
+												placeholder={m.compose_choose_setting({ setting: settingLabel(setting) })}
 												disabled={optionsLoading || Boolean(setting.unavailable_reason)}
-												onchange={(event) => onChange(setting.key, event.currentTarget.value)}
-											>
-												<option value="" disabled={setting.required}>
-													{setting.required
-														? m.compose_choose_setting({ setting: settingLabel(setting) })
-														: m.common_none()}
-												</option>
-												{#each remoteOptions as option (option.value)}
-													<option value={option.value}>{option.label}</option>
-												{/each}
-											</select>
+												onValueChange={(value) =>
+													onChange(setting.key, value === '__none__' ? '' : value)}
+												options={[
+													...(setting.required
+														? []
+														: [{ value: '__none__', label: m.common_none() }]),
+													...remoteOptions.map((option) => ({
+														value: option.value,
+														label: option.label
+													}))
+												]}
+												class="h-11 w-full"
+											/>
 											{#if optionsLoading}
 												<p class="flex items-center gap-1.5 text-xs text-muted-foreground">
 													<LoaderIcon class="size-3 animate-spin" />
@@ -308,22 +311,24 @@
 											{/if}
 										</div>
 									{:else if setting.type === 'select'}
-										<select
+										<AppSelect
 											id="destination-setting-{setting.key}"
-											class="mt-1 h-11 w-full rounded-md border bg-background px-3 text-sm"
-											value={valueAsString(setting.key)}
+											value={valueAsString(setting.key) || (setting.required ? '' : '__none__')}
+											placeholder={m.compose_choose_setting({ setting: settingLabel(setting) })}
 											disabled={Boolean(setting.unavailable_reason)}
-											onchange={(event) => onChange(setting.key, event.currentTarget.value)}
-										>
-											<option value="" disabled={setting.required}>
-												{setting.required
-													? m.compose_choose_setting({ setting: settingLabel(setting) })
-													: m.common_none()}
-											</option>
-											{#each setting.options ?? [] as option (option)}
-												<option value={option}>{option}</option>
-											{/each}
-										</select>
+											onValueChange={(value) =>
+												onChange(setting.key, value === '__none__' ? '' : value)}
+											options={[
+												...(setting.required
+													? []
+													: [{ value: '__none__', label: m.common_none() }]),
+												...(setting.options ?? []).map((option) => ({
+													value: option,
+													label: option
+												}))
+											]}
+											class="mt-1 h-11 w-full"
+										/>
 									{:else if ['tags', 'language', 'chips', 'user_picker', 'media_tags'].includes(control)}
 										<TagInput
 											id="destination-setting-{setting.key}"
@@ -432,41 +437,57 @@
 													</label>
 
 													{#if control === 'remote_picker'}
-														<select
+														<AppSelect
 															id="destination-media-{item.id}-{setting.key}"
-															class="mt-1 h-11 w-full rounded-md border bg-background px-3 text-sm"
-															value={valueAsString(setting.key, scopedValues)}
+															value={valueAsString(setting.key, scopedValues) ||
+																(setting.required ? '' : '__none__')}
+															placeholder={m.compose_choose_setting({
+																setting: settingLabel(setting)
+															})}
 															disabled={optionsLoading || Boolean(setting.unavailable_reason)}
-															onchange={(event) =>
-																onMediaChange?.(item.id, setting.key, event.currentTarget.value)}
-														>
-															<option value="" disabled={setting.required}>
-																{setting.required
-																	? m.compose_choose_setting({ setting: settingLabel(setting) })
-																	: m.common_none()}
-															</option>
-															{#each remoteOptions as option (option.value)}
-																<option value={option.value}>{option.label}</option>
-															{/each}
-														</select>
+															onValueChange={(value) =>
+																onMediaChange?.(
+																	item.id,
+																	setting.key,
+																	value === '__none__' ? '' : value
+																)}
+															options={[
+																...(setting.required
+																	? []
+																	: [{ value: '__none__', label: m.common_none() }]),
+																...remoteOptions.map((option) => ({
+																	value: option.value,
+																	label: option.label
+																}))
+															]}
+															class="mt-1 h-11 w-full"
+														/>
 													{:else if setting.type === 'select'}
-														<select
+														<AppSelect
 															id="destination-media-{item.id}-{setting.key}"
-															class="mt-1 h-11 w-full rounded-md border bg-background px-3 text-sm"
-															value={valueAsString(setting.key, scopedValues)}
+															value={valueAsString(setting.key, scopedValues) ||
+																(setting.required ? '' : '__none__')}
+															placeholder={m.compose_choose_setting({
+																setting: settingLabel(setting)
+															})}
 															disabled={Boolean(setting.unavailable_reason)}
-															onchange={(event) =>
-																onMediaChange?.(item.id, setting.key, event.currentTarget.value)}
-														>
-															<option value="" disabled={setting.required}>
-																{setting.required
-																	? m.compose_choose_setting({ setting: settingLabel(setting) })
-																	: m.common_none()}
-															</option>
-															{#each setting.options ?? [] as option (option)}
-																<option value={option}>{option}</option>
-															{/each}
-														</select>
+															onValueChange={(value) =>
+																onMediaChange?.(
+																	item.id,
+																	setting.key,
+																	value === '__none__' ? '' : value
+																)}
+															options={[
+																...(setting.required
+																	? []
+																	: [{ value: '__none__', label: m.common_none() }]),
+																...(setting.options ?? []).map((option) => ({
+																	value: option,
+																	label: option
+																}))
+															]}
+															class="mt-1 h-11 w-full"
+														/>
 													{:else if control === 'media_tags'}
 														<MediaTagEditor
 															id="destination-media-{item.id}-{setting.key}"
