@@ -12,9 +12,10 @@
 
 	interface Props {
 		active: SettingsDestinationID;
+		showInstance?: boolean;
 	}
 
-	let { active }: Props = $props();
+	let { active, showInstance = false }: Props = $props();
 
 	const personalDestinations = $derived<SettingsDestination[]>([
 		{ id: 'profile', label: m.settings_profile() },
@@ -32,10 +33,14 @@
 		{ id: 'members', label: m.settings_members() },
 		{ id: 'plan', label: m.settings_plan() }
 	]);
+	const instanceDestinations = $derived<SettingsDestination[]>(
+		showInstance ? [{ id: 'instance', label: m.settings_instance() }] : []
+	);
 	const allDestinations = $derived([
 		...personalDestinations,
 		...workspaceDestinations,
-		...teamDestinations
+		...teamDestinations,
+		...instanceDestinations
 	]);
 	const activeLabel = $derived(
 		allDestinations.find((destination) => destination.id === active)?.label ?? m.settings_general()
@@ -97,6 +102,15 @@
 					<Select.Item value={destination.id}>{destination.label}</Select.Item>
 				{/each}
 			</Select.Group>
+			{#if instanceDestinations.length}
+				<Select.Separator />
+				<Select.Group>
+					<Select.GroupHeading>{m.settings_instance()}</Select.GroupHeading>
+					{#each instanceDestinations as destination (destination.id)}
+						<Select.Item value={destination.id}>{destination.label}</Select.Item>
+					{/each}
+				</Select.Group>
+			{/if}
 		</Select.Content>
 	</Select.Root>
 
@@ -121,5 +135,16 @@
 		{#each teamDestinations as destination (destination.id)}
 			{@render destinationLink(destination)}
 		{/each}
+
+		{#if instanceDestinations.length}
+			<p
+				class="px-2 pt-4 text-[11px] font-medium tracking-[0.12em] text-muted-foreground uppercase"
+			>
+				{m.settings_instance()}
+			</p>
+			{#each instanceDestinations as destination (destination.id)}
+				{@render destinationLink(destination)}
+			{/each}
+		{/if}
 	</nav>
 </aside>

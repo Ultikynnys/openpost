@@ -122,6 +122,7 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             VERSION=${{ github.ref_name || 'dev' }}
+            COMMIT=${{ github.sha }}
           cache-from: type=gha,scope=openpost-production
           cache-to: type=gha,mode=max,scope=openpost-production
 
@@ -225,10 +226,11 @@ jobs:
         run: |
           cd backend
           version="${GITHUB_REF_NAME:-dev}"
+          commit="${GITHUB_SHA:-unknown}"
           if [ "${{ matrix.os }}" = "windows" ]; then
-            CGO_ENABLED=0 GOOS=${{ matrix.os }} GOARCH=${{ matrix.arch }} go build -ldflags="-s -w -X main.version=${version}" -o ../openpost-server-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }} ./cmd/openpost
+            CGO_ENABLED=0 GOOS=${{ matrix.os }} GOARCH=${{ matrix.arch }} go build -ldflags="-s -w -X main.version=${version} -X main.commit=${commit}" -o ../openpost-server-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }} ./cmd/openpost
           else
-            CGO_ENABLED=1 go build -ldflags="-s -w -X main.version=${version}" -o ../openpost-server-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }} ./cmd/openpost
+            CGO_ENABLED=1 go build -ldflags="-s -w -X main.version=${version} -X main.commit=${commit}" -o ../openpost-server-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }} ./cmd/openpost
           fi
 
       - name: Upload binary to release

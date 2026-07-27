@@ -7,6 +7,7 @@ OpenPost configuration falls into a few practical groups:
 - Secrets: JWT signing and token encryption
 - Media: local filesystem path by default, or S3-compatible storage for cloud deployments
 - Providers: client credentials, redirect URIs, and instance-specific settings
+- Operations: self-hosted update status and cloud-only provider-cost guardrails
 - Platform-specific behavior: options such as LinkedIn thread reply disabling
 
 For the full list, start with [Environment Variables](/configuration/environment-variables).

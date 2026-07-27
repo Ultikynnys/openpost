@@ -187,6 +187,9 @@ export interface MCPActivityItem {
 	created_at: string;
 }
 
+export type ProviderCostSummary = components['schemas']['ProviderCostSummary'];
+export type UpdateStatus = components['schemas']['UpdateStatusResponse'];
+
 export interface BillingStatus {
 	organization_id: string;
 	workspace_id: string;
@@ -198,6 +201,7 @@ export interface BillingStatus {
 	limits: Record<string, number>;
 	usage: Record<string, number>;
 	period_start: string;
+	provider_costs: ProviderCostSummary[] | null;
 }
 
 export interface TeamMember {

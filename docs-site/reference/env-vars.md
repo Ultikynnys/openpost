@@ -18,6 +18,16 @@ This page lists the most common core and provider variables. Use [Environment Va
 | `OPENPOST_FEEDBACK_RECIPIENT`       | empty                         | Recipient name disclosed in the form before send.                                            |
 | `OPENPOST_FEEDBACK_SUPPORT_URL`     | OpenPost GitHub new-issue URL | Support link shown when delivery is not configured.                                          |
 
+## Operations
+
+| Variable                                          | Default   | Purpose                                                                                           |
+| ------------------------------------------------- | --------- | ------------------------------------------------------------------------------------------------- |
+| `OPENPOST_UPDATE_CHECK_ENABLED`                   | `true`    | Enable read-only stable release checks for self-hosted instance admins.                           |
+| `OPENPOST_X_MONTHLY_BUDGET_MICROUSD`              | `5000000` | Cloud-only per-workspace X request safety limit in millionths of a US dollar.                     |
+| `OPENPOST_X_POST_CREATE_COST_MICROUSD`            | `15000`   | Estimated X post-create cost without a URL, in millionths of a US dollar.                         |
+| `OPENPOST_X_POST_CREATE_WITH_URL_COST_MICROUSD`   | `200000`  | Estimated X post-create cost with a URL, in millionths of a US dollar.                            |
+| `OPENPOST_PROVIDER_USAGE_RETENTION_DAYS`          | `180`     | Immutable provider-cost event retention; the current month is never pruned.                       |
+
 Most variables loaded through the main backend config loader can also be loaded from `<VARIABLE>_FILE`; direct env values win over file-backed values. Legacy aliases support the same suffix, for example `DATABASE_URL_FILE`, `JWT_SECRET_FILE`, and `ENCRYPTION_KEY_FILE`. Adapter-only variables read directly by provider code, such as `META_GRAPH_API_VERSION`, do not currently support `_FILE` variants.
 
 | Variable                              | Purpose                                                                                                     |
@@ -35,6 +45,7 @@ Most variables loaded through the main backend config loader can also be loaded 
 | `OPENPOST_FEEDBACK_DESTINATION_URL`   | Server-only Discord-compatible webhook                                                                      |
 | `OPENPOST_FEEDBACK_RECIPIENT`         | Recipient label disclosed to users                                                                          |
 | `OPENPOST_FEEDBACK_SUPPORT_URL`       | Fallback support URL                                                                                        |
+| `OPENPOST_UPDATE_CHECK_ENABLED`       | Enable read-only stable release checks for self-hosted instance admins                                      |
 | `OPENPOST_JWT_SECRET`                 | JWT signing secret                                                                                          |
 | `OPENPOST_ENCRYPTION_KEY`             | OAuth token encryption secret                                                                               |
 | `OPENPOST_STORAGE_DRIVER`             | Media storage driver: `local` or `s3`                                                                       |
@@ -57,6 +68,10 @@ Most variables loaded through the main backend config loader can also be loaded 
 | `OPENPOST_POLAR_PRO_PRODUCT_ID`       | Polar Pro product ID                                                                                        |
 | `OPENPOST_POLAR_TEAM_PRODUCT_ID`      | Polar Team product ID                                                                                       |
 | `OPENPOST_POLAR_AGENCY_PRODUCT_ID`    | Polar Agency product ID                                                                                     |
+| `OPENPOST_X_MONTHLY_BUDGET_MICROUSD`  | Cloud-only per-workspace X provider-cost safety limit                                                       |
+| `OPENPOST_X_POST_CREATE_COST_MICROUSD` | Estimated X post-create price without a URL                                                                |
+| `OPENPOST_X_POST_CREATE_WITH_URL_COST_MICROUSD` | Estimated X post-create price with a URL                                                      |
+| `OPENPOST_PROVIDER_USAGE_RETENTION_DAYS` | Immutable provider-cost event retention                                                                  |
 | `OPENPOST_PROVIDER_APPS`              | Structured provider app registry JSON; active encrypted provider app API rows can override matching entries |
 | `X_CLIENT_ID`                         | X client ID                                                                                                 |
 | `X_CLIENT_SECRET`                     | X client secret                                                                                             |

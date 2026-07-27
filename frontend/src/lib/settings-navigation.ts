@@ -2,6 +2,7 @@ export const settingsTabIDs = [
 	'profile',
 	'security',
 	'developer',
+	'instance',
 	'general',
 	'brand',
 	'schedule',

@@ -22,6 +22,7 @@
 	import { resolve } from '$app/paths';
 	import { auth } from '$lib/stores/auth';
 	import { getApiBase } from '$lib/stores/instance.svelte';
+	import type { SettingsTabID } from '$lib/settings-navigation';
 	import { loadStudioBrandKit } from '$lib/studio/api';
 	import type { StudioBrandKit } from '$lib/studio/types';
 	import { createPasskeyCredential } from '$lib/auth/webauthn';
@@ -47,6 +48,7 @@
 	import CameraIcon from 'lucide-svelte/icons/camera';
 	import AlertCircleIcon from 'lucide-svelte/icons/alert-circle';
 	import PaletteIcon from 'lucide-svelte/icons/palette';
+	import ServerCogIcon from 'lucide-svelte/icons/server-cog';
 	import { client } from '$lib/api/client';
 	import { getLocaleTag } from '$lib/i18n';
 	import { hostedPlanFromSearchParams } from '$lib/billing';
@@ -63,8 +65,10 @@
 		type BillingStatus,
 		type MCPActivityItem,
 		type PostingSchedule,
+		type ProviderCostSummary,
 		type ScheduleRow,
 		type SecurityStatus,
+		type UpdateStatus,
 		type WorkspaceInvitation,
 		type WorkspaceTeam
 	} from './settings-data';
@@ -125,6 +129,9 @@
 	let billingLoadError = $state('');
 	let billingStatusLoading = $state(false);
 	let billingStatus = $state<BillingStatus | null>(null);
+	let updateStatus = $state.raw<UpdateStatus | null>(null);
+	let updateStatusLoading = $state(false);
+	let updateStatusError = $state('');
 	let handledCheckoutPlan = '';
 	let teamLoading = $state(false);
 	let teamBusy = $state(false);
@@ -142,6 +149,7 @@
 	let loadedScheduleWorkspaceID = '';
 	let loadedBrandWorkspaceID = '';
 	let loadedSecurityUserID = '';
+	let loadedUpdateStatusUserID = '';
 	let loadedAPITokensUserID = '';
 	let apiTokensRequestUserID = '';
 	let loadedMCPActivityUserID = '';
@@ -320,6 +328,70 @@
 		return status;
 	}
 
+	function providerCostName(provider: string) {
+		return provider === 'x' ? 'X API' : provider;
+	}
+
+	function providerCostOperationLabel(operation: string) {
+		if (operation === 'post_create') return m.settings_provider_cost_post_create();
+		if (operation === 'post_create_with_url') {
+			return m.settings_provider_cost_post_create_with_url();
+		}
+		return operation;
+	}
+
+	function providerCostRequestLabel(count: number) {
+		const formatted = new Intl.NumberFormat(getLocaleTag()).format(count);
+		return count === 1
+			? m.settings_provider_cost_request_one()
+			: m.settings_provider_cost_requests({ count: formatted });
+	}
+
+	function providerCostReservationLabel(count: number) {
+		const formatted = new Intl.NumberFormat(getLocaleTag()).format(count);
+		return count === 1
+			? m.settings_provider_cost_reservation_one()
+			: m.settings_provider_cost_reservations({ count: formatted });
+	}
+
+	function formatProviderCost(microunits: number, currency: string) {
+		const amount = microunits / 1_000_000;
+		try {
+			return new Intl.NumberFormat(getLocaleTag(), {
+				style: 'currency',
+				currency,
+				minimumFractionDigits: 2,
+				maximumFractionDigits: 3
+			}).format(amount);
+		} catch {
+			return `${amount.toFixed(3)} ${currency}`;
+		}
+	}
+
+	function providerCostExposure(cost: ProviderCostSummary) {
+		return cost.cost_microusd + cost.reserved_cost_microusd;
+	}
+
+	function providerCostBudgetLabel(cost: ProviderCostSummary) {
+		return m.settings_provider_cost_budget({
+			confirmed: formatProviderCost(cost.cost_microusd, cost.currency),
+			reserved: formatProviderCost(cost.reserved_cost_microusd, cost.currency),
+			budget: formatProviderCost(cost.budget_microusd, cost.currency)
+		});
+	}
+
+	function providerCostProgress(cost: ProviderCostSummary) {
+		const exposure = providerCostExposure(cost);
+		if (cost.budget_microusd <= 0) return exposure > 0 ? 100 : 0;
+		return Math.min(100, Math.round((exposure / cost.budget_microusd) * 100));
+	}
+
+	function shortBuild(value: string) {
+		const normalized = value.trim();
+		if (normalized === 'unknown' || normalized.length <= 12) return normalized;
+		return normalized.slice(0, 12);
+	}
+
 	function mcpStatusLabel(status: string) {
 		if (status === 'success') return m.settings_mcp_status_success();
 		if (status === 'error') return m.settings_mcp_status_error();
@@ -404,17 +476,19 @@
 		{ id: 'schedule', label: m.settings_schedule() },
 		{ id: 'media', label: m.settings_media() },
 		{ id: 'members', label: m.settings_members() },
-		{ id: 'plan', label: m.settings_plan() }
-	] as const);
-	const activeSettingsTab = $derived.by(() =>
-		normalizeSettingsTab(
+		{ id: 'plan', label: m.settings_plan() },
+		...(authState.user?.is_admin ? [{ id: 'instance' as const, label: m.settings_instance() }] : [])
+	]);
+	const activeSettingsTab = $derived.by(() => {
+		const requested = normalizeSettingsTab(
 			page.url.searchParams.get('tab') || page.url.hash.replace(/^#/, '') || null
-		)
-	);
+		);
+		return requested === 'instance' && !authState.user?.is_admin ? 'general' : requested;
+	});
 	const settingsLoadingVariant = $derived.by(() => {
 		if (activeSettingsTab === 'profile') return 'profile' as const;
 		if (['members', 'plan', 'security'].includes(activeSettingsTab)) return 'cards' as const;
-		if (['developer', 'schedule'].includes(activeSettingsTab)) return 'list' as const;
+		if (['developer', 'schedule', 'instance'].includes(activeSettingsTab)) return 'list' as const;
 		return 'form' as const;
 	});
 	const profileEmail = $derived(authState.user?.email ?? '');
@@ -430,6 +504,7 @@
 	const currentBillingPlan = $derived(
 		billingPlans.find((plan) => plan.id === billingStatus?.plan_id) ?? null
 	);
+	const providerCosts = $derived(billingStatus?.provider_costs ?? []);
 	const hasActiveBillingPlan = $derived(
 		Boolean(
 			billingStatus?.plan_id &&
@@ -440,6 +515,7 @@
 		if (activeSettingsTab === 'profile') return m.settings_profile();
 		if (activeSettingsTab === 'security') return m.settings_security();
 		if (activeSettingsTab === 'developer') return m.settings_developer();
+		if (activeSettingsTab === 'instance') return m.settings_instance();
 		if (activeSettingsTab === 'members') return m.settings_team_members();
 		if (activeSettingsTab === 'plan') return m.settings_plan();
 		if (activeSettingsTab === 'schedule') return m.settings_schedule();
@@ -451,6 +527,7 @@
 		if (activeSettingsTab === 'profile') return m.settings_profile_description();
 		if (activeSettingsTab === 'security') return m.settings_account_security_body();
 		if (activeSettingsTab === 'developer') return m.settings_developer_description();
+		if (activeSettingsTab === 'instance') return m.settings_instance_description();
 		if (activeSettingsTab === 'members') return m.settings_members_description();
 		if (activeSettingsTab === 'plan') return m.settings_plan_description();
 		if (activeSettingsTab === 'schedule') return m.settings_schedule_description();
@@ -475,7 +552,7 @@
 				limit
 			}));
 	});
-	function isSettingsTab(value: string): value is (typeof settingsTabs)[number]['id'] {
+	function isSettingsTab(value: string): value is SettingsTabID {
 		return settingsTabs.some((tab) => tab.id === value);
 	}
 
@@ -484,7 +561,7 @@
 		return (format === 'long' ? longWeekdayFormatter : weekdayFormatter).format(date);
 	}
 
-	function normalizeSettingsTab(value: string | null) {
+	function normalizeSettingsTab(value: string | null): SettingsTabID {
 		if (value === 'billing' || value === 'organization') return 'plan';
 		if (value === 'team') return 'members';
 		if (value === 'tokens' || value === 'account')
@@ -770,13 +847,9 @@
 		billingLoadError = '';
 		billingStatus = null;
 		try {
-			const { data, error: err } = organizationID
-				? await client.GET('/organizations/{id}/billing/status', {
-						params: { path: { id: organizationID } }
-					})
-				: await client.GET('/billing/status', {
-						params: { query: { workspace_id: workspaceID } }
-					});
+			const { data, error: err } = await client.GET('/billing/status', {
+				params: { query: { workspace_id: workspaceID } }
+			});
 			if (err || !data) throw new Error(err?.detail || m.settings_billing_load_failed());
 			if (
 				requestSequence !== billingRequestSequence ||
@@ -795,6 +868,28 @@
 			billingLoadError = (e as Error).message || m.settings_billing_load_failed();
 		} finally {
 			if (requestSequence === billingRequestSequence) billingStatusLoading = false;
+		}
+	}
+
+	async function loadUpdateStatus(userID = authState.user?.id ?? '') {
+		if (!userID || !authState.user?.is_admin) return;
+		loadedUpdateStatusUserID = userID;
+		updateStatusLoading = true;
+		updateStatusError = '';
+		try {
+			const { data, error } = await client.GET('/admin/update-status');
+			if (error || !data) {
+				throw new Error(error?.detail || m.settings_instance_status_load_failed());
+			}
+			if (authState.user?.id !== userID) return;
+			updateStatus = data;
+		} catch (error) {
+			if (authState.user?.id !== userID) return;
+			loadedUpdateStatusUserID = '';
+			updateStatus = null;
+			updateStatusError = (error as Error).message || m.settings_instance_status_load_failed();
+		} finally {
+			if (authState.user?.id === userID) updateStatusLoading = false;
 		}
 	}
 
@@ -1422,6 +1517,9 @@
 				void loadMCPActivity();
 			}
 		}
+		if (tab === 'instance' && authState.user?.is_admin && loadedUpdateStatusUserID !== userID) {
+			void loadUpdateStatus(userID);
+		}
 	});
 
 	$effect(() => {
@@ -1477,7 +1575,10 @@
 		</InlineNotice>
 	{:else}
 		<div class="grid min-w-0 items-start gap-8 lg:grid-cols-[13rem_minmax(0,1fr)]">
-			<SettingsNavigation active={activeSettingsTab} />
+			<SettingsNavigation
+				active={activeSettingsTab}
+				showInstance={Boolean(authState.user?.is_admin)}
+			/>
 
 			<div class="min-w-0 space-y-10">
 				<section id="profile" class:hidden={activeSettingsTab !== 'profile'} class="scroll-mt-24">
@@ -1562,6 +1663,105 @@
 							type="submit"
 						/>
 					</form>
+				</section>
+
+				<section id="instance" class:hidden={activeSettingsTab !== 'instance'} class="scroll-mt-24">
+					<SectionHeader
+						title={m.settings_instance_status()}
+						description={m.settings_instance_status_body()}
+						icon={ServerCogIcon}
+						class="mb-4"
+					/>
+
+					{#if updateStatusLoading}
+						<PageLoading layout="list" label={m.common_loading()} items={3} />
+					{:else if updateStatusError}
+						<InlineNotice tone="error" message={updateStatusError}>
+							{#snippet actions()}
+								<Button variant="outline" size="sm" onclick={() => void loadUpdateStatus()}>
+									{m.common_retry()}
+								</Button>
+							{/snippet}
+						</InlineNotice>
+					{:else if updateStatus}
+						<div class="space-y-4" data-testid="instance-update-status">
+							{#if updateStatus.state === 'update_available'}
+								<InlineNotice tone="warning">
+									<div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+										<div>
+											<p class="font-medium">
+												{m.settings_instance_update_available({
+													version: updateStatus.latest_version ?? ''
+												})}
+											</p>
+											<p class="mt-0.5 text-current/80">
+												{m.settings_instance_update_available_body()}
+											</p>
+										</div>
+										{#if updateStatus.release_url}
+											<Button
+												href={updateStatus.release_url}
+												target="_blank"
+												rel="noreferrer"
+												variant="outline"
+												size="sm"
+											>
+												{m.settings_instance_view_release()}
+												<ExternalLinkIcon class="ml-1 h-3.5 w-3.5" />
+											</Button>
+										{/if}
+									</div>
+								</InlineNotice>
+							{:else if updateStatus.state === 'stale'}
+								<InlineNotice tone="info" message={m.settings_instance_stale()} />
+							{:else if updateStatus.state === 'unavailable'}
+								<InlineNotice tone="info" message={m.settings_instance_unavailable()} />
+							{:else if updateStatus.state === 'disabled'}
+								<InlineNotice tone="info" message={m.settings_instance_disabled()} />
+							{:else if updateStatus.state === 'development'}
+								<InlineNotice tone="info" message={m.settings_instance_development()} />
+							{:else}
+								<InlineNotice tone="success" message={m.settings_instance_current()} />
+							{/if}
+
+							<dl class="grid gap-4 rounded-lg border bg-muted/20 p-4 sm:grid-cols-2">
+								<div class="min-w-0">
+									<dt class="text-sm text-muted-foreground">
+										{m.settings_instance_running_version()}
+									</dt>
+									<dd class="mt-1 font-medium">{updateStatus.running_version}</dd>
+								</div>
+								<div class="min-w-0">
+									<dt class="text-sm text-muted-foreground">
+										{m.settings_instance_running_build()}
+									</dt>
+									<dd class="mt-1 truncate font-mono text-sm" title={updateStatus.running_build}>
+										{shortBuild(updateStatus.running_build)}
+									</dd>
+								</div>
+								{#if updateStatus.latest_version}
+									<div class="min-w-0">
+										<dt class="text-sm text-muted-foreground">
+											{m.settings_instance_latest_version()}
+										</dt>
+										<dd class="mt-1 font-medium">{updateStatus.latest_version}</dd>
+									</div>
+								{/if}
+								{#if updateStatus.checked_at}
+									<div class="min-w-0">
+										<dt class="text-sm text-muted-foreground">
+											{m.settings_instance_last_checked()}
+										</dt>
+										<dd class="mt-1">{formatDateTime(updateStatus.checked_at)}</dd>
+									</div>
+								{/if}
+							</dl>
+
+							<p class="max-w-2xl text-sm text-muted-foreground">
+								{m.settings_instance_no_auto_update()}
+							</p>
+						</div>
+					{/if}
 				</section>
 
 				<section
@@ -1909,6 +2109,112 @@
 								{/if}
 							</div>
 						</div>
+
+						{#if providerCosts.length}
+							<div
+								class="mb-4 rounded-lg border bg-background p-4"
+								data-testid="provider-cost-usage"
+							>
+								{#each providerCosts as providerCost (providerCost.provider)}
+									<div class="min-w-0">
+										<div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+											<div class="max-w-2xl">
+												<h3 class="font-semibold">{m.settings_provider_costs()}</h3>
+												<p class="mt-1 text-sm text-muted-foreground">
+													{m.settings_provider_costs_body()}
+												</p>
+											</div>
+											<div class="shrink-0 text-left sm:text-right">
+												<p class="font-medium">{providerCostName(providerCost.provider)}</p>
+												<p class="text-sm text-muted-foreground">
+													{providerCostBudgetLabel(providerCost)}
+												</p>
+											</div>
+										</div>
+
+										<div
+											class="mt-4 h-2 overflow-hidden rounded-full bg-muted"
+											role="progressbar"
+											aria-label={providerCostBudgetLabel(providerCost)}
+											aria-valuemin="0"
+											aria-valuemax={Math.max(providerCost.budget_microusd, 1)}
+											aria-valuenow={Math.min(
+												providerCostExposure(providerCost),
+												Math.max(providerCost.budget_microusd, 1)
+											)}
+										>
+											<div
+												class={[
+													'h-full rounded-full',
+													providerCostProgress(providerCost) >= 100
+														? 'bg-destructive'
+														: providerCostProgress(providerCost) >= 80
+															? 'bg-amber-500'
+															: 'bg-primary'
+												]}
+												style:width={`${providerCostProgress(providerCost)}%`}
+											></div>
+										</div>
+
+										{#if providerCost.operations?.length}
+											<ul class="mt-4 grid gap-x-6 gap-y-2 sm:grid-cols-2">
+												{#each providerCost.operations as operation (operation.operation)}
+													<li class="flex min-w-0 items-baseline justify-between gap-3 text-sm">
+														<div class="min-w-0">
+															<p class="truncate">
+																{providerCostOperationLabel(operation.operation)}
+															</p>
+															<p class="text-xs text-muted-foreground">
+																{providerCostRequestLabel(operation.event_count)}
+															</p>
+															{#if operation.reserved_event_count > 0}
+																<p class="text-xs text-amber-700 dark:text-amber-300">
+																	{providerCostReservationLabel(operation.reserved_event_count)}
+																</p>
+															{/if}
+														</div>
+														<div class="shrink-0 text-right">
+															<p class="font-medium">
+																{formatProviderCost(operation.cost_microusd, providerCost.currency)}
+															</p>
+															{#if operation.reserved_cost_microusd > 0}
+																<p class="text-xs text-amber-700 dark:text-amber-300">
+																	{m.settings_provider_cost_reserved_amount({
+																		amount: formatProviderCost(
+																			operation.reserved_cost_microusd,
+																			providerCost.currency
+																		)
+																	})}
+																</p>
+															{/if}
+														</div>
+													</li>
+												{/each}
+											</ul>
+										{/if}
+
+										<div
+											class="mt-4 flex flex-col gap-3 border-t pt-3 sm:flex-row sm:items-center sm:justify-between"
+										>
+											<p class="max-w-2xl text-xs text-muted-foreground">
+												{m.settings_provider_cost_estimate_note()}
+											</p>
+											<Button
+												href={providerCost.pricing_source_url}
+												target="_blank"
+												rel="noreferrer"
+												variant="ghost"
+												size="sm"
+												class="self-start sm:self-auto"
+											>
+												{m.settings_provider_cost_view_pricing()}
+												<ExternalLinkIcon class="ml-1 h-3.5 w-3.5" />
+											</Button>
+										</div>
+									</div>
+								{/each}
+							</div>
+						{/if}
 					{/if}
 
 					<details class="border-t pt-4" open={!hasActiveBillingPlan}>

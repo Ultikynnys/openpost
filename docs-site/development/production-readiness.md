@@ -82,7 +82,7 @@ OpenPost runs as a production self-hosted product and managed service. This page
 - Keep `marketing-site/` public in this repo.
 - Keep `docs-site/` technical and task-oriented.
 - Keep pricing, platform, comparison, security, open-source, changelog, and tools pages crawlable on `openpost.social`. The public sitemap now covers each current landing page, platform guide, comparison, and tool.
-- Keep the free tools useful without an account. The current set covers character counting, platform previews, thread splitting, handle checks, LinkedIn formatting, and timezone-aware posting plans, with focused browser checks.
+- Keep the free tools useful without an account. The current set covers social image design, character counting, platform previews, thread splitting, handle checks, LinkedIn formatting, and timezone-aware posting plans, with focused browser checks.
 - Keep docs on install, providers, configuration, CLI, operations, and development.
 
 ### 8. Verification
