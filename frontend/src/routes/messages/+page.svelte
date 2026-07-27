@@ -14,6 +14,7 @@
 	import InlineNotice from '$lib/components/inline-notice.svelte';
 	import AppToast from '$lib/components/app-toast.svelte';
 	import { Button } from '$lib/components/ui/button';
+	import { Checkbox } from '$lib/components/ui/checkbox';
 	import { Textarea } from '$lib/components/ui/textarea';
 	import InboxIcon from 'lucide-svelte/icons/inbox';
 	import RefreshIcon from 'lucide-svelte/icons/refresh-cw';
@@ -284,11 +285,9 @@
 		{/each}
 
 		<label class="flex min-h-11 items-center gap-2 text-sm">
-			<input
-				class="size-4 accent-primary"
-				type="checkbox"
+			<Checkbox
 				bind:checked={archived}
-				onchange={() => {
+				onCheckedChange={() => {
 					selectedId = '';
 					messages = [];
 					void loadConversations();

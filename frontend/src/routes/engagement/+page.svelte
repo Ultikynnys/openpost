@@ -21,6 +21,7 @@
 	import AppToast from '$lib/components/app-toast.svelte';
 	import DestructiveConfirmDialog from '$lib/components/destructive-confirm-dialog.svelte';
 	import { Button } from '$lib/components/ui/button';
+	import { Checkbox } from '$lib/components/ui/checkbox';
 	import { Textarea } from '$lib/components/ui/textarea';
 	import MessagesSquareIcon from 'lucide-svelte/icons/messages-square';
 	import RefreshIcon from 'lucide-svelte/icons/refresh-cw';
@@ -222,11 +223,11 @@
 				</select>
 			</label>
 			<label class="flex min-h-11 items-center gap-2 text-sm">
-				<input class="size-4 accent-primary" type="checkbox" bind:checked={unreadOnly} />
+				<Checkbox bind:checked={unreadOnly} />
 				{m.engagement_unread_only()}
 			</label>
 			<label class="flex min-h-11 items-center gap-2 text-sm">
-				<input class="size-4 accent-primary" type="checkbox" bind:checked={archived} />
+				<Checkbox bind:checked={archived} />
 				{m.engagement_archived()}
 			</label>
 			<span class="ms-auto text-sm text-muted-foreground">{total}</span>

@@ -2,6 +2,7 @@
 	import { tick } from 'svelte';
 	import type { SocialAccount } from '$lib/api/client';
 	import { Button } from '$lib/components/ui/button';
+	import { Checkbox } from '$lib/components/ui/checkbox';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
 	import * as Popover from '$lib/components/ui/popover';
 	import { cn, getPlatformKey, getPlatformName } from '$lib/utils';
@@ -226,20 +227,13 @@
 					data-testid="composer-account-row"
 				>
 					<label
+						for={`composer-account-${account.id}`}
 						class={cn(
 							'flex min-w-0 flex-1 cursor-pointer items-center gap-2.5 rounded-md px-2 py-1.5 text-sm focus-within:ring-2 focus-within:ring-ring',
 							!compatible && !selected && 'cursor-not-allowed opacity-45'
 						)}
 						data-testid="composer-account-toggle"
 					>
-						<input
-							type="checkbox"
-							class="sr-only"
-							checked={selected}
-							disabled={!compatible && !selected}
-							onclick={(event) => protectCustomDeselect(event, account)}
-							onchange={() => onToggle(account)}
-						/>
 						<span
 							class="flex size-5 items-center justify-center text-foreground"
 							aria-hidden="true"
@@ -286,17 +280,13 @@
 								</ul>
 							{/if}
 						</span>
-						<span
-							class={cn(
-								'flex size-4 shrink-0 items-center justify-center rounded-[4px] border transition-colors',
-								selected
-									? 'border-primary bg-primary text-primary-foreground'
-									: 'border-input bg-background text-transparent dark:bg-input/30'
-							)}
-							aria-hidden="true"
-						>
-							{#if selected}<RiCheckLine class="size-3.5" />{/if}
-						</span>
+						<Checkbox
+							id={`composer-account-${account.id}`}
+							checked={selected}
+							disabled={!compatible && !selected}
+							onclick={(event) => protectCustomDeselect(event, account)}
+							onCheckedChange={() => onToggle(account)}
+						/>
 					</label>
 
 					{#if selected && onSettings && settingsIds.has(account.id)}

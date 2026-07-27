@@ -1,4 +1,8 @@
 <script lang="ts">
+	import { scaleUtc } from 'd3-scale';
+	import { curveNatural } from 'd3-shape';
+	import { LineChart } from 'layerchart';
+	import * as Chart from '$lib/components/ui/chart';
 	import { m } from '$lib/paraglide/messages';
 
 	interface Point {
@@ -15,89 +19,61 @@
 
 	let { points, label, emptyLabel, formatValue }: Props = $props();
 
-	const chart = $derived.by(() => {
-		if (points.length < 2) return null;
-		const width = 680;
-		const height = 240;
-		const insetX = 24;
-		const insetTop = 20;
-		const insetBottom = 34;
-		const values = points.map((point) => point.value);
-		const minimum = Math.min(...values);
-		const maximum = Math.max(...values);
-		const span = Math.max(1, maximum - minimum);
-		const plotWidth = width - insetX * 2;
-		const plotHeight = height - insetTop - insetBottom;
-		const coordinates = points.map((point, index) => ({
-			...point,
-			x: insetX + (index / (points.length - 1)) * plotWidth,
-			y: insetTop + ((maximum - point.value) / span) * plotHeight
-		}));
-		return {
-			width,
-			height,
-			minimum,
-			maximum,
-			coordinates,
-			path: coordinates
-				.map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`)
-				.join(' ')
-		};
-	});
+	const chartData = $derived(
+		points.map((point) => ({
+			date: new Date(`${point.date}T00:00:00Z`),
+			value: point.value
+		}))
+	);
+	const chartConfig = $derived({
+		value: {
+			label: m.analytics_summary_followers(),
+			color: 'var(--chart-1)'
+		}
+	} satisfies Chart.ChartConfig);
 </script>
 
 <figure class="min-w-0">
-	{#if chart}
-		<svg
-			class="h-auto w-full overflow-visible text-muted-foreground"
-			viewBox={`0 0 ${chart.width} ${chart.height}`}
+	{#if chartData.length > 1}
+		<Chart.Container
+			config={chartConfig}
+			class="aspect-auto h-60 w-full"
 			role="img"
 			aria-label={label}
 		>
-			{#each [0, 0.5, 1] as ratio (ratio)}
-				{@const y = 20 + ratio * 186}
-				<line
-					x1="24"
-					x2="656"
-					{y}
-					y2={y}
-					class="stroke-border"
-					stroke-width="1"
-					vector-effect="non-scaling-stroke"
-				/>
-			{/each}
-			<path
-				d={chart.path}
-				fill="none"
-				class="stroke-primary"
-				stroke-width="3"
-				stroke-linecap="round"
-				stroke-linejoin="round"
-				vector-effect="non-scaling-stroke"
-			/>
-			{#each chart.coordinates as point, index (`${point.date}-${index}`)}
-				<circle
-					cx={point.x}
-					cy={point.y}
-					r={index === chart.coordinates.length - 1 ? 4.5 : 2.5}
-					class="fill-background stroke-primary"
-					stroke-width="2"
-					vector-effect="non-scaling-stroke"
-				/>
-			{/each}
-			<text x="24" y="233" class="fill-current text-[11px]">
-				{chart.coordinates[0].date}
-			</text>
-			<text x="656" y="233" text-anchor="end" class="fill-current text-[11px]">
-				{chart.coordinates.at(-1)?.date}
-			</text>
-			<text x="24" y="14" class="fill-current text-[11px]">
-				{formatValue(chart.maximum)}
-			</text>
-			<text x="24" y="201" class="fill-current text-[11px]">
-				{formatValue(chart.minimum)}
-			</text>
-		</svg>
+			<LineChart
+				points={{ r: 3 }}
+				data={chartData}
+				x="date"
+				xScale={scaleUtc()}
+				axis
+				series={[
+					{
+						key: 'value',
+						label: chartConfig.value.label,
+						color: chartConfig.value.color
+					}
+				]}
+				props={{
+					spline: { curve: curveNatural, motion: 'tween', strokeWidth: 2 },
+					highlight: { points: { motion: 'none', r: 5 } },
+					xAxis: {
+						format: (value: Date) =>
+							value.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+					},
+					yAxis: { format: (value: number) => formatValue(value) }
+				}}
+			>
+				{#snippet tooltip()}
+					<Chart.Tooltip
+						labelFormatter={(value) =>
+							value instanceof Date
+								? value.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+								: String(value)}
+					/>
+				{/snippet}
+			</LineChart>
+		</Chart.Container>
 
 		<table class="sr-only">
 			<caption>{label}</caption>

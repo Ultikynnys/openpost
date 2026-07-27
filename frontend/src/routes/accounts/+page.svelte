@@ -4,6 +4,7 @@
 	import { workspaceCtx } from '$lib/stores/workspace.svelte';
 	import { client, type Workspace, type SocialAccount, type ProviderInfo } from '$lib/api/client';
 	import { Button } from '$lib/components/ui/button';
+	import { Checkbox } from '$lib/components/ui/checkbox';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
@@ -1104,10 +1105,9 @@
 				{#if editingAccount.messaging_supported}
 					<div class="space-y-3 rounded-md border p-3">
 						<div class="flex items-start gap-3">
-							<input
+							<Checkbox
 								id="account-messages-enabled"
-								class="mt-1 size-4 accent-primary"
-								type="checkbox"
+								class="mt-1"
 								bind:checked={editMessagesEnabled}
 							/>
 							<div class="space-y-1">

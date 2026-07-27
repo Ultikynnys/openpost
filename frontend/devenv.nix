@@ -33,10 +33,10 @@ let
       pkgs.pnpm
     ];
     text = ''
-      # Cap V8 heap at 1GB to keep the runner's OOM in check on
-      # small-memory hosts (3–4GB). The default Node heap is ~1.7GB
-      # and svelte-check / vite / paraglide will reliably OOM it.
-      export NODE_OPTIONS="--max-old-space-size=1024"
+      # The full Svelte program now needs more than 1GB while loading its
+      # generated types. Keep the heap bounded, but leave enough headroom
+      # for the release validation gate.
+      export NODE_OPTIONS="--max-old-space-size=2048"
       cd "${config.git.root}"
       pnpm --filter @openpost/web check
     '';
@@ -71,10 +71,10 @@ let
       pkgs.pnpm
     ];
     text = ''
-      # The production bundle now needs slightly more than 1.5GB while
+      # The production bundle now needs slightly more than 2GB while
       # adapter-static finalizes the client output. Keep a bounded heap for
       # small-memory hosts, but leave enough headroom for release builds.
-      export NODE_OPTIONS="--max-old-space-size=2048"
+      export NODE_OPTIONS="--max-old-space-size=2560"
       cd "${config.git.root}"
       pnpm --filter @openpost/web build
       mkdir -p "${config.git.root}/backend/cmd/openpost/public"

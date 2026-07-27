@@ -155,6 +155,11 @@ test("analytics keeps provider metrics distinct across desktop and phone layouts
   await expect(
     page.getByText("Two measurements are needed to show a trend."),
   ).toHaveCount(0);
+  await expect(page.locator('[data-slot="chart"]')).toBeVisible();
+  await expect(page.locator('[data-slot="chart"]')).toHaveAttribute(
+    "data-chart",
+    /^chart-/,
+  );
   await expect(page.getByText("Reconnect required").first()).toBeVisible();
   await page.getByRole("button", { name: /7 days/ }).click();
   await expect.poll(() => requestedRanges.at(-1)).toBe("7");
@@ -180,7 +185,9 @@ test("analytics keeps provider metrics distinct across desktop and phone layouts
     page.locator('section[aria-labelledby="analytics-content-heading"] table'),
   ).toBeHidden();
   await page.getByRole("button", { name: "More" }).click();
-  await expect(page.getByRole("menuitem", { name: "Analytics", exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("menuitem", { name: "Analytics", exact: true }),
+  ).toBeVisible();
   expect({ consoleErrors, unauthorizedResponses }).toEqual({
     consoleErrors: [],
     unauthorizedResponses: [],

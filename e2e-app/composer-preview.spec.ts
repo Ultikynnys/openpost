@@ -206,6 +206,17 @@ test("composer renders account-specific renditions", async ({
   await expect(
     page.getByText("@openpost_studio", { exact: true }),
   ).toBeVisible();
+  const mainAccountRow = page
+    .getByTestId("composer-account-row")
+    .filter({ hasText: "@openpost_main" });
+  await mainAccountRow.getByText("@openpost_main", { exact: true }).click();
+  await expect(accountControl.getByTestId("composer-account-icon")).toHaveCount(
+    1,
+  );
+  await mainAccountRow.getByText("@openpost_main", { exact: true }).click();
+  await expect(accountControl.getByTestId("composer-account-icon")).toHaveCount(
+    2,
+  );
   await page.keyboard.press("Escape");
   await expect.poll(() => publicationPayload).toBeTruthy();
   await expect(page.getByTestId("composer-delete")).toBeVisible();

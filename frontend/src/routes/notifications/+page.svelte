@@ -14,6 +14,7 @@
 	import DestructiveConfirmDialog from '$lib/components/destructive-confirm-dialog.svelte';
 	import SectionHeader from '$lib/components/section-header.svelte';
 	import { Button } from '$lib/components/ui/button';
+	import { Checkbox } from '$lib/components/ui/checkbox';
 	import BellIcon from 'lucide-svelte/icons/bell';
 	import TrashIcon from 'lucide-svelte/icons/trash-2';
 	import CheckIcon from 'lucide-svelte/icons/check-check';
@@ -285,17 +286,11 @@
 							<tr>
 								<td class="px-4 py-3">{eventLabel(eventType)}</td>
 								<td class="px-4 py-3 text-center">
-									<input
-										class="size-4 accent-primary"
-										type="checkbox"
+									<Checkbox
 										checked={preference.in_app}
 										disabled={criticalTypes.has(eventType)}
 										aria-label={`${eventLabel(eventType)} · ${m.notifications_in_app()}`}
-										onchange={(event) =>
-											updatePreference(
-												eventType,
-												(event.currentTarget as HTMLInputElement).checked
-											)}
+										onCheckedChange={(checked) => updatePreference(eventType, checked)}
 									/>
 								</td>
 							</tr>

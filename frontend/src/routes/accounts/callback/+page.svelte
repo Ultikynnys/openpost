@@ -7,6 +7,7 @@
 	import StandaloneShell from '$lib/components/standalone-shell.svelte';
 	import InlineNotice from '$lib/components/inline-notice.svelte';
 	import { Button } from '$lib/components/ui/button';
+	import { Checkbox } from '$lib/components/ui/checkbox';
 	import { getPlatformName } from '$lib/utils';
 	import { getLocaleTag } from '$lib/i18n';
 	import { m } from '$lib/paraglide/messages';
@@ -224,6 +225,12 @@
 	function isSelected(optionId: string) {
 		return allowsMultiple ? selectedIds.includes(optionId) : selectedId === optionId;
 	}
+
+	function toggleSelection(optionId: string) {
+		selectedIds = selectedIds.includes(optionId)
+			? selectedIds.filter((id) => id !== optionId)
+			: [...selectedIds, optionId];
+	}
 </script>
 
 <svelte:head>
@@ -263,12 +270,10 @@
 						]}
 					>
 						{#if allowsMultiple}
-							<input
-								class="mt-1 size-4 accent-primary"
-								type="checkbox"
-								name="selection_ids"
-								value={option.id}
-								bind:group={selectedIds}
+							<Checkbox
+								class="mt-1"
+								checked={isSelected(option.id)}
+								onCheckedChange={() => toggleSelection(option.id)}
 							/>
 						{:else}
 							<input

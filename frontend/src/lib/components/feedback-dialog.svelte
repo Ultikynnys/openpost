@@ -3,6 +3,7 @@
 	import { page } from '$app/state';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import { Button } from '$lib/components/ui/button';
+	import { Checkbox } from '$lib/components/ui/checkbox';
 	import InlineNotice from '$lib/components/inline-notice.svelte';
 	import { client } from '$lib/api/client';
 	import { feedbackDiagnostics, type FeedbackDiagnosticsSnapshot } from '$lib/feedback-diagnostics';
@@ -328,13 +329,11 @@
 
 				<div class="space-y-3 rounded-md border p-3">
 					<label class="flex cursor-pointer items-start gap-3">
-						<input
-							type="checkbox"
-							class="mt-0.5 size-4 rounded border-input"
+						<Checkbox
+							class="mt-0.5"
 							checked={includeScreenshot}
 							disabled={screenshotLoading}
-							onchange={(event) =>
-								void toggleScreenshot((event.currentTarget as HTMLInputElement).checked)}
+							onCheckedChange={(checked) => void toggleScreenshot(checked)}
 						/>
 						<span>
 							<span class="block text-sm font-medium">{m.feedback_screenshot()}</span>
@@ -377,11 +376,10 @@
 
 				<div class="space-y-3 rounded-md border p-3">
 					<label class="flex cursor-pointer items-start gap-3">
-						<input
-							type="checkbox"
-							class="mt-0.5 size-4 rounded border-input"
+						<Checkbox
+							class="mt-0.5"
 							bind:checked={includeDiagnostics}
-							onchange={() => {
+							onCheckedChange={() => {
 								diagnosticsPreview = includeDiagnostics ? diagnosticsSnapshot() : null;
 							}}
 						/>

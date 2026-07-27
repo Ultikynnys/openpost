@@ -2,6 +2,7 @@
 	import type { SocialAccount } from '$lib/api/client';
 	import type { components } from '$lib/api/types';
 	import { Button } from '$lib/components/ui/button';
+	import { Checkbox } from '$lib/components/ui/checkbox';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import { Input } from '$lib/components/ui/input';
 	import { Textarea } from '$lib/components/ui/textarea';
@@ -246,12 +247,11 @@
 									</p>
 								{:else if setting.type === 'boolean'}
 									<label class="flex min-h-11 items-center gap-3 text-sm">
-										<input
-											type="checkbox"
-											class="size-5 rounded border accent-primary"
+										<Checkbox
+											class="size-5"
 											checked={valueAsBoolean(setting.key)}
 											disabled={Boolean(setting.unavailable_reason)}
-											onchange={(event) => onChange(setting.key, event.currentTarget.checked)}
+											onCheckedChange={(checked) => onChange(setting.key, checked)}
 										/>
 										<span>{settingLabel(setting)}</span>
 									</label>
@@ -411,13 +411,12 @@
 													</p>
 												{:else if setting.type === 'boolean'}
 													<label class="flex min-h-11 items-center gap-3 text-sm">
-														<input
-															type="checkbox"
-															class="size-5 rounded border accent-primary"
+														<Checkbox
+															class="size-5"
 															checked={valueAsBoolean(setting.key, scopedValues)}
 															disabled={Boolean(setting.unavailable_reason)}
-															onchange={(event) =>
-																onMediaChange?.(item.id, setting.key, event.currentTarget.checked)}
+															onCheckedChange={(checked) =>
+																onMediaChange?.(item.id, setting.key, checked)}
 														/>
 														<span>{settingLabel(setting)}</span>
 													</label>

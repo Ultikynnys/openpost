@@ -18,6 +18,7 @@ All notable changes to this project are documented in this file.
 
 ### Changed
 
+- Standardized checkbox controls on the shared shadcn-svelte component and moved Analytics trends to the shared shadcn-svelte chart stack.
 - Described Instagram Business and Creator, Facebook Pages, TikTok, and YouTube as implemented integrations while keeping live-account verification separate from repository support.
 - Added TTF and OTF brand-font uploads alongside WOFF2, simplified brand-asset editing, and reused Studio font and color selectors for brand text styles.
 - Applied X text, video-duration, and video-size limits per connected account by reading the authenticated account's subscription tier, with standard limits used when the tier cannot be verified.
@@ -31,6 +32,9 @@ All notable changes to this project are documented in this file.
 
 ### Fixed
 
+- Kept the sidebar calendar and full Calendar on one canonical occurrence rule so scheduled and published items appear consistently.
+- Loaded the original authenticated Brand asset when a generated thumbnail is unavailable.
+- Gave the full frontend validation program enough bounded Node heap to complete the release gate.
 - Aligned release browser checks with publication-backed Activity and Calendar loading, the current brand-font picker, and slower Studio export environments.
 - Redirected marketing-site documentation paths to the canonical docs site and restored real 404 responses for unknown paths.
 - Made Studio layer reordering work with touch drag handles on mobile, corrected one-direction drop placement, and kept keyboard reordering one step at a time.

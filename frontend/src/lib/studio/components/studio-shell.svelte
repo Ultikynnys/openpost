@@ -8,6 +8,7 @@
 	import * as Sheet from '$lib/components/ui/sheet';
 	import * as Tooltip from '$lib/components/ui/tooltip';
 	import { Button } from '$lib/components/ui/button';
+	import { Checkbox } from '$lib/components/ui/checkbox';
 	import { Input } from '$lib/components/ui/input';
 	import { Slider } from '$lib/components/ui/slider';
 	import StudioCanvas from './studio-canvas.svelte';
@@ -2044,7 +2045,7 @@
 		</Dialog.Header>
 		<div class="space-y-4">
 			<label class="flex min-h-11 items-center gap-2 rounded-lg border px-3">
-				<input type="checkbox" bind:checked={exportAllPages} />
+				<Checkbox bind:checked={exportAllPages} />
 				<span>{m.studio_export_all_pages({ count: editor.document?.pages.length ?? 0 })}</span>
 			</label>
 			<div class="grid grid-cols-2 gap-3">
