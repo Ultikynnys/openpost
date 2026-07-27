@@ -17,14 +17,16 @@ import (
 	"github.com/openpost/backend/internal/models"
 	"github.com/openpost/backend/internal/queue"
 	"github.com/openpost/backend/internal/services/entitlements"
+	"github.com/openpost/backend/internal/services/notifications"
 	"github.com/uptrace/bun"
 )
 
 type WorkspaceHandler struct {
-	db          *bun.DB
-	auth        middleware.Authenticator
-	entitlement entitlements.Service
-	frontendURL string
+	db            *bun.DB
+	auth          middleware.Authenticator
+	entitlement   entitlements.Service
+	notifications *notifications.Service
+	frontendURL   string
 }
 
 func NewWorkspaceHandler(db *bun.DB, authenticator middleware.Authenticator, entitlement ...entitlements.Service) *WorkspaceHandler {
@@ -37,6 +39,10 @@ func NewWorkspaceHandler(db *bun.DB, authenticator middleware.Authenticator, ent
 
 func (h *WorkspaceHandler) SetFrontendURL(frontendURL string) {
 	h.frontendURL = strings.TrimRight(strings.TrimSpace(frontendURL), "/")
+}
+
+func (h *WorkspaceHandler) SetNotificationService(service *notifications.Service) {
+	h.notifications = service
 }
 
 type CreateWorkspaceInput struct {
@@ -158,6 +164,10 @@ type AcceptWorkspaceInvitationInput struct {
 	Body struct {
 		Token string `json:"token" minLength:"16" doc:"Raw invitation token"`
 	}
+}
+
+type AcceptWorkspaceInvitationByIDInput struct {
+	PathID string `path:"id" doc:"Invitation ID shown to the invited signed-in user"`
 }
 
 type AcceptWorkspaceInvitationOutput struct {
@@ -398,7 +408,39 @@ func (h *WorkspaceHandler) CreateWorkspaceInvitation(api huma.API) {
 			ExpiresAt:       now.Add(7 * 24 * time.Hour),
 			CreatedAt:       now,
 		}
-		if _, err := h.db.NewInsert().Model(invitation).Exec(ctx); err != nil {
+		var invitedUser models.User
+		userLookupErr := h.db.NewSelect().
+			Model(&invitedUser).
+			Where("LOWER(email) = ?", email).
+			Scan(ctx)
+		if userLookupErr != nil && !errors.Is(userLookupErr, sql.ErrNoRows) {
+			return nil, huma.Error500InternalServerError("failed to resolve invited user")
+		}
+		var workspace models.Workspace
+		if err := h.db.NewSelect().Model(&workspace).Where("id = ?", input.PathID).Scan(ctx); err != nil {
+			return nil, huma.Error500InternalServerError("failed to load workspace")
+		}
+		if err := h.db.RunInTx(ctx, &sql.TxOptions{}, func(txCtx context.Context, tx bun.Tx) error {
+			if _, err := tx.NewInsert().Model(invitation).Exec(txCtx); err != nil {
+				return err
+			}
+			if errors.Is(userLookupErr, sql.ErrNoRows) || h.notifications == nil {
+				return nil
+			}
+			return h.notifications.CreateWithDB(txCtx, tx, notifications.CreateInput{
+				UserID:   invitedUser.ID,
+				Type:     notifications.TypeWorkspaceInvite,
+				Title:    "Workspace invitation",
+				Body:     "You were invited to " + workspace.Name + ".",
+				Href:     "/invite?id=" + invitation.ID,
+				DedupKey: "workspace-invitation:" + invitation.ID,
+				Actions: []models.NotificationAction{{
+					Label: "Review invitation",
+					Href:  "/invite?id=" + invitation.ID,
+					Kind:  "primary",
+				}},
+			})
+		}); err != nil {
 			return nil, huma.Error500InternalServerError("failed to create workspace invitation")
 		}
 
@@ -468,69 +510,107 @@ func (h *WorkspaceHandler) AcceptWorkspaceInvitation(api huma.API) {
 		if err != nil {
 			return nil, huma.Error500InternalServerError("failed to fetch workspace invitation")
 		}
-		if !middleware.WorkspaceScopeAllows(ctx, invitation.WorkspaceID) {
-			return nil, huma.Error403Forbidden(errWorkspaceAccessDenied)
-		}
-		if !invitation.AcceptedAt.IsZero() {
-			return nil, huma.NewError(http.StatusConflict, "workspace invitation already accepted")
-		}
-		if !invitation.RevokedAt.IsZero() {
-			return nil, huma.NewError(http.StatusConflict, "workspace invitation was revoked")
-		}
-		if !invitation.ExpiresAt.After(now) {
-			return nil, huma.NewError(http.StatusConflict, "workspace invitation expired")
-		}
-		if invitation.Email != userEmail {
-			return nil, huma.Error403Forbidden("workspace invitation belongs to a different email address")
-		}
+		return h.acceptWorkspaceInvitation(ctx, invitation, userID, userEmail, now)
+	})
 
-		err = h.db.RunInTx(ctx, &sql.TxOptions{}, func(txCtx context.Context, tx bun.Tx) error {
-			member := &models.WorkspaceMember{
-				WorkspaceID: invitation.WorkspaceID,
-				UserID:      userID,
-				Role:        invitation.Role,
-			}
-			if _, err := tx.NewInsert().
-				Model(member).
-				On("CONFLICT (workspace_id, user_id) DO NOTHING").
-				Exec(txCtx); err != nil {
-				return err
-			}
-			res, err := tx.NewUpdate().
-				Model((*models.WorkspaceInvitation)(nil)).
-				Set("accepted_by_user_id = ?", userID).
-				Set("accepted_at = ?", now).
-				Where("id = ? AND accepted_at IS NULL AND revoked_at IS NULL", invitation.ID).
-				Exec(txCtx)
-			if err != nil {
-				return err
-			}
-			affected, err := res.RowsAffected()
-			if err != nil {
-				return err
-			}
-			if affected == 0 {
-				return sql.ErrNoRows
-			}
-			return nil
-		})
+	huma.Register(api, huma.Operation{
+		OperationID:   "accept-workspace-invitation-by-id",
+		Method:        http.MethodPost,
+		Path:          "/workspace-invitations/{id}/accept",
+		Summary:       "Accept the current user's workspace invitation",
+		Description:   "Accepts a pending invitation only when its email matches the signed-in user. This supports safe in-app invitation notifications without storing the invitation token.",
+		Tags:          []string{tagWorkspaces},
+		DefaultStatus: http.StatusOK,
+		Middlewares:   huma.Middlewares{middleware.AuthMiddleware(api, h.auth)},
+		Errors:        []int{400, 403, 404, 409},
+	}, func(ctx context.Context, input *AcceptWorkspaceInvitationByIDInput) (*AcceptWorkspaceInvitationOutput, error) {
+		var invitation models.WorkspaceInvitation
+		err := h.db.NewSelect().Model(&invitation).Where("id = ?", input.PathID).Scan(ctx)
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, huma.NewError(http.StatusConflict, "workspace invitation is no longer pending")
+			return nil, huma.Error404NotFound("workspace invitation not found")
 		}
 		if err != nil {
-			return nil, huma.Error500InternalServerError("failed to accept workspace invitation")
+			return nil, huma.Error500InternalServerError("failed to fetch workspace invitation")
 		}
-
-		return &AcceptWorkspaceInvitationOutput{Body: struct {
-			WorkspaceID string `json:"workspace_id"`
-			Role        string `json:"role"`
-			Accepted    bool   `json:"accepted"`
-		}{
-			WorkspaceID: invitation.WorkspaceID,
-			Role:        invitation.Role,
-			Accepted:    true,
-		}}, nil
+		return h.acceptWorkspaceInvitation(
+			ctx,
+			invitation,
+			middleware.GetUserID(ctx),
+			normalizeWorkspaceInvitationEmail(middleware.GetUserEmail(ctx)),
+			time.Now().UTC(),
+		)
 	})
+}
+
+func (h *WorkspaceHandler) acceptWorkspaceInvitation(
+	ctx context.Context,
+	invitation models.WorkspaceInvitation,
+	userID string,
+	userEmail string,
+	now time.Time,
+) (*AcceptWorkspaceInvitationOutput, error) {
+	if !middleware.WorkspaceScopeAllows(ctx, invitation.WorkspaceID) {
+		return nil, huma.Error403Forbidden("token is not scoped to this workspace")
+	}
+	if !invitation.AcceptedAt.IsZero() {
+		return nil, huma.NewError(http.StatusConflict, "workspace invitation already accepted")
+	}
+	if !invitation.RevokedAt.IsZero() {
+		return nil, huma.NewError(http.StatusConflict, "workspace invitation was revoked")
+	}
+	if !invitation.ExpiresAt.After(now) {
+		return nil, huma.NewError(http.StatusConflict, "workspace invitation expired")
+	}
+	if invitation.Email != userEmail {
+		return nil, huma.Error403Forbidden("workspace invitation belongs to a different email address")
+	}
+
+	err := h.db.RunInTx(ctx, &sql.TxOptions{}, func(txCtx context.Context, tx bun.Tx) error {
+		member := &models.WorkspaceMember{
+			WorkspaceID: invitation.WorkspaceID,
+			UserID:      userID,
+			Role:        invitation.Role,
+		}
+		if _, err := tx.NewInsert().
+			Model(member).
+			On("CONFLICT (workspace_id, user_id) DO NOTHING").
+			Exec(txCtx); err != nil {
+			return err
+		}
+		result, err := tx.NewUpdate().
+			Model((*models.WorkspaceInvitation)(nil)).
+			Set("accepted_by_user_id = ?", userID).
+			Set("accepted_at = ?", now).
+			Where("id = ? AND accepted_at IS NULL AND revoked_at IS NULL", invitation.ID).
+			Exec(txCtx)
+		if err != nil {
+			return err
+		}
+		affected, err := result.RowsAffected()
+		if err != nil {
+			return err
+		}
+		if affected == 0 {
+			return sql.ErrNoRows
+		}
+		return nil
+	})
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, huma.NewError(http.StatusConflict, "workspace invitation is no longer pending")
+	}
+	if err != nil {
+		return nil, huma.Error500InternalServerError("failed to accept workspace invitation")
+	}
+
+	return &AcceptWorkspaceInvitationOutput{Body: struct {
+		WorkspaceID string `json:"workspace_id"`
+		Role        string `json:"role"`
+		Accepted    bool   `json:"accepted"`
+	}{
+		WorkspaceID: invitation.WorkspaceID,
+		Role:        invitation.Role,
+		Accepted:    true,
+	}}, nil
 }
 
 func (h *WorkspaceHandler) checkCreateWorkspaceEntitlement(ctx context.Context, organizationID, userID string) error {

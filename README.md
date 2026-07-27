@@ -46,7 +46,7 @@ OpenPost handles the part that should be simple: preparing, adapting, scheduling
 - **Write once, publish properly everywhere.** Keep one source post and adjust the text, media, format, and settings for each destination.
 - **See the whole schedule.** Plan posts in a calendar, reuse posting slots, and inspect queued, published, and failed work.
 - **Measure what each provider reports.** Keep account growth and publication engagement history without treating views, impressions, and reach as the same metric.
-- **Create the media you need.** Store reusable assets and build still images, carousels, and slideshow pages in OpenPost Studio.
+- **Create the media you need.** Use OpenPost Studio without an account for local, watermark-free exports, or save designs with reusable workspace media and brand assets.
 - **Keep brands separate.** Workspaces isolate accounts, media, schedules, members, and automation access.
 - **Automate without sharing social credentials.** Use the API, CLI, or MCP with revocable, workspace-scoped OpenPost tokens.
 - **Run it without an infrastructure project.** One container or binary, SQLite and local media by default, and a built-in durable job queue. Redis is not required.

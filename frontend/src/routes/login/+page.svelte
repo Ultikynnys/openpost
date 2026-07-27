@@ -36,6 +36,11 @@
 		return safeSameOriginRedirect($page.url);
 	}
 
+	function registrationTarget() {
+		const redirect = $page.url.searchParams.get('redirect');
+		return redirect ? `/register?redirect=${encodeURIComponent(redirect)}` : '/register';
+	}
+
 	async function handleSubmit(e: Event) {
 		e.preventDefault();
 		error = '';
@@ -206,7 +211,7 @@
 		<p class="mt-6 text-center text-sm text-muted-foreground">
 			{m.auth_login_no_account()}
 			<a
-				href={resolve('/register')}
+				href={resolve(registrationTarget() as '/')}
 				class="inline-flex min-h-11 items-center px-1 font-medium text-primary hover:underline"
 				>{m.auth_login_create_one()}</a
 			>

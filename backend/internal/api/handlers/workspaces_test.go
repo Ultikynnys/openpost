@@ -279,6 +279,9 @@ func TestAcceptWorkspaceInvitationAddsWorkspaceMember(t *testing.T) {
 	authenticator := workspaceTestAuthenticator{
 		"admin-token":  {UserID: "admin-1", Email: "admin@example.com"},
 		"invite-token": {UserID: "user-1", Email: "teammate@example.com"},
+		"scoped-token": {
+			UserID: "user-1", Email: "teammate@example.com", WorkspaceID: "ws-2",
+		},
 	}
 	srv := newWorkspaceTestServerWithAuthenticator(t, entitlements.NewSelfHostedService(), authenticator)
 	ctx := context.Background()
@@ -302,6 +305,11 @@ func TestAcceptWorkspaceInvitationAddsWorkspaceMember(t *testing.T) {
 		CreatedAt:       time.Now().UTC(),
 	}).Exec(ctx)
 	require.NoError(t, err)
+
+	scopedResp := srv.postJSON(t, "/api/v1/workspace-invitations/accept", map[string]string{
+		"token": rawInviteToken,
+	}, "scoped-token")
+	require.Equal(t, http.StatusForbidden, scopedResp.Code, scopedResp.Body.String())
 
 	resp := srv.postJSON(t, "/api/v1/workspace-invitations/accept", map[string]string{
 		"token": rawInviteToken,

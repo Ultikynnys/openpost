@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import {
+  authenticatePage,
   createWorkspace,
   password,
   registerUser,
@@ -66,4 +67,54 @@ test("login honors same-origin redirects for existing workspaces", async ({
 
   await expect(page).toHaveURL(/\/settings\?tab=plan$/);
   await expect(page.getByRole("heading", { name: "Billing" })).toBeVisible();
+});
+
+test("signed-in startup never mounts the login form inside the app shell", async ({
+  page,
+  request,
+}) => {
+  const unique = Date.now().toString(36);
+  const email = `auth-startup-${unique}@example.com`;
+
+  const auth = await registerUser(request, email);
+  await createWorkspace(request, auth.token, "Startup Route E2E");
+  await authenticatePage(page, auth.token);
+  await page.addInitScript(() => {
+    const observedWindow = window as typeof window & {
+      __openpostLoginShellFlash?: boolean;
+    };
+    observedWindow.__openpostLoginShellFlash = false;
+
+    const detectLoginShellFlash = () => {
+      if (
+        document.querySelector('[data-testid="app-sidebar"]') &&
+        document.querySelector("form input#email")
+      ) {
+        observedWindow.__openpostLoginShellFlash = true;
+      }
+    };
+
+    new MutationObserver(detectLoginShellFlash).observe(
+      document.documentElement,
+      {
+        childList: true,
+        subtree: true,
+      },
+    );
+  });
+
+  await page.goto("/login");
+
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByTestId("app-sidebar")).toBeVisible();
+  expect(
+    await page.evaluate(
+      () =>
+        (
+          window as typeof window & {
+            __openpostLoginShellFlash?: boolean;
+          }
+        ).__openpostLoginShellFlash,
+    ),
+  ).toBe(false);
 });

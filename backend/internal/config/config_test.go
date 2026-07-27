@@ -43,6 +43,7 @@ var configTestEnvKeys = []string{
 	"OPENPOST_FEEDBACK_DESTINATION_URL",
 	"OPENPOST_FEEDBACK_RECIPIENT",
 	"OPENPOST_FEEDBACK_SUPPORT_URL",
+	"OPENPOST_UPDATE_CHECK_ENABLED",
 	"OPENPOST_SMTP_HOST",
 	"OPENPOST_SMTP_PORT",
 	"OPENPOST_SMTP_USERNAME",
@@ -58,6 +59,10 @@ var configTestEnvKeys = []string{
 	"TWITTER_CLIENT_SECRET",
 	"X_REDIRECT_URI",
 	"TWITTER_REDIRECT_URI",
+	"OPENPOST_X_MONTHLY_BUDGET_MICROUSD",
+	"OPENPOST_X_POST_CREATE_COST_MICROUSD",
+	"OPENPOST_X_POST_CREATE_WITH_URL_COST_MICROUSD",
+	"OPENPOST_PROVIDER_USAGE_RETENTION_DAYS",
 	"MASTODON_REDIRECT_URI",
 	"MASTODON_SERVERS",
 	"LINKEDIN_CLIENT_ID",
@@ -111,6 +116,27 @@ func TestLoadProductionPrimitiveDefaults(t *testing.T) {
 	require.False(t, cfg.FeedbackEnabled)
 	require.Empty(t, cfg.FeedbackDestinationURL)
 	require.Equal(t, "https://github.com/rodrgds/openpost/issues/new", cfg.FeedbackSupportURL)
+	require.True(t, cfg.UpdateCheckEnabled)
+	require.Equal(t, int64(5_000_000), cfg.XMonthlyBudgetMicrousd)
+	require.Equal(t, int64(15_000), cfg.XPostCreateCostMicrousd)
+	require.Equal(t, int64(200_000), cfg.XPostCreateWithURLCostMicrousd)
+	require.Equal(t, 180, cfg.ProviderUsageRetentionDays)
+}
+
+func TestLoadProviderCostGuardrailConfiguration(t *testing.T) {
+	t.Setenv("OPENPOST_UPDATE_CHECK_ENABLED", "false")
+	t.Setenv("OPENPOST_X_MONTHLY_BUDGET_MICROUSD", "1230000")
+	t.Setenv("OPENPOST_X_POST_CREATE_COST_MICROUSD", "16000")
+	t.Setenv("OPENPOST_X_POST_CREATE_WITH_URL_COST_MICROUSD", "210000")
+	t.Setenv("OPENPOST_PROVIDER_USAGE_RETENTION_DAYS", "90")
+
+	cfg := Load()
+
+	require.False(t, cfg.UpdateCheckEnabled)
+	require.Equal(t, int64(1_230_000), cfg.XMonthlyBudgetMicrousd)
+	require.Equal(t, int64(16_000), cfg.XPostCreateCostMicrousd)
+	require.Equal(t, int64(210_000), cfg.XPostCreateWithURLCostMicrousd)
+	require.Equal(t, 90, cfg.ProviderUsageRetentionDays)
 }
 
 func TestLoadStudioConfiguration(t *testing.T) {
@@ -351,6 +377,22 @@ func TestValidateRuntimeRejectsCloudLocalDefaults(t *testing.T) {
 	require.ErrorContains(t, err, "OPENPOST_DATABASE_DRIVER=postgres")
 	require.ErrorContains(t, err, "OPENPOST_DATABASE_URL")
 	require.ErrorContains(t, err, "OPENPOST_STORAGE_DRIVER=s3")
+}
+
+func TestValidateRuntimeRejectsNegativeProviderCostConfiguration(t *testing.T) {
+	cfg := validCloudRuntimeConfig()
+	cfg.XMonthlyBudgetMicrousd = -1
+	cfg.XPostCreateCostMicrousd = -1
+	cfg.XPostCreateWithURLCostMicrousd = -1
+	cfg.ProviderUsageRetentionDays = -1
+
+	err := cfg.ValidateRuntime()
+
+	require.Error(t, err)
+	require.ErrorContains(t, err, "OPENPOST_X_MONTHLY_BUDGET_MICROUSD >= 0")
+	require.ErrorContains(t, err, "OPENPOST_X_POST_CREATE_COST_MICROUSD >= 0")
+	require.ErrorContains(t, err, "OPENPOST_X_POST_CREATE_WITH_URL_COST_MICROUSD >= 0")
+	require.ErrorContains(t, err, "OPENPOST_PROVIDER_USAGE_RETENTION_DAYS >= 0")
 }
 
 func TestValidateRuntimeRejectsCloudMissingS3Primitives(t *testing.T) {

@@ -17,7 +17,7 @@ The web app is the main editorial surface.
 - [Scheduling](/usage/scheduling) covers queued publishing and failure visibility.
 - [Analytics](/usage/analytics) covers account growth, publication metrics, provider permissions, and collection timing.
 - [Media](/usage/media-library) covers reusable assets, designs, templates, brand resources, collections, provenance, usage checks, and safe cleanup.
-- [OpenPost Studio](/usage/studio) covers multi-page design editing, recovery versions, background removal, export, and composer return.
+- [OpenPost Studio](/usage/studio) covers the no-account local editor, multi-page design editing, workspace migration, recovery versions, background removal, export, and composer return.
 
 ## CLI
 

@@ -27,6 +27,7 @@ import (
 	"github.com/openpost/backend/internal/services/providerapps"
 	"github.com/openpost/backend/internal/services/publicurl"
 	"github.com/openpost/backend/internal/services/sessions"
+	"github.com/openpost/backend/internal/services/updatestatus"
 	"github.com/uptrace/bun"
 )
 
@@ -61,6 +62,7 @@ type RouteDeps struct {
 	AnalyticsService             *analyticsservice.Service
 	CommunicationsService        *communicationsservice.Service
 	NotificationService          *notifications.Service
+	UpdateStatusService          *updatestatus.Service
 
 	MediaHandler    *handlers.MediaHandler
 	BillingHandler  *handlers.BillingHandler
@@ -117,6 +119,7 @@ func RegisterHumaRoutes(api huma.API, deps RouteDeps) {
 	authHandler.VerifyTOTPLogin(api)
 	authHandler.BeginPasskeyLogin(api)
 	authHandler.FinishPasskeyLogin(api)
+	authHandler.SessionState(api)
 	authHandler.Me(api)
 	authHandler.UpdateProfile(api)
 	authHandler.SecurityStatus(api)
@@ -154,6 +157,7 @@ func RegisterHumaRoutes(api huma.API, deps RouteDeps) {
 	handlers.NewAnalyticsHandler(deps.DB, deps.Authenticator, deps.AnalyticsService).RegisterRoutes(api)
 	handlers.NewCommunicationsHandler(deps.DB, deps.Authenticator, deps.CommunicationsService).RegisterRoutes(api)
 	handlers.NewNotificationHandler(deps.DB, deps.Authenticator, deps.NotificationService).RegisterRoutes(api)
+	handlers.NewUpdateStatusHandler(deps.DB, deps.Authenticator, deps.UpdateStatusService).RegisterRoutes(api)
 
 	mcpOAuthHandler := deps.MCPOAuthHandler
 	if mcpOAuthHandler == nil {
@@ -163,6 +167,7 @@ func RegisterHumaRoutes(api huma.API, deps RouteDeps) {
 
 	workspaceHandler := handlers.NewWorkspaceHandler(deps.DB, deps.Authenticator, deps.Entitlement)
 	workspaceHandler.SetFrontendURL(deps.FrontendURL)
+	workspaceHandler.SetNotificationService(deps.NotificationService)
 	workspaceHandler.CreateWorkspace(api)
 	workspaceHandler.ListWorkspaces(api)
 	workspaceHandler.ListOrganizations(api)

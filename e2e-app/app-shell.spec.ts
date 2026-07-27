@@ -110,7 +110,11 @@ test("first autosave establishes the draft URL and keeps draft actions in one co
     page.getByRole("button", { name: "Save changes", exact: true }),
   ).toHaveCount(0);
   await expect(page.getByText("Editing draft post")).toHaveCount(0);
-  await expect(page.getByText("Saved", { exact: true })).toHaveCount(0);
+  await expect(
+    page
+      .getByTestId("composer-context-status")
+      .getByText("Saved", { exact: true }),
+  ).toBeVisible();
 
   await page.reload();
   await expect(page.getByLabel("Post text")).toHaveValue(content);

@@ -83,4 +83,12 @@ func TestCreateSchemaRunsPublicationMigration(t *testing.T) {
 		Where("type = 'index' AND name = ?", "jobs_status_run_at_idx").
 		Scan(ctx, &jobIndexCount))
 	require.Equal(t, 1, jobIndexCount)
+
+	var videoCodecColumnCount int
+	require.NoError(t, db.NewSelect().
+		ColumnExpr("COUNT(*)").
+		TableExpr("pragma_table_info('media_attachments')").
+		Where("name = ?", "video_codec").
+		Scan(ctx, &videoCodecColumnCount))
+	require.Equal(t, 1, videoCodecColumnCount)
 }

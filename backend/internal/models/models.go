@@ -283,6 +283,62 @@ type UsageCounter struct {
 	UpdatedAt   time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"updated_at"`
 }
 
+// ProviderUsageEvent is an immutable estimate of a confirmed successful hosted
+// provider request. OperationKey makes one confirmed request idempotent without
+// retaining post text, provider responses, or credentials.
+type ProviderUsageEvent struct {
+	bun.BaseModel `bun:"table:provider_usage_events"`
+
+	ID               string    `bun:",pk" json:"id"`
+	WorkspaceID      string    `bun:",notnull" json:"workspace_id"`
+	Provider         string    `bun:",notnull" json:"provider"`
+	Operation        string    `bun:",notnull" json:"operation"`
+	OperationKey     string    `bun:",notnull,unique" json:"operation_key"`
+	Units            int64     `bun:",notnull" json:"units"`
+	UnitCostMicrousd int64     `bun:",notnull" json:"unit_cost_microusd"`
+	CostMicrousd     int64     `bun:",notnull" json:"cost_microusd"`
+	OccurredAt       time.Time `bun:",notnull" json:"occurred_at"`
+	CreatedAt        time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"created_at"`
+}
+
+// ProviderUsageReservation holds the bounded cost exposure for an in-flight or
+// ambiguous provider request. It is mutable operational state, not billable
+// usage, and is removed after a confirmed success or definite failure.
+type ProviderUsageReservation struct {
+	bun.BaseModel `bun:"table:provider_usage_reservations"`
+
+	OperationKey     string    `bun:",pk" json:"operation_key"`
+	WorkspaceID      string    `bun:",notnull" json:"workspace_id"`
+	Provider         string    `bun:",notnull" json:"provider"`
+	Operation        string    `bun:",notnull" json:"operation"`
+	State            string    `bun:",notnull" json:"state"`
+	Units            int64     `bun:",notnull" json:"units"`
+	UnitCostMicrousd int64     `bun:",notnull" json:"unit_cost_microusd"`
+	CostMicrousd     int64     `bun:",notnull" json:"cost_microusd"`
+	OccurredAt       time.Time `bun:",notnull" json:"occurred_at"`
+	CreatedAt        time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"created_at"`
+	UpdatedAt        time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"updated_at"`
+}
+
+// ProviderUsagePeriodCounter is a monthly projection of immutable confirmed
+// usage events plus active reservations. It can be rebuilt from both sources.
+type ProviderUsagePeriodCounter struct {
+	bun.BaseModel `bun:"table:provider_usage_period_counters"`
+
+	WorkspaceID        string    `bun:",pk" json:"workspace_id"`
+	PeriodStart        time.Time `bun:",pk" json:"period_start"`
+	Provider           string    `bun:",pk" json:"provider"`
+	Operation          string    `bun:",pk" json:"operation"`
+	EventCount         int64     `bun:",notnull,default:0" json:"event_count"`
+	Units              int64     `bun:",notnull,default:0" json:"units"`
+	CostMicrousd       int64     `bun:",notnull,default:0" json:"cost_microusd"`
+	ReservedEventCount int64     `bun:",notnull,default:0" json:"reserved_event_count"`
+	ReservedUnits      int64     `bun:",notnull,default:0" json:"reserved_units"`
+	ReservedMicrousd   int64     `bun:"reserved_cost_microusd,notnull,default:0" json:"reserved_cost_microusd"`
+	CreatedAt          time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"created_at"`
+	UpdatedAt          time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"updated_at"`
+}
+
 type BillingSubscription struct {
 	bun.BaseModel `bun:"table:billing_subscriptions"`
 
@@ -554,6 +610,7 @@ type AnalyticsAccountSnapshot struct {
 	SocialAccountID string    `bun:"social_account_id,notnull" json:"social_account_id"`
 	Platform        string    `bun:",notnull" json:"platform"`
 	MetricsJSON     string    `bun:"metrics_json,notnull,default:'{}'" json:"metrics_json"`
+	CaptureKey      string    `bun:"capture_key,notnull,default:''" json:"-"`
 	CapturedAt      time.Time `bun:"captured_at,notnull" json:"captured_at"`
 }
 
@@ -569,6 +626,7 @@ type AnalyticsRenditionSnapshot struct {
 	SocialAccountID string    `bun:"social_account_id,notnull" json:"social_account_id"`
 	Platform        string    `bun:",notnull" json:"platform"`
 	MetricsJSON     string    `bun:"metrics_json,notnull,default:'{}'" json:"metrics_json"`
+	CaptureKey      string    `bun:"capture_key,notnull,default:''" json:"-"`
 	CapturedAt      time.Time `bun:"captured_at,notnull" json:"captured_at"`
 }
 
@@ -595,36 +653,59 @@ type AnalyticsSyncState struct {
 	UpdatedAt       time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"updated_at"`
 }
 
+// EngagementAttachment is the safe public metadata needed to render a
+// provider-owned attachment. Provider payloads and media contents are not
+// retained.
+type EngagementAttachment struct {
+	Type      string `json:"type"`
+	URL       string `json:"url"`
+	Name      string `json:"name,omitempty"`
+	MimeType  string `json:"mime_type,omitempty"`
+	Thumbnail string `json:"thumbnail,omitempty"`
+	AltText   string `json:"alt_text,omitempty"`
+}
+
 // EngagementItem is a normalized reply or comment collected from a provider.
 // Provider payloads are deliberately not retained.
 type EngagementItem struct {
 	bun.BaseModel `bun:"table:engagement_items"`
 
-	ID                   string    `bun:",pk" json:"id"`
-	WorkspaceID          string    `bun:"workspace_id,notnull" json:"workspace_id"`
-	RenditionID          string    `bun:"rendition_id,notnull" json:"rendition_id"`
-	SocialAccountID      string    `bun:"social_account_id,notnull" json:"social_account_id"`
-	Platform             string    `bun:",notnull" json:"platform"`
-	RemoteID             string    `bun:"remote_id,notnull" json:"remote_id"`
-	ParentRemoteID       string    `bun:"parent_remote_id,notnull,default:''" json:"parent_remote_id"`
-	ConversationRemoteID string    `bun:"conversation_remote_id,notnull,default:''" json:"conversation_remote_id"`
-	AuthorRemoteID       string    `bun:"author_remote_id,notnull,default:''" json:"author_remote_id"`
-	AuthorName           string    `bun:"author_name,notnull,default:''" json:"author_name"`
-	AuthorHandle         string    `bun:"author_handle,notnull,default:''" json:"author_handle"`
-	AuthorAvatarURL      string    `bun:"author_avatar_url,notnull,default:''" json:"author_avatar_url"`
-	Body                 string    `bun:",notnull,default:''" json:"body"`
-	IsOurs               bool      `bun:"is_ours,notnull,default:false" json:"is_ours"`
-	CanReply             bool      `bun:"can_reply,notnull,default:false" json:"can_reply"`
-	CanHide              bool      `bun:"can_hide,notnull,default:false" json:"can_hide"`
-	CanDelete            bool      `bun:"can_delete,notnull,default:false" json:"can_delete"`
-	Hidden               bool      `bun:",notnull,default:false" json:"hidden"`
-	ReadAt               time.Time `bun:"read_at,nullzero" json:"read_at,omitempty,omitzero"`
-	ArchivedAt           time.Time `bun:"archived_at,nullzero" json:"archived_at,omitempty,omitzero"`
-	RemoteCreatedAt      time.Time `bun:"remote_created_at,nullzero" json:"remote_created_at,omitempty,omitzero"`
-	LastSeenAt           time.Time `bun:"last_seen_at,notnull" json:"last_seen_at"`
-	CreatedAt            time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"created_at"`
-	UpdatedAt            time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"updated_at"`
-	ProviderPostURL      string    `bun:"-" json:"provider_post_url,omitempty"`
+	ID                   string                 `bun:",pk" json:"id"`
+	WorkspaceID          string                 `bun:"workspace_id,notnull" json:"workspace_id"`
+	RenditionID          string                 `bun:"rendition_id,notnull" json:"rendition_id"`
+	SocialAccountID      string                 `bun:"social_account_id,notnull" json:"social_account_id"`
+	Platform             string                 `bun:",notnull" json:"platform"`
+	RemoteID             string                 `bun:"remote_id,notnull" json:"remote_id"`
+	ParentRemoteID       string                 `bun:"parent_remote_id,notnull,default:''" json:"parent_remote_id"`
+	ConversationRemoteID string                 `bun:"conversation_remote_id,notnull,default:''" json:"conversation_remote_id"`
+	AuthorRemoteID       string                 `bun:"author_remote_id,notnull,default:''" json:"author_remote_id"`
+	AuthorName           string                 `bun:"author_name,notnull,default:''" json:"author_name"`
+	AuthorHandle         string                 `bun:"author_handle,notnull,default:''" json:"author_handle"`
+	AuthorAvatarURL      string                 `bun:"author_avatar_url,notnull,default:''" json:"author_avatar_url"`
+	Body                 string                 `bun:",notnull,default:''" json:"body"`
+	AttachmentsJSON      string                 `bun:"attachments_json,notnull,default:'[]'" json:"-"`
+	IsOurs               bool                   `bun:"is_ours,notnull,default:false" json:"is_ours"`
+	CanReply             bool                   `bun:"can_reply,notnull,default:false" json:"can_reply"`
+	CanHide              bool                   `bun:"can_hide,notnull,default:false" json:"can_hide"`
+	CanDelete            bool                   `bun:"can_delete,notnull,default:false" json:"can_delete"`
+	CanLike              bool                   `bun:"can_like,notnull,default:false" json:"can_like"`
+	CanUnlike            bool                   `bun:"can_unlike,notnull,default:false" json:"can_unlike"`
+	Liked                bool                   `bun:"liked,notnull,default:false" json:"liked"`
+	Hidden               bool                   `bun:",notnull,default:false" json:"hidden"`
+	ReadAt               time.Time              `bun:"read_at,nullzero" json:"read_at,omitempty,omitzero"`
+	ArchivedAt           time.Time              `bun:"archived_at,nullzero" json:"archived_at,omitempty,omitzero"`
+	EditedAt             time.Time              `bun:"edited_at,nullzero" json:"edited_at,omitempty,omitzero"`
+	DeletedAt            time.Time              `bun:"deleted_at,nullzero" json:"deleted_at,omitempty,omitzero"`
+	RemoteCreatedAt      time.Time              `bun:"remote_created_at,nullzero" json:"remote_created_at,omitempty,omitzero"`
+	LastSeenAt           time.Time              `bun:"last_seen_at,notnull" json:"last_seen_at"`
+	CreatedAt            time.Time              `bun:",nullzero,notnull,default:current_timestamp" json:"created_at"`
+	UpdatedAt            time.Time              `bun:",nullzero,notnull,default:current_timestamp" json:"updated_at"`
+	ProviderPostURL      string                 `bun:"-" json:"provider_post_url,omitempty"`
+	PublicationID        string                 `bun:"-" json:"publication_id,omitempty"`
+	PublicationTitle     string                 `bun:"-" json:"publication_title,omitempty"`
+	PublicationExcerpt   string                 `bun:"-" json:"publication_excerpt,omitempty"`
+	AccountUsername      string                 `bun:"-" json:"account_username,omitempty"`
+	Attachments          []EngagementAttachment `bun:"-" json:"attachments"`
 }
 
 // Conversation is a provider DM thread. It stores only the normalized
@@ -700,17 +781,28 @@ type CommunicationSyncState struct {
 type UserNotification struct {
 	bun.BaseModel `bun:"table:user_notifications"`
 
-	ID          string    `bun:",pk" json:"id"`
-	UserID      string    `bun:"user_id,notnull" json:"user_id"`
-	WorkspaceID string    `bun:"workspace_id,notnull,default:''" json:"workspace_id"`
-	Type        string    `bun:",notnull" json:"type"`
-	Title       string    `bun:",notnull" json:"title"`
-	Body        string    `bun:",notnull,default:''" json:"body"`
-	Href        string    `bun:",notnull,default:''" json:"href"`
-	PayloadJSON string    `bun:"payload_json,notnull,default:'{}'" json:"payload_json"`
-	DedupKey    string    `bun:"dedup_key,notnull,default:''" json:"-"`
-	ReadAt      time.Time `bun:"read_at,nullzero" json:"read_at"`
-	CreatedAt   time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"created_at"`
+	ID          string               `bun:",pk" json:"id"`
+	UserID      string               `bun:"user_id,notnull" json:"user_id"`
+	WorkspaceID string               `bun:"workspace_id,notnull,default:''" json:"workspace_id"`
+	Type        string               `bun:",notnull" json:"type"`
+	Title       string               `bun:",notnull" json:"title"`
+	Body        string               `bun:",notnull,default:''" json:"body"`
+	Href        string               `bun:",notnull,default:''" json:"href"`
+	PayloadJSON string               `bun:"payload_json,notnull,default:'{}'" json:"payload_json"`
+	DedupKey    string               `bun:"dedup_key,notnull,default:''" json:"-"`
+	ReadAt      time.Time            `bun:"read_at,nullzero" json:"read_at"`
+	CreatedAt   time.Time            `bun:",nullzero,notnull,default:current_timestamp" json:"created_at"`
+	Actions     []NotificationAction `bun:"-" json:"actions,omitempty"`
+}
+
+// NotificationAction is a safe in-app action. Only local application paths are
+// accepted by the notification service.
+type NotificationAction struct {
+	Label     string `json:"label"`
+	Href      string `json:"href,omitempty"`
+	Kind      string `json:"kind,omitempty"`
+	Operation string `json:"operation,omitempty"`
+	TargetID  string `json:"target_id,omitempty"`
 }
 
 // UserNotificationPreference stores the user's per-event delivery choices.
@@ -807,6 +899,16 @@ type MediaAttachment struct {
 	DurationMS         int64     `bun:"duration_ms,notnull,default:0" json:"duration_ms"`
 	FrameRate          float64   `bun:"frame_rate,notnull,default:0" json:"frame_rate"`
 	AspectRatio        string    `bun:"aspect_ratio,notnull,default:''" json:"aspect_ratio"`
+	ContainerFormat    string    `bun:"container_format,notnull,default:''" json:"container_format"`
+	VideoCodec         string    `bun:"video_codec,notnull,default:''" json:"video_codec"`
+	VideoProfile       string    `bun:"video_profile,notnull,default:''" json:"video_profile"`
+	AudioCodec         string    `bun:"audio_codec,notnull,default:''" json:"audio_codec"`
+	PixelFormat        string    `bun:"pixel_format,notnull,default:''" json:"pixel_format"`
+	ColorSpace         string    `bun:"color_space,notnull,default:''" json:"color_space"`
+	BitRate            int64     `bun:"bit_rate,notnull,default:0" json:"bit_rate"`
+	Rotation           int       `bun:"rotation,notnull,default:0" json:"rotation"`
+	AudioChannels      int       `bun:"audio_channels,notnull,default:0" json:"audio_channels"`
+	ProcessingProgress int       `bun:"processing_progress,notnull,default:0" json:"processing_progress"`
 	DominantType       string    `bun:"dominant_type,notnull,default:''" json:"dominant_type"`
 	AnalysisStatus     string    `bun:"analysis_status,notnull,default:'ready'" json:"analysis_status"`
 	AnalysisError      string    `bun:"analysis_error,notnull,default:''" json:"analysis_error"`
@@ -845,6 +947,7 @@ type DesignDocument struct {
 	BrandKitRevision    int       `bun:"brand_kit_revision,notnull,default:0" json:"brand_kit_revision"`
 	ExportFormat        string    `bun:"export_format,notnull,default:'png'" json:"export_format"`
 	ExportQuality       float64   `bun:"export_quality,notnull,default:0.92" json:"export_quality"`
+	ExportMatteColor    string    `bun:"export_matte_color,notnull,default:'#ffffff'" json:"export_matte_color"`
 	CoverPreviewMediaID string    `bun:"cover_preview_media_id,nullzero" json:"cover_preview_media_id,omitempty"`
 	IsFavorite          bool      `bun:"is_favorite,notnull,default:false" json:"is_favorite"`
 	CreatedAt           time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"created_at"`
@@ -860,6 +963,7 @@ type DesignPage struct {
 	Name                string    `bun:",notnull" json:"name"`
 	DisplayOrder        int       `bun:"display_order,notnull" json:"display_order"`
 	BackgroundColor     string    `bun:"background_color,notnull,default:'#ffffff'" json:"background_color"`
+	BackgroundJSON      string    `bun:"background_json,notnull,default:'{}'" json:"-"`
 	SceneJSON           string    `bun:"scene_json,notnull,default:'[]'" json:"scene_json"`
 	PreviewMediaID      string    `bun:"preview_media_id,nullzero" json:"preview_media_id,omitempty"`
 	LatestExportMediaID string    `bun:"latest_export_media_id,nullzero" json:"latest_export_media_id,omitempty"`

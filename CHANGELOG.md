@@ -6,6 +6,10 @@ All notable changes to this project are documented in this file.
 
 ### Added
 
+- Added a no-account OpenPost Studio at `/studio` with on-device design and image storage, watermark-free export, public starter templates, privacy-safe Umami funnel events, and an explicit path that copies local work into a new or existing workspace.
+- Added a client-first video workflow across every video-capable composer and the Media library, with browser-side inspection, MP4 remuxing, H.264/AAC transcoding and compression, precise trimming, draggable aspect-ratio cropping, real upload progress and cancellation, durable server verification, poster generation, and retryable processing.
+- Added a cloud-only X request-cost guardrail with durable pre-request reservations, immutable idempotent events only for confirmed successes, separate unresolved exposure, reconciled monthly counters, workspace-visible estimates, and per-workspace safety limits that never gate self-hosted publishing.
+- Added a self-hosted instance-admin update status with running build details, cached and bounded stable release checks, validated official release links, and no auto-update path.
 - Added LinkedIn Organization Page selection with one-grant multi-account connection, encrypted shared credentials, organization author URNs, and an explicit operator permission gate.
 - Added verified Discord webhook accounts with scheduled text, streamed multipart attachments, safe mention defaults, reply references, and deletion.
 - Added a durable Engagement workspace, per-user in-app notifications, and an opt-in unified inbox for X, Bluesky, Facebook Pages, Instagram Professional accounts, and Mastodon direct posts.
@@ -16,12 +20,15 @@ All notable changes to this project are documented in this file.
 - Added pixel-based rectangle, ellipse, lasso, and color-aware magic selections to Studio, plus persistent hard-edge Pencil and tolerance-aware Paint Bucket tools with selection clipping, brand colors, touch controls, and keyboard shortcuts.
 - Added selection-clipped linear, radial, angle, reflected, and diamond gradients to Studio, plus reusable inside, center, and outside borders for visual layers.
 - Added non-destructive Eraser and Magic Eraser tools, expanded image color controls and quick looks, and outside borders that follow the visible pixels of transparent images.
+- Added transparent, solid, multi-stop gradient, and image page backgrounds to Studio, with opacity controls, responsive previews, and configurable JPEG matte colors.
 - Added account-aware LinkedIn member and Organization Page analytics for approved Community Management API applications.
 - Added a unified follower trend and publication-level content performance with expandable per-platform results.
 - Added direct provider-post links to Engagement, including instance-aware Mastodon and DID-aware Bluesky links.
+- Added actionable partial-publish notifications, a safe retry-all-failed-destinations action, token-free in-app workspace invitation acceptance, and X/Mastodon engagement reactions.
 
 ### Changed
 
+- Reduced app startup and publication-list load with precompressed immutable assets, service-worker caching that fills as routes are visited, video-editor code loaded only when needed, and publication data loaded in a fixed number of queries.
 - Added Photoshop-style Studio tool slots, movable pixel-selection borders, textured pencil strokes, and drag-to-place media previews.
 - Replaced the remaining native radio inputs with the shared shadcn-svelte radio group and synchronized Studio color editing across Hex, HSL, and RGB.
 - Clarified analytics exposure metrics, made follower changes legible with a padded chart range, and kept long connected-account lists within the chart height on desktop.
@@ -40,14 +47,20 @@ All notable changes to this project are documented in this file.
 - Moved Studio media selection into a full-height sheet and made media grids add columns as their panels grow.
 - Renamed the sidebar Communications destination to Inbox, clarified archived engagement actions, and kept filter changes in place without replacing the page with a loading placeholder.
 - Standardized application select controls on the shared shadcn-svelte component.
+- Made Engagement post-centered with account/publication filters, reply threading, safe attachment links, edited/deleted state, and durable provider sync health.
+- Made composer source or override state, save state, destination readiness, reset-to-source, and the last conflict editor visible in the main authoring flow.
+- Made Analytics account filters apply to every total and content row, added per-provider metric detail, sorting, native links, stale timing, and capture-window snapshot deduplication.
+- Made feedback rate limits durable across restarts and multiple app instances.
 
 ### Fixed
 
+- Prevented signed-in startup redirects from briefly mounting the login form inside the authenticated application sidebar.
 - Fixed Studio color picks falling back to black, first-drag layer movement and Alt duplication, unstable paint erasing, and save validation for erase masks and color adjustments.
 - Persisted each Studio design's export format and quality so PNG and WebP selections no longer reset to the preset default after autosave.
 - Kept desktop page widths stable when vertical scrollbars appear without narrowing phone drawers, shortened the draft context action, and made Engagement archive, restore, read, and provider-delete actions update without a loading flash or false “Move to inbox” state.
 - Used the configured public media or S3/R2 URL consistently for verification and provider publishing, refreshed stale failed checks before validation, and removed duplicate HTTPS errors from destination account menus.
 - Made Studio transforms undoable, made Shift-rotation snap stably to 15-degree steps, assigned Space-drag to panning and Alt-drag to duplication, and allowed pasteboard clicks to clear selection.
+- Restored native Tab navigation in Studio, exposed shape insertion on desktop and mobile, and made export settings summarize output size, transparency, and destination before rendering.
 - Kept the sidebar calendar and full Calendar on one canonical occurrence rule so scheduled and published items appear consistently.
 - Loaded the original authenticated Brand asset when a generated thumbnail is unavailable.
 - Gave the full frontend validation program enough bounded Node heap to complete the release gate.
@@ -70,6 +83,9 @@ All notable changes to this project are documented in this file.
 - Removed content performance for posts that providers report as deleted or unavailable, while keeping the canonical OpenPost publication history.
 - Removed generic provider quota caveats from the composer when there is no actionable account problem.
 - Kept Studio export confirmation ahead of late autosave announcements and aligned end-to-end select interactions with the shared shadcn-svelte control.
+- Removed the unused draft `force` request field so conflict overwrite always uses a current revision compare-and-set, and preserved engagement read/archive state across provider edits and deletions.
+- Preserved X reaction state across provider syncs, exposed the inverse reaction action immediately, and enforced workspace-scoped token boundaries when accepting invitations.
+- Kept direct video upload completion idempotent while analysis runs, and allowed later manual publication retries to report a fresh result without duplicating automatic-attempt alerts.
 
 ## [1.27.9] - 2026-07-25
 

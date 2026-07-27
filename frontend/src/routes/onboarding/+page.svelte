@@ -14,6 +14,7 @@
 	import RocketIcon from 'lucide-svelte/icons/rocket';
 	import LoaderIcon from 'lucide-svelte/icons/loader-2';
 	import { m } from '$lib/paraglide/messages';
+	import { safeSameOriginRedirect } from '$lib/redirects';
 	import {
 		hostedPlanFromSearchParams,
 		onboardingPathForPlan,
@@ -35,6 +36,8 @@
 	}
 
 	function afterOnboardingTarget() {
+		const redirect = safeSameOriginRedirect(page.url, '');
+		if (redirect) return redirect;
 		const planID = selectedPlanID();
 		return localStorage.getItem(SAMPLE_CAMPAIGN_DISMISSED_KEY) === 'true'
 			? settingsPathForPlan(planID)
@@ -42,7 +45,7 @@
 	}
 
 	function loginTarget() {
-		return `/login?redirect=${encodeURIComponent(onboardingPathForPlan(selectedPlanID()))}`;
+		return `/login?redirect=${encodeURIComponent(`${page.url.pathname}${page.url.search}`)}`;
 	}
 
 	onMount(() => {

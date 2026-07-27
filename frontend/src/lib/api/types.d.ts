@@ -244,6 +244,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/update-status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get instance update status
+         * @description Returns a cached, read-only stable release comparison. This endpoint never installs updates.
+         */
+        get: operations["get-instance-update-status"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/analytics": {
         parameters: {
             query?: never;
@@ -715,6 +735,26 @@ export interface paths {
         put?: never;
         /** Start TOTP enrollment for the current user */
         post: operations["begin-totp-setup"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/session-state": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get optional web session state
+         * @description Returns an anonymous state instead of an authorization error when no valid session is present.
+         */
+        get: operations["get-auth-session-state"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1356,6 +1396,23 @@ export interface paths {
         head?: never;
         /** Update media metadata (alt text) */
         patch: operations["update-media"];
+        trace?: never;
+    };
+    "/media/{id}/analysis/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Retry authoritative analysis for a video */
+        post: operations["retry-media-analysis"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/media/{id}/favorite": {
@@ -2022,6 +2079,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/publications/{id}/retry-failed": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Retry every retryable failed publication destination
+         * @description Queues one publication job. Destinations that already succeeded and failures that require editing or reconnection are left unchanged.
+         */
+        post: operations["retry-failed-publication-renditions"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/publications/{id}/schedule": {
         parameters: {
             query?: never;
@@ -2248,6 +2325,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/studio/public-templates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List built-in Studio templates available without a workspace */
+        get: operations["list-public-studio-templates"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/studio/return-tokens": {
         parameters: {
             query?: never;
@@ -2363,6 +2457,26 @@ export interface paths {
         put?: never;
         /** Accept a workspace invitation */
         post: operations["accept-workspace-invitation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/workspace-invitations/{id}/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Accept the current user's workspace invitation
+         * @description Accepts a pending invitation only when its email matches the signed-in user. This supports safe in-app invitation notifications without storing the invitation token.
+         */
+        post: operations["accept-workspace-invitation-by-id"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2670,7 +2784,10 @@ export interface components {
             };
             missing_account_scopes: string[] | null;
             missing_content_scopes: string[] | null;
+            /** Format: date-time */
+            next_sync_at?: string;
             platform: string;
+            stale: boolean;
             status: string;
             username: string;
         };
@@ -2815,6 +2932,17 @@ export interface components {
             token?: string;
             user?: components["schemas"]["UserProfile"];
         };
+        AuthSessionStateOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/AuthSessionStateOutputBody.json
+             */
+            readonly $schema?: string;
+            /** @description Whether the request has a valid OpenPost session */
+            authenticated: boolean;
+            user?: components["schemas"]["UserProfile"];
+        };
         BatchDeleteMediaInputBody: {
             /**
              * Format: uri
@@ -2885,9 +3013,11 @@ export interface components {
             plan_id?: string;
             /** @description Billing provider */
             provider?: string;
+            /** @description Confirmed hosted provider-cost estimates and unresolved reservations, separate from the product subscription */
+            provider_costs: components["schemas"]["ProviderCostSummary"][] | null;
             /** @description Subscription status */
             status: string;
-            /** @description Current-month usage counters */
+            /** @description Current-month product usage counters */
             usage: {
                 [key: string]: number;
             };
@@ -3135,11 +3265,14 @@ export interface components {
             metrics: {
                 [key: string]: number;
             };
+            /** Format: date-time */
+            next_sync_at?: string;
             platform: string;
             publication_id: string;
             /** Format: date-time */
             published_at: string;
             rendition_id: string;
+            stale: boolean;
             status: string;
             title: string;
             username: string;
@@ -3503,6 +3636,8 @@ export interface components {
              * @example https://example.com/schemas/CreateStudioDesignInputBody.json
              */
             readonly $schema?: string;
+            /** @description Stable client request ID used to make design creation idempotent */
+            client_request_id?: string;
             /** Format: int64 */
             height_px: number;
             preset_key: string;
@@ -3892,13 +4027,23 @@ export interface components {
              */
             readonly $schema?: string;
             /** @enum {string} */
-            action: "reply" | "hide" | "delete";
+            action: "reply" | "hide" | "delete" | "like" | "unlike";
             message?: string;
             workspace_id: string;
         };
+        EngagementAttachment: {
+            alt_text?: string;
+            mime_type?: string;
+            name?: string;
+            thumbnail?: string;
+            type: string;
+            url: string;
+        };
         EngagementItem: {
+            account_username?: string;
             /** Format: date-time */
             archived_at?: string;
+            attachments: components["schemas"]["EngagementAttachment"][] | null;
             author_avatar_url: string;
             author_handle: string;
             author_name: string;
@@ -3906,18 +4051,28 @@ export interface components {
             body: string;
             can_delete: boolean;
             can_hide: boolean;
+            can_like: boolean;
             can_reply: boolean;
+            can_unlike: boolean;
             conversation_remote_id: string;
             /** Format: date-time */
             created_at: string;
+            /** Format: date-time */
+            deleted_at?: string;
+            /** Format: date-time */
+            edited_at?: string;
             hidden: boolean;
             id: string;
             is_ours: boolean;
             /** Format: date-time */
             last_seen_at: string;
+            liked: boolean;
             parent_remote_id: string;
             platform: string;
             provider_post_url?: string;
+            publication_excerpt?: string;
+            publication_id?: string;
+            publication_title?: string;
             /** Format: date-time */
             read_at?: string;
             /** Format: date-time */
@@ -3937,8 +4092,22 @@ export interface components {
              */
             readonly $schema?: string;
             items: components["schemas"]["EngagementItem"][] | null;
+            sync_states: components["schemas"]["EngagementSyncState"][] | null;
             /** Format: int64 */
             total: number;
+        };
+        EngagementSyncState: {
+            error_code: string;
+            error_message: string;
+            id: string;
+            /** Format: date-time */
+            last_success_at?: string;
+            /** Format: date-time */
+            next_sync_at?: string;
+            platform: string;
+            rendition_id: string;
+            social_account_id: string;
+            status: string;
         };
         ErrorDetail: {
             /** @description Where the error occurred, e.g. 'body.items[3].tags' or 'path.thing-id' */
@@ -4233,6 +4402,15 @@ export interface components {
             can_edit: boolean;
             tags: components["schemas"]["MediaTagResponse"][] | null;
         };
+        ListPublicStudioTemplatesOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ListPublicStudioTemplatesOutputBody.json
+             */
+            readonly $schema?: string;
+            templates: components["schemas"]["StudioTemplateResponse"][] | null;
+        };
         ListStudioDesignsOutputBody: {
             /**
              * Format: uri
@@ -4360,10 +4538,26 @@ export interface components {
             analysis_status: string;
             /** @description Media library role */
             asset_kind: string;
+            /**
+             * Format: int64
+             * @description Detected audio channel count
+             */
+            audio_channels: number;
+            /** @description Detected audio codec */
+            audio_codec?: string;
+            /**
+             * Format: int64
+             * @description Detected aggregate bitrate in bits per second
+             */
+            bit_rate: number;
             /** @description Whether media can be deleted */
             can_delete: boolean;
             /** @description Collection IDs containing this media */
             collections: string[] | null;
+            /** @description Detected video color space */
+            color_space?: string;
+            /** @description Detected media container */
+            container_format?: string;
             /** @description Creation time */
             created_at: string;
             /** @description Producing Studio design */
@@ -4395,8 +4589,15 @@ export interface components {
             original_filename: string;
             /** @description Source media for this derivative */
             parent_media_id?: string;
+            /** @description Detected video pixel format */
+            pixel_format?: string;
             /** @description Poster thumbnail URL */
             poster_thumbnail_url?: string;
+            /**
+             * Format: int64
+             * @description Server processing progress from 0 to 100
+             */
+            processing_progress: number;
             /** @description Processing status */
             processing_status: string;
             /** @description Public URL verification time */
@@ -4408,6 +4609,11 @@ export interface components {
              * @description Public URL verification HTTP status
              */
             public_url_status: number;
+            /**
+             * Format: int64
+             * @description Normalized display rotation
+             */
+            rotation: number;
             /**
              * Format: int64
              * @description File size in bytes
@@ -4426,6 +4632,10 @@ export interface components {
              * @description Number of posts using this media
              */
             usage_count: number;
+            /** @description Detected video codec */
+            video_codec?: string;
+            /** @description Detected video codec profile */
+            video_profile?: string;
             /**
              * Format: int64
              * @description Image width
@@ -4492,6 +4702,10 @@ export interface components {
             readonly $schema?: string;
             /** @description Persisted alt text */
             alt_text: string;
+            /** @description Media analysis error */
+            analysis_error?: string;
+            /** @description Media analysis status */
+            analysis_status: string;
             /** @description Media library role */
             asset_kind: string;
             /** @description Whether an existing media attachment was reused */
@@ -4508,6 +4722,15 @@ export interface components {
             original_filename: string;
             /** @description Source media ID */
             parent_media_id?: string;
+            /** @description Poster thumbnail URL */
+            poster_thumbnail_url?: string;
+            /**
+             * Format: int64
+             * @description Server processing progress from 0 to 100
+             */
+            processing_progress: number;
+            /** @description Media processing status */
+            processing_status: string;
             /**
              * Format: int64
              * @description File size in bytes
@@ -4576,6 +4799,13 @@ export interface components {
             slot?: components["schemas"]["PostingScheduleResponse"];
             /** @description The suggested time in ISO 8601 format */
             slot_time: string;
+        };
+        NotificationAction: {
+            href?: string;
+            kind?: string;
+            label: string;
+            operation?: string;
+            target_id?: string;
         };
         NotificationPage: {
             /**
@@ -4924,6 +5154,87 @@ export interface components {
             /** @description Last update time */
             updated_at: string;
         };
+        ProviderCostOperationSummary: {
+            /**
+             * Format: int64
+             * @description Confirmed estimated provider cost in millionths of the currency unit
+             */
+            cost_microusd: number;
+            /**
+             * Format: int64
+             * @description Number of confirmed successful request estimates
+             */
+            event_count: number;
+            /** @description Metered provider operation */
+            operation: string;
+            /**
+             * Format: int64
+             * @description Reserved provider exposure in millionths of the currency unit
+             */
+            reserved_cost_microusd: number;
+            /**
+             * Format: int64
+             * @description Number of in-flight or ambiguous request reservations
+             */
+            reserved_event_count: number;
+            /**
+             * Format: int64
+             * @description Reserved provider operation units not counted as confirmed billed usage
+             */
+            reserved_units: number;
+            /**
+             * Format: int64
+             * @description Confirmed estimated billed operation units
+             */
+            units: number;
+        };
+        ProviderCostSummary: {
+            /**
+             * Format: int64
+             * @description Configured monthly safety limit covering confirmed cost and reservations
+             */
+            budget_microusd: number;
+            /**
+             * Format: int64
+             * @description Confirmed estimated provider cost in millionths of the currency unit
+             */
+            cost_microusd: number;
+            /** @description ISO 4217 estimate currency */
+            currency: string;
+            /**
+             * Format: int64
+             * @description Number of confirmed successful provider request estimates
+             */
+            event_count: number;
+            /** @description Operation-level confirmed and reserved breakdown */
+            operations: components["schemas"]["ProviderCostOperationSummary"][] | null;
+            /** @description UTC month start */
+            period_start: string;
+            /** @description Provider pricing source used by this estimate */
+            pricing_source_url: string;
+            /** @description Provider key */
+            provider: string;
+            /**
+             * Format: int64
+             * @description Reserved provider exposure in millionths of the currency unit
+             */
+            reserved_cost_microusd: number;
+            /**
+             * Format: int64
+             * @description Number of in-flight or ambiguous provider request reservations
+             */
+            reserved_event_count: number;
+            /**
+             * Format: int64
+             * @description Reserved provider units not counted as confirmed billed usage
+             */
+            reserved_units: number;
+            /**
+             * Format: int64
+             * @description Confirmed estimated billed provider operation units
+             */
+            units: number;
+        };
         ProviderInfo: {
             /** @description Connection method: oauth, app_password, or oauth_oob */
             auth_mode: string;
@@ -5143,8 +5454,6 @@ export interface components {
              * @description Revision loaded by the editor
              */
             expected_revision: number;
-            /** @description Confirms an explicit overwrite after reviewing the latest revision */
-            force?: boolean;
             /** @description Publication goal */
             goal?: string;
             /**
@@ -5588,6 +5897,20 @@ export interface components {
             /** Format: int64 */
             expected_revision: number;
         };
+        RetryMediaAnalysisOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/RetryMediaAnalysisOutputBody.json
+             */
+            readonly $schema?: string;
+            /** @description Current analysis status */
+            analysis_status: string;
+            /** @description Media ID */
+            media_id: string;
+            /** @description Current processing status */
+            processing_status: string;
+        };
         RevokeAPITokenOutputBody: {
             /**
              * Format: uri
@@ -5665,8 +5988,6 @@ export interface components {
              * @description Revision loaded by the editor
              */
             expected_revision: number;
-            /** @description Confirms an explicit overwrite after reviewing the latest revision */
-            force?: boolean;
             /** @description Replacement aggregate media */
             media_ids: string[] | null;
             /** @description Canonical segments, media, settings, and destination renditions */
@@ -6054,6 +6375,7 @@ export interface components {
         StudioExportDefaults: {
             /** @enum {string} */
             format: "png" | "jpeg" | "webp";
+            matte_color: string;
             /** Format: double */
             quality: number;
         };
@@ -6140,7 +6462,22 @@ export interface components {
             /** @enum {string} */
             shape: "rectangle" | "rounded_rectangle" | "circle" | "ellipse" | "diamond";
         };
+        StudioPageBackground: {
+            color?: string;
+            gradient?: components["schemas"]["StudioGradientValue"];
+            image?: components["schemas"]["StudioPageBackgroundImage"];
+            /** Format: double */
+            opacity: number;
+            /** @enum {string} */
+            type: "transparent" | "solid" | "gradient" | "image";
+        };
+        StudioPageBackgroundImage: {
+            /** @enum {string} */
+            fit: "cover" | "contain" | "stretch";
+            media_id: string;
+        };
         StudioPagePayload: {
+            background?: components["schemas"]["StudioPageBackground"];
             background_color: string;
             id: string;
             latest_export_media_id?: string;
@@ -6566,6 +6903,31 @@ export interface components {
             /** @description User display name */
             display_name?: string;
         };
+        UpdateStatusResponse: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/UpdateStatusResponse.json
+             */
+            readonly $schema?: string;
+            /** @description Last bounded release-check attempt */
+            checked_at?: string;
+            /** @description Latest stable OpenPost release tag */
+            latest_version?: string;
+            /** @description Latest release publication time */
+            published_at?: string;
+            /** @description Validated GitHub release page */
+            release_url?: string;
+            /** @description Source revision embedded in or detected from the running server */
+            running_build: string;
+            /** @description Version embedded in the running server */
+            running_version: string;
+            /**
+             * @description Release comparison state
+             * @enum {string}
+             */
+            state: "current" | "update_available" | "stale" | "unavailable" | "disabled" | "development";
+        };
         UpdateStudioBrandKitInputBody: {
             /**
              * Format: uri
@@ -6691,6 +7053,7 @@ export interface components {
             variants: components["schemas"]["VariantResponse"][] | null;
         };
         UserNotification: {
+            actions?: components["schemas"]["NotificationAction"][] | null;
             body: string;
             /** Format: date-time */
             created_at: string;
@@ -7752,6 +8115,62 @@ export interface operations {
             };
             /** @description Error */
             default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "get-instance-update-status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UpdateStatusResponse"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -9349,6 +9768,35 @@ export interface operations {
             };
         };
     };
+    "get-auth-session-state": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthSessionStateOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     "list-auth-sessions": {
         parameters: {
             query?: never;
@@ -10343,6 +10791,7 @@ export interface operations {
                 workspace_id: string;
                 platform?: string;
                 account_id?: string;
+                publication_id?: string;
                 unread_only?: boolean;
                 archived?: boolean;
                 limit?: number;
@@ -11499,6 +11948,74 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UpdateMediaOutputBody"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "retry-media-analysis": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Media ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RetryMediaAnalysisOutputBody"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
                 };
             };
             /** @description Forbidden */
@@ -14211,6 +14728,83 @@ export interface operations {
             };
         };
     };
+    "retry-failed-publication-renditions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Publication ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActionOutputBody"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     "schedule-publication": {
         parameters: {
             query?: never;
@@ -15229,6 +15823,35 @@ export interface operations {
             };
         };
     };
+    "list-public-studio-templates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListPublicStudioTemplatesOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     "create-studio-return-token": {
         parameters: {
             query?: never;
@@ -15775,6 +16398,83 @@ export interface operations {
                 "application/json": components["schemas"]["AcceptWorkspaceInvitationInputBody"];
             };
         };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AcceptWorkspaceInvitationOutputBody"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "accept-workspace-invitation-by-id": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Invitation ID shown to the invited signed-in user */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description OK */
             200: {

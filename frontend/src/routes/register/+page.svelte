@@ -13,6 +13,8 @@
 	import CheckCircleIcon from 'lucide-svelte/icons/check-circle-2';
 	import { m } from '$lib/paraglide/messages';
 	import { onboardingPathForPlan } from '$lib/billing';
+	import { safeSameOriginRedirect } from '$lib/redirects';
+	import { trackPublicStudioEvent } from '$lib/studio/public-telemetry';
 	import { onMount } from 'svelte';
 	import { client, type AuthConfiguration } from '$lib/api/client';
 
@@ -43,6 +45,19 @@
 		void loadConfiguration();
 	});
 
+	function registrationTarget() {
+		const onboarding = onboardingPathForPlan(page.url.searchParams.get('plan'));
+		const redirect = safeSameOriginRedirect(page.url, '');
+		if (!redirect) return onboarding;
+		const separator = onboarding.includes('?') ? '&' : '?';
+		return `${onboarding}${separator}redirect=${encodeURIComponent(redirect)}`;
+	}
+
+	function loginTarget() {
+		const redirect = safeSameOriginRedirect(page.url, '');
+		return redirect ? `/login?redirect=${encodeURIComponent(redirect)}` : '/login';
+	}
+
 	async function handleSubmit(e: Event) {
 		e.preventDefault();
 		error = '';
@@ -68,7 +83,10 @@
 
 		if (result.success) {
 			registrationSuccess = true;
-			goto(resolve(onboardingPathForPlan(page.url.searchParams.get('plan')) as '/'));
+			if (safeSameOriginRedirect(page.url, '').startsWith('/studio/local_design_')) {
+				trackPublicStudioEvent('studio_signup_completed', { source: 'editor' });
+			}
+			goto(resolve(registrationTarget() as '/'));
 		} else {
 			error = result.error || m.auth_register_failed();
 			isLoading = false;
@@ -182,7 +200,7 @@
 		<p class="mt-6 text-center text-sm text-muted-foreground">
 			{m.auth_register_have_account()}
 			<a
-				href={resolve('/login')}
+				href={resolve(loginTarget() as '/')}
 				class="inline-flex min-h-11 items-center px-1 font-medium text-primary hover:underline"
 				>{m.auth_register_sign_in()}</a
 			>

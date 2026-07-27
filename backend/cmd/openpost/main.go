@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"syscall"
@@ -36,6 +37,7 @@ import (
 	"github.com/openpost/backend/internal/services/feedback"
 	"github.com/openpost/backend/internal/services/mastodonapps"
 	"github.com/openpost/backend/internal/services/mcpoauth"
+	"github.com/openpost/backend/internal/services/mediaanalysis"
 	"github.com/openpost/backend/internal/services/mediasigner"
 	"github.com/openpost/backend/internal/services/mediastore"
 	"github.com/openpost/backend/internal/services/mfa"
@@ -46,9 +48,13 @@ import (
 	"github.com/openpost/backend/internal/services/publisher"
 	"github.com/openpost/backend/internal/services/sessions"
 	"github.com/openpost/backend/internal/services/tokenmanager"
+	"github.com/openpost/backend/internal/services/updatestatus"
+	"github.com/openpost/backend/internal/services/usage"
+	"github.com/openpost/backend/internal/services/videoprocessing"
 )
 
 var version = "dev"
+var commit = "unknown"
 
 //nolint:gocyclo
 func main() {
@@ -130,7 +136,9 @@ func main() {
 		}
 	}
 	tokenManager := tokenmanager.NewTokenManager(db, tokenEncryptor)
+	usageService := usage.NewService(db)
 	publishSvc := publisher.NewService(db, tokenManager)
+	publishSvc.SetUsage(usageService)
 	publishSvc.SetEntitlement(entitlementService)
 	publishSvc.SetDisableLinkedInThreadReplies(cfg.DisableLinkedInThreadReplies)
 	publishSvc.SetMediaSigner(mediaSigner)
@@ -167,6 +175,33 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to build provider app registry: %v", err)
 	}
+	if cfg.Edition == config.EditionCloud {
+		if _, xEnabled := providers[usage.ProviderX]; xEnabled {
+			if err := usageService.SetProviderCostPolicy(usage.NewXProviderCostPolicy(
+				cfg.XMonthlyBudgetMicrousd,
+				cfg.XPostCreateCostMicrousd,
+				cfg.XPostCreateWithURLCostMicrousd,
+			)); err != nil {
+				log.Fatalf("hosted X provider cost configuration is invalid: %v", err)
+			}
+			now := time.Now().UTC()
+			if err := usageService.ReconcileProviderCosts(context.Background(), now); err != nil {
+				log.Fatalf("failed to reconcile current provider cost counters: %v", err)
+			}
+			if cfg.ProviderUsageRetentionDays > 0 {
+				cutoff := now.AddDate(0, 0, -cfg.ProviderUsageRetentionDays)
+				if openPeriod := usage.MonthStart(now); cutoff.After(openPeriod) {
+					cutoff = openPeriod
+				}
+				if _, err := usageService.PruneProviderUsageEvents(context.Background(), cutoff, 1000); err != nil {
+					log.Printf("Failed to prune provider usage events: %v", err)
+				}
+				if _, err := usageService.PruneProviderUsageReservations(context.Background(), cutoff, 1000); err != nil {
+					log.Printf("Failed to prune provider usage reservations: %v", err)
+				}
+			}
+		}
+	}
 	for _, entry := range providerEntries {
 		log.Printf("Registered provider adapter: %s", entry.Key)
 	}
@@ -201,9 +236,11 @@ func main() {
 	}
 	publishSvc.SetStorage(storage)
 	publicMediaVerifier := publicurl.NewMediaVerifier(cfg.MediaURL, storage, mediaSigner)
+	videoProcessingService := videoprocessing.NewService(db, storage, mediaanalysis.FFmpegAnalyzer{})
 	mediaHandler := handlers.NewMediaHandler(db, storage, authService, authenticator, mediaSigner)
 	mediaHandler.SetEntitlement(entitlementService)
 	mediaHandler.SetPublicMediaVerifier(publicMediaVerifier)
+	mediaHandler.SetVideoProcessor(videoProcessingService)
 	profileHandler := handlers.NewProfileHandler(db, authenticator, storage)
 
 	var feedbackDestination feedback.Destination
@@ -227,6 +264,10 @@ func main() {
 	worker.SetFeedbackService(feedbackService)
 	worker.SetAnalyticsService(analyticsService)
 	worker.SetCommunicationsService(communicationsService)
+	worker.SetVideoProcessingService(videoProcessingService)
+	if err := videoProcessingService.EnqueuePendingAnalysis(context.Background()); err != nil {
+		log.Fatalf("failed to schedule pending video analysis: %v", err)
+	}
 	if err := analyticsService.ScheduleSweep(context.Background(), time.Now().UTC()); err != nil {
 		log.Fatalf("failed to schedule analytics collection: %v", err)
 	}
@@ -242,6 +283,7 @@ func main() {
 	mediaHandler.RegisterLegacyRoutes(e)
 	profileHandler.RegisterLegacyRoutes(e)
 	billingHandler := handlers.NewBillingHandler(billingService, db, authenticator)
+	billingHandler.SetUsage(usageService)
 	billingHandler.RegisterRoutes(e)
 
 	e.GET("/openapi.json", func(c echo.Context) error {
@@ -271,7 +313,11 @@ func main() {
 	mcpHandler.RegisterRoutes(e)
 	mcpOAuthHandler := handlers.NewMCPOAuthHandler(mcpOAuthService, authenticator, cfg.PublicURL)
 	mcpOAuthHandler.RegisterEchoRoutes(e)
-
+	updateStatusService := updatestatus.NewService(updatestatus.Options{
+		Enabled:        cfg.Edition == config.EditionSelfHost && cfg.UpdateCheckEnabled,
+		RunningVersion: version,
+		RunningBuild:   runningBuildRevision(),
+	})
 	apiroutes.RegisterHumaRoutes(api, apiroutes.RouteDeps{
 		DB:                  db,
 		AuthService:         authService,
@@ -314,6 +360,7 @@ func main() {
 		AnalyticsService:             analyticsService,
 		CommunicationsService:        communicationsService,
 		NotificationService:          notificationService,
+		UpdateStatusService:          updateStatusService,
 		MediaHandler:                 mediaHandler,
 		PublicMediaVerifier:          publicMediaVerifier,
 		ProfileHandler:               profileHandler,
@@ -380,4 +427,31 @@ func main() {
 
 	wg.Wait()
 	log.Println("Server stopped")
+}
+
+func runningBuildRevision() string {
+	if strings.TrimSpace(commit) != "" && commit != "unknown" {
+		return commit
+	}
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return "unknown"
+	}
+	revision := ""
+	dirty := false
+	for _, setting := range info.Settings {
+		switch setting.Key {
+		case "vcs.revision":
+			revision = setting.Value
+		case "vcs.modified":
+			dirty = setting.Value == "true"
+		}
+	}
+	if revision == "" {
+		return "unknown"
+	}
+	if dirty {
+		return revision + "-dirty"
+	}
+	return revision
 }
