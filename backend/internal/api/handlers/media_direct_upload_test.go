@@ -358,6 +358,45 @@ func TestCompleteMediaUploadSessionFinalizesUploadedObject(t *testing.T) {
 	require.Equal(t, int64(12), current)
 }
 
+func TestCompleteMediaUploadSessionRetryDoesNotRecountQueuedVideo(t *testing.T) {
+	t.Parallel()
+
+	storage := newFakeDirectUploadStorage()
+	srv := newMediaDirectUploadTestServer(t, storage, entitlements.NewSelfHostedService())
+	mediaID := srv.createUploadSession(t, "clip.mp4", "video/mp4", 12)
+	storage.objects[mediaID+".mp4"] = []byte("video bytes!")
+
+	first := srv.postJSON(t, "/api/v1/media/upload-session/"+mediaID+"/complete", map[string]any{
+		"workspace_id": "ws-1",
+	})
+	require.Equal(t, http.StatusOK, first.Code, first.Body.String())
+	_, err := srv.db.NewUpdate().
+		Model((*models.MediaAttachment)(nil)).
+		Set("processing_status = ?", mediaProcessingStatus).
+		Set("analysis_status = ?", "pending").
+		Where("id = ?", mediaID).
+		Exec(context.Background())
+	require.NoError(t, err)
+
+	retry := srv.postJSON(t, "/api/v1/media/upload-session/"+mediaID+"/complete", map[string]any{
+		"workspace_id": "ws-1",
+	})
+	require.Equal(t, http.StatusOK, retry.Code, retry.Body.String())
+	var out MediaUploadResult
+	require.NoError(t, json.Unmarshal(retry.Body.Bytes(), &out))
+	require.Equal(t, mediaProcessingStatus, out.ProcessingStatus)
+	require.Equal(t, "pending", out.AnalysisStatus)
+
+	current, err := srv.usage.CurrentMonthly(
+		context.Background(),
+		"ws-1",
+		entitlements.LimitMediaBytesUploadedMonthly,
+		time.Now(),
+	)
+	require.NoError(t, err)
+	require.Equal(t, int64(12), current)
+}
+
 func TestCompleteMediaUploadSessionDedupesExistingMedia(t *testing.T) {
 	t.Parallel()
 

@@ -1,10 +1,52 @@
 import { expect, test } from "@playwright/test";
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { authenticatePage, createWorkspace, registerUser } from "./helpers";
 
 const tinyPNG = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
   "base64",
 );
+
+function createVideoFixture(): Buffer {
+  const directory = mkdtempSync(join(tmpdir(), "openpost-video-e2e-"));
+  const filename = join(directory, "clip.mp4");
+  try {
+    execFileSync("ffmpeg", [
+      "-y",
+      "-hide_banner",
+      "-loglevel",
+      "error",
+      "-f",
+      "lavfi",
+      "-i",
+      "color=c=0x2563eb:s=160x90:d=1",
+      "-f",
+      "lavfi",
+      "-i",
+      "anullsrc=r=44100:cl=stereo",
+      "-shortest",
+      "-c:v",
+      "libx264",
+      "-profile:v",
+      "baseline",
+      "-pix_fmt",
+      "yuv420p",
+      "-movflags",
+      "+faststart",
+      "-c:a",
+      "aac",
+      "-b:a",
+      "32k",
+      filename,
+    ]);
+    return readFileSync(filename);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+}
 
 test("media library uploads and lists a local media file", async ({
   page,
@@ -105,6 +147,102 @@ test("media library uploads and lists a local media file", async ({
     .getByRole("button", { name: "Delete", exact: true })
     .click();
   await expect(page.getByText("No media found")).toBeVisible();
+});
+
+test("video upload edits in the browser and becomes a verified media asset", async ({
+  page,
+  request,
+}) => {
+  test.setTimeout(120_000);
+  const unique = Date.now().toString(36);
+  const auth = await registerUser(request, `media-video-${unique}@example.com`);
+  const workspace = await createWorkspace(
+    request,
+    auth.token,
+    "Video Media E2E",
+  );
+  const browserErrors: string[] = [];
+  page.on("console", (message) => {
+    if (message.type() === "error") browserErrors.push(message.text());
+  });
+  page.on("pageerror", (error) => browserErrors.push(error.message));
+
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await authenticatePage(page, auth.token);
+  await page.goto("/media");
+  await page.getByRole("button", { name: "Create" }).click();
+  await page.getByRole("menuitem", { name: "Upload media" }).click();
+  await page.locator("#file-upload").setInputFiles({
+    name: "launch-video.mp4",
+    mimeType: "video/mp4",
+    buffer: createVideoFixture(),
+  });
+
+  const editor = page.getByRole("dialog", { name: "Edit video" });
+  await expect(editor).toBeVisible();
+  await expect(editor.getByText("160×90")).toBeVisible();
+  await editor.locator('input[type="number"]').nth(1).fill("0.5");
+  await editor.getByRole("button", { name: "Apply edit" }).click();
+  await expect(editor).toBeHidden({ timeout: 30_000 });
+
+  const uploadDialog = page.getByRole("dialog", { name: "Upload Media" });
+  await expect(uploadDialog.getByText("launch-video-edited.mp4")).toBeVisible();
+  await uploadDialog.getByRole("button", { name: "Upload" }).click();
+  await expect(
+    page.getByRole("status").getByText("Uploaded 1 file", { exact: true }),
+  ).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByText("launch-video-edited.mp4")).toBeVisible();
+
+  const mediaResponse = await request.get(
+    `/api/v1/media?workspace_id=${workspace.id}&type=video`,
+    { headers: { Authorization: `Bearer ${auth.token}` } },
+  );
+  expect(mediaResponse.ok()).toBeTruthy();
+  const mediaBody = (await mediaResponse.json()) as {
+    total: number;
+    media: Array<Record<string, unknown>>;
+  };
+  expect(mediaBody.total).toBe(1);
+  expect(mediaBody.media[0]).toMatchObject({
+    original_filename: "launch-video-edited.mp4",
+    mime_type: "video/mp4",
+    processing_status: "ready",
+    analysis_status: "ready",
+    container_format: "mov",
+    video_codec: "h264",
+    audio_codec: "aac",
+  });
+  expect(Number(mediaBody.media[0].duration_ms)).toBeGreaterThan(0);
+  expect(String(mediaBody.media[0].poster_thumbnail_url)).toContain("/poster");
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole("button", { name: "Create" }).click();
+  await page.getByRole("menuitem", { name: "Upload media" }).click();
+  await page.locator("#file-upload").setInputFiles({
+    name: "phone-video.mp4",
+    mimeType: "video/mp4",
+    buffer: createVideoFixture(),
+  });
+  await expect(editor).toBeVisible();
+  const overflow = await page.evaluate(
+    () => document.documentElement.scrollWidth - window.innerWidth,
+  );
+  expect(overflow).toBeLessThanOrEqual(1);
+  for (const label of [
+    "Original",
+    "Upload without editing",
+    "Cancel",
+    "Apply edit",
+  ]) {
+    const button = editor.getByRole("button", { name: label, exact: true });
+    if (!(await button.isVisible())) continue;
+    const box = await button.boundingBox();
+    if (box) {
+      expect(box.height).toBeGreaterThanOrEqual(44);
+    }
+  }
+  await editor.getByRole("button", { name: "Cancel", exact: true }).click();
+  expect(browserErrors).toEqual([]);
 });
 
 test("brand kit inputs keep focus while editing", async ({ page, request }) => {

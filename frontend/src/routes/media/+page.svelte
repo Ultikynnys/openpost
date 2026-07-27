@@ -7,8 +7,9 @@
 	import { SvelteSet } from 'svelte/reactivity';
 	import { client, type Workspace } from '$lib/api/client';
 	import { getAuthenticatedMediaURL } from '$lib/media-url';
-	import { isSupportedMediaFile, uploadMediaFiles } from '$lib/media-upload-client';
-	import { uploadMediaFile } from '$lib/media-upload-client';
+	import { isSupportedMediaFile, uploadMediaFile } from '$lib/media-upload-client';
+	import type { VideoPreparationProgress, VideoPreparationStage } from '$lib/video/types';
+	import { videoPreparationErrorMessage } from '$lib/video/errors';
 	import {
 		deleteStudioDesign,
 		duplicateStudioDesign,
@@ -32,6 +33,7 @@
 	import CameraCapture from '$lib/components/camera-capture.svelte';
 	import AppSelect from '$lib/components/app-select.svelte';
 	import MediaOrganizationDialog from '$lib/components/media-organization-dialog.svelte';
+	import VideoEditorDialog from '$lib/components/video-editor-dialog.svelte';
 	import LoaderIcon from 'lucide-svelte/icons/loader-2';
 	import ImageIcon from 'lucide-svelte/icons/image';
 	import VideoIcon from 'lucide-svelte/icons/video';
@@ -73,6 +75,16 @@
 		usage_count: number;
 		can_delete: boolean;
 		processing_status: string;
+		processing_progress: number;
+		analysis_status: string;
+		analysis_error?: string;
+		poster_thumbnail_url?: string;
+		duration_ms: number;
+		frame_rate: number;
+		container_format?: string;
+		video_codec?: string;
+		video_profile?: string;
+		audio_codec?: string;
 		source: string;
 		asset_kind: string;
 		parent_media_id?: string;
@@ -165,7 +177,12 @@
 	let uploadDialogOpen = $state(false);
 	let uploadLoading = $state(false);
 	let uploadError = $state('');
-	let uploadProgress = $state('');
+	let uploadFiles = $state.raw<File[]>([]);
+	let uploadProgress = $state.raw<VideoPreparationProgress | null>(null);
+	let uploadController: AbortController | null = null;
+	let uploadInput: HTMLInputElement | null = null;
+	let uploadVideoEditorOpen = $state(false);
+	let uploadVideoEditorFile = $state<File | null>(null);
 
 	let usageDialogOpen = $state(false);
 	let selectedMedia = $state<MediaItem | null>(null);
@@ -667,6 +684,22 @@
 		}
 	}
 
+	async function retryVideoAnalysis(media: MediaItem): Promise<void> {
+		try {
+			const { error: retryError } = await client.POST('/media/{id}/analysis/retry', {
+				params: { path: { id: media.id } }
+			});
+			if (retryError) throw new Error(retryError.detail || m.media_video_retry_failed());
+			media.processing_status = 'processing';
+			media.processing_progress = 0;
+			media.analysis_status = 'pending';
+			media.analysis_error = '';
+			notify(m.media_video_retry_started(), 'neutral');
+		} catch (cause) {
+			notify(cause instanceof Error ? cause.message : m.media_video_retry_failed(), 'error');
+		}
+	}
+
 	function handleUsageDialogOpenChange(nextOpen: boolean) {
 		usageDialogOpen = nextOpen;
 		if (nextOpen) return;
@@ -677,14 +710,70 @@
 		selectedMedia = null;
 	}
 
+	function handleUploadSelection(event: Event) {
+		const input = event.currentTarget as HTMLInputElement;
+		const selectedFiles = Array.from(input.files ?? []);
+		const supportedFiles = selectedFiles.filter(isSupportedMediaFile);
+		uploadError = '';
+		if (supportedFiles.length !== selectedFiles.length) {
+			uploadError = m.media_select_file_error();
+		}
+		if (supportedFiles.length > 10) {
+			uploadFiles = [];
+			uploadError = m.media_max_files_error();
+			return;
+		}
+		uploadFiles = supportedFiles;
+		if (supportedFiles.length === 1 && isVideo(supportedFiles[0].type)) {
+			uploadVideoEditorFile = supportedFiles[0];
+			uploadVideoEditorOpen = true;
+		}
+	}
+
+	function attachUploadInput(input: HTMLInputElement) {
+		uploadInput = input;
+		return () => {
+			if (uploadInput === input) uploadInput = null;
+		};
+	}
+
+	function useEditedLibraryVideo(file: File) {
+		uploadFiles = [file];
+		uploadVideoEditorFile = null;
+	}
+
+	function uploadStage(stage: VideoPreparationStage): string {
+		switch (stage) {
+			case 'inspecting':
+				return m.video_upload_inspecting();
+			case 'remuxing':
+				return m.video_upload_remuxing();
+			case 'compressing':
+				return m.video_upload_compressing();
+			case 'uploading':
+				return m.video_upload_uploading();
+			case 'finalizing':
+				return m.video_upload_finalizing();
+			case 'processing':
+				return m.video_upload_processing();
+		}
+	}
+
+	function cancelLibraryUpload() {
+		uploadController?.abort();
+		if (!uploadLoading) {
+			uploadDialogOpen = false;
+			uploadFiles = [];
+			if (uploadInput) uploadInput.value = '';
+		}
+	}
+
 	async function handleUpload() {
 		if (!selectedWorkspaceId) return;
 		uploadLoading = true;
 		uploadError = '';
 
-		const fileInput = document.getElementById('file-upload') as HTMLInputElement;
-		const selectedFiles = Array.from(fileInput?.files ?? []);
-		const files = selectedFiles.filter(isSupportedMediaFile);
+		const files = uploadFiles.filter(isSupportedMediaFile);
 		if (files.length === 0) {
 			uploadError = m.media_select_file_error();
 			uploadLoading = false;
@@ -697,24 +786,41 @@
 		}
 
 		try {
-			uploadProgress =
-				files.length === 1 ? m.media_uploading() : m.media_uploading_count({ count: files.length });
-			const uploaded = await uploadMediaFiles(selectedWorkspaceId, files, (done, total) => {
-				uploadProgress =
-					total === 1 ? m.media_finalizing() : m.media_uploaded_progress({ done, total });
-			});
+			uploadController = new AbortController();
+			const uploaded = [];
+			for (const [index, file] of files.entries()) {
+				uploaded.push(
+					await uploadMediaFile({
+						workspaceId: selectedWorkspaceId,
+						file,
+						signal: uploadController.signal,
+						onProgress: (progress) => {
+							uploadProgress = {
+								...progress,
+								fraction: Math.min(1, (index + progress.fraction) / files.length)
+							};
+						}
+					})
+				);
+			}
 
 			uploadDialogOpen = false;
-			fileInput.value = '';
+			uploadFiles = [];
+			if (uploadInput) uploadInput.value = '';
 			notify(uploadedCountLabel(uploaded.length), 'success');
 			soundPreferences.play('success');
 			await loadMedia();
-		} catch (e) {
-			uploadError = (e as Error).message;
+		} catch (cause) {
+			if (cause instanceof DOMException && cause.name === 'AbortError') {
+				uploadError = '';
+				return;
+			}
+			uploadError = videoPreparationErrorMessage(cause, m.media_select_file_error());
 			soundPreferences.play('error');
 		} finally {
 			uploadLoading = false;
-			uploadProgress = '';
+			uploadProgress = null;
+			uploadController = null;
 		}
 	}
 
@@ -722,6 +828,17 @@
 		if (bytes < 1024) return bytes + ' B';
 		if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
 		return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+	}
+
+	function formatVideoDuration(milliseconds: number): string {
+		if (!Number.isFinite(milliseconds) || milliseconds <= 0) return '—';
+		const totalSeconds = Math.round(milliseconds / 1000);
+		const hours = Math.floor(totalSeconds / 3600);
+		const minutes = Math.floor((totalSeconds % 3600) / 60);
+		const seconds = totalSeconds % 60;
+		return hours > 0
+			? `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+			: `${minutes}:${String(seconds).padStart(2, '0')}`;
 	}
 
 	function formatDate(dateStr: string): string {
@@ -882,6 +999,23 @@
 			replaceState(resolve(`${next.pathname}${next.search}` as '/'), {});
 		}
 		void loadWorkspaces();
+	});
+
+	onMount(() => {
+		const timer = window.setInterval(() => {
+			if (
+				!mediaLoading &&
+				!isSelectionMode &&
+				mediaItems.some(
+					(item) =>
+						isVideo(item.mime_type) &&
+						(item.processing_status === 'processing' || item.analysis_status === 'pending')
+				)
+			) {
+				void loadMedia();
+			}
+		}, 2500);
+		return () => window.clearInterval(timer);
 	});
 
 	$effect(() => {
@@ -1351,13 +1485,24 @@
 										: 'aspect-square h-24'}"
 								>
 									{#if isVideo(media.mime_type)}
-										<video
-											src={getAuthenticatedMediaURL(media.url)}
-											class="size-full object-cover"
-											muted
-											playsinline
-											preload="metadata"
-										></video>
+										{#if media.thumbnail_url || media.poster_thumbnail_url}
+											<img
+												src={getAuthenticatedMediaURL(
+													media.thumbnail_url || media.poster_thumbnail_url || ''
+												)}
+												alt=""
+												loading="lazy"
+												class="size-full object-cover transition-transform duration-200 group-hover:scale-[1.02]"
+											/>
+										{:else if media.processing_status === 'ready'}
+											<video
+												src={getAuthenticatedMediaURL(media.url)}
+												class="size-full object-cover"
+												muted
+												playsinline
+												preload="metadata"
+											></video>
+										{/if}
 										<div
 											class="pointer-events-none absolute inset-0 flex items-center justify-center"
 										>
@@ -1367,6 +1512,50 @@
 												<VideoIcon class="size-5 text-foreground" />
 											</div>
 										</div>
+										{#if media.processing_status === 'processing' || media.analysis_status === 'pending'}
+											<div
+												class="absolute inset-x-2 bottom-2 z-[2] space-y-1 rounded-lg bg-background/90 px-2 py-2 shadow-sm backdrop-blur"
+												aria-live="polite"
+											>
+												<div class="flex items-center gap-2 text-xs font-medium">
+													<LoaderIcon class="size-3.5 animate-spin" />
+													{m.media_video_processing({
+														percent: Math.max(0, media.processing_progress ?? 0)
+													})}
+												</div>
+												<div class="h-1.5 overflow-hidden rounded-full bg-muted">
+													<div
+														class="h-full rounded-full bg-primary transition-[width]"
+														style:width={`${Math.min(
+															100,
+															Math.max(4, media.processing_progress ?? 0)
+														)}%`}
+													></div>
+												</div>
+											</div>
+										{:else if media.processing_status === 'failed' || media.analysis_status === 'failed'}
+											<div
+												class="absolute inset-x-2 bottom-2 z-[2] rounded-lg bg-destructive/90 px-2 py-2 text-xs text-destructive-foreground shadow-sm"
+											>
+												<p class="line-clamp-2">
+													{media.analysis_error || m.media_video_processing_failed()}
+												</p>
+												{#if mediaCanEdit}
+													<Button
+														type="button"
+														variant="secondary"
+														size="sm"
+														class="relative z-10 mt-2 h-8"
+														onclick={(event) => {
+															event.stopPropagation();
+															void retryVideoAnalysis(media);
+														}}
+													>
+														{m.common_retry()}
+													</Button>
+												{/if}
+											</div>
+										{/if}
 									{:else if isImage(media.mime_type)}
 										<img
 											src={getAuthenticatedMediaURL(media.thumbnail_url || media.url)}
@@ -1762,14 +1951,27 @@
 
 <!-- Upload Dialog -->
 <Dialog.Root bind:open={uploadDialogOpen}>
-	<Dialog.Content class="sm:max-w-md">
+	<Dialog.Content
+		class="sm:max-w-md"
+		showCloseButton={!uploadLoading}
+		onInteractOutside={(event) => uploadLoading && event.preventDefault()}
+		onEscapeKeydown={(event) => uploadLoading && event.preventDefault()}
+	>
 		<Dialog.Header>
 			<Dialog.Title>{m.media_upload_title()}</Dialog.Title>
 			<Dialog.Description>{m.media_upload_description()}</Dialog.Description>
 		</Dialog.Header>
 
 		<div class="space-y-4 py-4">
-			<input id="file-upload" type="file" accept="image/*,video/*" multiple class="peer sr-only" />
+			<input
+				id="file-upload"
+				type="file"
+				accept="image/*,video/*"
+				multiple
+				class="peer sr-only"
+				onchange={handleUploadSelection}
+				{@attach attachUploadInput}
+			/>
 			<label
 				class="flex min-h-48 cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed p-6 text-center transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-ring peer-focus-visible:ring-offset-2 peer-focus-visible:outline-none hover:bg-muted/40"
 				for="file-upload"
@@ -1778,6 +1980,21 @@
 				<p class="text-sm font-medium">{m.media_select_files()}</p>
 				<p class="mt-1 text-sm text-muted-foreground">{m.media_upload_batch_hint()}</p>
 			</label>
+
+			{#if uploadFiles.length > 0}
+				<div class="rounded-lg border bg-muted/20 px-3 py-2">
+					<p class="text-sm font-medium">
+						{uploadFiles.length === 1
+							? uploadFiles[0].name
+							: m.media_selected_files({ count: uploadFiles.length })}
+					</p>
+					{#if uploadFiles.length === 1}
+						<p class="mt-0.5 text-xs text-muted-foreground">
+							{formatSize(uploadFiles[0].size)}
+						</p>
+					{/if}
+				</div>
+			{/if}
 
 			{#if uploadError}
 				<InlineNotice
@@ -1789,15 +2006,31 @@
 			{/if}
 
 			{#if uploadProgress}
-				<p class="text-sm text-muted-foreground">{uploadProgress}</p>
+				<div class="space-y-2" aria-live="polite">
+					<div class="flex items-center justify-between gap-3">
+						<p class="text-sm font-medium">
+							{m.video_upload_progress({
+								stage: uploadStage(uploadProgress.stage),
+								percent: Math.round(uploadProgress.fraction * 100)
+							})}
+						</p>
+						<Button type="button" variant="ghost" size="sm" onclick={cancelLibraryUpload}>
+							{m.video_upload_cancel()}
+						</Button>
+					</div>
+					<div class="h-2 overflow-hidden rounded-full bg-muted">
+						<div
+							class="h-full rounded-full bg-primary transition-[width]"
+							style:width={`${Math.round(uploadProgress.fraction * 100)}%`}
+						></div>
+					</div>
+				</div>
 			{/if}
 		</div>
 
 		<Dialog.Footer>
-			<Button variant="outline" onclick={() => (uploadDialogOpen = false)}
-				>{m.common_cancel()}</Button
-			>
-			<Button onclick={handleUpload} disabled={uploadLoading}>
+			<Button variant="outline" onclick={cancelLibraryUpload}>{m.common_cancel()}</Button>
+			<Button onclick={handleUpload} disabled={uploadLoading || uploadFiles.length === 0}>
 				{#if uploadLoading}
 					<LoaderIcon class="mr-2 size-4 animate-spin" />
 				{/if}
@@ -1806,6 +2039,13 @@
 		</Dialog.Footer>
 	</Dialog.Content>
 </Dialog.Root>
+
+<VideoEditorDialog
+	bind:open={uploadVideoEditorOpen}
+	file={uploadVideoEditorFile}
+	onConfirm={useEditedLibraryVideo}
+	onSkip={useEditedLibraryVideo}
+/>
 
 <Dialog.Root bind:open={cameraDialogOpen}>
 	<Dialog.Content class="sm:max-w-2xl">
@@ -1891,6 +2131,45 @@
 									{selectedMedia.parent_media_id}
 								</dd>
 							</div>
+						{/if}
+						{#if isVideo(selectedMedia.mime_type)}
+							<div>
+								<dt class="text-xs text-muted-foreground">{m.media_duration()}</dt>
+								<dd class="mt-0.5">{formatVideoDuration(selectedMedia.duration_ms)}</dd>
+							</div>
+							<div>
+								<dt class="text-xs text-muted-foreground">{m.media_video_format()}</dt>
+								<dd class="mt-0.5">
+									{[
+										selectedMedia.container_format,
+										selectedMedia.video_codec,
+										selectedMedia.audio_codec
+									]
+										.filter(Boolean)
+										.join(' · ') || '—'}
+								</dd>
+							</div>
+							{#if selectedMedia.processing_status === 'failed' || selectedMedia.analysis_status === 'failed'}
+								<div class="sm:col-span-2">
+									<InlineNotice
+										tone="error"
+										message={selectedMedia.analysis_error || m.media_video_processing_failed()}
+									>
+										{#snippet actions()}
+											{#if mediaCanEdit}
+												<Button
+													type="button"
+													variant="outline"
+													size="sm"
+													onclick={() => retryVideoAnalysis(selectedMedia!)}
+												>
+													{m.common_retry()}
+												</Button>
+											{/if}
+										{/snippet}
+									</InlineNotice>
+								</div>
+							{/if}
 						{/if}
 						{#if selectedMedia.collections.length}
 							<div>

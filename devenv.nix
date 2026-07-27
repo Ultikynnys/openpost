@@ -12,6 +12,7 @@
     pkgs.jq
     pkgs.ripgrep
     pkgs.sqlite
+    pkgs.ffmpeg
     pkgs.wget
     pkgs.docker
   ];

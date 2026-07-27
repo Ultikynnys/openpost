@@ -14,6 +14,7 @@ import (
 
 const (
 	ProviderBluesky   = "bluesky"
+	ProviderDiscord   = "discord"
 	ProviderFacebook  = "facebook"
 	ProviderInstagram = "instagram"
 	ProviderLinkedIn  = "linkedin"
@@ -253,6 +254,13 @@ func All() []Capability {
 	shortVideo.MaxDurationSeconds = 180
 	shortVideo.AspectRatios = []string{"9:16", "1:1"}
 	blueskyVideo := MediaConstraint{MinCount: 1, MaxCount: 1, AllowedMIMEs: []string{"video/mp4"}, MaxSizeBytes: 100 * 1024 * 1024}
+	xVideo := MediaConstraint{MinCount: 1, MaxCount: 1, AllowedMIMEs: []string{"video/mp4"}, MaxSizeBytes: 512 * 1024 * 1024, MaxDurationSeconds: 140}
+	mastodonVideo := MediaConstraint{MinCount: 1, MaxCount: 1, AllowedMIMEs: []string{"video/mp4", "video/quicktime", "video/webm"}, MaxSizeBytes: 99 * 1024 * 1024}
+	linkedinVideo := MediaConstraint{MinCount: 1, MaxCount: 1, AllowedMIMEs: []string{"video/mp4"}, MaxSizeBytes: 500 * 1024 * 1024, MaxDurationSeconds: 30 * 60}
+	tiktokVideo := MediaConstraint{MinCount: 1, MaxCount: 1, AllowedMIMEs: []string{"video/mp4", "video/quicktime", "video/webm"}, MaxSizeBytes: 4 * 1024 * 1024 * 1024, MaxDurationSeconds: 10 * 60, AspectRatios: []string{"9:16", "1:1"}}
+	tiktokVideo.RequiresPublicURL = true
+	tiktokVideo.RequiresHTTPSFetchable = true
+	discordVideo := MediaConstraint{MinCount: 1, MaxCount: 1, AllowedMIMEs: []string{"video/mp4", "video/quicktime", "video/webm"}, MaxSizeBytes: 10 * 1024 * 1024}
 	publicShortVideo := shortVideo
 	publicShortVideo.RequiresPublicURL = true
 	publicShortVideo.RequiresHTTPSFetchable = true
@@ -266,15 +274,12 @@ func All() []Capability {
 	}
 	longVideo := video
 	longVideo.MaxDurationSeconds = 43200
-	xVideo := video
-	xVideo.MaxDurationSeconds = 4 * 60 * 60
-	xVideo.MaxSizeBytes = 16 * 1024 * 1024 * 1024
 	xThreadMedia := MediaConstraint{
 		MinCount:           0,
 		MaxCount:           4,
 		AllowedMIMEs:       []string{"image/jpeg", "image/png", "image/webp", "image/gif", "video/mp4", "video/quicktime"},
-		MaxSizeBytes:       16 * 1024 * 1024 * 1024,
-		MaxDurationSeconds: 4 * 60 * 60,
+		MaxSizeBytes:       512 * 1024 * 1024,
+		MaxDurationSeconds: 140,
 	}
 
 	defaultQueued := func(c Capability) Capability {
@@ -286,7 +291,7 @@ func All() []Capability {
 		c.MediaShapes = mediaShapesFor(c.Profile, c.Media)
 		c.Settings = normalizeSettingDefinitions(c)
 		c.ValidationCategories = validationCategories(c)
-		c.CapabilityRevision = "2026-07-23.1"
+		c.CapabilityRevision = "2026-07-27.1"
 		return c
 	}
 
@@ -296,6 +301,7 @@ func All() []Capability {
 		defaultQueued(Capability{Provider: ProviderX, Profile: models.ContentProfileLinkShare, Label: "X link", TextLimit: 25_000, Media: text, Settings: append(linkSettings(), xSettings()...), Caveats: []string{"Text limits are reduced unless the connected account reports an active X subscription."}}),
 		defaultQueued(Capability{Provider: ProviderX, Profile: models.ContentProfileImagePost, Label: "X image post", TextLimit: 25_000, Media: MediaConstraint{MinCount: 1, MaxCount: 4, AllowedMIMEs: []string{"image/jpeg", "image/png", "image/webp", "image/gif"}}, Settings: xSettings(), Caveats: []string{"Text limits are reduced unless the connected account reports an active X subscription."}}),
 		defaultQueued(Capability{Provider: ProviderX, Profile: models.ContentProfileShortVideo, Label: "X video", TextLimit: 25_000, Media: xVideo, Settings: xSettings(), Caveats: []string{"Text and video limits are reduced unless the connected account reports an active X subscription."}}),
+		defaultQueued(Capability{Provider: ProviderX, Profile: models.ContentProfileLongVideo, Label: "X video", TextLimit: 25_000, Media: xVideo, Settings: xSettings(), Caveats: []string{"Text and video limits are expanded only when the connected account reports an active X subscription."}}),
 
 		defaultQueued(Capability{Provider: ProviderBluesky, Profile: models.ContentProfileShortText, Label: "Bluesky post", TextLimit: 300, Media: text, Settings: blueskySettings()}),
 		defaultQueued(Capability{Provider: ProviderBluesky, Profile: models.ContentProfileThread, Label: "Bluesky thread", TextLimit: 300, Media: MediaConstraint{MinCount: 0, MaxCount: 4, AllowedMIMEs: []string{"image/jpeg", "image/png", "image/webp", "video/mp4"}}, Settings: blueskySettings()}),
@@ -307,6 +313,8 @@ func All() []Capability {
 		defaultQueued(Capability{Provider: ProviderMastodon, Profile: models.ContentProfileThread, Label: "Mastodon thread", TextLimit: 500, Media: MediaConstraint{MinCount: 0, MaxCount: 4, AllowedMIMEs: []string{"image/jpeg", "image/png", "image/webp", "image/gif", "video/mp4"}}, Settings: mastodonSettings()}),
 		defaultQueued(Capability{Provider: ProviderMastodon, Profile: models.ContentProfileLinkShare, Label: "Mastodon link", TextLimit: 500, Media: text, Settings: append(linkSettings(), mastodonSettings()...)}),
 		defaultQueued(Capability{Provider: ProviderMastodon, Profile: models.ContentProfileImagePost, Label: "Mastodon media", TextLimit: 500, Media: MediaConstraint{MinCount: 1, MaxCount: 4, AllowedMIMEs: []string{"image/jpeg", "image/png", "image/webp", "image/gif", "video/mp4"}}, Settings: mastodonSettings()}),
+		defaultQueued(Capability{Provider: ProviderMastodon, Profile: models.ContentProfileShortVideo, Label: "Mastodon video", TextLimit: 500, Media: mastodonVideo, Settings: mastodonSettings()}),
+		defaultQueued(Capability{Provider: ProviderMastodon, Profile: models.ContentProfileLongVideo, Label: "Mastodon video", TextLimit: 500, Media: mastodonVideo, Settings: mastodonSettings()}),
 
 		defaultQueued(Capability{Provider: ProviderThreads, Profile: models.ContentProfileShortText, Label: "Threads post", TextLimit: 500, Media: text, Settings: threadsSettings()}),
 		defaultQueued(Capability{Provider: ProviderThreads, Profile: models.ContentProfileThread, Label: "Threads thread", TextLimit: 500, Media: publicMedia, RequiresPublicMedia: true, Settings: threadsSettings()}),
@@ -321,8 +329,8 @@ func All() []Capability {
 		defaultQueued(Capability{Provider: ProviderLinkedIn, Profile: models.ContentProfileImagePost, Label: "LinkedIn image", TextLimit: 3000, Media: image, Settings: linkedinSettings()}),
 		defaultQueued(Capability{Provider: ProviderLinkedIn, Profile: models.ContentProfileCarousel, Label: "LinkedIn document", TextLimit: 3000, Media: document, Settings: append([]SettingField{{Key: "document_title", Label: "Document title", Type: "text", Required: true}}, linkedinSettings()...)}),
 		defaultQueued(Capability{Provider: ProviderLinkedIn, Profile: models.ContentProfileCarousel, OutputProfile: "linkedin.multi_image", Label: "LinkedIn multi-image post", TextLimit: 3000, Media: MediaConstraint{MinCount: 2, MaxCount: 20, AllowedMIMEs: []string{"image/jpeg", "image/png"}}, Settings: linkedinSettings()}),
-		defaultQueued(Capability{Provider: ProviderLinkedIn, Profile: models.ContentProfileShortVideo, Label: "LinkedIn video", TextLimit: 3000, Media: shortVideo, Settings: linkedinSettings()}),
-		defaultQueued(Capability{Provider: ProviderLinkedIn, Profile: models.ContentProfileLongVideo, Label: "LinkedIn video", TextLimit: 3000, Media: longVideo, Settings: linkedinSettings()}),
+		defaultQueued(Capability{Provider: ProviderLinkedIn, Profile: models.ContentProfileShortVideo, Label: "LinkedIn video", TextLimit: 3000, Media: linkedinVideo, Settings: linkedinSettings()}),
+		defaultQueued(Capability{Provider: ProviderLinkedIn, Profile: models.ContentProfileLongVideo, Label: "LinkedIn video", TextLimit: 3000, Media: linkedinVideo, Settings: linkedinSettings()}),
 
 		defaultQueued(Capability{Provider: ProviderFacebook, Profile: models.ContentProfileShortText, Label: "Facebook Page post", TextLimit: 63206, Media: text, Settings: facebookSettings()}),
 		defaultQueued(Capability{Provider: ProviderFacebook, Profile: models.ContentProfileLinkShare, Label: "Facebook Page link", TextLimit: 63206, Media: text, Settings: facebookSettings()}),
@@ -340,8 +348,13 @@ func All() []Capability {
 		defaultQueued(Capability{Provider: ProviderYouTube, Profile: models.ContentProfileShortVideo, Label: "YouTube Short", TextLimit: 5000, TitleRequired: true, DescriptionRequired: false, Media: shortVideo, Settings: youtubeSettings(), Caveats: []string{"Unaudited Google projects can force uploads private."}}),
 		defaultQueued(Capability{Provider: ProviderYouTube, Profile: models.ContentProfileLongVideo, Label: "YouTube video", TextLimit: 5000, TitleRequired: true, DescriptionRequired: false, Media: longVideo, Settings: youtubeSettings(), Caveats: []string{"Unaudited Google projects can force uploads private."}}),
 
-		defaultQueued(Capability{Provider: ProviderTikTok, Profile: models.ContentProfileShortVideo, Label: "TikTok video", TextLimit: 2200, Media: publicShortVideo, RequiresPublicMedia: true, RequiresAppReview: true, Settings: tiktokSettings()}),
+		defaultQueued(Capability{Provider: ProviderTikTok, Profile: models.ContentProfileShortVideo, Label: "TikTok video", TextLimit: 2200, Media: tiktokVideo, RequiresPublicMedia: true, RequiresAppReview: true, Settings: tiktokSettings()}),
 		defaultQueued(Capability{Provider: ProviderTikTok, Profile: models.ContentProfileCarousel, Label: "TikTok photo post", TextLimit: 4000, Media: tiktokPhotos, RequiresPublicMedia: true, RequiresAppReview: true, Settings: tiktokSettings()}),
+
+		defaultQueued(Capability{Provider: ProviderDiscord, Profile: models.ContentProfileShortText, Label: "Discord message", TextLimit: 2000, Media: text}),
+		defaultQueued(Capability{Provider: ProviderDiscord, Profile: models.ContentProfileImagePost, Label: "Discord attachment", TextLimit: 2000, Media: MediaConstraint{MinCount: 1, MaxCount: 10, AllowedMIMEs: []string{"image/jpeg", "image/png", "image/webp", "image/gif"}, MaxSizeBytes: 10 * 1024 * 1024}}),
+		defaultQueued(Capability{Provider: ProviderDiscord, Profile: models.ContentProfileShortVideo, Label: "Discord video", TextLimit: 2000, Media: discordVideo}),
+		defaultQueued(Capability{Provider: ProviderDiscord, Profile: models.ContentProfileLongVideo, Label: "Discord video", TextLimit: 2000, Media: discordVideo}),
 	}
 }
 
@@ -600,7 +613,7 @@ func Resolve(provider string, input ResolveInput) ResolvedCapability {
 				Provider:           provider,
 				Intents:            []string{intent},
 				MediaShapes:        []string{shape},
-				CapabilityRevision: "2026-07-23.1",
+				CapabilityRevision: "2026-07-27.1",
 			},
 			Compatible: false,
 			ActiveConstraints: map[string]any{
@@ -682,6 +695,30 @@ func applyResolvedConstraintValues(resolved *ResolvedCapability, constraints map
 	}
 	if value, ok := constraintInt(constraints["max_video_duration_seconds"]); ok && value > 0 {
 		resolved.Media.MaxDurationSeconds = value
+	}
+	if value, ok := constraintInt64(constraints["max_video_size_bytes"]); ok && value > 0 {
+		resolved.Media.MaxSizeBytes = value
+	}
+	if values := constraintStrings(constraints["allowed_mimes"]); len(values) > 0 {
+		resolved.Media.AllowedMIMEs = values
+		resolved.MediaShapes = mediaShapesFor(resolved.Profile, resolved.Media)
+	}
+}
+
+func constraintStrings(value any) []string {
+	switch typed := value.(type) {
+	case []string:
+		return uniqueStrings(typed)
+	case []any:
+		values := make([]string, 0, len(typed))
+		for _, item := range typed {
+			if text, ok := item.(string); ok && strings.TrimSpace(text) != "" {
+				values = append(values, text)
+			}
+		}
+		return uniqueStrings(values)
+	default:
+		return nil
 	}
 }
 
@@ -1410,7 +1447,7 @@ func validateMediaItem(capability Capability, item MediaItem) []ValidationIssue 
 	if capability.Media.MaxSizeBytes > 0 && item.Size > capability.Media.MaxSizeBytes {
 		issues = append(issues, ValidationIssue{Severity: "error", Code: "media_size", Message: "Media file is too large", Provider: capability.Provider, Profile: capability.Profile, MediaID: item.ID})
 	}
-	if strings.HasPrefix(item.MimeType, "video/") && item.AnalysisStatus != "" && item.AnalysisStatus != "ready" {
+	if strings.HasPrefix(item.MimeType, "video/") && item.AnalysisStatus != "" && item.AnalysisStatus != "ready" && item.AnalysisStatus != "failed" {
 		issues = append(issues, ValidationIssue{Severity: "error", Code: "media_analysis_pending", Message: "Video analysis must finish before scheduling or publishing", Provider: capability.Provider, Profile: capability.Profile, MediaID: item.ID})
 	}
 	if strings.HasPrefix(item.MimeType, "video/") && item.AnalysisStatus == "failed" {

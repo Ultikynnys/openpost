@@ -23,6 +23,16 @@ Every web composer media entry point uses one picker:
 
 Selection remains ordered. The picker applies the MIME, count, and purpose constraints resolved from the currently selected provider accounts rather than using one fixed four-item limit.
 
+## Video preparation and editing
+
+The Media upload dialog and every video-capable composer use the same client-side pipeline. OpenPost inspects the selected file in the browser, keeps a compatible H.264/AAC MP4 unchanged, remuxes compatible tracks without re-encoding, or transcodes and compresses the video when the selected destinations require it. The strictest size, duration, format, and aspect constraints from all selected accounts apply to the shared upload.
+
+For a single video, the editor can trim to exact in and out points, preview the selected range, and crop with destination-aware aspect presets. Drag the crop window or move it with the arrow keys, then use crop zoom to choose the visible region. OpenPost tests a real H.264 frame encode before it enables cropping. Browsers that cannot encode H.264 can still trim compatible files without re-encoding.
+
+Conversion and editing stay in the browser. The upload view reports separate inspection, remux, conversion, transfer, finalization, and server-check stages and lets you cancel the active work. After transfer, a durable server job verifies the real container, codecs, dimensions, duration, frame rate, rotation, pixel format, audio, and bitrate and creates a poster. A video cannot be scheduled or published until that check succeeds. Failed checks remain visible in Media with the server error and a retry action.
+
+Provider transfer remains provider-specific after preparation: X uses chunked media upload, Mastodon uses asynchronous media processing, Bluesky uses its video service and job polling, LinkedIn initializes and finalizes video upload ranges, TikTok uses its direct or inbox transfer path, YouTube uses resumable upload, and public-URL providers fetch the stored video over HTTPS.
+
 ## Storage and provenance
 
 Uploaded files, captures, exports, derivatives, brand assets, and custom fonts count toward workspace media storage. Internal design and template previews are hidden from the library and excluded from the displayed quota total.

@@ -2,6 +2,10 @@
 
 OpenPost stores media through its `BlobStorage` abstraction. Local filesystem storage is the self-hosted default; S3-compatible storage is the cloud-ready driver path.
 
+## Video processing dependency
+
+OpenPost requires `ffmpeg` and `ffprobe` on `PATH` to verify uploaded videos and create posters. The official Docker image includes both tools, and the project Devenv supplies them for development. Install FFmpeg separately when running the standalone binary. A video stays unavailable for publishing if the server cannot complete this verification; Media shows the processing error and offers a retry after the dependency or file problem is fixed.
+
 ## Key settings
 
 - `OPENPOST_MEDIA_PATH` controls where files are stored on disk.

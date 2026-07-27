@@ -18,6 +18,7 @@ RUN mkdir -p backend/cmd/openpost/public && pnpm --filter @openpost/web build
 FROM golang:1.26.5-alpine AS backend-builder
 
 ARG VERSION=dev
+ARG COMMIT=unknown
 
 RUN apk add --no-cache gcc musl-dev sqlite-dev
 
@@ -30,12 +31,12 @@ COPY backend/ ./backend/
 # Copy frontend build output from the correct location
 COPY --from=frontend-builder /app/backend/cmd/openpost/public ./backend/cmd/openpost/public
 
-RUN cd backend && CGO_ENABLED=1 GOOS=linux go build -a -installsuffix cgo -ldflags="-s -w -X main.version=${VERSION}" -o openpost ./cmd/openpost
+RUN cd backend && CGO_ENABLED=1 GOOS=linux go build -a -installsuffix cgo -ldflags="-s -w -X main.version=${VERSION} -X main.commit=${COMMIT}" -o openpost ./cmd/openpost
 
 # Runtime stage
 FROM alpine:3.19
 
-RUN apk add --no-cache ca-certificates tzdata sqlite
+RUN apk add --no-cache ca-certificates ffmpeg tzdata sqlite
 
 RUN adduser -D -u 1000 openpost
 

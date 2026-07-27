@@ -189,7 +189,8 @@ func TestApplyAccountConstraintsRevalidatesXTextAndVideo(t *testing.T) {
 		Segments: segments,
 	})
 	require.NotContains(t, issueCodes(resolved.Issues), "text_too_long")
-	require.NotContains(t, issueCodes(resolved.Issues), "media_duration")
+	require.Contains(t, issueCodes(resolved.Issues), "media_duration")
+	require.Contains(t, issueCodes(resolved.Issues), "media_size")
 
 	ApplyAccountConstraints(&resolved, segments, map[string]any{
 		"text_limit":                 280,
@@ -211,6 +212,61 @@ func TestApplyAccountConstraintsRevalidatesXTextAndVideo(t *testing.T) {
 	require.NotContains(t, issueCodes(resolved.Issues), "media_duration")
 	require.NotContains(t, issueCodes(resolved.Issues), "media_size")
 	require.True(t, resolved.Compatible)
+}
+
+func TestVideoCapabilitiesUseSafeProviderSpecificLimits(t *testing.T) {
+	tests := []struct {
+		provider     string
+		profile      string
+		maxBytes     int64
+		maxDuration  int
+		allowedMIMEs []string
+	}{
+		{ProviderX, models.ContentProfileLongVideo, 512 * 1024 * 1024, 140, []string{"video/mp4"}},
+		{ProviderMastodon, models.ContentProfileLongVideo, 99 * 1024 * 1024, 0, []string{"video/mp4", "video/quicktime", "video/webm"}},
+		{ProviderLinkedIn, models.ContentProfileLongVideo, 500 * 1024 * 1024, 30 * 60, []string{"video/mp4"}},
+		{ProviderTikTok, models.ContentProfileShortVideo, 4 * 1024 * 1024 * 1024, 10 * 60, []string{"video/mp4", "video/quicktime", "video/webm"}},
+		{ProviderDiscord, models.ContentProfileLongVideo, 10 * 1024 * 1024, 0, []string{"video/mp4", "video/quicktime", "video/webm"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.provider+"_"+tt.profile, func(t *testing.T) {
+			capability, ok := Find(tt.provider, tt.profile)
+			require.True(t, ok)
+			require.Equal(t, tt.maxBytes, capability.Media.MaxSizeBytes)
+			require.Equal(t, tt.maxDuration, capability.Media.MaxDurationSeconds)
+			require.ElementsMatch(t, tt.allowedMIMEs, capability.Media.AllowedMIMEs)
+			require.Equal(t, "2026-07-27.1", capability.CapabilityRevision)
+		})
+	}
+}
+
+func TestApplyAccountConstraintsRefreshesVideoMIMEsAndSize(t *testing.T) {
+	segments := []ResolveSegment{{
+		ID:   "segment-1",
+		Body: "Video",
+		Media: []MediaItem{{
+			ID:             "video-1",
+			MimeType:       "video/webm",
+			Size:           120 * 1024 * 1024,
+			DurationMS:     60_000,
+			AnalysisStatus: "ready",
+		}},
+	}}
+	resolved := Resolve(ProviderMastodon, ResolveInput{
+		Intent:   IntentVideo,
+		Segments: segments,
+	})
+	require.Contains(t, issueCodes(resolved.Issues), "media_size")
+	require.NotContains(t, issueCodes(resolved.Issues), "media_type")
+
+	ApplyAccountConstraints(&resolved, segments, map[string]any{
+		"max_video_size_bytes": int64(200 * 1024 * 1024),
+		"allowed_mimes":        []any{"video/mp4", "video/webm"},
+	})
+	require.NotContains(t, issueCodes(resolved.Issues), "media_size")
+	require.NotContains(t, issueCodes(resolved.Issues), "media_type")
+	require.Contains(t, resolved.Media.AllowedMIMEs, "video/webm")
 }
 
 func TestValidateBlocksXMutuallyExclusiveSettings(t *testing.T) {

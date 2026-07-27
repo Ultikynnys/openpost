@@ -1,10 +1,11 @@
 import { getToken } from '$lib/api/client';
 import type { components } from '$lib/api/types';
 import { getApiBase } from '$lib/stores/instance.svelte';
+import type { VideoConstraint, VideoPreparationProgress } from '$lib/video/types';
 
 export type MediaUploadResult = components['schemas']['MediaUploadResult'];
 
-interface UploadMediaFileOptions {
+export interface UploadMediaFileOptions {
 	workspaceId: string;
 	file: File;
 	altText?: string;
@@ -13,6 +14,9 @@ interface UploadMediaFileOptions {
 	parentMediaId?: string;
 	designDocumentId?: string;
 	designPageId?: string;
+	videoConstraints?: VideoConstraint[];
+	onProgress?: (progress: VideoPreparationProgress) => void;
+	signal?: AbortSignal;
 }
 
 interface UploadProblem {
@@ -41,8 +45,17 @@ export async function uploadMediaFile({
 	assetKind = 'library',
 	parentMediaId = '',
 	designDocumentId = '',
-	designPageId = ''
+	designPageId = '',
+	videoConstraints = [],
+	onProgress,
+	signal
 }: UploadMediaFileOptions): Promise<MediaUploadResult> {
+	let uploadFile = file;
+	if (file.type.startsWith('video/') || looksLikeVideo(file.name)) {
+		const { prepareVideoForUpload } = await import('$lib/video/prepare');
+		const prepared = await prepareVideoForUpload(file, videoConstraints, onProgress, signal);
+		uploadFile = prepared.file;
+	}
 	const metadata = {
 		source,
 		assetKind,
@@ -51,15 +64,22 @@ export async function uploadMediaFile({
 		designPageId
 	};
 	if (!(await mediaStorageSupportsDirectUploads(workspaceId))) {
-		return uploadViaMultipart(workspaceId, file, altText, metadata);
+		return uploadViaMultipart(workspaceId, uploadFile, altText, metadata, onProgress, signal);
 	}
 	try {
-		return await uploadViaDirectSession(workspaceId, file, altText, metadata);
+		return await uploadViaDirectSession(
+			workspaceId,
+			uploadFile,
+			altText,
+			metadata,
+			onProgress,
+			signal
+		);
 	} catch (error) {
 		if (!shouldUseMultipartFallback(error)) {
 			throw error;
 		}
-		return uploadViaMultipart(workspaceId, file, altText, metadata);
+		return uploadViaMultipart(workspaceId, uploadFile, altText, metadata, onProgress, signal);
 	}
 }
 
@@ -145,12 +165,16 @@ async function uploadViaDirectSession(
 		parentMediaId: string;
 		designDocumentId: string;
 		designPageId: string;
-	}
+	},
+	onProgress?: (progress: VideoPreparationProgress) => void,
+	signal?: AbortSignal
 ): Promise<MediaUploadResult> {
+	onProgress?.({ stage: 'uploading', fraction: 0, message: 'Starting upload' });
 	const sessionResp = await fetch(apiURL('/media/upload-session'), {
 		method: 'POST',
 		credentials: 'include',
 		headers: apiHeaders(true),
+		signal,
 		body: JSON.stringify({
 			workspace_id: workspaceId,
 			filename: file.name,
@@ -180,29 +204,29 @@ async function uploadViaDirectSession(
 	if (!uploadHeaders.has('Content-Type') && file.type) {
 		uploadHeaders.set('Content-Type', file.type);
 	}
-	const uploadResp = await fetch(
+	await putBlobWithProgress(
 		isExternalUpload ? session.upload.url : apiURL(session.upload.url),
-		{
-			method: session.upload.method || 'PUT',
-			credentials: isExternalUpload ? 'omit' : 'include',
-			headers: uploadHeaders,
-			body: file
-		}
+		session.upload.method || 'PUT',
+		uploadHeaders,
+		file,
+		isExternalUpload,
+		(fraction) => onProgress?.({ stage: 'uploading', fraction, message: 'Uploading video' }),
+		signal
 	);
-	if (!uploadResp.ok) {
-		throw await uploadErrorFromResponse(uploadResp, 'Media upload failed');
-	}
 
+	onProgress?.({ stage: 'finalizing', fraction: 0.96, message: 'Finalizing upload' });
 	const completeResp = await fetch(apiURL(session.complete_url), {
 		method: 'POST',
 		credentials: 'include',
 		headers: apiHeaders(true),
+		signal,
 		body: JSON.stringify({ workspace_id: workspaceId })
 	});
 	if (!completeResp.ok) {
 		throw await uploadErrorFromResponse(completeResp, 'Failed to finalize media upload');
 	}
-	return (await completeResp.json()) as MediaUploadResult;
+	const result = (await completeResp.json()) as MediaUploadResult;
+	return waitForVideoProcessing(workspaceId, result, onProgress, signal);
 }
 
 async function uploadViaMultipart(
@@ -215,7 +239,9 @@ async function uploadViaMultipart(
 		parentMediaId: string;
 		designDocumentId: string;
 		designPageId: string;
-	}
+	},
+	onProgress?: (progress: VideoPreparationProgress) => void,
+	signal?: AbortSignal
 ): Promise<MediaUploadResult> {
 	const formData = new FormData();
 	formData.append('file', file);
@@ -229,16 +255,14 @@ async function uploadViaMultipart(
 	if (metadata.designDocumentId) formData.append('design_document_id', metadata.designDocumentId);
 	if (metadata.designPageId) formData.append('design_page_id', metadata.designPageId);
 
-	const response = await fetch(apiURL('/media/upload'), {
-		method: 'POST',
-		credentials: 'include',
-		headers: apiHeaders(false),
-		body: formData
-	});
-	if (!response.ok) {
-		throw await uploadErrorFromResponse(response, 'Upload failed');
-	}
-	return (await response.json()) as MediaUploadResult;
+	onProgress?.({ stage: 'uploading', fraction: 0, message: 'Starting upload' });
+	const response = await uploadFormWithProgress(
+		apiURL('/media/upload'),
+		formData,
+		(fraction) => onProgress?.({ stage: 'uploading', fraction, message: 'Uploading video' }),
+		signal
+	);
+	return waitForVideoProcessing(workspaceId, response as MediaUploadResult, onProgress, signal);
 }
 
 function apiURL(path: string): string {
@@ -286,4 +310,191 @@ async function parseUploadProblem(response: Response): Promise<UploadProblem> {
 function isForbiddenBrowserUploadHeader(header: string): boolean {
 	const normalized = header.toLowerCase();
 	return normalized === 'host' || normalized === 'content-length';
+}
+
+function looksLikeVideo(filename: string): boolean {
+	return /\.(mp4|m4v|mov|webm|mkv|avi|mpeg|mpg)$/i.test(filename);
+}
+
+async function waitForVideoProcessing(
+	workspaceId: string,
+	result: MediaUploadResult,
+	onProgress?: (progress: VideoPreparationProgress) => void,
+	signal?: AbortSignal
+): Promise<MediaUploadResult> {
+	type ProcessedResult = MediaUploadResult & {
+		processing_status?: string;
+		processing_progress?: number;
+		analysis_status?: string;
+		analysis_error?: string;
+		poster_thumbnail_url?: string;
+	};
+	type MetadataResponse = {
+		media?: Array<{
+			id: string;
+			processing_status?: string;
+			processing_progress?: number;
+			analysis_status?: string;
+			analysis_error?: string;
+			poster_thumbnail_url?: string;
+		}>;
+	};
+
+	let current = result as ProcessedResult;
+	if (!current.mime_type.startsWith('video/') || current.processing_status !== 'processing') {
+		return result;
+	}
+
+	const deadline = Date.now() + 2 * 60 * 1000;
+	while (Date.now() < deadline) {
+		assertUploadNotAborted(signal);
+		onProgress?.({
+			stage: 'processing',
+			fraction: Math.max(0, Math.min(1, (current.processing_progress ?? 0) / 100)),
+			message: 'Checking video compatibility'
+		});
+		await abortableDelay(650, signal);
+		const params = new URLSearchParams({
+			workspace_id: workspaceId,
+			media_ids: current.id
+		});
+		const response = await fetch(apiURL(`/media/metadata?${params.toString()}`), {
+			credentials: 'include',
+			headers: apiHeaders(false),
+			signal
+		});
+		if (!response.ok) throw await uploadErrorFromResponse(response, 'Failed to check video');
+		const metadata = ((await response.json()) as MetadataResponse).media?.find(
+			(item) => item.id === current.id
+		);
+		if (!metadata) throw new UploadRequestError('Uploaded video could not be found', 404);
+		current = { ...current, ...metadata };
+		if (metadata.processing_status === 'ready' && metadata.analysis_status === 'ready') {
+			onProgress?.({ stage: 'processing', fraction: 1, message: 'Video is ready' });
+			return current;
+		}
+		if (metadata.processing_status === 'failed' || metadata.analysis_status === 'failed') {
+			throw new UploadRequestError(
+				metadata.analysis_error || 'OpenPost could not process this video',
+				422
+			);
+		}
+	}
+	throw new UploadRequestError(
+		'Video processing is taking longer than expected. It remains in Media and can be retried there.',
+		408
+	);
+}
+
+function abortableDelay(milliseconds: number, signal?: AbortSignal): Promise<void> {
+	return new Promise((resolve, reject) => {
+		if (signal?.aborted) {
+			reject(new DOMException('Aborted', 'AbortError'));
+			return;
+		}
+		const timer = window.setTimeout(() => {
+			signal?.removeEventListener('abort', abort);
+			resolve();
+		}, milliseconds);
+		const abort = () => {
+			window.clearTimeout(timer);
+			reject(new DOMException('Aborted', 'AbortError'));
+		};
+		signal?.addEventListener('abort', abort, { once: true });
+	});
+}
+
+function assertUploadNotAborted(signal?: AbortSignal): void {
+	if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+}
+
+function putBlobWithProgress(
+	url: string,
+	method: string,
+	headers: Headers,
+	body: Blob,
+	isExternal: boolean,
+	onProgress: (fraction: number) => void,
+	signal?: AbortSignal
+): Promise<void> {
+	return new Promise((resolve, reject) => {
+		if (signal?.aborted) {
+			reject(new DOMException('Aborted', 'AbortError'));
+			return;
+		}
+		const xhr = new XMLHttpRequest();
+		xhr.open(method, url);
+		xhr.withCredentials = !isExternal;
+		headers.forEach((value, key) => xhr.setRequestHeader(key, value));
+		const abort = () => xhr.abort();
+		signal?.addEventListener('abort', abort, { once: true });
+		const cleanup = () => signal?.removeEventListener('abort', abort);
+		xhr.upload.onprogress = (event) => {
+			if (event.lengthComputable && event.total > 0) onProgress(event.loaded / event.total);
+		};
+		xhr.onload = () => {
+			cleanup();
+			if (xhr.status >= 200 && xhr.status < 300) {
+				onProgress(1);
+				resolve();
+				return;
+			}
+			reject(new UploadRequestError(xhr.responseText || 'Media upload failed', xhr.status));
+		};
+		xhr.onerror = () => {
+			cleanup();
+			reject(new UploadRequestError('Network error while uploading media', 0));
+		};
+		xhr.onabort = () => {
+			cleanup();
+			reject(new DOMException('Aborted', 'AbortError'));
+		};
+		xhr.send(body);
+	});
+}
+
+function uploadFormWithProgress(
+	url: string,
+	body: FormData,
+	onProgress: (fraction: number) => void,
+	signal?: AbortSignal
+): Promise<unknown> {
+	return new Promise((resolve, reject) => {
+		if (signal?.aborted) {
+			reject(new DOMException('Aborted', 'AbortError'));
+			return;
+		}
+		const xhr = new XMLHttpRequest();
+		xhr.open('POST', url);
+		xhr.withCredentials = true;
+		for (const [key, value] of apiHeaders(false)) xhr.setRequestHeader(key, value);
+		const abort = () => xhr.abort();
+		signal?.addEventListener('abort', abort, { once: true });
+		const cleanup = () => signal?.removeEventListener('abort', abort);
+		xhr.upload.onprogress = (event) => {
+			if (event.lengthComputable && event.total > 0) onProgress(event.loaded / event.total);
+		};
+		xhr.onload = () => {
+			cleanup();
+			if (xhr.status < 200 || xhr.status >= 300) {
+				reject(new UploadRequestError(xhr.responseText || 'Upload failed', xhr.status));
+				return;
+			}
+			try {
+				onProgress(1);
+				resolve(JSON.parse(xhr.responseText));
+			} catch {
+				reject(new UploadRequestError('The upload response was invalid', xhr.status));
+			}
+		};
+		xhr.onerror = () => {
+			cleanup();
+			reject(new UploadRequestError('Network error while uploading media', 0));
+		};
+		xhr.onabort = () => {
+			cleanup();
+			reject(new DOMException('Aborted', 'AbortError'));
+		};
+		xhr.send(body);
+	});
 }

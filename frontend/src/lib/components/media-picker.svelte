@@ -14,11 +14,19 @@
 	import UploadIcon from 'lucide-svelte/icons/upload';
 	import CameraIcon from 'lucide-svelte/icons/camera';
 	import ImageIcon from 'lucide-svelte/icons/image';
+	import VideoIcon from 'lucide-svelte/icons/video';
 	import PaletteIcon from 'lucide-svelte/icons/palette';
 	import CheckIcon from 'lucide-svelte/icons/check';
 	import LoaderIcon from 'lucide-svelte/icons/loader-2';
 	import ArrowLeftIcon from 'lucide-svelte/icons/arrow-left';
 	import { m } from '$lib/paraglide/messages';
+	import { effectiveVideoConstraints } from '$lib/video/constraints';
+	import { videoPreparationErrorMessage } from '$lib/video/errors';
+	import type {
+		VideoConstraint,
+		VideoPreparationProgress,
+		VideoPreparationStage
+	} from '$lib/video/types';
 
 	let {
 		open = $bindable(false),
@@ -32,6 +40,7 @@
 		showCreate = true,
 		desktopSize = 'default',
 		presentation = 'dialog',
+		videoConstraints = [],
 		onConfirm,
 		onCreate
 	}: {
@@ -46,6 +55,7 @@
 		showCreate?: boolean;
 		desktopSize?: 'default' | 'compact';
 		presentation?: 'dialog' | 'sheet';
+		videoConstraints?: VideoConstraint[];
 		onConfirm: (mediaIDs: string[], media: StudioMediaItem[]) => void | Promise<void>;
 		onCreate?: () => void | Promise<void>;
 	} = $props();
@@ -59,6 +69,14 @@
 	let error = $state('');
 	let uploadInput = $state<HTMLInputElement>();
 	let loadedForWorkspace = $state('');
+	let uploadProgress = $state<VideoPreparationProgress | null>(null);
+	let uploadController: AbortController | null = null;
+	let editorOpen = $state(false);
+	let editorFile = $state<File | null>(null);
+	let videoEditorModule = $state.raw<Promise<typeof import('./video-editor-dialog.svelte')> | null>(
+		null
+	);
+	const editorAspectRatios = $derived(effectiveVideoConstraints(videoConstraints).aspectRatios);
 
 	function attachUploadInput(node: HTMLInputElement) {
 		uploadInput = node;
@@ -79,7 +97,10 @@
 		loading = true;
 		error = '';
 		try {
-			media = (await listStudioMedia(workspaceId, search)).filter((item) =>
+			const allowsImages = accept.some((mime) => mime === 'image/*' || mime.startsWith('image/'));
+			const allowsVideos = accept.some((mime) => mime === 'video/*' || mime.startsWith('video/'));
+			const requestedType = allowsImages && allowsVideos ? 'all' : allowsVideos ? 'video' : 'image';
+			media = (await listStudioMedia(workspaceId, search, requestedType)).filter((item) =>
 				mimeAllowed(item.mime_type)
 			);
 			loadedForWorkspace = workspaceId;
@@ -97,6 +118,18 @@
 	}
 
 	function toggleMedia(id: string): void {
+		const candidate = media.find((item) => item.id === id);
+		if (
+			candidate?.mime_type.startsWith('video/') &&
+			(candidate.processing_status !== 'ready' || candidate.analysis_status !== 'ready')
+		) {
+			error =
+				candidate.analysis_error ||
+				(candidate.analysis_status === 'failed'
+					? m.media_video_processing_failed()
+					: m.video_upload_processing());
+			return;
+		}
 		if (selectedIDs.includes(id)) {
 			selectedIDs = selectedIDs.filter((item) => item !== id);
 			return;
@@ -132,24 +165,96 @@
 
 	async function uploadFiles(files: FileList | null): Promise<void> {
 		if (!files?.length) return;
+		const available = Math.max(0, maxSelection - selectedIDs.length);
+		const candidates = Array.from(files)
+			.filter((file) => mimeAllowed(file.type))
+			.slice(0, available);
+		if (candidates.length === 1 && candidates[0].type.startsWith('video/')) {
+			await openVideoEditor(candidates[0]);
+			if (uploadInput) uploadInput.value = '';
+			return;
+		}
+		await performUploads(candidates);
+	}
+
+	async function openVideoEditor(file: File): Promise<void> {
 		actionLoading = true;
 		error = '';
+		editorFile = file;
 		try {
-			const available = Math.max(0, maxSelection - selectedIDs.length);
-			const candidates = Array.from(files)
-				.filter((file) => mimeAllowed(file.type))
-				.slice(0, available);
-			for (const file of candidates) {
-				const uploaded = await uploadMediaFile({ workspaceId, file, source: 'upload' });
+			videoEditorModule ??= import('./video-editor-dialog.svelte');
+			await videoEditorModule;
+			editorOpen = true;
+		} catch (cause) {
+			videoEditorModule = null;
+			editorFile = null;
+			error = videoPreparationErrorMessage(cause, m.media_picker_upload_failed());
+		} finally {
+			actionLoading = false;
+		}
+	}
+
+	async function performUploads(files: File[]): Promise<void> {
+		if (files.length === 0) return;
+		actionLoading = true;
+		error = '';
+		uploadController = new AbortController();
+		try {
+			for (const file of files) {
+				uploadProgress = {
+					stage: file.type.startsWith('video/') ? 'inspecting' : 'uploading',
+					fraction: 0,
+					message: ''
+				};
+				const uploaded = await uploadMediaFile({
+					workspaceId,
+					file,
+					source: 'upload',
+					videoConstraints,
+					onProgress: (progress) => (uploadProgress = progress),
+					signal: uploadController.signal
+				});
 				selectedIDs = [...selectedIDs, uploaded.id];
 			}
 			await loadMedia();
 			mode = 'library';
 		} catch (cause) {
-			error = cause instanceof Error ? cause.message : m.media_picker_upload_failed();
+			if (cause instanceof DOMException && cause.name === 'AbortError') {
+				error = '';
+				return;
+			}
+			error = videoPreparationErrorMessage(cause, m.media_picker_upload_failed());
 		} finally {
 			actionLoading = false;
+			uploadProgress = null;
+			uploadController = null;
 			if (uploadInput) uploadInput.value = '';
+		}
+	}
+
+	async function useEditorFile(file: File): Promise<void> {
+		editorFile = null;
+		await performUploads([file]);
+	}
+
+	function cancelUpload() {
+		uploadController?.abort();
+	}
+
+	function uploadStage(stage: VideoPreparationStage): string {
+		switch (stage) {
+			case 'inspecting':
+				return m.video_upload_inspecting();
+			case 'remuxing':
+				return m.video_upload_remuxing();
+			case 'compressing':
+				return m.video_upload_compressing();
+			case 'uploading':
+				return m.video_upload_uploading();
+			case 'finalizing':
+				return m.video_upload_finalizing();
+			case 'processing':
+				return m.video_upload_processing();
 		}
 	}
 
@@ -283,12 +388,38 @@
 							aria-pressed={selectedIDs.includes(item.id)}
 							aria-label={m.media_picker_select_item({ name: item.original_filename })}
 						>
-							<img
-								src={getAuthenticatedMediaURL(item.thumbnail_url || item.url)}
-								alt={item.alt_text || item.original_filename}
-								class="size-full object-cover transition-transform group-hover:scale-[1.02]"
-								loading="lazy"
-							/>
+							{#if item.mime_type.startsWith('video/')}
+								{#if item.thumbnail_url || item.poster_thumbnail_url}
+									<img
+										src={getAuthenticatedMediaURL(
+											item.thumbnail_url || item.poster_thumbnail_url || ''
+										)}
+										alt={item.alt_text || item.original_filename}
+										class="size-full object-cover transition-transform group-hover:scale-[1.02]"
+										loading="lazy"
+									/>
+								{:else}
+									<div class="flex size-full items-center justify-center">
+										{#if item.processing_status === 'processing'}
+											<LoaderIcon class="size-6 animate-spin text-muted-foreground" />
+										{:else}
+											<VideoIcon class="size-7 text-muted-foreground" />
+										{/if}
+									</div>
+								{/if}
+								<span
+									class="absolute bottom-2 left-2 flex size-7 items-center justify-center rounded-full bg-background/90 shadow-sm"
+								>
+									<VideoIcon class="size-3.5" />
+								</span>
+							{:else}
+								<img
+									src={getAuthenticatedMediaURL(item.thumbnail_url || item.url)}
+									alt={item.alt_text || item.original_filename}
+									class="size-full object-cover transition-transform group-hover:scale-[1.02]"
+									loading="lazy"
+								/>
+							{/if}
 							{#if selectedIDs.includes(item.id)}
 								<span
 									class="absolute top-2 right-2 flex size-7 items-center justify-center rounded-full bg-primary text-primary-foreground shadow"
@@ -322,6 +453,27 @@
 			role="alert"
 		>
 			{error}
+		</div>
+	{/if}
+	{#if uploadProgress}
+		<div class="mx-4 mb-3 space-y-2 rounded-lg border bg-muted/20 px-3 py-3" aria-live="polite">
+			<div class="flex items-center justify-between gap-3">
+				<p class="text-sm font-medium">
+					{m.video_upload_progress({
+						stage: uploadStage(uploadProgress.stage),
+						percent: Math.round(uploadProgress.fraction * 100)
+					})}
+				</p>
+				<Button type="button" variant="ghost" size="sm" onclick={cancelUpload}>
+					{m.video_upload_cancel()}
+				</Button>
+			</div>
+			<div class="h-2 overflow-hidden rounded-full bg-muted">
+				<div
+					class="h-full rounded-full bg-primary transition-[width]"
+					style:width={`${Math.round(uploadProgress.fraction * 100)}%`}
+				></div>
+			</div>
 		</div>
 	{/if}
 	{#if mode === 'library'}
@@ -372,4 +524,16 @@
 			{@render pickerBody()}
 		</Dialog.Content>
 	</Dialog.Root>
+{/if}
+
+{#if videoEditorModule}
+	{#await videoEditorModule then { default: VideoEditorDialog }}
+		<VideoEditorDialog
+			bind:open={editorOpen}
+			file={editorFile}
+			allowedAspectRatios={editorAspectRatios}
+			onConfirm={useEditorFile}
+			onSkip={useEditorFile}
+		/>
+	{/await}
 {/if}

@@ -401,6 +401,31 @@
 			? (getVariantContent(activeVariantAccountId, activePost.key) ?? activePost.content)
 			: activePost.content
 	);
+	const editorContextLabel = $derived(
+		activeVariantAccount
+			? activeVariantIsUnsynced
+				? m.compose_override_version({
+						account:
+							activeVariantAccount.account_username ||
+							getPlatformName(activeVariantAccount.platform)
+					})
+				: m.compose_source_for_account({
+						account:
+							activeVariantAccount.account_username ||
+							getPlatformName(activeVariantAccount.platform)
+					})
+			: m.compose_source_version()
+	);
+	const composerSaveLabel = $derived.by(() => {
+		if (draftConflict) return m.compose_conflict_state();
+		if (isSaving) return m.common_saving();
+		if (hasContent && getSaveSnapshot() !== lastSavedSnapshot) return m.compose_unsaved_changes();
+		if (draftId && lastSavedSnapshot) return m.compose_saved_state();
+		return m.compose_unsaved_changes();
+	});
+	const readyDestinationCount = $derived(
+		selectedAccounts.filter((account) => accountBlockers(account).length === 0).length
+	);
 
 	const editorTargetAccounts = $derived.by(() => {
 		if (activeVariantAccountId) {
@@ -1928,7 +1953,6 @@
 
 	function saveDraft(
 		options: {
-			force?: boolean;
 			saveAsCopy?: boolean;
 			scheduledAt?: string | null;
 		} = {}
@@ -1937,7 +1961,6 @@
 	}
 
 	async function saveDraftNow(options: {
-		force?: boolean;
 		saveAsCopy?: boolean;
 		scheduledAt?: string | null;
 	}): Promise<string | null> {
@@ -1995,8 +2018,7 @@
 					params: { path: { id: startingDraftId } },
 					body: {
 						...body,
-						expected_revision: revision,
-						force: Boolean(options.force)
+						expected_revision: revision
 					}
 				});
 				if (saveError) {
@@ -2076,7 +2098,7 @@
 	async function overwriteSavedTextDraft() {
 		if (!draftConflict) return;
 		revision = draftConflict.conflict.current_revision;
-		const saved = await saveDraft({ force: true });
+		const saved = await saveDraft();
 		if (!saved) throw new Error(error || m.compose_update_draft_failed());
 		lastSavedSnapshot = getSaveSnapshot();
 		success = m.compose_changes_saved();
@@ -3208,6 +3230,31 @@
 						{/if}
 					</div>
 				{/if}
+
+				<div
+					class="mb-4 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-md border bg-muted/20 px-3 py-2 text-xs"
+					data-testid="composer-context-status"
+				>
+					<span class="font-medium text-foreground">{editorContextLabel}</span>
+					<span class="text-muted-foreground">{composerSaveLabel}</span>
+					<span class="text-muted-foreground">
+						{m.compose_destination_ready_count({
+							ready: readyDestinationCount,
+							total: selectedAccounts.length
+						})}
+					</span>
+					{#if activeVariantAccountId && activeVariantIsUnsynced}
+						<Button
+							type="button"
+							variant="ghost"
+							size="sm"
+							class="ms-auto h-7 px-2 text-xs"
+							onclick={() => activeVariantAccountId && resyncAccount(activeVariantAccountId)}
+						>
+							{m.compose_sync_back()}
+						</Button>
+					{/if}
+				</div>
 
 				<!-- Posts -->
 				<div class="space-y-0">

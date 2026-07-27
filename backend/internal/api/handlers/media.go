@@ -35,6 +35,7 @@ import (
 	"github.com/openpost/backend/internal/services/mediastore"
 	"github.com/openpost/backend/internal/services/publicurl"
 	"github.com/openpost/backend/internal/services/usage"
+	"github.com/openpost/backend/internal/services/videoprocessing"
 	"github.com/uptrace/bun"
 )
 
@@ -61,7 +62,7 @@ type MediaHandler struct {
 	signer      *mediasigner.Signer
 	quota       entitlements.Service
 	usage       *usage.Service
-	analyzer    mediaanalysis.Analyzer
+	video       *videoprocessing.Service
 	publicMedia *publicurl.MediaVerifier
 }
 
@@ -115,7 +116,6 @@ func NewMediaHandler(
 		signer:      signer,
 		quota:       entitlements.NewSelfHostedService(),
 		usage:       usage.NewService(db),
-		analyzer:    mediaanalysis.DisabledAnalyzer{},
 		publicMedia: publicurl.NewMediaVerifier("", storage, signer),
 	}
 }
@@ -133,8 +133,19 @@ func (h *MediaHandler) SetUsage(usageService *usage.Service) {
 }
 
 func (h *MediaHandler) SetAnalyzer(analyzer mediaanalysis.Analyzer) {
-	if analyzer != nil {
-		h.analyzer = analyzer
+	if analyzer == nil {
+		return
+	}
+	if h.video == nil {
+		h.video = videoprocessing.NewService(h.db, h.storage, analyzer)
+		return
+	}
+	h.video.SetAnalyzer(analyzer)
+}
+
+func (h *MediaHandler) SetVideoProcessor(service *videoprocessing.Service) {
+	if service != nil {
+		h.video = service
 	}
 }
 
@@ -184,6 +195,16 @@ type MediaListItem struct {
 	ProcessingStatus   string   `json:"processing_status" doc:"Processing status"`
 	DurationMS         int64    `json:"duration_ms" doc:"Video duration in milliseconds"`
 	FrameRate          float64  `json:"frame_rate" doc:"Video frame rate"`
+	ContainerFormat    string   `json:"container_format,omitempty" doc:"Detected media container"`
+	VideoCodec         string   `json:"video_codec,omitempty" doc:"Detected video codec"`
+	VideoProfile       string   `json:"video_profile,omitempty" doc:"Detected video codec profile"`
+	AudioCodec         string   `json:"audio_codec,omitempty" doc:"Detected audio codec"`
+	PixelFormat        string   `json:"pixel_format,omitempty" doc:"Detected video pixel format"`
+	ColorSpace         string   `json:"color_space,omitempty" doc:"Detected video color space"`
+	BitRate            int64    `json:"bit_rate" doc:"Detected aggregate bitrate in bits per second"`
+	Rotation           int      `json:"rotation" doc:"Normalized display rotation"`
+	AudioChannels      int      `json:"audio_channels" doc:"Detected audio channel count"`
+	ProcessingProgress int      `json:"processing_progress" doc:"Server processing progress from 0 to 100"`
 	AnalysisStatus     string   `json:"analysis_status" doc:"Media analysis status"`
 	AnalysisError      string   `json:"analysis_error,omitempty" doc:"Media analysis error"`
 	PosterThumbnailURL string   `json:"poster_thumbnail_url,omitempty" doc:"Poster thumbnail URL"`
@@ -263,6 +284,11 @@ type MediaMetadataItem struct {
 	Thumbnail          string  `json:"thumbnail_url" doc:"Thumbnail URL"`
 	DurationMS         int64   `json:"duration_ms" doc:"Video duration in milliseconds"`
 	FrameRate          float64 `json:"frame_rate" doc:"Video frame rate"`
+	ContainerFormat    string  `json:"container_format,omitempty" doc:"Detected media container"`
+	VideoCodec         string  `json:"video_codec,omitempty" doc:"Detected video codec"`
+	AudioCodec         string  `json:"audio_codec,omitempty" doc:"Detected audio codec"`
+	ProcessingStatus   string  `json:"processing_status" doc:"Media processing status"`
+	ProcessingProgress int     `json:"processing_progress" doc:"Server processing progress from 0 to 100"`
 	PosterThumbnailURL string  `json:"poster_thumbnail_url,omitempty" doc:"Poster thumbnail URL"`
 	AnalysisStatus     string  `json:"analysis_status" doc:"Media analysis status"`
 	AnalysisError      string  `json:"analysis_error,omitempty" doc:"Media analysis error"`
@@ -328,6 +354,18 @@ type UpdateMediaOutput struct {
 	}
 }
 
+type RetryMediaAnalysisInput struct {
+	PathID string `path:"id" doc:"Media ID"`
+}
+
+type RetryMediaAnalysisOutput struct {
+	Body struct {
+		MediaID          string `json:"media_id" doc:"Media ID"`
+		ProcessingStatus string `json:"processing_status" doc:"Current processing status"`
+		AnalysisStatus   string `json:"analysis_status" doc:"Current analysis status"`
+	}
+}
+
 type CreateMediaUploadSessionInput struct {
 	Body struct {
 		WorkspaceID      string `json:"workspace_id" doc:"Workspace ID"`
@@ -367,18 +405,23 @@ type CompleteMediaUploadSessionInput struct {
 }
 
 type MediaUploadResult struct {
-	ID               string `json:"id" doc:"Media ID"`
-	MimeType         string `json:"mime_type" doc:"MIME type"`
-	URL              string `json:"url" doc:"URL to access the media"`
-	Size             int64  `json:"size" doc:"File size in bytes"`
-	Deduped          bool   `json:"deduped" doc:"Whether an existing media attachment was reused"`
-	AltText          string `json:"alt_text" doc:"Persisted alt text"`
-	OriginalFilename string `json:"original_filename" doc:"Persisted original filename"`
-	Source           string `json:"source" doc:"Media provenance"`
-	AssetKind        string `json:"asset_kind" doc:"Media library role"`
-	ParentMediaID    string `json:"parent_media_id,omitempty" doc:"Source media ID"`
-	DesignDocumentID string `json:"design_document_id,omitempty" doc:"Producing Studio design ID"`
-	DesignPageID     string `json:"design_page_id,omitempty" doc:"Producing Studio page ID"`
+	ID                 string `json:"id" doc:"Media ID"`
+	MimeType           string `json:"mime_type" doc:"MIME type"`
+	URL                string `json:"url" doc:"URL to access the media"`
+	Size               int64  `json:"size" doc:"File size in bytes"`
+	Deduped            bool   `json:"deduped" doc:"Whether an existing media attachment was reused"`
+	AltText            string `json:"alt_text" doc:"Persisted alt text"`
+	OriginalFilename   string `json:"original_filename" doc:"Persisted original filename"`
+	Source             string `json:"source" doc:"Media provenance"`
+	AssetKind          string `json:"asset_kind" doc:"Media library role"`
+	ParentMediaID      string `json:"parent_media_id,omitempty" doc:"Source media ID"`
+	DesignDocumentID   string `json:"design_document_id,omitempty" doc:"Producing Studio design ID"`
+	DesignPageID       string `json:"design_page_id,omitempty" doc:"Producing Studio page ID"`
+	ProcessingStatus   string `json:"processing_status" doc:"Media processing status"`
+	ProcessingProgress int    `json:"processing_progress" doc:"Server processing progress from 0 to 100"`
+	AnalysisStatus     string `json:"analysis_status" doc:"Media analysis status"`
+	AnalysisError      string `json:"analysis_error,omitempty" doc:"Media analysis error"`
+	PosterThumbnailURL string `json:"poster_thumbnail_url,omitempty" doc:"Poster thumbnail URL"`
 }
 
 type CompleteMediaUploadSessionOutput struct {
@@ -606,12 +649,22 @@ func (h *MediaHandler) RegisterRoutes(api huma.API) {
 				IsFavorite:         m.IsFavorite,
 				CreatedAt:          m.CreatedAt.Format(time.RFC3339),
 				URL:                "/media/" + m.ID,
-				ThumbnailURL:       "/media/" + m.ID + "/thumb",
+				ThumbnailURL:       "",
 				UsageCount:         usage.Total,
 				CanDelete:          usage.Blocking == 0,
 				ProcessingStatus:   m.ProcessingStatus,
 				DurationMS:         m.DurationMS,
 				FrameRate:          m.FrameRate,
+				ContainerFormat:    m.ContainerFormat,
+				VideoCodec:         m.VideoCodec,
+				VideoProfile:       m.VideoProfile,
+				AudioCodec:         m.AudioCodec,
+				PixelFormat:        m.PixelFormat,
+				ColorSpace:         m.ColorSpace,
+				BitRate:            m.BitRate,
+				Rotation:           m.Rotation,
+				AudioChannels:      m.AudioChannels,
+				ProcessingProgress: m.ProcessingProgress,
 				AnalysisStatus:     m.AnalysisStatus,
 				AnalysisError:      m.AnalysisError,
 				PosterThumbnailURL: mediaPosterURL(m),
@@ -632,8 +685,13 @@ func (h *MediaHandler) RegisterRoutes(api huma.API) {
 			if result[i].AssetKind == "" {
 				result[i].AssetKind = "library"
 			}
-			if thumbs.SM != "" {
+			switch {
+			case thumbs.SM != "":
 				result[i].ThumbnailURL = "/media/" + m.ID + "/thumb/sm"
+			case strings.HasPrefix(m.MimeType, "video/"):
+				result[i].ThumbnailURL = result[i].PosterThumbnailURL
+			case strings.HasPrefix(m.MimeType, "image/"):
+				result[i].ThumbnailURL = result[i].URL
 			}
 		}
 
@@ -908,6 +966,55 @@ func (h *MediaHandler) RegisterRoutes(api huma.API) {
 	})
 
 	huma.Register(api, huma.Operation{
+		OperationID: "retry-media-analysis",
+		Method:      http.MethodPost,
+		Path:        "/media/{id}/analysis/retry",
+		Summary:     "Retry authoritative analysis for a video",
+		Tags:        []string{tagMedia},
+		Middlewares: huma.Middlewares{middleware.AuthMiddleware(api, h.authn)},
+		Errors:      []int{400, 403, 404},
+	}, func(ctx context.Context, input *RetryMediaAnalysisInput) (*RetryMediaAnalysisOutput, error) {
+		var media models.MediaAttachment
+		if err := h.db.NewSelect().Model(&media).Where("id = ?", input.PathID).Scan(ctx); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return nil, huma.Error404NotFound(errMediaNotFound)
+			}
+			return nil, huma.Error500InternalServerError("failed to fetch media")
+		}
+		if err := h.ensureMediaWorkspaceEditAccess(ctx, middleware.GetUserID(ctx), media.WorkspaceID); err != nil {
+			return nil, err
+		}
+		if !strings.HasPrefix(media.MimeType, "video/") {
+			return nil, huma.Error400BadRequest("only video media can be analyzed")
+		}
+		if h.video == nil {
+			return nil, huma.Error500InternalServerError("video processing is not configured")
+		}
+		if _, err := h.db.NewUpdate().
+			Model((*models.MediaAttachment)(nil)).
+			Set("processing_status = ?", mediaProcessingStatus).
+			Set("processing_progress = 0").
+			Set("analysis_status = ?", mediaanalysis.AnalysisStatusPending).
+			Set("analysis_error = ''").
+			Where("id = ?", media.ID).
+			Exec(ctx); err != nil {
+			return nil, huma.Error500InternalServerError("failed to reset video analysis")
+		}
+		if err := h.video.EnqueueAnalysis(ctx, media.ID); err != nil {
+			return nil, huma.Error500InternalServerError("failed to queue video analysis")
+		}
+		return &RetryMediaAnalysisOutput{Body: struct {
+			MediaID          string `json:"media_id" doc:"Media ID"`
+			ProcessingStatus string `json:"processing_status" doc:"Current processing status"`
+			AnalysisStatus   string `json:"analysis_status" doc:"Current analysis status"`
+		}{
+			MediaID:          media.ID,
+			ProcessingStatus: mediaProcessingStatus,
+			AnalysisStatus:   mediaanalysis.AnalysisStatusPending,
+		}}, nil
+	})
+
+	huma.Register(api, huma.Operation{
 		OperationID: "create-media-upload-session",
 		Method:      http.MethodPost,
 		Path:        "/media/upload-session",
@@ -990,22 +1097,24 @@ func (h *MediaHandler) RegisterRoutes(api huma.API) {
 
 		now := time.Now().UTC()
 		media := &models.MediaAttachment{
-			ID:               mediaID,
-			WorkspaceID:      workspaceID,
-			FilePath:         session.Key,
-			StorageType:      h.storage.Driver(),
-			MimeType:         mimeType,
-			ProcessingStatus: mediaProcessingStatus,
-			Size:             input.Body.Size,
-			OriginalFilename: filename,
-			FileHash:         "pending:" + mediaID,
-			Source:           source,
-			AssetKind:        assetKind,
-			ParentMediaID:    strings.TrimSpace(input.Body.ParentMediaID),
-			DesignDocumentID: strings.TrimSpace(input.Body.DesignDocumentID),
-			DesignPageID:     strings.TrimSpace(input.Body.DesignPageID),
-			AltText:          input.Body.AltText,
-			CreatedAt:        now,
+			ID:                 mediaID,
+			WorkspaceID:        workspaceID,
+			FilePath:           session.Key,
+			StorageType:        h.storage.Driver(),
+			MimeType:           mimeType,
+			ProcessingStatus:   mediaProcessingStatus,
+			ProcessingProgress: 0,
+			Size:               input.Body.Size,
+			OriginalFilename:   filename,
+			FileHash:           "pending:" + mediaID,
+			Source:             source,
+			AssetKind:          assetKind,
+			ParentMediaID:      strings.TrimSpace(input.Body.ParentMediaID),
+			DesignDocumentID:   strings.TrimSpace(input.Body.DesignDocumentID),
+			DesignPageID:       strings.TrimSpace(input.Body.DesignPageID),
+			AltText:            input.Body.AltText,
+			AnalysisStatus:     mediaanalysis.AnalysisStatusPending,
+			CreatedAt:          now,
 		}
 		if _, err := h.db.NewInsert().Model(media).Exec(ctx); err != nil {
 			return nil, huma.Error500InternalServerError("failed to reserve media upload")
@@ -1150,7 +1259,7 @@ func (h *MediaHandler) completeDirectMediaUpload(ctx context.Context, userID, wo
 	if err != nil {
 		return result, err
 	}
-	if media.ProcessingStatus == mediaReadyStatus {
+	if directMediaUploadFinalized(media) {
 		return mediaUploadResultFromAttachment(media, false), nil
 	}
 
@@ -1228,13 +1337,21 @@ func (h *MediaHandler) loadDirectMediaUpload(ctx context.Context, userID, worksp
 	if err := h.ensureMediaWorkspaceEditAccess(ctx, userID, workspaceID); err != nil {
 		return media, err
 	}
-	if media.ProcessingStatus != mediaReadyStatus && media.ProcessingStatus != mediaProcessingStatus {
+	if !directMediaUploadFinalized(media) &&
+		media.ProcessingStatus != mediaReadyStatus &&
+		media.ProcessingStatus != mediaProcessingStatus {
 		return media, huma.Error400BadRequest("media upload session is not pending")
 	}
 	if media.StorageType != h.storage.Driver() {
 		return media, huma.Error400BadRequest("media upload session belongs to a different storage driver")
 	}
 	return media, nil
+}
+
+func directMediaUploadFinalized(media models.MediaAttachment) bool {
+	fileHash := strings.TrimSpace(media.FileHash)
+	return media.ProcessingStatus == mediaReadyStatus ||
+		(fileHash != "" && !strings.HasPrefix(fileHash, "pending:"))
 }
 
 func (h *MediaHandler) inspectDirectMediaUpload(ctx context.Context, media models.MediaAttachment) (mediaUploadInspection, error) {
@@ -1347,6 +1464,7 @@ func (h *MediaHandler) finalizeDirectMediaUploadRecord(ctx context.Context, medi
 
 	media.MimeType = mimeType
 	media.ProcessingStatus = mediaReadyStatus
+	media.ProcessingProgress = 100
 	media.Size = inspection.Size
 	media.FileHash = inspection.FileHash
 	media.Width = width
@@ -1355,17 +1473,23 @@ func (h *MediaHandler) finalizeDirectMediaUploadRecord(ctx context.Context, medi
 	media.DominantType = dominantMediaType(mimeType)
 	media.AspectRatio = mediaAspectRatio(width, height)
 	media.AnalysisStatus = mediaanalysis.AnalysisStatusReady
-	if strings.HasPrefix(mimeType, "video/") {
-		h.applyVideoAnalysis(ctx, &media, inspection.Content)
+	if strings.HasPrefix(mimeType, "video/") && h.video != nil {
+		media.ProcessingStatus = mediaProcessingStatus
+		media.ProcessingProgress = 0
+		media.AnalysisStatus = mediaanalysis.AnalysisStatusPending
+		media.AnalysisError = ""
 	}
 	h.applyPublicURLVerification(ctx, &media)
 	if _, err := h.db.NewUpdate().
 		Model(&media).
-		Column("mime_type", "processing_status", "size", "file_hash", "width", "height", "duration_ms", "frame_rate", "thumbnails", "dominant_type", "aspect_ratio", "analysis_status", "analysis_error", "thumbnail_object_key", "public_url_ready", "public_url_checked_at", "public_url_status", "public_url_error").
+		Column("mime_type", "processing_status", "processing_progress", "size", "file_hash", "width", "height", "duration_ms", "frame_rate", "thumbnails", "dominant_type", "aspect_ratio", "analysis_status", "analysis_error", "thumbnail_object_key", "public_url_ready", "public_url_checked_at", "public_url_status", "public_url_error").
 		Where("id = ?", media.ID).
 		Exec(ctx); err != nil {
 		h.markMediaUploadFailed(ctx, media.ID)
 		return media, huma.Error500InternalServerError("failed to finalize media record")
+	}
+	if strings.HasPrefix(mimeType, "video/") && h.video != nil {
+		h.enqueueVideoAnalysis(ctx, media.ID)
 	}
 	return media, nil
 }
@@ -1401,48 +1525,13 @@ func greatestCommonDivisor(a, b int) int {
 	return a
 }
 
-func (h *MediaHandler) applyVideoAnalysis(ctx context.Context, media *models.MediaAttachment, content []byte) {
-	analyzer := h.analyzer
-	if analyzer == nil {
-		analyzer = mediaanalysis.DisabledAnalyzer{}
+func (h *MediaHandler) enqueueVideoAnalysis(ctx context.Context, mediaID string) {
+	if h.video == nil {
+		log.Printf("video analysis service is unavailable for media %s", mediaID)
+		return
 	}
-	result, err := analyzer.Analyze(ctx, mediaanalysis.Input{
-		Filename: media.FilePath,
-		MIMEType: media.MimeType,
-		Content:  content,
-	})
-	if err != nil && result.AnalysisStatus == "" {
-		result.AnalysisStatus = mediaanalysis.AnalysisStatusFailed
-		result.AnalysisError = err.Error()
-	}
-	if result.AnalysisStatus == "" {
-		result.AnalysisStatus = mediaanalysis.AnalysisStatusReady
-	}
-	media.AnalysisStatus = result.AnalysisStatus
-	media.AnalysisError = result.AnalysisError
-	media.DominantType = firstMediaString(result.DominantType, media.DominantType)
-	if result.Width > 0 {
-		media.Width = result.Width
-	}
-	if result.Height > 0 {
-		media.Height = result.Height
-	}
-	if result.DurationMS > 0 {
-		media.DurationMS = result.DurationMS
-	}
-	if result.FrameRate > 0 {
-		media.FrameRate = result.FrameRate
-	}
-	if result.AspectRatio != "" {
-		media.AspectRatio = result.AspectRatio
-	} else {
-		media.AspectRatio = mediaAspectRatio(media.Width, media.Height)
-	}
-	if len(result.PosterContent) > 0 {
-		objectKey := "poster_" + media.ID + ".jpg"
-		if saved, err := mediastore.SaveWithContentType(h.storage, objectKey, bytes.NewReader(result.PosterContent), "image/jpeg"); err == nil {
-			media.ThumbnailObjectKey = saved
-		}
+	if err := h.video.EnqueueAnalysis(ctx, mediaID); err != nil {
+		log.Printf("failed to enqueue video analysis for media %s: %v", mediaID, err)
 	}
 }
 
@@ -1465,15 +1554,6 @@ func formatMediaTime(value time.Time) string {
 		return ""
 	}
 	return value.UTC().Format(time.RFC3339)
-}
-
-func firstMediaString(values ...string) string {
-	for _, value := range values {
-		if strings.TrimSpace(value) != "" {
-			return value
-		}
-	}
-	return ""
 }
 
 func detectedMediaMimeType(content []byte, fallback string) string {
@@ -1539,36 +1619,46 @@ func (h *MediaHandler) markMediaUploadFailed(ctx context.Context, mediaID string
 
 func mediaUploadResultFromAttachment(media models.MediaAttachment, deduped bool) MediaUploadResult {
 	return MediaUploadResult{
-		ID:               media.ID,
-		MimeType:         media.MimeType,
-		URL:              "/media/" + media.ID,
-		Size:             media.Size,
-		Deduped:          deduped,
-		AltText:          media.AltText,
-		OriginalFilename: media.OriginalFilename,
-		Source:           defaultMediaSource(media.Source),
-		AssetKind:        defaultMediaAssetKind(media.AssetKind),
-		ParentMediaID:    media.ParentMediaID,
-		DesignDocumentID: media.DesignDocumentID,
-		DesignPageID:     media.DesignPageID,
+		ID:                 media.ID,
+		MimeType:           media.MimeType,
+		URL:                "/media/" + media.ID,
+		Size:               media.Size,
+		Deduped:            deduped,
+		AltText:            media.AltText,
+		OriginalFilename:   media.OriginalFilename,
+		Source:             defaultMediaSource(media.Source),
+		AssetKind:          defaultMediaAssetKind(media.AssetKind),
+		ParentMediaID:      media.ParentMediaID,
+		DesignDocumentID:   media.DesignDocumentID,
+		DesignPageID:       media.DesignPageID,
+		ProcessingStatus:   media.ProcessingStatus,
+		ProcessingProgress: media.ProcessingProgress,
+		AnalysisStatus:     media.AnalysisStatus,
+		AnalysisError:      media.AnalysisError,
+		PosterThumbnailURL: mediaPosterURL(media),
 	}
 }
 
 func mediaUploadMap(media models.MediaAttachment, deduped bool) map[string]interface{} {
 	result := mediaUploadResultFromAttachment(media, deduped)
 	return map[string]interface{}{
-		"id":                 result.ID,
-		"mime_type":          result.MimeType,
-		"url":                result.URL,
-		"size":               result.Size,
-		"deduped":            result.Deduped,
-		"alt_text":           result.AltText,
-		"original_filename":  result.OriginalFilename,
-		"source":             result.Source,
-		"asset_kind":         result.AssetKind,
-		"parent_media_id":    result.ParentMediaID,
-		"design_document_id": result.DesignDocumentID,
-		"design_page_id":     result.DesignPageID,
+		"id":                   result.ID,
+		"mime_type":            result.MimeType,
+		"url":                  result.URL,
+		"size":                 result.Size,
+		"deduped":              result.Deduped,
+		"alt_text":             result.AltText,
+		"original_filename":    result.OriginalFilename,
+		"source":               result.Source,
+		"asset_kind":           result.AssetKind,
+		"parent_media_id":      result.ParentMediaID,
+		"design_document_id":   result.DesignDocumentID,
+		"design_page_id":       result.DesignPageID,
+		"processing_status":    result.ProcessingStatus,
+		"processing_progress":  result.ProcessingProgress,
+		"analysis_status":      result.AnalysisStatus,
+		"analysis_error":       result.AnalysisError,
+		"poster_thumbnail_url": result.PosterThumbnailURL,
 	}
 }
 
@@ -2249,6 +2339,11 @@ func (h *MediaHandler) mediaMetadata(c echo.Context) error {
 			URL:                "/media/" + m.ID,
 			DurationMS:         m.DurationMS,
 			FrameRate:          m.FrameRate,
+			ContainerFormat:    m.ContainerFormat,
+			VideoCodec:         m.VideoCodec,
+			AudioCodec:         m.AudioCodec,
+			ProcessingStatus:   m.ProcessingStatus,
+			ProcessingProgress: m.ProcessingProgress,
 			PosterThumbnailURL: mediaPosterURL(m),
 			AnalysisStatus:     m.AnalysisStatus,
 			AnalysisError:      m.AnalysisError,
@@ -2261,6 +2356,9 @@ func (h *MediaHandler) mediaMetadata(c echo.Context) error {
 			if json.Unmarshal([]byte(thumbsJSON), &thumbs) == nil && thumbs.SM != "" {
 				item.Thumbnail = "/media/" + m.ID + "/thumb/sm"
 			}
+		}
+		if item.Thumbnail == "" && item.PosterThumbnailURL != "" {
+			item.Thumbnail = item.PosterThumbnailURL
 		}
 		result = append(result, item)
 	}
@@ -2283,6 +2381,9 @@ func (h *MediaHandler) deleteMediaFiles(media *models.MediaAttachment) error {
 	}
 	if thumbs.MD != "" {
 		h.storage.Delete(thumbs.MD) //nolint:errcheck
+	}
+	if media.ThumbnailObjectKey != "" {
+		h.storage.Delete(media.ThumbnailObjectKey) //nolint:errcheck
 	}
 
 	return nil
@@ -2336,6 +2437,8 @@ func (h *MediaHandler) RegisterLegacyRoutes(e *echo.Echo) {
 	e.HEAD("/media/:id", h.serveMedia, h.optionalMediaAuth())
 	e.GET("/media/:id/thumb/:size", h.serveThumbnailSize, h.optionalMediaAuth())
 	e.HEAD("/media/:id/thumb/:size", h.serveThumbnailSize, h.optionalMediaAuth())
+	e.GET("/media/:id/poster", h.serveVideoPoster, h.optionalMediaAuth())
+	e.HEAD("/media/:id/poster", h.serveVideoPoster, h.optionalMediaAuth())
 }
 
 //nolint:gocyclo // Auth, session claiming, bounded streaming, storage cleanup, and retry recovery form one ordered transaction boundary.
@@ -2613,26 +2716,29 @@ func (h *MediaHandler) processStreamUpload(
 	}
 
 	media := &models.MediaAttachment{
-		ID:               mediaID,
-		WorkspaceID:      input.WorkspaceID,
-		FilePath:         savedPath,
-		StorageType:      h.storage.Driver(),
-		MimeType:         mimeType,
-		ProcessingStatus: mediaReadyStatus,
-		Size:             counter.count,
-		OriginalFilename: input.Filename,
-		FileHash:         fileHash,
-		AltText:          input.AltText,
-		Source:           source,
-		AssetKind:        assetKind,
-		ParentMediaID:    strings.TrimSpace(input.ParentMediaID),
-		DesignDocumentID: strings.TrimSpace(input.DesignDocumentID),
-		DesignPageID:     strings.TrimSpace(input.DesignPageID),
-		DominantType:     dominantMediaType(mimeType),
-		AnalysisStatus:   mediaanalysis.AnalysisStatusReady,
+		ID:                 mediaID,
+		WorkspaceID:        input.WorkspaceID,
+		FilePath:           savedPath,
+		StorageType:        h.storage.Driver(),
+		MimeType:           mimeType,
+		ProcessingStatus:   mediaReadyStatus,
+		ProcessingProgress: 100,
+		Size:               counter.count,
+		OriginalFilename:   input.Filename,
+		FileHash:           fileHash,
+		AltText:            input.AltText,
+		Source:             source,
+		AssetKind:          assetKind,
+		ParentMediaID:      strings.TrimSpace(input.ParentMediaID),
+		DesignDocumentID:   strings.TrimSpace(input.DesignDocumentID),
+		DesignPageID:       strings.TrimSpace(input.DesignPageID),
+		DominantType:       dominantMediaType(mimeType),
+		AnalysisStatus:     mediaanalysis.AnalysisStatusReady,
 	}
-	if strings.HasPrefix(mimeType, "video/") {
-		h.applyVideoAnalysis(ctx, media, nil)
+	if strings.HasPrefix(mimeType, "video/") && h.video != nil {
+		media.ProcessingStatus = mediaProcessingStatus
+		media.ProcessingProgress = 0
+		media.AnalysisStatus = mediaanalysis.AnalysisStatusPending
 	}
 
 	if _, err := h.db.NewInsert().Model(media).Exec(ctx); err != nil {
@@ -2647,6 +2753,9 @@ func (h *MediaHandler) processStreamUpload(
 	}
 	if err := refreshPublicMediaState(ctx, h.db, h.publicMedia, media); err != nil {
 		log.Printf("failed to persist public URL verification for media %s: %v", media.ID, err)
+	}
+	if strings.HasPrefix(mimeType, "video/") && h.video != nil {
+		h.enqueueVideoAnalysis(ctx, media.ID)
 	}
 	if !isInternalMediaAssetKind(assetKind) {
 		if _, err := h.usage.IncrementMonthly(ctx, input.WorkspaceID, entitlements.LimitMediaBytesUploadedMonthly, media.Size, time.Now().UTC()); err != nil {
@@ -2715,21 +2824,22 @@ func (h *MediaHandler) processUploadBytes(ctx context.Context, input mediaUpload
 	}
 
 	media := &models.MediaAttachment{
-		ID:               mediaID,
-		WorkspaceID:      input.WorkspaceID,
-		FilePath:         savedPath,
-		StorageType:      h.storage.Driver(),
-		MimeType:         mimeType,
-		ProcessingStatus: mediaReadyStatus,
-		Size:             input.Size,
-		OriginalFilename: input.Filename,
-		FileHash:         fileHash,
-		AltText:          input.AltText,
-		Source:           source,
-		AssetKind:        assetKind,
-		ParentMediaID:    strings.TrimSpace(input.ParentMediaID),
-		DesignDocumentID: strings.TrimSpace(input.DesignDocumentID),
-		DesignPageID:     strings.TrimSpace(input.DesignPageID),
+		ID:                 mediaID,
+		WorkspaceID:        input.WorkspaceID,
+		FilePath:           savedPath,
+		StorageType:        h.storage.Driver(),
+		MimeType:           mimeType,
+		ProcessingStatus:   mediaReadyStatus,
+		ProcessingProgress: 100,
+		Size:               input.Size,
+		OriginalFilename:   input.Filename,
+		FileHash:           fileHash,
+		AltText:            input.AltText,
+		Source:             source,
+		AssetKind:          assetKind,
+		ParentMediaID:      strings.TrimSpace(input.ParentMediaID),
+		DesignDocumentID:   strings.TrimSpace(input.DesignDocumentID),
+		DesignPageID:       strings.TrimSpace(input.DesignPageID),
 	}
 
 	width, height := 0, 0
@@ -2749,8 +2859,10 @@ func (h *MediaHandler) processUploadBytes(ctx context.Context, input mediaUpload
 	media.DominantType = dominantMediaType(mimeType)
 	media.AspectRatio = mediaAspectRatio(media.Width, media.Height)
 	media.AnalysisStatus = mediaanalysis.AnalysisStatusReady
-	if strings.HasPrefix(mimeType, "video/") {
-		h.applyVideoAnalysis(ctx, media, input.Content)
+	if strings.HasPrefix(mimeType, "video/") && h.video != nil {
+		media.ProcessingStatus = mediaProcessingStatus
+		media.ProcessingProgress = 0
+		media.AnalysisStatus = mediaanalysis.AnalysisStatusPending
 	}
 
 	if _, err := h.db.NewInsert().Model(media).Exec(ctx); err != nil {
@@ -2766,6 +2878,9 @@ func (h *MediaHandler) processUploadBytes(ctx context.Context, input mediaUpload
 	}
 	if err := refreshPublicMediaState(ctx, h.db, h.publicMedia, media); err != nil {
 		log.Printf("failed to persist public URL verification for media %s: %v", media.ID, err)
+	}
+	if strings.HasPrefix(mimeType, "video/") {
+		h.enqueueVideoAnalysis(ctx, media.ID)
 	}
 	if !isInternalMediaAssetKind(assetKind) {
 		if _, err := h.usage.IncrementMonthly(ctx, input.WorkspaceID, entitlements.LimitMediaBytesUploadedMonthly, input.Size, time.Now().UTC()); err != nil {
@@ -2970,6 +3085,37 @@ func (h *MediaHandler) serveThumbnailSize(c echo.Context) error {
 	c.Response().Header().Set("Content-Type", "image/jpeg")
 	c.Response().Header().Set("Cache-Control", "public, max-age=86400")
 
+	return c.Stream(http.StatusOK, "image/jpeg", file)
+}
+
+func (h *MediaHandler) serveVideoPoster(c echo.Context) error {
+	mediaID := c.Param("id")
+	if dotIdx := strings.LastIndex(mediaID, "."); dotIdx > 0 {
+		mediaID = mediaID[:dotIdx]
+	}
+	media := new(models.MediaAttachment)
+	if err := h.db.NewSelect().Model(media).Where("id = ?", mediaID).Scan(c.Request().Context()); err != nil {
+		return c.JSON(http.StatusNotFound, map[string]string{fieldError: errMediaNotFound})
+	}
+	if err := h.authorizeMediaAccess(c, media); err != nil {
+		return err
+	}
+	if strings.TrimSpace(media.ThumbnailObjectKey) == "" {
+		return c.JSON(http.StatusNotFound, map[string]string{fieldError: "video poster not found"})
+	}
+	file, err := h.storage.Open(media.ThumbnailObjectKey)
+	if err != nil {
+		return c.JSON(http.StatusNotFound, map[string]string{fieldError: "video poster file not found"})
+	}
+	defer file.Close()
+	c.Response().Header().Set("Content-Type", "image/jpeg")
+	c.Response().Header().Set("Cache-Control", "private, max-age=86400")
+	if f, ok := file.(*os.File); ok {
+		if stat, statErr := f.Stat(); statErr == nil {
+			http.ServeContent(c.Response(), c.Request(), stat.Name(), stat.ModTime(), f)
+			return nil
+		}
+	}
 	return c.Stream(http.StatusOK, "image/jpeg", file)
 }
 

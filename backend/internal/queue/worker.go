@@ -18,6 +18,7 @@ import (
 	"github.com/openpost/backend/internal/services/mediastore"
 	"github.com/openpost/backend/internal/services/publisher"
 	"github.com/openpost/backend/internal/services/tokenmanager"
+	"github.com/openpost/backend/internal/services/videoprocessing"
 	"github.com/uptrace/bun"
 )
 
@@ -46,6 +47,7 @@ type BackgroundWorker struct {
 	feedback       *feedback.Service
 	analytics      *analyticsservice.Service
 	communications *communicationsservice.Service
+	video          *videoprocessing.Service
 	done           chan struct{}
 }
 
@@ -59,6 +61,10 @@ func (w *BackgroundWorker) SetAnalyticsService(service *analyticsservice.Service
 
 func (w *BackgroundWorker) SetCommunicationsService(service *communicationsservice.Service) {
 	w.communications = service
+}
+
+func (w *BackgroundWorker) SetVideoProcessingService(service *videoprocessing.Service) {
+	w.video = service
 }
 
 func NewWorker(db *bun.DB, id string, interval time.Duration, pub *publisher.Service, tokens *tokenmanager.TokenManager, storage mediastore.BlobStorage) *BackgroundWorker {
@@ -254,7 +260,12 @@ func (w *BackgroundWorker) handleLockedJob(ctx context.Context, job *models.Job)
 			job.Status = jobStatusPending
 			jitter := float64((time.Now().UnixNano()%401)-200) / 1000
 			backoff := publisher.RetryDelay(job.Attempts, retryAfter, jitter)
-			job.RunAt = time.Now().Add(backoff)
+			job.RunAt = time.Now().Add(backoff).UTC()
+			if job.Type == jobTypePublishPost || job.Type == jobTypePublishPublication {
+				if retryErr := w.publisher.UpdateJobRetryAt(ctx, job.Type, job.Payload, job.RunAt); retryErr != nil {
+					log.Printf("[Worker %s] failed to align publish retry time for job %s: %v\n", w.workerID, job.ID, retryErr)
+				}
+			}
 		}
 		job.LastError = lastError
 
@@ -328,6 +339,7 @@ func (w *BackgroundWorker) heartbeatJobLock(ctx context.Context, jobID string) {
 }
 
 func (w *BackgroundWorker) executeJob(ctx context.Context, job *models.Job) error {
+	ctx = publisher.WithJobExecution(ctx, job.ID, job.Attempts, job.LockedAt)
 	// Job handlers will be injected or called from here based on Type
 	switch job.Type {
 	case jobTypePublishPost:
@@ -359,6 +371,11 @@ func (w *BackgroundWorker) executeJob(ctx context.Context, job *models.Job) erro
 			return fmt.Errorf("communications collection is not configured")
 		}
 		return w.communications.HandleJob(ctx, job.Type, job.Payload)
+	case videoprocessing.JobTypeAnalyze:
+		if w.video == nil {
+			return fmt.Errorf("video processing is not configured")
+		}
+		return w.video.HandleJob(ctx, job.Type, job.Payload)
 	default:
 		return fmt.Errorf("unsupported job type %q", job.Type)
 	}

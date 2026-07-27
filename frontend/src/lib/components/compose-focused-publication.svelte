@@ -8,6 +8,7 @@
 	import type { components } from '$lib/api/types';
 	import { getAuthenticatedMediaByID } from '$lib/media-url';
 	import { isSupportedMediaFile, uploadMediaFile } from '$lib/media-upload-client';
+	import { videoPreparationErrorMessage } from '$lib/video/errors';
 	import { workspaceCtx } from '$lib/stores/workspace.svelte';
 	import { ui } from '$lib/stores/ui.svelte';
 	import { Button } from '$lib/components/ui/button';
@@ -24,6 +25,7 @@
 	import InlineNotice from './inline-notice.svelte';
 	import MediaPicker from './media-picker.svelte';
 	import PageLoading from './page-loading.svelte';
+	import VideoEditorDialog from './video-editor-dialog.svelte';
 	import { getLocaleTag } from '$lib/i18n';
 	import { getPlatformKey, getPlatformName } from '$lib/utils';
 	import { CalendarDate, isEqualDay } from '@internationalized/date';
@@ -77,6 +79,8 @@
 	import type { ComposerRecoverySnapshot, StudioMediaItem } from '$lib/studio/types';
 	import { parseDraftConflict, type DraftConflictProblem } from '$lib/draft-conflict';
 	import { SerializedSaveQueue } from '$lib/serialized-save-queue';
+	import { effectiveVideoConstraints } from '$lib/video/constraints';
+	import type { VideoPreparationProgress, VideoPreparationStage } from '$lib/video/types';
 
 	type Capability = components['schemas']['Capability'];
 	type Publication = components['schemas']['PublicationResponse'];
@@ -176,6 +180,10 @@
 	let accountsLoading = $state(false);
 	let accountsError = $state('');
 	let uploading = $state(false);
+	let uploadProgress = $state<VideoPreparationProgress | null>(null);
+	let uploadController: AbortController | null = null;
+	let videoEditorOpen = $state(false);
+	let videoEditorFile = $state<File | null>(null);
 	let draggingMedia = $state(false);
 	let mediaPickerOpen = $state(false);
 	let mediaPickerPurpose = $state<'media' | 'thumbnail'>('media');
@@ -202,7 +210,7 @@
 	let allowNavigationOnce = false;
 	let autoSaveReady = false;
 	let autoSaveTimer: ReturnType<typeof setTimeout> | null = null;
-	let lastSavedSnapshot = '';
+	let lastSavedSnapshot = $state('');
 	let publicationContextRequestId = '';
 	let resolvedCapabilities = $state<Record<string, ResolvedAccountCapability>>({});
 	let capabilityResolveLoading = $state(false);
@@ -218,6 +226,12 @@
 		selectedAccounts
 			.map((account) => capabilityForAccount(account))
 			.filter((capability): capability is Capability => capability !== null)
+	);
+	const selectedVideoConstraints = $derived(
+		selectedCapabilities.map((capability) => capability.media)
+	);
+	const selectedVideoAspectRatios = $derived(
+		effectiveVideoConstraints(selectedVideoConstraints).aspectRatios
 	);
 	const composerMediaLimit = $derived.by(() => {
 		const limits = selectedCapabilities
@@ -296,6 +310,17 @@
 		Boolean(selectedWorkspaceId) && schedulingSettingsWorkspaceId === selectedWorkspaceId
 	);
 	const canSchedule = $derived(canQueue && selectedWorkspaceSettingsReady);
+	const focusedSaveLabel = $derived.by(() => {
+		if (draftConflict) return m.compose_conflict_state();
+		if (saving || autoSaving) return m.common_saving();
+		if (hasDraftContent() && saveSnapshot() !== lastSavedSnapshot)
+			return m.compose_unsaved_changes();
+		if (publicationId && lastSavedSnapshot) return m.compose_saved_state();
+		return m.compose_unsaved_changes();
+	});
+	const readyDestinationCount = $derived(
+		selectedAccounts.filter((account) => accountBlockers(account).length === 0).length
+	);
 	const scheduleTimezoneLabel = $derived(schedulingSettings.timezone);
 	const isToday = $derived(
 		selectedDate ? isEqualDay(selectedDate, workspaceClock(scheduleTimezoneLabel).date) : false
@@ -1036,12 +1061,35 @@
 			)
 			.slice(0, available);
 		if (selected.length === 0) return;
+		if (selected.length === 1 && selected[0].type.startsWith('video/')) {
+			videoEditorFile = selected[0];
+			videoEditorOpen = true;
+			draggingMedia = false;
+			return;
+		}
+		await performFocusedUpload(selected);
+	}
+
+	async function performFocusedUpload(files: File[]) {
+		if (!selectedWorkspaceId || uploading || files.length === 0) return;
 		uploading = true;
 		error = '';
+		uploadController = new AbortController();
 		try {
 			const uploaded: FocusedMedia[] = [];
-			for (const file of selected) {
-				const item = await uploadMediaFile({ workspaceId: selectedWorkspaceId, file });
+			for (const file of files) {
+				uploadProgress = {
+					stage: file.type.startsWith('video/') ? 'inspecting' : 'uploading',
+					fraction: 0,
+					message: ''
+				};
+				const item = await uploadMediaFile({
+					workspaceId: selectedWorkspaceId,
+					file,
+					videoConstraints: selectedVideoConstraints,
+					onProgress: (progress) => (uploadProgress = progress),
+					signal: uploadController.signal
+				});
 				uploaded.push({
 					id: item.id,
 					mime_type: item.mime_type,
@@ -1056,10 +1104,39 @@
 			await resolveSelectedCapabilities();
 			queueAutoSave();
 		} catch (uploadError) {
-			error = uploadError instanceof Error ? uploadError.message : m.compose_upload_failed();
+			if (uploadError instanceof DOMException && uploadError.name === 'AbortError') return;
+			error = videoPreparationErrorMessage(uploadError, m.compose_upload_failed());
 		} finally {
 			uploading = false;
+			uploadProgress = null;
+			uploadController = null;
 			draggingMedia = false;
+		}
+	}
+
+	async function useEditedVideo(file: File) {
+		videoEditorFile = null;
+		await performFocusedUpload([file]);
+	}
+
+	function cancelFocusedUpload() {
+		uploadController?.abort();
+	}
+
+	function uploadStage(stage: VideoPreparationStage): string {
+		switch (stage) {
+			case 'inspecting':
+				return m.video_upload_inspecting();
+			case 'remuxing':
+				return m.video_upload_remuxing();
+			case 'compressing':
+				return m.video_upload_compressing();
+			case 'uploading':
+				return m.video_upload_uploading();
+			case 'finalizing':
+				return m.video_upload_finalizing();
+			case 'processing':
+				return m.video_upload_processing();
 		}
 	}
 
@@ -1913,7 +1990,6 @@
 			startingPublicationId: string;
 		},
 		options: {
-			force?: boolean;
 			saveAsCopy?: boolean;
 		} = {}
 	): Promise<string> {
@@ -1927,7 +2003,6 @@
 			startingPublicationId: string;
 		},
 		options: {
-			force?: boolean;
 			saveAsCopy?: boolean;
 		} = {}
 	): Promise<string> {
@@ -1940,7 +2015,6 @@
 				params: { path: { id: targetPublicationId } },
 				body: {
 					expected_revision: revision,
-					force: Boolean(options.force),
 					title: payload.title,
 					intent: payload.intent,
 					content_profile: payload.content_profile,
@@ -2011,7 +2085,7 @@
 	async function overwriteSavedDraft() {
 		if (!draftConflict) return;
 		revision = draftConflict.conflict.current_revision;
-		await persistPublication(undefined, { force: true });
+		await persistPublication();
 		lastSavedSnapshot = saveSnapshot();
 		success = m.compose_changes_saved();
 		error = '';
@@ -2312,6 +2386,20 @@
 					</div>
 				{/if}
 
+				<div
+					class="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-md border bg-muted/20 px-3 py-2 text-xs"
+					data-testid="composer-context-status"
+				>
+					<span class="font-medium text-foreground">{m.compose_source_version()}</span>
+					<span class="text-muted-foreground">{focusedSaveLabel}</span>
+					<span class="text-muted-foreground">
+						{m.compose_destination_ready_count({
+							ready: readyDestinationCount,
+							total: selectedAccounts.length
+						})}
+					</span>
+				</div>
+
 				<section class="flex flex-col gap-5">
 					<div class="{modeMeta.mediaFirst ? 'order-1' : 'order-2'} space-y-3">
 						<div class="space-y-3">
@@ -2324,6 +2412,27 @@
 								onChoose={() => openFocusedMediaPicker('media')}
 								onDropFiles={uploadFocusedFiles}
 							/>
+							{#if uploadProgress}
+								<div class="space-y-2 rounded-lg border bg-muted/20 px-3 py-3" aria-live="polite">
+									<div class="flex items-center justify-between gap-3">
+										<p class="text-sm font-medium">
+											{m.video_upload_progress({
+												stage: uploadStage(uploadProgress.stage),
+												percent: Math.round(uploadProgress.fraction * 100)
+											})}
+										</p>
+										<Button type="button" variant="ghost" size="sm" onclick={cancelFocusedUpload}>
+											{m.video_upload_cancel()}
+										</Button>
+									</div>
+									<div class="h-2 overflow-hidden rounded-full bg-muted">
+										<div
+											class="h-full rounded-full bg-primary transition-[width]"
+											style:width={`${Math.round(uploadProgress.fraction * 100)}%`}
+										></div>
+									</div>
+								</div>
+							{/if}
 							{#if media.length > 0}
 								<div class="grid gap-2 sm:grid-cols-2">
 									{#each media as item (item.id)}
@@ -2549,8 +2658,17 @@
 	multiple={mediaPickerPurpose !== 'thumbnail' && composerMediaLimit > 1}
 	title={mediaPickerPurpose === 'thumbnail' ? m.compose_thumbnail() : m.compose_add_media()}
 	purpose={mediaPickerPurpose === 'thumbnail' ? 'thumbnail' : 'post_media'}
+	videoConstraints={mediaPickerPurpose === 'thumbnail' ? [] : selectedVideoConstraints}
 	onConfirm={applyFocusedMediaPicker}
 	onCreate={openStudioFromFocusedComposer}
+/>
+
+<VideoEditorDialog
+	bind:open={videoEditorOpen}
+	file={videoEditorFile}
+	allowedAspectRatios={selectedVideoAspectRatios}
+	onConfirm={useEditedVideo}
+	onSkip={useEditedVideo}
 />
 
 <DestinationSettingsDialog

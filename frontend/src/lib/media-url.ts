@@ -1,5 +1,6 @@
 import { getToken } from '$lib/api/client';
 import { getMediaBase } from '$lib/stores/instance.svelte';
+import { localStudioMediaURLFromPath } from '$lib/studio/local-media-url';
 
 function normalizeMediaPath(path: string): string {
 	if (!path) return path;
@@ -13,6 +14,8 @@ function normalizeMediaPath(path: string): string {
 }
 
 export function getAuthenticatedMediaURL(path: string): string {
+	const localURL = localStudioMediaURLFromPath(path);
+	if (localURL) return localURL;
 	const normalized = normalizeMediaPath(path);
 	const token = getToken();
 	if (!normalized || !token) {
