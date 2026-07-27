@@ -59,7 +59,7 @@
 
     build.exec = ''
       cd "${config.git.root}"
-      frontend-build && backend-build && (cd cli && go build ./...)
+      frontend-build && backend-build && (cd cli && go build -buildvcs=false ./...)
     '';
 
     docs-build.exec = ''

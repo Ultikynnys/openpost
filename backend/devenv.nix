@@ -104,7 +104,13 @@ in
     '';
 
     backend-build.exec = ''
-      cd "${config.git.root}/backend" && go build -o openpost ./cmd/openpost
+      build_commit="$(git -C "${config.git.root}" rev-parse HEAD)"
+      if ! git -C "${config.git.root}" diff --quiet ||
+         ! git -C "${config.git.root}" diff --cached --quiet; then
+        build_commit="$build_commit-dirty"
+      fi
+      cd "${config.git.root}/backend" &&
+        go build -buildvcs=false -ldflags="-X main.commit=$build_commit" -o openpost ./cmd/openpost
     '';
 
     backend-test.exec = ''
