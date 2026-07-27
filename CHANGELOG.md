@@ -22,6 +22,10 @@ All notable changes to this project are documented in this file.
 
 ### Changed
 
+- Added Photoshop-style Studio tool slots, movable pixel-selection borders, textured pencil strokes, and drag-to-place media previews.
+- Replaced the remaining native radio inputs with the shared shadcn-svelte radio group and synchronized Studio color editing across Hex, HSL, and RGB.
+- Clarified analytics exposure metrics, made follower changes legible with a padded chart range, and kept long connected-account lists within the chart height on desktop.
+- Standardized editable Settings pages on one sticky save footer, removed the redundant Brand kit name, and simplified account security with expandable password and data actions.
 - Standardized checkbox controls on the shared shadcn-svelte component and moved Analytics trends to the shared shadcn-svelte chart stack.
 - Described Instagram Business and Creator, Facebook Pages, TikTok, and YouTube as implemented integrations while keeping live-account verification separate from repository support.
 - Added TTF and OTF brand-font uploads alongside WOFF2, simplified brand-asset editing, and reused Studio font and color selectors for brand text styles.
@@ -39,8 +43,10 @@ All notable changes to this project are documented in this file.
 
 ### Fixed
 
+- Fixed Studio color picks falling back to black, first-drag layer movement and Alt duplication, unstable paint erasing, and save validation for erase masks and color adjustments.
+- Kept page widths stable when vertical scrollbars appear, shortened the draft context action, and made Engagement archive, restore, read, and provider-delete actions update without a loading flash or false “Move to inbox” state.
 - Used the configured public media or S3/R2 URL consistently for verification and provider publishing, refreshed stale failed checks before validation, and removed duplicate HTTPS errors from destination account menus.
-- Made Studio transforms undoable, constrained Shift-rotation to 15-degree steps, assigned Space-drag to panning and Alt-drag to duplication, and allowed pasteboard clicks to clear selection.
+- Made Studio transforms undoable, made Shift-rotation snap stably to 15-degree steps, assigned Space-drag to panning and Alt-drag to duplication, and allowed pasteboard clicks to clear selection.
 - Kept the sidebar calendar and full Calendar on one canonical occurrence rule so scheduled and published items appear consistently.
 - Loaded the original authenticated Brand asset when a generated thumbnail is unavailable.
 - Gave the full frontend validation program enough bounded Node heap to complete the release gate.
