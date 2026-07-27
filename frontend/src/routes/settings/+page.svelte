@@ -15,12 +15,12 @@
 	import DestructiveConfirmDialog from '$lib/components/destructive-confirm-dialog.svelte';
 	import ProfileAvatarUploader from '$lib/components/profile-avatar-uploader.svelte';
 	import AccountDataCard from '$lib/components/account-data-card.svelte';
+	import MediaPreviewImage from '$lib/components/media-preview-image.svelte';
 	import BrandKitEditor from '$lib/studio/components/brand-kit-editor.svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { auth } from '$lib/stores/auth';
 	import { getApiBase } from '$lib/stores/instance.svelte';
-	import { getAuthenticatedMediaURL } from '$lib/media-url';
 	import { loadStudioBrandKit } from '$lib/studio/api';
 	import type { StudioBrandKit } from '$lib/studio/types';
 	import { createPasskeyCredential } from '$lib/auth/webauthn';
@@ -2627,8 +2627,8 @@
 													<div
 														class="flex aspect-square items-center justify-center bg-muted/20 p-3"
 													>
-														<img
-															src={getAuthenticatedMediaURL(`/media/${asset.media_id}/thumb/md`)}
+														<MediaPreviewImage
+															mediaId={asset.media_id}
 															alt={asset.name || asset.role}
 															class="max-h-full max-w-full object-contain"
 														/>

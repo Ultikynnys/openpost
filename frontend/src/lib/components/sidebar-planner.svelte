@@ -6,6 +6,7 @@
 	import { client } from '$lib/api/client';
 	import type { components } from '$lib/api/types';
 	import { workspaceDateKeyFromISO } from '$lib/components/compose/schedule-timezone';
+	import { publicationCalendarOccurrence } from '$lib/publication-calendar';
 	import AppToast from '$lib/components/app-toast.svelte';
 	import DestructiveConfirmDialog from '$lib/components/destructive-confirm-dialog.svelte';
 	import * as CalendarUi from '$lib/components/ui/calendar';
@@ -81,7 +82,6 @@
 					params: {
 						query: {
 							workspace_id: currentWorkspaceId,
-							status: 'scheduled',
 							limit: 200,
 							offset
 						}
@@ -97,11 +97,9 @@
 			if (request !== overviewRequest) return;
 			const nextCounts = new SvelteMap<string, number>();
 			for (const publication of publications) {
-				if (!publication.scheduled_at) continue;
-				const key = workspaceDateKeyFromISO(
-					publication.scheduled_at,
-					workspaceCtx.settings.timezone || 'UTC'
-				);
+				const occursAt = publicationCalendarOccurrence(publication);
+				if (!occursAt) continue;
+				const key = workspaceDateKeyFromISO(occursAt, workspaceCtx.settings.timezone || 'UTC');
 				if (!key?.startsWith(month)) continue;
 				nextCounts.set(key, (nextCounts.get(key) ?? 0) + 1);
 			}

@@ -2,8 +2,8 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Checkbox } from '$lib/components/ui/checkbox';
 	import { Input } from '$lib/components/ui/input';
+	import MediaPreviewImage from '$lib/components/media-preview-image.svelte';
 	import { uploadMediaFile } from '$lib/media-upload-client';
-	import { getAuthenticatedMediaURL } from '$lib/media-url';
 	import { saveStudioBrandKit } from '../api';
 	import { loadStudioBrandFonts } from '../fonts';
 	import StudioColorPicker from './studio-color-picker.svelte';
@@ -409,8 +409,8 @@
 								<div
 									class="flex aspect-square items-center justify-center overflow-hidden rounded-lg bg-muted/30 p-2"
 								>
-									<img
-										src={getAuthenticatedMediaURL(`/media/${asset.media_id}/thumb/md`)}
+									<MediaPreviewImage
+										mediaId={asset.media_id}
 										alt={asset.name || asset.role}
 										class="max-h-full max-w-full object-contain"
 									/>

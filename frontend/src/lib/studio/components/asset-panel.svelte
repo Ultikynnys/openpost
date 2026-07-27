@@ -9,6 +9,7 @@
 	import { Input } from '$lib/components/ui/input';
 	import * as Tooltip from '$lib/components/ui/tooltip';
 	import MediaPicker from '$lib/components/media-picker.svelte';
+	import MediaPreviewImage from '$lib/components/media-preview-image.svelte';
 	import SearchIcon from 'lucide-svelte/icons/search';
 	import PlusIcon from 'lucide-svelte/icons/plus';
 	import LoaderIcon from 'lucide-svelte/icons/loader-2';
@@ -168,8 +169,8 @@
 								disabled={!editor.canEdit}
 								title={asset.name || asset.role}
 							>
-								<img
-									src={getAuthenticatedMediaURL(`/media/${asset.media_id}/thumb/md`)}
+								<MediaPreviewImage
+									mediaId={asset.media_id}
 									alt={asset.name || asset.role}
 									class="aspect-square w-full object-contain p-1.5 transition-transform group-hover:scale-[1.03]"
 								/>

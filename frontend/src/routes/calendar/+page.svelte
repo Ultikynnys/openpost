@@ -4,6 +4,7 @@
 	import { resolve } from '$app/paths';
 	import { client, type SocialAccount } from '$lib/api/client';
 	import type { components } from '$lib/api/types';
+	import { publicationCalendarOccurrence } from '$lib/publication-calendar';
 	import {
 		isFutureSchedule,
 		workspaceClock,
@@ -305,14 +306,7 @@
 	}
 
 	function publicationToCalendarItem(publication: Publication): CalendarItem | null {
-		if (publication.status !== 'scheduled' && publication.status !== 'published') return null;
-		const occursAt =
-			publication.status === 'published'
-				? publication.actual_run_at ||
-					publication.scheduled_at ||
-					publication.updated_at ||
-					publication.created_at
-				: publication.scheduled_at;
+		const occursAt = publicationCalendarOccurrence(publication);
 		if (!occursAt) return null;
 		const renditions = publication.renditions ?? [];
 		const accounts = accountsForRenditions(publication.workspace_id, renditions);

@@ -154,3 +154,80 @@ test("brand kit inputs keep focus while editing", async ({ page, request }) => {
     .click();
   await expect(fontFamily).toContainText("Geist Variable");
 });
+
+test("brand assets fall back to the original file when no thumbnail exists", async ({
+  page,
+  request,
+}) => {
+  const unique = Date.now().toString(36);
+  const auth = await registerUser(
+    request,
+    `brand-preview-${unique}@example.com`,
+  );
+  const workspace = (await createWorkspace(
+    request,
+    auth.token,
+    "Brand Preview E2E",
+  )) as { id: string };
+
+  const upload = await request.post("/api/v1/media/upload", {
+    headers: { Authorization: `Bearer ${auth.token}` },
+    multipart: {
+      workspace_id: workspace.id,
+      source: "upload",
+      asset_kind: "brand_asset",
+      file: {
+        name: "brand-mark.png",
+        mimeType: "image/png",
+        buffer: tinyPNG,
+      },
+    },
+  });
+  expect(upload.ok()).toBeTruthy();
+  const media = (await upload.json()) as { id: string };
+
+  const saveBrand = await request.put("/api/v1/studio/brand-kit", {
+    headers: { Authorization: `Bearer ${auth.token}` },
+    data: {
+      workspace_id: workspace.id,
+      name: "Brand Preview",
+      colors: [],
+      text_styles: [],
+      backgrounds: [],
+      assets: [
+        {
+          media_id: media.id,
+          role: "primary_logo",
+          name: "Brand mark",
+        },
+      ],
+      fonts: [],
+    },
+  });
+  expect(saveBrand.ok()).toBeTruthy();
+
+  await authenticatePage(page, auth.token);
+  await page.route(`**/media/${media.id}/thumb/md**`, async (route) => {
+    await route.fulfill({
+      status: 404,
+      contentType: "application/json",
+      body: '{"error":"thumbnail not found"}',
+    });
+  });
+  await page.goto("/settings?tab=brand");
+
+  const preview = page.getByRole("img", { name: "Brand mark" }).first();
+  await expect(preview).toBeVisible();
+  await expect
+    .poll(() =>
+      preview.evaluate((image) =>
+        image instanceof HTMLImageElement
+          ? { width: image.naturalWidth, source: image.currentSrc }
+          : { width: 0, source: "" },
+      ),
+    )
+    .toEqual({
+      width: 1,
+      source: expect.stringMatching(new RegExp(`/media/${media.id}(?:\\?|$)`)),
+    });
+});
