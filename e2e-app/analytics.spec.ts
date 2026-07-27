@@ -90,6 +90,20 @@ test("analytics keeps provider metrics distinct across desktop and phone layouts
             metrics: {},
             follower_series: [],
           },
+          ...Array.from({ length: 7 }, (_, index) => ({
+            id: `account-mastodon-${index}`,
+            platform: "mastodon",
+            username: `@community-${index}`,
+            status: "ok",
+            account_supported: true,
+            content_supported: true,
+            missing_account_scopes: [],
+            missing_content_scopes: [],
+            metrics: { followers: 80 + index },
+            follower_delta: index,
+            follower_series: [],
+            last_synced_at: "2026-07-26T11:55:00Z",
+          })),
         ],
         content: [
           {
@@ -242,12 +256,27 @@ test("analytics keeps provider metrics distinct across desktop and phone layouts
     /^chart-/,
   );
   await expect(
+    page.getByText(
+      "Views are provider-counted plays or opens. Impressions are times content was shown.",
+      { exact: false },
+    ),
+  ).toBeVisible();
+  const accountList = page
+    .locator('section[aria-labelledby="analytics-accounts-heading"]')
+    .locator('[class*="overflow-y-auto"]');
+  await expect(accountList).toBeVisible();
+  await expect
+    .poll(() =>
+      accountList.evaluate(
+        (element) => element.scrollHeight > element.clientHeight,
+      ),
+    )
+    .toBe(true);
+  await expect(
     page.getByRole("button", { name: /All accounts/ }),
   ).toHaveAttribute("aria-pressed", "true");
   await expect(
-    page.getByText(
-      "@video: Reconnect this account to grant: user.info.stats.",
-    ),
+    page.getByText("@video: Reconnect this account to grant: user.info.stats."),
   ).toBeVisible();
   await page.getByRole("button", { name: /7 days/ }).click();
   await expect.poll(() => requestedRanges.at(-1)).toBe("7");

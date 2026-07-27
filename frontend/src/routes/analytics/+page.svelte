@@ -367,6 +367,9 @@ FORM: Publications are the primary rows; provider renditions disclose in place w
 						</p>
 					</div>
 				</div>
+				<p class="border-t border-border px-3 py-2.5 text-xs leading-5 text-muted-foreground">
+					{m.analytics_metric_definitions()}
+				</p>
 			</section>
 
 			{#if !hasMeasurements}
@@ -397,7 +400,9 @@ FORM: Publications are the primary rows; provider renditions disclose in place w
 					<h2 id="analytics-accounts-heading" class="text-base font-semibold">
 						{m.analytics_accounts_title()}
 					</h2>
-					<div class="mt-3 divide-y divide-border border-y border-border">
+					<div
+						class="mt-3 divide-y divide-border border-y border-border lg:max-h-72 lg:overflow-y-auto lg:overscroll-contain lg:pe-1"
+					>
 						<button
 							type="button"
 							class={[

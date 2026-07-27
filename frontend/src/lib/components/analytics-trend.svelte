@@ -3,6 +3,7 @@
 	import { curveNatural } from 'd3-shape';
 	import { LineChart } from 'layerchart';
 	import * as Chart from '$lib/components/ui/chart';
+	import { paddedMetricDomain } from '$lib/analytics-chart';
 	import { m } from '$lib/paraglide/messages';
 
 	interface Point {
@@ -31,6 +32,7 @@
 			color: 'var(--chart-1)'
 		}
 	} satisfies Chart.ChartConfig);
+	const yDomain = $derived(paddedMetricDomain(chartData.map((point) => point.value)));
 </script>
 
 <figure class="min-w-0">
@@ -46,6 +48,7 @@
 				data={chartData}
 				x="date"
 				xScale={scaleUtc()}
+				{yDomain}
 				axis
 				series={[
 					{
