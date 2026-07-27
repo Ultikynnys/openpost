@@ -8,6 +8,7 @@
 	import InlineNotice from '$lib/components/inline-notice.svelte';
 	import { Button } from '$lib/components/ui/button';
 	import { Checkbox } from '$lib/components/ui/checkbox';
+	import * as RadioGroup from '$lib/components/ui/radio-group';
 	import { getPlatformName } from '$lib/utils';
 	import { getLocaleTag } from '$lib/i18n';
 	import { m } from '$lib/paraglide/messages';
@@ -258,68 +259,78 @@
 				{/if}
 			</p>
 
+			{#snippet optionCard(option: SelectionOption, multiple: boolean)}
+				<label
+					class={[
+						'flex cursor-pointer gap-3 rounded-md border p-4 transition-colors',
+						isSelected(option.id)
+							? 'border-primary bg-primary/5 ring-2 ring-primary/20'
+							: 'border-border hover:bg-muted/40'
+					]}
+				>
+					{#if multiple}
+						<Checkbox
+							class="mt-1"
+							checked={isSelected(option.id)}
+							onCheckedChange={() => toggleSelection(option.id)}
+						/>
+					{:else}
+						<RadioGroup.Item class="mt-1" value={option.id} aria-label={optionTitle(option)} />
+					{/if}
+					{#if option.avatar_url}
+						<img
+							class="size-12 rounded-full border object-cover"
+							src={option.avatar_url}
+							alt=""
+							loading="lazy"
+						/>
+					{:else}
+						<div
+							class="flex size-12 shrink-0 items-center justify-center rounded-full bg-muted text-sm font-medium text-muted-foreground"
+							aria-hidden="true"
+						>
+							{optionTitle(option).slice(0, 1).toUpperCase()}
+						</div>
+					{/if}
+					<span class="min-w-0 flex-1 space-y-1">
+						<span class="block font-medium text-foreground">{optionTitle(option)}</span>
+						{#if optionSubtitle(option)}
+							<span class="block text-sm text-muted-foreground">{optionSubtitle(option)}</span>
+						{/if}
+						{#if option.description}
+							<span class="block text-sm text-muted-foreground">{option.description}</span>
+						{/if}
+						{#if metadataEntries(option).length}
+							<span class="flex flex-wrap gap-2 pt-1">
+								{#each metadataEntries(option) as [key, value] (key)}
+									<span class="rounded-sm bg-muted px-2 py-1 text-xs text-muted-foreground">
+										{key.replaceAll('_', ' ')}: {value}
+									</span>
+								{/each}
+							</span>
+						{/if}
+					</span>
+				</label>
+			{/snippet}
+
 			<fieldset class="space-y-3" disabled={submitting}>
 				<legend class="sr-only">{m.accounts_callback_available({ platform: platformName })}</legend>
-				{#each options as option (option.id)}
-					<label
-						class={[
-							'flex cursor-pointer gap-3 rounded-md border p-4 transition-colors',
-							isSelected(option.id)
-								? 'border-primary bg-primary/5 ring-2 ring-primary/20'
-								: 'border-border hover:bg-muted/40'
-						]}
+				{#if allowsMultiple}
+					{#each options as option (option.id)}
+						{@render optionCard(option, true)}
+					{/each}
+				{:else}
+					<RadioGroup.Root
+						bind:value={selectedId}
+						name="selection_id"
+						required
+						disabled={submitting}
 					>
-						{#if allowsMultiple}
-							<Checkbox
-								class="mt-1"
-								checked={isSelected(option.id)}
-								onCheckedChange={() => toggleSelection(option.id)}
-							/>
-						{:else}
-							<input
-								class="mt-1 size-4 accent-primary"
-								type="radio"
-								name="selection_id"
-								value={option.id}
-								bind:group={selectedId}
-								required
-							/>
-						{/if}
-						{#if option.avatar_url}
-							<img
-								class="size-12 rounded-full border object-cover"
-								src={option.avatar_url}
-								alt=""
-								loading="lazy"
-							/>
-						{:else}
-							<div
-								class="flex size-12 shrink-0 items-center justify-center rounded-full bg-muted text-sm font-medium text-muted-foreground"
-								aria-hidden="true"
-							>
-								{optionTitle(option).slice(0, 1).toUpperCase()}
-							</div>
-						{/if}
-						<span class="min-w-0 flex-1 space-y-1">
-							<span class="block font-medium text-foreground">{optionTitle(option)}</span>
-							{#if optionSubtitle(option)}
-								<span class="block text-sm text-muted-foreground">{optionSubtitle(option)}</span>
-							{/if}
-							{#if option.description}
-								<span class="block text-sm text-muted-foreground">{option.description}</span>
-							{/if}
-							{#if metadataEntries(option).length}
-								<span class="flex flex-wrap gap-2 pt-1">
-									{#each metadataEntries(option) as [key, value] (key)}
-										<span class="rounded-sm bg-muted px-2 py-1 text-xs text-muted-foreground">
-											{key.replaceAll('_', ' ')}: {value}
-										</span>
-									{/each}
-								</span>
-							{/if}
-						</span>
-					</label>
-				{/each}
+						{#each options as option (option.id)}
+							{@render optionCard(option, false)}
+						{/each}
+					</RadioGroup.Root>
+				{/if}
 			</fieldset>
 
 			{#if error}

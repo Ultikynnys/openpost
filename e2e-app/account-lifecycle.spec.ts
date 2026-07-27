@@ -116,12 +116,24 @@ test("users can change passwords, export data, and permanently delete their acco
   await expect(
     page.getByRole("heading", { name: "Password and account data" }),
   ).toBeVisible();
+  await page
+    .getByRole("button", { name: /Change password/ })
+    .first()
+    .click();
   await page.locator("#account-current-password").fill(password);
   await page.locator("#account-new-password").fill(replacementPassword);
   await page.locator("#account-confirm-password").fill(replacementPassword);
-  await page.getByRole("button", { name: "Change password" }).click();
+  await page
+    .locator("form")
+    .filter({ has: page.locator("#account-current-password") })
+    .getByRole("button", { name: "Change password" })
+    .click();
   await expect(page.getByText(/Password changed\./)).toBeVisible();
 
+  await page
+    .getByRole("button", { name: /Download your data/ })
+    .first()
+    .click();
   await page.locator("#export-password").fill(replacementPassword);
   const download = page.waitForEvent("download");
   await page.getByRole("button", { name: "Download JSON export" }).click();

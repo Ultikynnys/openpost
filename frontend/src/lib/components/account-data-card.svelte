@@ -4,8 +4,10 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
+	import * as Collapsible from '$lib/components/ui/collapsible';
 	import InlineNotice from '$lib/components/inline-notice.svelte';
 	import DeleteAccountDialog from '$lib/components/delete-account-dialog.svelte';
+	import ChevronDownIcon from 'lucide-svelte/icons/chevron-down';
 	import DownloadIcon from 'lucide-svelte/icons/download';
 	import KeyRoundIcon from 'lucide-svelte/icons/key-round';
 	import LoaderIcon from 'lucide-svelte/icons/loader-2';
@@ -31,6 +33,8 @@
 	let deletionImpact = $state<AccountDeletionImpact | null>(null);
 	let notice = $state('');
 	let noticeTone = $state<'success' | 'error'>('success');
+	let passwordOpen = $state(false);
+	let exportOpen = $state(false);
 
 	function showError(message: string) {
 		noticeTone = 'error';
@@ -66,6 +70,7 @@
 		currentPassword = '';
 		newPassword = '';
 		confirmPassword = '';
+		passwordOpen = false;
 		showSuccess(m.settings_change_password_success({ count: data.revoked_sessions }));
 	}
 
@@ -90,6 +95,7 @@
 		anchor.click();
 		URL.revokeObjectURL(url);
 		exportPassword = '';
+		exportOpen = false;
 		showSuccess(m.settings_export_success());
 	}
 
@@ -116,105 +122,135 @@
 	}
 </script>
 
-<div class="rounded-lg border p-4">
-	<div class="mb-4">
+<section class="overflow-hidden rounded-lg border">
+	<div class="p-4">
 		<h3 class="font-medium">{m.settings_account_data()}</h3>
 		<p class="mt-1 text-sm text-muted-foreground">{m.settings_account_data_body()}</p>
 	</div>
 
 	{#if notice}
-		<InlineNotice tone={noticeTone} message={notice} class="mb-4" />
+		<div class="px-4 pb-4">
+			<InlineNotice tone={noticeTone} message={notice} />
+		</div>
 	{/if}
 
-	<div class="grid gap-4 xl:grid-cols-3">
-		<form onsubmit={changePassword} class="space-y-3 rounded-md border p-3">
-			<div>
-				<h4 class="flex items-center gap-2 text-sm font-medium">
-					<KeyRoundIcon class="size-4 text-muted-foreground" />
-					{m.settings_change_password()}
-				</h4>
-				<p class="mt-1 text-xs leading-5 text-muted-foreground">
-					{m.settings_change_password_body()}
-				</p>
-			</div>
-			<div class="space-y-2">
-				<Label for="account-current-password">{m.settings_current_password()}</Label>
-				<Input
-					id="account-current-password"
-					type="password"
-					bind:value={currentPassword}
-					autocomplete="current-password"
-					required
+	<div class="divide-y border-t">
+		<Collapsible.Root bind:open={passwordOpen}>
+			<Collapsible.Trigger
+				class="group flex min-h-16 w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none focus-visible:ring-inset"
+			>
+				<KeyRoundIcon class="size-4 shrink-0 text-muted-foreground" />
+				<span class="min-w-0 flex-1">
+					<span class="block text-sm font-medium">{m.settings_change_password()}</span>
+					<span class="mt-0.5 block text-xs leading-5 text-muted-foreground">
+						{m.settings_change_password_body()}
+					</span>
+				</span>
+				<ChevronDownIcon
+					class="size-4 shrink-0 text-muted-foreground transition-transform group-data-[state=open]:rotate-180"
 				/>
-			</div>
-			<div class="space-y-2">
-				<Label for="account-new-password">{m.settings_new_password()}</Label>
-				<Input
-					id="account-new-password"
-					type="password"
-					bind:value={newPassword}
-					autocomplete="new-password"
-					minlength={12}
-					required
-				/>
-			</div>
-			<div class="space-y-2">
-				<Label for="account-confirm-password">{m.settings_confirm_new_password()}</Label>
-				<Input
-					id="account-confirm-password"
-					type="password"
-					bind:value={confirmPassword}
-					autocomplete="new-password"
-					minlength={12}
-					required
-				/>
-			</div>
-			<Button type="submit" class="w-full gap-2" disabled={passwordBusy}>
-				{#if passwordBusy}<LoaderIcon class="size-4 animate-spin" />{/if}
-				{passwordBusy ? m.settings_change_password_loading() : m.settings_change_password_submit()}
-			</Button>
-		</form>
+			</Collapsible.Trigger>
+			<Collapsible.Content>
+				<form
+					onsubmit={changePassword}
+					class="grid gap-3 border-t bg-muted/10 p-4 sm:grid-cols-2 xl:grid-cols-3"
+				>
+					<div class="space-y-2">
+						<Label for="account-current-password">{m.settings_current_password()}</Label>
+						<Input
+							id="account-current-password"
+							type="password"
+							bind:value={currentPassword}
+							autocomplete="current-password"
+							required
+						/>
+					</div>
+					<div class="space-y-2">
+						<Label for="account-new-password">{m.settings_new_password()}</Label>
+						<Input
+							id="account-new-password"
+							type="password"
+							bind:value={newPassword}
+							autocomplete="new-password"
+							minlength={12}
+							required
+						/>
+					</div>
+					<div class="space-y-2">
+						<Label for="account-confirm-password">{m.settings_confirm_new_password()}</Label>
+						<Input
+							id="account-confirm-password"
+							type="password"
+							bind:value={confirmPassword}
+							autocomplete="new-password"
+							minlength={12}
+							required
+						/>
+					</div>
+					<div class="sm:col-span-2 xl:col-span-3">
+						<Button type="submit" disabled={passwordBusy}>
+							{#if passwordBusy}<LoaderIcon class="size-4 animate-spin" />{/if}
+							{passwordBusy
+								? m.settings_change_password_loading()
+								: m.settings_change_password_submit()}
+						</Button>
+					</div>
+				</form>
+			</Collapsible.Content>
+		</Collapsible.Root>
 
-		<form onsubmit={exportData} class="space-y-3 rounded-md border p-3">
-			<div>
-				<h4 class="flex items-center gap-2 text-sm font-medium">
-					<DownloadIcon class="size-4 text-muted-foreground" />
-					{m.settings_export_data()}
-				</h4>
-				<p class="mt-1 text-xs leading-5 text-muted-foreground">
-					{m.settings_export_data_body()}
-				</p>
-			</div>
-			<div class="space-y-2">
-				<Label for="export-password">{m.settings_export_password()}</Label>
-				<Input
-					id="export-password"
-					type="password"
-					bind:value={exportPassword}
-					autocomplete="current-password"
-					required
+		<Collapsible.Root bind:open={exportOpen}>
+			<Collapsible.Trigger
+				class="group flex min-h-16 w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none focus-visible:ring-inset"
+			>
+				<DownloadIcon class="size-4 shrink-0 text-muted-foreground" />
+				<span class="min-w-0 flex-1">
+					<span class="block text-sm font-medium">{m.settings_export_data()}</span>
+					<span class="mt-0.5 line-clamp-2 block text-xs leading-5 text-muted-foreground">
+						{m.settings_export_data_body()}
+					</span>
+				</span>
+				<ChevronDownIcon
+					class="size-4 shrink-0 text-muted-foreground transition-transform group-data-[state=open]:rotate-180"
 				/>
-			</div>
-			<Button type="submit" variant="outline" class="w-full gap-2" disabled={exportBusy}>
-				{#if exportBusy}<LoaderIcon class="size-4 animate-spin" />{/if}
-				{exportBusy ? m.settings_export_loading() : m.settings_export_submit()}
-			</Button>
-		</form>
+			</Collapsible.Trigger>
+			<Collapsible.Content>
+				<form
+					onsubmit={exportData}
+					class="grid gap-3 border-t bg-muted/10 p-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end"
+				>
+					<div class="space-y-2">
+						<Label for="export-password">{m.settings_export_password()}</Label>
+						<Input
+							id="export-password"
+							type="password"
+							bind:value={exportPassword}
+							autocomplete="current-password"
+							required
+						/>
+					</div>
+					<Button type="submit" variant="outline" disabled={exportBusy}>
+						{#if exportBusy}<LoaderIcon class="size-4 animate-spin" />{/if}
+						{exportBusy ? m.settings_export_loading() : m.settings_export_submit()}
+					</Button>
+				</form>
+			</Collapsible.Content>
+		</Collapsible.Root>
 
-		<div class="space-y-3 rounded-md border border-destructive/20 bg-destructive/5 p-3">
-			<div>
+		<div class="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+			<div class="min-w-0">
 				<h4 class="flex items-center gap-2 text-sm font-medium text-destructive">
 					<TrashIcon class="size-4" />
 					{m.settings_delete_account()}
 				</h4>
-				<p class="mt-1 text-xs leading-5 text-muted-foreground">
+				<p class="mt-1 max-w-2xl text-xs leading-5 text-muted-foreground">
 					{m.settings_delete_account_body()}
 				</p>
 			</div>
 			<Button
 				type="button"
 				variant="destructive"
-				class="w-full gap-2"
+				class="shrink-0"
 				disabled={deletionBusy}
 				onclick={reviewDeletion}
 			>
@@ -223,7 +259,7 @@
 			</Button>
 		</div>
 	</div>
-</div>
+</section>
 
 {#if deletionImpact}
 	<DeleteAccountDialog

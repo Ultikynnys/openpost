@@ -4,6 +4,7 @@
 	import * as Dialog from '$lib/components/ui/dialog';
 	import { Button } from '$lib/components/ui/button';
 	import { Checkbox } from '$lib/components/ui/checkbox';
+	import * as RadioGroup from '$lib/components/ui/radio-group';
 	import InlineNotice from '$lib/components/inline-notice.svelte';
 	import { client } from '$lib/api/client';
 	import { feedbackDiagnostics, type FeedbackDiagnosticsSnapshot } from '$lib/feedback-diagnostics';
@@ -294,7 +295,12 @@
 
 				<fieldset class="space-y-2">
 					<legend class="text-sm font-medium">{m.feedback_category()}</legend>
-					<div class="grid grid-cols-3 gap-2">
+					<RadioGroup.Root
+						class="grid grid-cols-3 gap-2"
+						value={category}
+						onValueChange={(value) => (category = value as FeedbackCategory)}
+						aria-label={m.feedback_category()}
+					>
 						{#each [['bug', m.feedback_category_bug()], ['idea', m.feedback_category_idea()], ['question', m.feedback_category_question()]] as option (option[0])}
 							<label
 								class={[
@@ -302,18 +308,11 @@
 									category === option[0] && 'border-primary bg-primary/8 text-primary'
 								]}
 							>
-								<input
-									class="sr-only"
-									type="radio"
-									name="feedback-category"
-									value={option[0]}
-									checked={category === option[0]}
-									onchange={() => (category = option[0] as FeedbackCategory)}
-								/>
+								<RadioGroup.Item class="sr-only" value={option[0]} aria-label={option[1]} />
 								{option[1]}
 							</label>
 						{/each}
-					</div>
+					</RadioGroup.Root>
 				</fieldset>
 
 				<label class="block space-y-2">

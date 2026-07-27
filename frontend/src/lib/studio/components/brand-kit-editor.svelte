@@ -4,6 +4,7 @@
 	import { Input } from '$lib/components/ui/input';
 	import MediaPreviewImage from '$lib/components/media-preview-image.svelte';
 	import AppSelect from '$lib/components/app-select.svelte';
+	import SettingsFormFooter from '$lib/components/settings-form-footer.svelte';
 	import { uploadMediaFile } from '$lib/media-upload-client';
 	import { saveStudioBrandKit } from '../api';
 	import { loadStudioBrandFonts } from '../fonts';
@@ -274,19 +275,6 @@
 </script>
 
 <div class="space-y-10" {@attach initializeEditor}>
-	<header
-		class="sticky top-0 z-20 -mx-1 flex items-end gap-3 border-b bg-background/95 px-1 pb-4 backdrop-blur-sm"
-	>
-		<label class="min-w-0 flex-1 text-sm font-medium">
-			<span class="mb-1.5 block text-muted-foreground">{m.brand_kit_name()}</span>
-			<Input bind:value={name} maxlength={120} class="h-11 text-base font-semibold" />
-		</label>
-		<Button class="min-h-11 shrink-0" onclick={save} disabled={saving || !kit.can_edit}>
-			{#if saving}<LoaderIcon class="animate-spin" />{/if}
-			<span class="hidden sm:inline">{m.brand_save_kit()}</span>
-			<span class="sm:hidden">{m.common_save()}</span>
-		</Button>
-	</header>
 	{#if error}<p class="text-sm text-destructive" role="alert">{error}</p>{/if}
 	{#if success}<p class="text-sm text-emerald-700 dark:text-emerald-300" role="status">
 			{success}
@@ -682,4 +670,12 @@
 			</details>
 		{/each}
 	</section>
+
+	<SettingsFormFooter
+		label={m.brand_save_kit()}
+		savingLabel={m.brand_save_kit()}
+		{saving}
+		disabled={!kit.can_edit}
+		onSave={save}
+	/>
 </div>

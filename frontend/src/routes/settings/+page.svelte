@@ -15,6 +15,7 @@
 	import DestructiveConfirmDialog from '$lib/components/destructive-confirm-dialog.svelte';
 	import ProfileAvatarUploader from '$lib/components/profile-avatar-uploader.svelte';
 	import AccountDataCard from '$lib/components/account-data-card.svelte';
+	import SettingsFormFooter from '$lib/components/settings-form-footer.svelte';
 	import MediaPreviewImage from '$lib/components/media-preview-image.svelte';
 	import BrandKitEditor from '$lib/studio/components/brand-kit-editor.svelte';
 	import { goto } from '$app/navigation';
@@ -26,14 +27,12 @@
 	import { createPasskeyCredential } from '$lib/auth/webauthn';
 	import LoaderIcon from 'lucide-svelte/icons/loader-2';
 	import SettingsIcon from 'lucide-svelte/icons/settings';
-	import SaveIcon from 'lucide-svelte/icons/save';
 	import ClockIcon from 'lucide-svelte/icons/clock';
 	import ImageIcon from 'lucide-svelte/icons/image';
 	import CalendarIcon from 'lucide-svelte/icons/calendar';
 	import PlusIcon from 'lucide-svelte/icons/plus';
 	import TrashIcon from 'lucide-svelte/icons/trash';
 	import SparklesIcon from 'lucide-svelte/icons/sparkles';
-	import ShieldCheckIcon from 'lucide-svelte/icons/shield-check';
 	import SmartphoneIcon from 'lucide-svelte/icons/smartphone';
 	import KeyRoundIcon from 'lucide-svelte/icons/key-round';
 	import TerminalIcon from 'lucide-svelte/icons/terminal';
@@ -450,7 +449,7 @@
 	});
 	const activeSettingsDescription = $derived.by(() => {
 		if (activeSettingsTab === 'profile') return m.settings_profile_description();
-		if (activeSettingsTab === 'security') return m.settings_security_description();
+		if (activeSettingsTab === 'security') return m.settings_account_security_body();
 		if (activeSettingsTab === 'developer') return m.settings_developer_description();
 		if (activeSettingsTab === 'members') return m.settings_members_description();
 		if (activeSettingsTab === 'plan') return m.settings_plan_description();
@@ -1556,16 +1555,12 @@
 							<InlineNotice tone="error" message={profileError} />
 						{/if}
 
-						<div class="flex justify-end">
-							<Button type="submit" disabled={profileBusy}>
-								{#if profileBusy}
-									<LoaderIcon class="mr-2 h-4 w-4 animate-spin" />
-								{:else}
-									<SaveIcon class="mr-2 h-4 w-4" />
-								{/if}
-								{m.settings_save_profile()}
-							</Button>
-						</div>
+						<SettingsFormFooter
+							label={m.settings_save_profile()}
+							savingLabel={m.settings_save_profile()}
+							saving={profileBusy}
+							type="submit"
+						/>
 					</form>
 				</section>
 
@@ -1974,18 +1969,11 @@
 				</section>
 
 				<section id="security" class:hidden={activeSettingsTab !== 'security'} class="scroll-mt-24">
-					<SectionHeader
-						title={m.settings_account_security()}
-						description={m.settings_account_security_body()}
-						icon={ShieldCheckIcon}
-						class="mb-4"
-					/>
-
 					{#if loadingSecurity}
 						<PageLoading layout="grid" label={m.common_loading()} items={2} />
 					{:else}
 						<div class="space-y-4">
-							<div class="rounded-lg border bg-muted/20 p-4">
+							<div class="border-y py-3">
 								<div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
 									<div>
 										<p class="text-sm font-medium">{securityStatus?.user.email}</p>
@@ -2001,8 +1989,6 @@
 									</p>
 								</div>
 							</div>
-
-							<AccountDataCard email={securityStatus?.user.email ?? profileEmail} />
 
 							<div class="rounded-lg border p-4">
 								<div class="mb-4 flex items-center justify-between gap-3">
@@ -2246,6 +2232,8 @@
 									</div>
 								</div>
 							</div>
+
+							<AccountDataCard email={securityStatus?.user.email ?? profileEmail} />
 
 							{#if securityError}
 								<InlineNotice tone="error" message={securityError} />
@@ -2586,9 +2574,7 @@
 									<section class="space-y-4">
 										<div class="flex items-center gap-2">
 											<PaletteIcon class="size-4 text-primary" />
-											<h2 class="font-semibold">
-												{brandKit.name || m.brand_default_name()}
-											</h2>
+											<h2 class="font-semibold">{m.brand_colors_backgrounds()}</h2>
 										</div>
 										<div class="grid grid-cols-2 gap-3 sm:grid-cols-3">
 											{#each brandKit.colors as color (color.id || color.name)}
@@ -3068,22 +3054,15 @@
 					</div>
 				</section>
 
-				<div
-					class:hidden={!['general', 'media', 'schedule'].includes(activeSettingsTab)}
-					class="sticky bottom-[calc(5rem+env(safe-area-inset-bottom))] z-10 flex justify-end rounded-lg border bg-background/95 p-3 shadow-sm backdrop-blur md:bottom-3"
-				>
-					<Button
-						onclick={saveSettings}
-						disabled={saving || Boolean(intervalError || draftGapError)}
-					>
-						{#if saving}
-							<LoaderIcon class="mr-2 h-4 w-4 animate-spin" />
-						{:else}
-							<SaveIcon class="mr-2 h-4 w-4" />
-						{/if}
-						{m.settings_save_changes()}
-					</Button>
-				</div>
+				{#if ['general', 'media', 'schedule'].includes(activeSettingsTab)}
+					<SettingsFormFooter
+						label={m.settings_save_changes()}
+						savingLabel={m.settings_save_changes()}
+						{saving}
+						disabled={Boolean(intervalError || draftGapError)}
+						onSave={saveSettings}
+					/>
+				{/if}
 			</div>
 		</div>
 	{/if}
