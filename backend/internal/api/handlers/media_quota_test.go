@@ -14,15 +14,23 @@ import (
 	"github.com/openpost/backend/internal/models"
 	"github.com/openpost/backend/internal/services/entitlements"
 	"github.com/openpost/backend/internal/services/mediastore"
+	"github.com/openpost/backend/internal/services/publicurl"
 	"github.com/openpost/backend/internal/services/usage"
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/bun"
 )
 
 type mediaQuotaTestServer struct {
-	echo  *echo.Echo
-	db    *bun.DB
-	usage *usage.Service
+	echo    *echo.Echo
+	db      *bun.DB
+	handler *MediaHandler
+	usage   *usage.Service
+}
+
+type publicMediaVerifierFunc func(context.Context, string) publicurl.Result
+
+func (verify publicMediaVerifierFunc) Verify(ctx context.Context, rawURL string) publicurl.Result {
+	return verify(ctx, rawURL)
 }
 
 func newMediaQuotaTestServer(t *testing.T, entitlement entitlements.Service) *mediaQuotaTestServer {
@@ -53,7 +61,7 @@ func newMediaQuotaTestServer(t *testing.T, entitlement entitlements.Service) *me
 
 	e := echo.New()
 	handler.RegisterLegacyRoutes(e)
-	return &mediaQuotaTestServer{echo: e, db: db, usage: usageSvc}
+	return &mediaQuotaTestServer{echo: e, db: db, handler: handler, usage: usageSvc}
 }
 
 func (s *mediaQuotaTestServer) upload(t *testing.T, filename string, content []byte) *httptest.ResponseRecorder {
@@ -137,4 +145,31 @@ func TestUploadMediaIncrementsMonthlyUsageAfterSuccessfulUpload(t *testing.T) {
 	current, err := srv.usage.CurrentMonthly(context.Background(), "ws-1", entitlements.LimitMediaBytesUploadedMonthly, time.Now())
 	require.NoError(t, err)
 	require.Equal(t, int64(4), current)
+}
+
+func TestUploadMediaVerifiesPublicURLAfterPersistingRecord(t *testing.T) {
+	t.Parallel()
+
+	srv := newMediaQuotaTestServer(t, entitlements.NewSelfHostedService())
+	verificationCalled := false
+	srv.handler.SetPublicURLVerifier(publicMediaVerifierFunc(func(ctx context.Context, _ string) publicurl.Result {
+		verificationCalled = true
+		var count int
+		require.NoError(t, srv.db.NewSelect().ColumnExpr("COUNT(*)").TableExpr("media_attachments").Scan(ctx, &count))
+		require.Equal(t, 1, count)
+		return publicurl.Result{
+			Ready:      true,
+			StatusCode: http.StatusOK,
+			CheckedAt:  time.Now().UTC(),
+		}
+	}))
+
+	resp := srv.upload(t, "ready.txt", []byte("provider-safe"))
+
+	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
+	require.True(t, verificationCalled)
+	var media models.MediaAttachment
+	require.NoError(t, srv.db.NewSelect().Model(&media).Scan(t.Context()))
+	require.True(t, media.PublicURLReady)
+	require.Equal(t, http.StatusOK, media.PublicURLStatus)
 }

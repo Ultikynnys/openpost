@@ -2634,7 +2634,6 @@ func (h *MediaHandler) processStreamUpload(
 	if strings.HasPrefix(mimeType, "video/") {
 		h.applyVideoAnalysis(ctx, media, nil)
 	}
-	h.applyPublicURLVerification(ctx, media)
 
 	if _, err := h.db.NewInsert().Model(media).Exec(ctx); err != nil {
 		if source == "upload" && assetKind == "library" {
@@ -2645,6 +2644,9 @@ func (h *MediaHandler) processStreamUpload(
 		}
 		_ = h.storage.Delete(objectKey)
 		return nil, errors.New("failed to save media record")
+	}
+	if err := refreshPublicMediaState(ctx, h.db, h.publicMedia, media); err != nil {
+		log.Printf("failed to persist public URL verification for media %s: %v", media.ID, err)
 	}
 	if !isInternalMediaAssetKind(assetKind) {
 		if _, err := h.usage.IncrementMonthly(ctx, input.WorkspaceID, entitlements.LimitMediaBytesUploadedMonthly, media.Size, time.Now().UTC()); err != nil {
@@ -2750,7 +2752,6 @@ func (h *MediaHandler) processUploadBytes(ctx context.Context, input mediaUpload
 	if strings.HasPrefix(mimeType, "video/") {
 		h.applyVideoAnalysis(ctx, media, input.Content)
 	}
-	h.applyPublicURLVerification(ctx, media)
 
 	if _, err := h.db.NewInsert().Model(media).Exec(ctx); err != nil {
 		if source == "upload" && assetKind == "library" {
@@ -2762,6 +2763,9 @@ func (h *MediaHandler) processUploadBytes(ctx context.Context, input mediaUpload
 			}
 		}
 		return nil, errors.New("failed to save media record")
+	}
+	if err := refreshPublicMediaState(ctx, h.db, h.publicMedia, media); err != nil {
+		log.Printf("failed to persist public URL verification for media %s: %v", media.ID, err)
 	}
 	if !isInternalMediaAssetKind(assetKind) {
 		if _, err := h.usage.IncrementMonthly(ctx, input.WorkspaceID, entitlements.LimitMediaBytesUploadedMonthly, input.Size, time.Now().UTC()); err != nil {
