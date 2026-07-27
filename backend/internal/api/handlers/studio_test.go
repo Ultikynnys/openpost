@@ -78,6 +78,11 @@ func TestStudioDesignSaveUsesOptimisticConcurrencyAndTracksMedia(t *testing.T) {
 			SourceHeight: 1080,
 			Fit:          "cover",
 			Crop:         StudioCrop{Width: 1, Height: 1},
+			Adjustments: StudioImageAdjustments{
+				Tint:     0.15,
+				Vibrance: 0.25,
+				Hue:      -0.1,
+			},
 		},
 		Effects: &StudioLayerEffects{
 			BlendMode: "overlay",
@@ -103,6 +108,15 @@ func TestStudioDesignSaveUsesOptimisticConcurrencyAndTracksMedia(t *testing.T) {
 			},
 		},
 		Mask: &StudioLayerMask{Shape: "circle", Inset: 4},
+		EraseMask: &StudioEraseMask{
+			SourceWidth:  1080,
+			SourceHeight: 1080,
+			Strokes: []StudioEraseStroke{{
+				Size:   24,
+				Points: []StudioPaintPoint{{X: 100, Y: 100}, {X: 160, Y: 120}},
+			}},
+			Spans: []StudioPaintSpan{{X: 20, Y: 40, Width: 80}},
+		},
 	})
 	payload.Pages[0].Layers = append(payload.Pages[0].Layers, StudioLayer{
 		ID:      "paint-layer-1",
@@ -171,6 +185,8 @@ func TestStudioDesignSaveUsesOptimisticConcurrencyAndTracksMedia(t *testing.T) {
 	require.Equal(t, "Launch updated", saved.Body.Document.Title)
 	require.Equal(t, "overlay", saved.Body.Document.Pages[0].Layers[0].Effects.BlendMode)
 	require.Equal(t, "circle", saved.Body.Document.Pages[0].Layers[0].Mask.Shape)
+	require.Equal(t, 0.25, saved.Body.Document.Pages[0].Layers[0].Image.Adjustments.Vibrance)
+	require.Len(t, saved.Body.Document.Pages[0].Layers[0].EraseMask.Strokes, 1)
 	require.Equal(t, "paint", saved.Body.Document.Pages[0].Layers[1].Type)
 	require.Equal(t, "stroke", saved.Body.Document.Pages[0].Layers[1].Paint.Kind)
 	require.Equal(t, "gradient", saved.Body.Document.Pages[0].Layers[2].Paint.Kind)

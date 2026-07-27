@@ -66,6 +66,8 @@ test("Studio creates from an original template, adapts to mobile, and exports to
     x: stageBox.x + stageBox.width * 0.35,
     y: stageBox.y + stageBox.height * 0.4,
   };
+  await page.mouse.click(canvasBox.x + 8, canvasBox.y + canvasBox.height / 2);
+  await expect(page.getByRole("treeitem", { selected: true })).toHaveCount(0);
   await page.keyboard.down("Alt");
   await page.mouse.move(headlinePoint.x, headlinePoint.y);
   await page.mouse.down();
@@ -227,7 +229,12 @@ test("Studio creates from an original template, adapts to mobile, and exports to
       }
       return maxX < 0
         ? null
-        : { width: maxX - minX + 1, height: maxY - minY + 1 };
+        : {
+            x: minX,
+            y: minY,
+            width: maxX - minX + 1,
+            height: maxY - minY + 1,
+          };
     });
   const selectionBox = await selectionSurface.boundingBox();
   if (!selectionBox)
@@ -320,9 +327,19 @@ test("Studio creates from an original template, adapts to mobile, and exports to
   await expect(page.getByRole("treeitem", { selected: true })).toHaveCount(1);
 
   await page.keyboard.press("m");
+  const marqueeSlot = page.getByRole("button", { name: "Rectangle select" });
+  await expect(marqueeSlot).toBeVisible();
+  await marqueeSlot.click({ button: "right" });
   await expect(
-    page.getByRole("button", { name: "Rectangle select" }),
+    page.getByRole("menuitem", { name: "Rectangle select" }),
   ).toBeVisible();
+  await page.getByRole("menuitem", { name: "Ellipse select" }).click();
+  const ellipseSlot = page.getByRole("button", { name: "Ellipse select" });
+  await ellipseSlot.click();
+  await expect(
+    page.getByTestId("studio-selection-options").getByText("Ellipse select"),
+  ).toBeVisible();
+  await page.keyboard.press("m");
   await page
     .getByTestId("studio-selection-options")
     .getByRole("button", { name: "New" })
@@ -343,6 +360,45 @@ test("Studio creates from an original template, adapts to mobile, and exports to
   await page.mouse.up();
   await expect.poll(selectedPixelCount).toBeGreaterThan(0);
   await expect(page.getByRole("treeitem", { selected: true })).toHaveCount(1);
+  const selectionBeforeMove = await selectionBounds();
+  if (!selectionBeforeMove)
+    throw new Error("Rectangle selection did not produce pixel bounds");
+  const selectionCanvasSize = await page
+    .getByTestId("studio-pixel-selection")
+    .evaluate((canvas) => ({
+      width: (canvas as HTMLCanvasElement).width,
+      height: (canvas as HTMLCanvasElement).height,
+    }));
+  const selectionStart = {
+    x:
+      marqueeBounds.x +
+      ((selectionBeforeMove.x + selectionBeforeMove.width / 2) /
+        selectionCanvasSize.width) *
+        marqueeBounds.width,
+    y:
+      marqueeBounds.y +
+      ((selectionBeforeMove.y + selectionBeforeMove.height / 2) /
+        selectionCanvasSize.height) *
+        marqueeBounds.height,
+  };
+  await page.mouse.move(selectionStart.x, selectionStart.y);
+  await page.mouse.down();
+  await page.mouse.move(selectionStart.x + 24, selectionStart.y + 16, {
+    steps: 4,
+  });
+  await page.mouse.up();
+  await expect
+    .poll(async () => (await selectionBounds())?.x ?? 0)
+    .toBeGreaterThan(selectionBeforeMove.x);
+  const selectionAfterDrag = await selectionBounds();
+  await page.keyboard.press("Shift+ArrowRight");
+  await expect
+    .poll(async () => (await selectionBounds())?.x ?? 0)
+    .toBe((selectionAfterDrag?.x ?? 0) + 10);
+  await page
+    .getByTestId("studio-selection-options")
+    .getByRole("button", { name: "Deselect" })
+    .click();
 
   await page.keyboard.press("Shift+m");
   await expect(
@@ -403,6 +459,12 @@ test("Studio creates from an original template, adapts to mobile, and exports to
     .getByRole("button", { name: "Deselect" })
     .click();
   await page.keyboard.press("p");
+  const roughness = page.getByRole("slider", { name: "Roughness 0%" });
+  await roughness.focus();
+  await roughness.press("End");
+  await expect(
+    page.getByRole("slider", { name: "Roughness 100%" }),
+  ).toBeVisible();
   await page.mouse.move(
     lassoBounds.x + lassoBounds.width * 0.25,
     lassoBounds.y + lassoBounds.height * 0.3,
@@ -601,7 +663,7 @@ test("Studio creates from an original template, adapts to mobile, and exports to
         document.documentElement.scrollWidth -
         document.documentElement.clientWidth,
     ),
-  ).toBe(0);
+  ).toBeLessThanOrEqual(0);
 
   await page.setViewportSize({ width: 844, height: 390 });
   await expect
@@ -630,7 +692,7 @@ test("Studio creates from an original template, adapts to mobile, and exports to
         document.documentElement.scrollWidth -
         document.documentElement.clientWidth,
     ),
-  ).toBe(0);
+  ).toBeLessThanOrEqual(0);
   await page.setViewportSize({ width: 390, height: 844 });
 
   await page.getByRole("button", { name: "Export" }).click();

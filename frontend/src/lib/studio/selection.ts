@@ -182,7 +182,8 @@ export function strokePixelMask(
 	width: number,
 	height: number,
 	points: SelectionPoint[],
-	size: number
+	size: number,
+	roughness = 0
 ): Uint8Array {
 	const mask = new Uint8Array(width * height);
 	if (points.length === 0) return mask;
@@ -214,7 +215,60 @@ export function strokePixelMask(
 			});
 		}
 	}
+	const texture = Math.max(0, Math.min(1, roughness));
+	if (texture > 0) {
+		const hardMask = mask.slice();
+		for (let y = 0; y < height; y++) {
+			for (let x = 0; x < width; x++) {
+				const index = y * width + x;
+				if (!hardMask[index]) continue;
+				const edge =
+					x === 0 ||
+					y === 0 ||
+					x + 1 === width ||
+					y + 1 === height ||
+					!hardMask[index - 1] ||
+					!hardMask[index + 1] ||
+					!hardMask[index - width] ||
+					!hardMask[index + width];
+				if (edge && pixelNoise(x, y) < texture * 0.72) mask[index] = 0;
+			}
+		}
+	}
 	return mask;
+}
+
+export function pixelMaskContainsPoint(
+	mask: Uint8Array,
+	width: number,
+	height: number,
+	point: SelectionPoint
+): boolean {
+	const x = Math.floor(point.x);
+	const y = Math.floor(point.y);
+	return x >= 0 && x < width && y >= 0 && y < height && Boolean(mask[y * width + x]);
+}
+
+export function translatePixelMask(
+	mask: Uint8Array,
+	width: number,
+	height: number,
+	deltaX: number,
+	deltaY: number
+): Uint8Array {
+	const translated = new Uint8Array(width * height);
+	const offsetX = Math.round(deltaX);
+	const offsetY = Math.round(deltaY);
+	for (let y = 0; y < height; y++) {
+		const targetY = y + offsetY;
+		if (targetY < 0 || targetY >= height) continue;
+		for (let x = 0; x < width; x++) {
+			if (!mask[y * width + x]) continue;
+			const targetX = x + offsetX;
+			if (targetX >= 0 && targetX < width) translated[targetY * width + targetX] = 1;
+		}
+	}
+	return translated;
 }
 
 export function magicPixelMask(
@@ -305,6 +359,30 @@ export function intersectPixelMasks(left: Uint8Array, right: Uint8Array): Uint8A
 	return result;
 }
 
+export function subtractPixelMasks(left: Uint8Array, right: Uint8Array): Uint8Array {
+	const result = left.slice();
+	for (let index = 0; index < result.length; index++) {
+		if (right[index]) result[index] = 0;
+	}
+	return result;
+}
+
+export function pixelSpansToMask(
+	spans: Array<{ x: number; y: number; width: number }>,
+	width: number,
+	height: number
+): Uint8Array {
+	const mask = new Uint8Array(width * height);
+	for (const span of spans) {
+		const y = Math.floor(span.y);
+		if (y < 0 || y >= height) continue;
+		const start = clampInteger(Math.floor(span.x), 0, width);
+		const end = clampInteger(Math.ceil(span.x + span.width), 0, width);
+		if (end > start) mask.fill(1, y * width + start, y * width + end);
+	}
+	return mask;
+}
+
 export function pixelMaskBounds(
 	mask: Uint8Array,
 	width: number,
@@ -366,6 +444,12 @@ export function colorsWithinTolerance(
 
 function clampInteger(value: number, min: number, max: number): number {
 	return Math.max(min, Math.min(max, Math.trunc(value)));
+}
+
+function pixelNoise(x: number, y: number): number {
+	let value = Math.imul(x + 1, 374_761_393) ^ Math.imul(y + 1, 668_265_263);
+	value = Math.imul(value ^ (value >>> 13), 1_274_126_177);
+	return ((value ^ (value >>> 16)) >>> 0) / 4_294_967_295;
 }
 
 function parseHexColor(value: string): { red: number; green: number; blue: number } | null {

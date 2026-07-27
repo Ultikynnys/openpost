@@ -12,7 +12,8 @@
 		onValueChange,
 		onValueCommit,
 		class: className,
-		trackClass = ''
+		trackClass = '',
+		rangeClass = ''
 	}: {
 		value?: number;
 		min?: number;
@@ -24,6 +25,7 @@
 		onValueCommit?: (value: number) => void;
 		class?: string;
 		trackClass?: string;
+		rangeClass?: string;
 	} = $props();
 </script>
 
@@ -48,7 +50,7 @@
 		>
 			<SliderPrimitive.Range
 				data-slot="slider-range"
-				class="absolute h-full bg-primary data-[orientation=vertical]:w-full"
+				class={cn('absolute h-full bg-primary data-[orientation=vertical]:w-full', rangeClass)}
 			/>
 		</span>
 		{#each thumbItems as thumb (thumb.index)}

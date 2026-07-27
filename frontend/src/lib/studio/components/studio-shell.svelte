@@ -2,7 +2,7 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import { Menubar } from 'bits-ui';
+	import { ContextMenu, Menubar } from 'bits-ui';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
 	import * as Sheet from '$lib/components/ui/sheet';
@@ -10,6 +10,7 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Checkbox } from '$lib/components/ui/checkbox';
 	import { Input } from '$lib/components/ui/input';
+	import * as RadioGroup from '$lib/components/ui/radio-group';
 	import { Slider } from '$lib/components/ui/slider';
 	import AppSelect from '$lib/components/app-select.svelte';
 	import StudioCanvas from './studio-canvas.svelte';
@@ -153,6 +154,9 @@
 	let resizeHeight = $state(1080);
 	let resizeMode = $state<'scale' | 'preserve'>('scale');
 	let resizeError = $state('');
+	let marqueeSlotTool = $state<'marquee' | 'ellipse_marquee'>('marquee');
+	let fillSlotTool = $state<'bucket' | 'gradient'>('bucket');
+	let eraserSlotTool = $state<'eraser' | 'magic_eraser'>('eraser');
 	let assetPanelWidth = $state(260);
 	let inspectorPanelWidth = $state(320);
 	let layersPanelHeight = $state(280);
@@ -759,6 +763,9 @@
 
 	function setTool(tool: StudioTool): void {
 		editor.activeTool = tool;
+		if (isMarqueeTool(tool)) marqueeSlotTool = tool;
+		if (isFillTool(tool)) fillSlotTool = tool;
+		if (isEraserTool(tool)) eraserSlotTool = tool;
 		if (tool === 'text') editor.addText();
 		if (tool === 'image' || tool === 'camera') {
 			editor.leftPanel = 'media';
@@ -842,6 +849,17 @@
 		if (modifier && key === '1') {
 			event.preventDefault();
 			editor.zoom = 1;
+			return;
+		}
+		if (
+			editor.pixelSelection &&
+			['arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(key)
+		) {
+			event.preventDefault();
+			const distance = event.shiftKey ? 10 : 1;
+			const deltaX = key === 'arrowleft' ? -distance : key === 'arrowright' ? distance : 0;
+			const deltaY = key === 'arrowup' ? -distance : key === 'arrowdown' ? distance : 0;
+			editor.movePixelSelection(editor.pixelSelection.data, deltaX, deltaY);
 			return;
 		}
 		if (key === 'delete' || key === 'backspace') {
@@ -1129,15 +1147,17 @@
 		{ key: 'zoom', label: m.studio_zoom(), icon: ZoomInIcon }
 	];
 
-	function isMarqueeTool(tool: StudioTool): boolean {
+	function isMarqueeTool(
+		tool: StudioTool
+	): tool is Extract<StudioTool, 'marquee' | 'ellipse_marquee'> {
 		return tool === 'marquee' || tool === 'ellipse_marquee';
 	}
 
-	function isFillTool(tool: StudioTool): boolean {
+	function isFillTool(tool: StudioTool): tool is Extract<StudioTool, 'bucket' | 'gradient'> {
 		return tool === 'bucket' || tool === 'gradient';
 	}
 
-	function isEraserTool(tool: StudioTool): boolean {
+	function isEraserTool(tool: StudioTool): tool is Extract<StudioTool, 'eraser' | 'magic_eraser'> {
 		return tool === 'eraser' || tool === 'magic_eraser';
 	}
 
@@ -1149,6 +1169,13 @@
 		return m.studio_pixel_select();
 	}
 </script>
+
+{#snippet toolGroupIndicator()}
+	<span
+		aria-hidden="true"
+		class="pointer-events-none absolute right-[3px] bottom-[3px] size-[5px] bg-current opacity-50 [clip-path:polygon(100%_0,100%_100%,0_100%)]"
+	></span>
+{/snippet}
 
 <svelte:window
 	onkeydown={handleShortcut}
@@ -1466,133 +1493,170 @@
 						<Tooltip.Content side="right">{m.studio_select_objects()} · V</Tooltip.Content>
 					</Tooltip.Root>
 				{:else if tool.key === 'marquee'}
-					<DropdownMenu.Root>
+					<ContextMenu.Root>
 						<Tooltip.Root>
 							<Tooltip.Trigger>
 								{#snippet child({ props: tooltipProps })}
-									<DropdownMenu.Trigger>
+									<ContextMenu.Trigger>
 										{#snippet child({ props: menuProps })}
 											<Button
 												{...tooltipProps}
 												{...menuProps}
 												variant={isMarqueeTool(editor.activeTool) ? 'secondary' : 'ghost'}
 												size="icon-sm"
-												aria-label={selectionToolLabel(editor.activeTool)}
+												class="relative"
+												onclick={() => setTool(marqueeSlotTool)}
+												aria-label={selectionToolLabel(marqueeSlotTool)}
 												aria-pressed={isMarqueeTool(editor.activeTool)}
 											>
-												{#if editor.activeTool === 'marquee'}
+												{#if marqueeSlotTool === 'marquee'}
 													<RectangleSelectIcon />
-												{:else if editor.activeTool === 'ellipse_marquee'}
-													<CircleDashedIcon />
 												{:else}
-													<RectangleSelectIcon />
+													<CircleDashedIcon />
 												{/if}
+												{@render toolGroupIndicator()}
 											</Button>
 										{/snippet}
-									</DropdownMenu.Trigger>
+									</ContextMenu.Trigger>
 								{/snippet}
 							</Tooltip.Trigger>
 							<Tooltip.Content side="right">
-								{selectionToolLabel(editor.activeTool)}
+								{selectionToolLabel(marqueeSlotTool)}
 							</Tooltip.Content>
 						</Tooltip.Root>
-						<DropdownMenu.Content side="right" align="start" class="min-w-52">
-							<DropdownMenu.Item onclick={() => setTool('marquee')}>
-								<RectangleSelectIcon />
-								{m.studio_rectangle_select()}
-								<span class="ml-auto text-xs text-muted-foreground">M</span>
-							</DropdownMenu.Item>
-							<DropdownMenu.Item onclick={() => setTool('ellipse_marquee')}>
-								<CircleDashedIcon />
-								{m.studio_ellipse_select()}
-								<span class="ml-auto text-xs text-muted-foreground">⇧M</span>
-							</DropdownMenu.Item>
-						</DropdownMenu.Content>
-					</DropdownMenu.Root>
+						<ContextMenu.Portal>
+							<ContextMenu.Content
+								class="z-50 min-w-52 rounded-lg bg-popover/95 p-1 text-sm text-popover-foreground shadow-md ring-1 ring-foreground/10 backdrop-blur outline-none"
+							>
+								<ContextMenu.Item
+									class="flex min-h-9 cursor-default items-center gap-2 rounded-md px-2 outline-none data-highlighted:bg-muted"
+									onclick={() => setTool('marquee')}
+								>
+									<RectangleSelectIcon />
+									{m.studio_rectangle_select()}
+									<span class="ml-auto text-xs text-muted-foreground">M</span>
+								</ContextMenu.Item>
+								<ContextMenu.Item
+									class="flex min-h-9 cursor-default items-center gap-2 rounded-md px-2 outline-none data-highlighted:bg-muted"
+									onclick={() => setTool('ellipse_marquee')}
+								>
+									<CircleDashedIcon />
+									{m.studio_ellipse_select()}
+									<span class="ml-auto text-xs text-muted-foreground">⇧M</span>
+								</ContextMenu.Item>
+							</ContextMenu.Content>
+						</ContextMenu.Portal>
+					</ContextMenu.Root>
 				{:else if tool.key === 'bucket'}
-					<DropdownMenu.Root>
+					<ContextMenu.Root>
 						<Tooltip.Root>
 							<Tooltip.Trigger>
 								{#snippet child({ props: tooltipProps })}
-									<DropdownMenu.Trigger>
+									<ContextMenu.Trigger disabled={!editor.canEdit}>
 										{#snippet child({ props: menuProps })}
 											<Button
 												{...tooltipProps}
 												{...menuProps}
 												variant={isFillTool(editor.activeTool) ? 'secondary' : 'ghost'}
 												size="icon-sm"
-												aria-label={editor.activeTool === 'gradient'
+												class="relative"
+												onclick={() => setTool(fillSlotTool)}
+												aria-label={fillSlotTool === 'gradient'
 													? m.studio_gradient()
 													: m.studio_paint_bucket()}
 												disabled={!editor.canEdit}
 											>
-												{#if editor.activeTool === 'gradient'}
+												{#if fillSlotTool === 'gradient'}
 													<BlendIcon />
 												{:else}
 													<PaintBucketIcon />
 												{/if}
+												{@render toolGroupIndicator()}
 											</Button>
 										{/snippet}
-									</DropdownMenu.Trigger>
+									</ContextMenu.Trigger>
 								{/snippet}
 							</Tooltip.Trigger>
 							<Tooltip.Content side="right">{m.studio_fill()}</Tooltip.Content>
 						</Tooltip.Root>
-						<DropdownMenu.Content side="right" align="start" class="min-w-44">
-							<DropdownMenu.Item onclick={() => setTool('bucket')}>
-								<PaintBucketIcon />
-								{m.studio_paint_bucket()}
-								<span class="ml-auto text-xs text-muted-foreground">⇧G</span>
-							</DropdownMenu.Item>
-							<DropdownMenu.Item onclick={() => setTool('gradient')}>
-								<BlendIcon />
-								{m.studio_gradient()}
-								<span class="ml-auto text-xs text-muted-foreground">G</span>
-							</DropdownMenu.Item>
-						</DropdownMenu.Content>
-					</DropdownMenu.Root>
+						<ContextMenu.Portal>
+							<ContextMenu.Content
+								class="z-50 min-w-44 rounded-lg bg-popover/95 p-1 text-sm text-popover-foreground shadow-md ring-1 ring-foreground/10 backdrop-blur outline-none"
+							>
+								<ContextMenu.Item
+									class="flex min-h-9 cursor-default items-center gap-2 rounded-md px-2 outline-none data-highlighted:bg-muted"
+									onclick={() => setTool('bucket')}
+								>
+									<PaintBucketIcon />
+									{m.studio_paint_bucket()}
+									<span class="ml-auto text-xs text-muted-foreground">⇧G</span>
+								</ContextMenu.Item>
+								<ContextMenu.Item
+									class="flex min-h-9 cursor-default items-center gap-2 rounded-md px-2 outline-none data-highlighted:bg-muted"
+									onclick={() => setTool('gradient')}
+								>
+									<BlendIcon />
+									{m.studio_gradient()}
+									<span class="ml-auto text-xs text-muted-foreground">G</span>
+								</ContextMenu.Item>
+							</ContextMenu.Content>
+						</ContextMenu.Portal>
+					</ContextMenu.Root>
 				{:else if tool.key === 'eraser'}
-					<DropdownMenu.Root>
+					<ContextMenu.Root>
 						<Tooltip.Root>
 							<Tooltip.Trigger>
 								{#snippet child({ props: tooltipProps })}
-									<DropdownMenu.Trigger>
+									<ContextMenu.Trigger disabled={!editor.canEdit}>
 										{#snippet child({ props: menuProps })}
 											<Button
 												{...tooltipProps}
 												{...menuProps}
 												variant={isEraserTool(editor.activeTool) ? 'secondary' : 'ghost'}
 												size="icon-sm"
-												aria-label={editor.activeTool === 'magic_eraser'
+												class="relative"
+												onclick={() => setTool(eraserSlotTool)}
+												aria-label={eraserSlotTool === 'magic_eraser'
 													? m.studio_magic_erase()
 													: m.studio_erase()}
 												disabled={!editor.canEdit}
 											>
-												{#if editor.activeTool === 'magic_eraser'}
+												{#if eraserSlotTool === 'magic_eraser'}
 													<WandIcon />
 												{:else}
 													<EraserIcon />
 												{/if}
+												{@render toolGroupIndicator()}
 											</Button>
 										{/snippet}
-									</DropdownMenu.Trigger>
+									</ContextMenu.Trigger>
 								{/snippet}
 							</Tooltip.Trigger>
 							<Tooltip.Content side="right">{m.studio_erase()}</Tooltip.Content>
 						</Tooltip.Root>
-						<DropdownMenu.Content side="right" align="start" class="min-w-48">
-							<DropdownMenu.Item onclick={() => setTool('eraser')}>
-								<EraserIcon />
-								{m.studio_erase()}
-								<span class="ml-auto text-xs text-muted-foreground">E</span>
-							</DropdownMenu.Item>
-							<DropdownMenu.Item onclick={() => setTool('magic_eraser')}>
-								<WandIcon />
-								{m.studio_magic_erase()}
-								<span class="ml-auto text-xs text-muted-foreground">⇧E</span>
-							</DropdownMenu.Item>
-						</DropdownMenu.Content>
-					</DropdownMenu.Root>
+						<ContextMenu.Portal>
+							<ContextMenu.Content
+								class="z-50 min-w-48 rounded-lg bg-popover/95 p-1 text-sm text-popover-foreground shadow-md ring-1 ring-foreground/10 backdrop-blur outline-none"
+							>
+								<ContextMenu.Item
+									class="flex min-h-9 cursor-default items-center gap-2 rounded-md px-2 outline-none data-highlighted:bg-muted"
+									onclick={() => setTool('eraser')}
+								>
+									<EraserIcon />
+									{m.studio_erase()}
+									<span class="ml-auto text-xs text-muted-foreground">E</span>
+								</ContextMenu.Item>
+								<ContextMenu.Item
+									class="flex min-h-9 cursor-default items-center gap-2 rounded-md px-2 outline-none data-highlighted:bg-muted"
+									onclick={() => setTool('magic_eraser')}
+								>
+									<WandIcon />
+									{m.studio_magic_erase()}
+									<span class="ml-auto text-xs text-muted-foreground">⇧E</span>
+								</ContextMenu.Item>
+							</ContextMenu.Content>
+						</ContextMenu.Portal>
+					</ContextMenu.Root>
 				{:else}
 					<Tooltip.Root>
 						<Tooltip.Trigger>
@@ -1739,7 +1803,7 @@
 							<Button
 								{...props}
 								variant={isMarqueeTool(editor.activeTool) ? 'secondary' : 'ghost'}
-								class="h-12 w-16 shrink-0 snap-start flex-col gap-0 px-0 text-[11px] md:h-12"
+								class="relative h-12 w-16 shrink-0 snap-start flex-col gap-0 px-0 text-[11px] md:h-12"
 								aria-label={m.studio_pixel_select()}
 							>
 								{#if editor.activeTool === 'marquee'}
@@ -1750,6 +1814,7 @@
 									<RectangleSelectIcon />
 								{/if}
 								{m.studio_pixels()}
+								{@render toolGroupIndicator()}
 							</Button>
 						{/snippet}
 					</DropdownMenu.Trigger>
@@ -1771,7 +1836,7 @@
 							<Button
 								{...props}
 								variant={isFillTool(editor.activeTool) ? 'secondary' : 'ghost'}
-								class="h-12 w-16 shrink-0 snap-start flex-col gap-0 px-0 text-[11px] md:h-12"
+								class="relative h-12 w-16 shrink-0 snap-start flex-col gap-0 px-0 text-[11px] md:h-12"
 								disabled={!editor.canEdit}
 								aria-label={editor.activeTool === 'gradient'
 									? m.studio_gradient()
@@ -1783,6 +1848,7 @@
 									<PaintBucketIcon />
 								{/if}
 								{m.studio_fill()}
+								{@render toolGroupIndicator()}
 							</Button>
 						{/snippet}
 					</DropdownMenu.Trigger>
@@ -1804,7 +1870,7 @@
 							<Button
 								{...props}
 								variant={isEraserTool(editor.activeTool) ? 'secondary' : 'ghost'}
-								class="h-12 w-16 shrink-0 snap-start flex-col gap-0 px-0 text-[11px] md:h-12"
+								class="relative h-12 w-16 shrink-0 snap-start flex-col gap-0 px-0 text-[11px] md:h-12"
 								disabled={!editor.canEdit}
 								aria-label={editor.activeTool === 'magic_eraser'
 									? m.studio_magic_erase()
@@ -1816,6 +1882,7 @@
 									<EraserIcon />
 								{/if}
 								{m.studio_erase()}
+								{@render toolGroupIndicator()}
 							</Button>
 						{/snippet}
 					</DropdownMenu.Trigger>
@@ -2074,14 +2141,20 @@
 					<Input type="number" min="64" max="4096" bind:value={resizeHeight} />
 				</label>
 			</div>
-			<label class="flex min-h-11 items-center gap-2 rounded-lg border px-3 text-sm">
-				<input type="radio" value="scale" bind:group={resizeMode} />
-				<span>{m.studio_scale_content()}</span>
-			</label>
-			<label class="flex min-h-11 items-center gap-2 rounded-lg border px-3 text-sm">
-				<input type="radio" value="preserve" bind:group={resizeMode} />
-				<span>{m.studio_preserve_content()}</span>
-			</label>
+			<RadioGroup.Root bind:value={resizeMode}>
+				<label
+					class="flex min-h-11 cursor-pointer items-center gap-2 rounded-lg border px-3 text-sm has-data-[state=checked]:border-primary has-data-[state=checked]:bg-primary/5"
+				>
+					<RadioGroup.Item value="scale" />
+					<span>{m.studio_scale_content()}</span>
+				</label>
+				<label
+					class="flex min-h-11 cursor-pointer items-center gap-2 rounded-lg border px-3 text-sm has-data-[state=checked]:border-primary has-data-[state=checked]:bg-primary/5"
+				>
+					<RadioGroup.Item value="preserve" />
+					<span>{m.studio_preserve_content()}</span>
+				</label>
+			</RadioGroup.Root>
 			{#if resizeError}
 				<p class="rounded-md bg-destructive/10 p-3 text-sm text-destructive" role="alert">
 					{resizeError}

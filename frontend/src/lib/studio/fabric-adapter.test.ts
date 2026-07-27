@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import {
 	computeImageGeometry,
 	OpenPostFabricAdapter,
-	studioRotationForGesture,
 	studioLayerRenderOrder
 } from './fabric-adapter';
 import type { StudioDocument, StudioLayer, StudioPage } from './types';
@@ -52,13 +51,6 @@ function imageLayer(
 }
 
 describe('Studio image geometry', () => {
-	it('constrains Shift-rotation to Photoshop-style 15 degree increments', () => {
-		expect(studioRotationForGesture(22, true)).toBe(15);
-		expect(studioRotationForGesture(23, true)).toBe(30);
-		expect(studioRotationForGesture(-38, true)).toBe(-45);
-		expect(studioRotationForGesture(22, false)).toBe(22);
-	});
-
 	it('keeps cover pixels flush with a resized frame', () => {
 		const geometry = computeImageGeometry(imageLayer(1200, 1200), 1920, 1080);
 
@@ -124,6 +116,65 @@ describe('Studio image geometry', () => {
 			expect(imageObject.scaleX).toBeCloseTo(imageObject.scaleY);
 		}
 	);
+});
+
+describe('Studio rotation gestures', () => {
+	it('configures snapping before Fabric calculates the angle without rewriting the live angle', () => {
+		const adapter = new OpenPostFabricAdapter({
+			canvas: {} as HTMLCanvasElement,
+			document: { width_px: 1080, height_px: 1080 } as StudioDocument,
+			page: {
+				id: 'page',
+				name: 'Page 1',
+				background_color: '#ffffff',
+				layers: []
+			},
+			readOnly: false,
+			onSelection: () => undefined,
+			onTransform: () => undefined,
+			onTextChange: () => undefined
+		});
+		const handlers = new Map<string, (event: unknown) => void>();
+		const target = { angle: 22, snapAngle: undefined, snapThreshold: undefined };
+		const canvas = {
+			on(eventName: string, handler: (event: unknown) => void) {
+				handlers.set(eventName, handler);
+			},
+			getActiveObject() {
+				return target;
+			}
+		};
+		const internals = adapter as unknown as {
+			canvas: typeof canvas;
+			bindEvents(): void;
+		};
+		internals.canvas = canvas;
+		internals.bindEvents();
+		const dispatch = (eventName: string, event: unknown) => {
+			const handler = handlers.get(eventName);
+			if (!handler) throw new Error(`Missing Fabric event handler: ${eventName}`);
+			handler(event);
+		};
+
+		dispatch('mouse:move:before', {
+			e: { shiftKey: true },
+			transform: { action: 'rotate', target }
+		});
+		expect(target).toMatchObject({ angle: 22, snapAngle: 15, snapThreshold: 7.5 });
+
+		dispatch('object:rotating', { e: { shiftKey: true }, target });
+		expect(target.angle).toBe(22);
+
+		dispatch('mouse:move:before', {
+			e: { shiftKey: false },
+			transform: { action: 'rotate', target }
+		});
+		expect(target).toMatchObject({
+			angle: 22,
+			snapAngle: undefined,
+			snapThreshold: undefined
+		});
+	});
 });
 
 describe('Studio layer render order', () => {

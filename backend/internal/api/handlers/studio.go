@@ -104,6 +104,9 @@ type StudioImageAdjustments struct {
 	Contrast    float64 `json:"contrast"`
 	Saturation  float64 `json:"saturation"`
 	Temperature float64 `json:"temperature"`
+	Tint        float64 `json:"tint"`
+	Vibrance    float64 `json:"vibrance"`
+	Hue         float64 `json:"hue"`
 	Exposure    float64 `json:"exposure"`
 	Highlights  float64 `json:"highlights"`
 	Shadows     float64 `json:"shadows"`
@@ -144,6 +147,18 @@ type StudioPaintSpan struct {
 	Y     float64 `json:"y"`
 	X     float64 `json:"x"`
 	Width float64 `json:"width"`
+}
+
+type StudioEraseStroke struct {
+	Size   float64            `json:"size" minimum:"1" maximum:"512"`
+	Points []StudioPaintPoint `json:"points"`
+}
+
+type StudioEraseMask struct {
+	SourceWidth  float64             `json:"source_width" minimum:"1"`
+	SourceHeight float64             `json:"source_height" minimum:"1"`
+	Strokes      []StudioEraseStroke `json:"strokes"`
+	Spans        []StudioPaintSpan   `json:"spans"`
 }
 
 type StudioGradientStop struct {
@@ -214,6 +229,7 @@ type StudioLayer struct {
 	Paint     *StudioPaintValue   `json:"paint,omitempty"`
 	Effects   *StudioLayerEffects `json:"effects,omitempty"`
 	Mask      *StudioLayerMask    `json:"mask,omitempty"`
+	EraseMask *StudioEraseMask    `json:"erase_mask,omitempty"`
 }
 
 type StudioPagePayload struct {
@@ -1564,6 +1580,14 @@ func validateStudioLayer(layer StudioLayer) error {
 			return fmt.Errorf("studio layer mask is invalid")
 		}
 	}
+	if layer.EraseMask != nil {
+		if layer.Type != "image" && layer.Type != "paint" {
+			return fmt.Errorf("only image and paint layers can include erase masks")
+		}
+		if err := validateStudioEraseMask(layer.EraseMask); err != nil {
+			return err
+		}
+	}
 	if layer.Effects != nil {
 		if !oneOfStudioString(layer.Effects.BlendMode, "normal", "multiply", "screen", "overlay", "darken", "lighten", "soft_light") {
 			return fmt.Errorf("studio layer blend mode is invalid")
@@ -1644,6 +1668,9 @@ func validateStudioLayer(layer StudioLayer) error {
 			adjustments.Contrast,
 			adjustments.Saturation,
 			adjustments.Temperature,
+			adjustments.Tint,
+			adjustments.Vibrance,
+			adjustments.Hue,
 			adjustments.Exposure,
 			adjustments.Highlights,
 			adjustments.Shadows,
@@ -1710,11 +1737,52 @@ func validateStudioLayer(layer StudioLayer) error {
 			return fmt.Errorf("only gradient paint layers can include gradient properties")
 		}
 	case "group":
-		if layer.Text != nil || layer.Image != nil || layer.Shape != nil || layer.Paint != nil || layer.Effects != nil || layer.Mask != nil {
+		if layer.Text != nil || layer.Image != nil || layer.Shape != nil || layer.Paint != nil || layer.Effects != nil || layer.Mask != nil || layer.EraseMask != nil {
 			return fmt.Errorf("group layers cannot contain visual properties")
 		}
 	default:
 		return fmt.Errorf("unsupported Studio layer type")
+	}
+	return nil
+}
+
+//nolint:gocyclo // Erase-mask validation keeps all bounded raster limits at the API boundary.
+func validateStudioEraseMask(mask *StudioEraseMask) error {
+	if mask == nil {
+		return nil
+	}
+	if !finiteStudioNumber(mask.SourceWidth) ||
+		!finiteStudioNumber(mask.SourceHeight) ||
+		mask.SourceWidth <= 0 ||
+		mask.SourceHeight <= 0 ||
+		mask.SourceWidth > studioMaxDimension ||
+		mask.SourceHeight > studioMaxDimension ||
+		len(mask.Strokes) > 10_000 ||
+		len(mask.Spans) > 250_000 {
+		return fmt.Errorf("studio erase mask properties are invalid")
+	}
+	totalPoints := 0
+	for _, stroke := range mask.Strokes {
+		totalPoints += len(stroke.Points)
+		if !finiteStudioNumber(stroke.Size) ||
+			stroke.Size < 1 ||
+			stroke.Size > 512 ||
+			totalPoints > 100_000 {
+			return fmt.Errorf("studio erase mask strokes are invalid")
+		}
+		for _, point := range stroke.Points {
+			if !finiteStudioNumber(point.X) || !finiteStudioNumber(point.Y) {
+				return fmt.Errorf("studio erase mask points must be finite")
+			}
+		}
+	}
+	for _, span := range mask.Spans {
+		if !finiteStudioNumber(span.X) ||
+			!finiteStudioNumber(span.Y) ||
+			!finiteStudioNumber(span.Width) ||
+			span.Width <= 0 {
+			return fmt.Errorf("studio erase mask spans are invalid")
+		}
 	}
 	return nil
 }

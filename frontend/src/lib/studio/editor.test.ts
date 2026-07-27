@@ -266,4 +266,23 @@ describe('Studio editor layer interactions', () => {
 			editor.activePage?.layers.find((candidate) => candidate.id === imageID)?.erase_mask
 		).toBeUndefined();
 	});
+
+	it('subtracts magic erase pixels directly from paint spans', () => {
+		const editor = new StudioEditor();
+		editor.load(response());
+		const paintMask = new Uint8Array(1080 * 1080);
+		paintMask.fill(1, 40 * 1080 + 20, 40 * 1080 + 30);
+		editor.addPaintFill(paintMask);
+		const paint = editor.selectedLayers[0];
+		const eraseMask = new Uint8Array(10);
+		eraseMask.fill(1, 3, 7);
+
+		editor.addMagicErase(paint.id, 10, 1, eraseMask);
+
+		expect(editor.selectedLayers[0].paint?.spans).toEqual([
+			{ x: 0, y: 0, width: 3 },
+			{ x: 7, y: 0, width: 3 }
+		]);
+		expect(editor.selectedLayers[0].erase_mask).toBeUndefined();
+	});
 });

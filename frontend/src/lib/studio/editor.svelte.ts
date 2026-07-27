@@ -15,8 +15,11 @@ import {
 	combinePixelMasks,
 	intersectPixelMasks,
 	pixelMaskBounds,
+	pixelSpansToMask,
 	pixelMaskToSpans,
 	strokePixelMask,
+	subtractPixelMasks,
+	translatePixelMask,
 	mergeSelectionIDs,
 	type SelectionPoint,
 	type StudioPixelSelection
@@ -54,6 +57,7 @@ export class StudioEditor {
 	gradientType = $state<StudioGradientType>('linear');
 	gradientReverse = $state(false);
 	pencilSize = $state(12);
+	pencilRoughness = $state(0);
 	eraserSize = $state(32);
 	magicEraserTolerance = $state(32);
 	magicEraserContiguous = $state(true);
@@ -222,6 +226,24 @@ export class StudioEditor {
 		this.pixelSelection = null;
 	}
 
+	movePixelSelection(data: Uint8Array, deltaX: number, deltaY: number): void {
+		if (!this.pixelSelection) return;
+		const translated = translatePixelMask(
+			data,
+			this.pixelSelection.width,
+			this.pixelSelection.height,
+			deltaX,
+			deltaY
+		);
+		this.pixelSelection = pixelMaskBounds(
+			translated,
+			this.pixelSelection.width,
+			this.pixelSelection.height
+		)
+			? { ...this.pixelSelection, data: translated }
+			: null;
+	}
+
 	selectAll(): void {
 		if (
 			this.document &&
@@ -323,7 +345,8 @@ export class StudioEditor {
 			this.document.width_px,
 			this.document.height_px,
 			points,
-			this.pencilSize
+			this.pencilSize,
+			this.pencilRoughness
 		);
 		this.addPaintFill(
 			this.pixelSelection ? intersectPixelMasks(stroke, this.pixelSelection.data) : stroke,
@@ -346,6 +369,19 @@ export class StudioEditor {
 				.find((page) => page.id === this.activePageID)
 				?.layers.find((candidate) => candidate.id === id);
 			if (!target) return;
+			if (target.type === 'paint' && target.paint) {
+				const width = Math.max(1, Math.round(target.paint.source_width));
+				const height = Math.max(1, Math.round(target.paint.source_height));
+				const paintMask = pixelSpansToMask(target.paint.spans, width, height);
+				const eraseMask = strokePixelMask(width, height, points, size);
+				target.paint.spans = pixelMaskToSpans(
+					subtractPixelMasks(paintMask, eraseMask),
+					width,
+					height
+				);
+				target.erase_mask = undefined;
+				return;
+			}
 			const mask =
 				target.erase_mask?.source_width === sourceWidth &&
 				target.erase_mask.source_height === sourceHeight
@@ -379,6 +415,18 @@ export class StudioEditor {
 				.find((page) => page.id === this.activePageID)
 				?.layers.find((candidate) => candidate.id === id);
 			if (!target) return;
+			if (target.type === 'paint' && target.paint) {
+				const width = Math.max(1, Math.round(target.paint.source_width));
+				const height = Math.max(1, Math.round(target.paint.source_height));
+				const paintMask = pixelSpansToMask(target.paint.spans, width, height);
+				target.paint.spans = pixelMaskToSpans(
+					subtractPixelMasks(paintMask, maskData),
+					width,
+					height
+				);
+				target.erase_mask = undefined;
+				return;
+			}
 			const eraseMask =
 				target.erase_mask?.source_width === sourceWidth &&
 				target.erase_mask.source_height === sourceHeight
@@ -495,7 +543,10 @@ export class StudioEditor {
 		this.selectedLayerIDs = [layer.id];
 	}
 
-	addImage(media: { id: string; width?: number; height?: number; name?: string }): void {
+	addImage(
+		media: { id: string; width?: number; height?: number; name?: string },
+		center?: SelectionPoint
+	): void {
 		if (!this.document) return;
 		const hasIntrinsicSize = Boolean(media.width && media.height);
 		const sourceWidth = hasIntrinsicSize ? media.width! : 1;
@@ -518,8 +569,20 @@ export class StudioEditor {
 			transform: defaultTransform(
 				width,
 				height,
-				(this.document.width_px - width) / 2,
-				(this.document.height_px - height) / 2
+				Math.max(
+					-width * 0.5,
+					Math.min(
+						this.document.width_px - width * 0.5,
+						(center?.x ?? this.document.width_px / 2) - width / 2
+					)
+				),
+				Math.max(
+					-height * 0.5,
+					Math.min(
+						this.document.height_px - height * 0.5,
+						(center?.y ?? this.document.height_px / 2) - height / 2
+					)
+				)
 			),
 			image: {
 				media_id: media.id,

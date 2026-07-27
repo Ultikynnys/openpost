@@ -14,12 +14,18 @@
 		intersectPixelMasks,
 		magicPixelMask,
 		normalizeSelectionBounds,
+		pixelMaskContainsPoint,
 		polygonPixelMask,
 		rectanglePixelMask,
 		type SelectionBounds,
 		type SelectionPoint
 	} from '../selection';
 	import type { StudioGradientType, StudioSelectionMode, StudioSelectionTool } from '../types';
+	import {
+		containsStudioMediaDrag,
+		readStudioMediaDrag,
+		STUDIO_MEDIA_DRAG_TYPE
+	} from '../media-drag';
 
 	type AreaSelectionTool = Extract<StudioSelectionTool, 'marquee' | 'ellipse_marquee' | 'lasso'>;
 	type CanvasGestureTool = AreaSelectionTool | 'pencil' | 'eraser' | 'gradient';
@@ -31,6 +37,7 @@
 		points: SelectionPoint[];
 		mode: StudioSelectionMode;
 		targetLayerID?: string;
+		originalSelection?: Uint8Array;
 	}
 
 	const editor = useStudioEditor();
@@ -50,6 +57,8 @@
 	let magicPulse = $state<SelectionPoint | null>(null);
 	let selectionOverlay = $state<HTMLCanvasElement>();
 	let magicPulseTimer: ReturnType<typeof setTimeout> | undefined;
+	let mediaDropActive = $state(false);
+	let mediaDragDepth = 0;
 	let panStart = { x: 0, y: 0, panX: 0, panY: 0 };
 	const touchPointers = new SvelteMap<number, { x: number; y: number }>();
 	let pinchStart = { distance: 0, zoom: 1, centerX: 0, centerY: 0, panX: 0, panY: 0 };
@@ -221,10 +230,11 @@
 				!selection.data[index - selection.width] ||
 				!selection.data[index + selection.width];
 			const offset = index * 4;
-			image.data[offset] = 249;
-			image.data[offset + 1] = 115;
-			image.data[offset + 2] = 22;
-			image.data[offset + 3] = edge ? 220 : 30;
+			const light = (x + y) % 8 < 4;
+			image.data[offset] = light ? 255 : 0;
+			image.data[offset + 1] = light ? 255 : 0;
+			image.data[offset + 2] = light ? 255 : 0;
+			image.data[offset + 3] = edge ? 235 : 0;
 		}
 		context.putImageData(image, 0, 0);
 	});
@@ -268,7 +278,10 @@
 		return editor.selectionMode;
 	}
 
-	function documentPoint(event: PointerEvent, clampToCanvas = false): SelectionPoint | null {
+	function documentPoint(
+		event: Pick<PointerEvent, 'clientX' | 'clientY'>,
+		clampToCanvas = false
+	): SelectionPoint | null {
 		const stage = stageElement;
 		const document = editor.document;
 		if (!stage || !document) return null;
@@ -362,6 +375,32 @@
 		const mode = isAreaSelectionTool(tool)
 			? selectionModeForEvent(event, tool)
 			: editor.selectionMode;
+		if (
+			(tool === 'marquee' || tool === 'ellipse_marquee' || tool === 'lasso') &&
+			mode === 'replace' &&
+			editor.pixelSelection &&
+			pixelMaskContainsPoint(
+				editor.pixelSelection.data,
+				editor.pixelSelection.width,
+				editor.pixelSelection.height,
+				point
+			)
+		) {
+			selectionGesture = {
+				tool,
+				pointerID: event.pointerId,
+				start: point,
+				current: point,
+				points: [point],
+				mode,
+				originalSelection: editor.pixelSelection.data.slice()
+			};
+			if (event.currentTarget instanceof HTMLDivElement) {
+				event.currentTarget.setPointerCapture(event.pointerId);
+			}
+			event.preventDefault();
+			return true;
+		}
 		if (tool === 'magic_eraser') {
 			const targetLayerID = erasableTargetID(point);
 			const sampled = targetLayerID ? adapter.rasterizeLayerAtPoint(targetLayerID, point) : null;
@@ -449,7 +488,14 @@
 		if (!gesture || gesture.pointerID !== event.pointerId) return false;
 		let point = documentPoint(event, true);
 		if (!point) return false;
-		if (['marquee', 'ellipse_marquee'].includes(gesture.tool)) {
+		if (gesture.originalSelection) {
+			point = constrainGradientPoint(gesture.start, point, event);
+			editor.movePixelSelection(
+				gesture.originalSelection,
+				point.x - gesture.start.x,
+				point.y - gesture.start.y
+			);
+		} else if (['marquee', 'ellipse_marquee'].includes(gesture.tool)) {
 			point = constrainMarqueePoint(gesture.start, point, event);
 		} else if (gesture.tool === 'gradient') {
 			point = constrainGradientPoint(gesture.start, point, event);
@@ -472,7 +518,23 @@
 		const gesture = selectionGesture;
 		if (!gesture || gesture.pointerID !== event.pointerId) return false;
 		let point = documentPoint(event, true) ?? gesture.current;
-		if (['marquee', 'ellipse_marquee'].includes(gesture.tool)) {
+		if (gesture.originalSelection) {
+			point = constrainGradientPoint(gesture.start, point, event);
+			editor.movePixelSelection(
+				gesture.originalSelection,
+				point.x - gesture.start.x,
+				point.y - gesture.start.y
+			);
+			selectionGesture = null;
+			if (
+				event.currentTarget instanceof HTMLDivElement &&
+				event.currentTarget.hasPointerCapture(event.pointerId)
+			) {
+				event.currentTarget.releasePointerCapture(event.pointerId);
+			}
+			event.preventDefault();
+			return true;
+		} else if (['marquee', 'ellipse_marquee'].includes(gesture.tool)) {
 			point = constrainMarqueePoint(gesture.start, point, event);
 		} else if (gesture.tool === 'gradient') {
 			point = constrainGradientPoint(gesture.start, point, event);
@@ -605,6 +667,36 @@
 			editor.panX -= event.deltaX || event.deltaY;
 			editor.panY -= event.deltaY;
 		}
+	}
+
+	function handleMediaDragEnter(event: DragEvent): void {
+		if (!containsStudioMediaDrag(event.dataTransfer)) return;
+		event.preventDefault();
+		mediaDragDepth += 1;
+		mediaDropActive = true;
+	}
+
+	function handleMediaDragOver(event: DragEvent): void {
+		if (!containsStudioMediaDrag(event.dataTransfer)) return;
+		event.preventDefault();
+		if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy';
+		mediaDropActive = true;
+	}
+
+	function handleMediaDragLeave(event: DragEvent): void {
+		if (!containsStudioMediaDrag(event.dataTransfer)) return;
+		mediaDragDepth = Math.max(0, mediaDragDepth - 1);
+		if (mediaDragDepth === 0) mediaDropActive = false;
+	}
+
+	function handleMediaDrop(event: DragEvent): void {
+		const payload = readStudioMediaDrag(event.dataTransfer);
+		mediaDragDepth = 0;
+		mediaDropActive = false;
+		if (!payload || !editor.canEdit) return;
+		event.preventDefault();
+		const point = documentPoint(event);
+		if (point) editor.addImage(payload, point);
 	}
 
 	function startPan(event: PointerEvent): void {
@@ -760,6 +852,10 @@
 	onpointermovecapture={movePasteboardPointer}
 	onpointerupcapture={stopPasteboardPointer}
 	onpointercancelcapture={cancelPasteboardPointer}
+	ondragenter={handleMediaDragEnter}
+	ondragover={handleMediaDragOver}
+	ondragleave={handleMediaDragLeave}
+	ondrop={handleMediaDrop}
 	role="application"
 	aria-label={m.studio_design_canvas()}
 >
@@ -947,6 +1043,26 @@
 						/>
 					</label>
 				{/if}
+				{#if editor.activeTool === 'pencil'}
+					<label class="flex min-w-40 items-center gap-2 px-1 text-xs">
+						<span class="whitespace-nowrap">
+							{m.studio_pencil_roughness({
+								value: Math.round(editor.pencilRoughness * 100)
+							})}
+						</span>
+						<Slider
+							value={Math.round(editor.pencilRoughness * 100)}
+							min={0}
+							max={100}
+							step={1}
+							class="w-20"
+							ariaLabel={m.studio_pencil_roughness({
+								value: Math.round(editor.pencilRoughness * 100)
+							})}
+							onValueChange={(value) => (editor.pencilRoughness = value / 100)}
+						/>
+					</label>
+				{/if}
 				{#if ['pencil', 'bucket', 'gradient'].includes(editor.activeTool)}
 					<label class="flex min-w-34 items-center gap-2 px-1 text-xs">
 						<span class="whitespace-nowrap">
@@ -1013,7 +1129,19 @@
 					data-active={editor.pixelSelection ? 'true' : 'false'}
 					aria-hidden="true"
 				></canvas>
-				{#if selectionGesture}
+				{#if mediaDropActive}
+					<div
+						class="pointer-events-none absolute inset-0 z-30 grid place-items-center rounded-sm bg-primary/12 ring-4 ring-primary ring-inset"
+						data-testid="studio-media-drop-target"
+					>
+						<span
+							class="rounded-full border border-white/15 bg-neutral-950/90 px-4 py-2 text-sm font-semibold text-white shadow-xl backdrop-blur"
+						>
+							{m.studio_drop_to_place()}
+						</span>
+					</div>
+				{/if}
+				{#if selectionGesture && !selectionGesture.originalSelection}
 					<svg
 						class="pointer-events-none absolute inset-0 z-20 size-full overflow-visible"
 						viewBox={`0 0 ${editor.document.width_px} ${editor.document.height_px}`}

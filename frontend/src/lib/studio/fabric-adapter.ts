@@ -18,6 +18,8 @@ type FabricObject = InstanceType<FabricModule['FabricObject']> & {
 	__studioObjectURL?: string;
 	__studioSourceWidth?: number;
 	__studioSourceHeight?: number;
+	snapAngle?: number;
+	snapThreshold?: number;
 };
 type FabricTextObject = FabricObject & {
 	text?: string;
@@ -60,9 +62,14 @@ interface FabricAdapterOptions {
 }
 
 const SNAP_SCREEN_PX = 7;
+const ROTATION_SNAP_ANGLE = 15;
 
-export function studioRotationForGesture(angle: number, constrain: boolean): number {
-	return constrain ? Math.round(angle / 15) * 15 : angle;
+function applyStudioRotationConstraint(
+	target: { snapAngle?: number; snapThreshold?: number },
+	constrain: boolean
+): void {
+	target.snapAngle = constrain ? ROTATION_SNAP_ANGLE : undefined;
+	target.snapThreshold = constrain ? ROTATION_SNAP_ANGLE / 2 : undefined;
 }
 
 export function studioLayerRenderOrder(layers: StudioLayer[]): StudioLayer[] {
@@ -138,6 +145,7 @@ export class OpenPostFabricAdapter {
 	private onTextEditingChange: NonNullable<FabricAdapterOptions['onTextEditingChange']>;
 	private onImageDimensions: NonNullable<FabricAdapterOptions['onImageDimensions']>;
 	private altDuplicatePending = false;
+	private altOriginGhost: FabricObject | null = null;
 
 	constructor(options: FabricAdapterOptions) {
 		this.element = options.canvas;
@@ -492,6 +500,8 @@ export class OpenPostFabricAdapter {
 	setSelection(ids: string[]): void {
 		this.desiredSelectionIDs = [...ids];
 		if (this.syncing) return;
+		const current = this.selectedIDs();
+		if (current.length === ids.length && current.every((id, index) => id === ids[index])) return;
 		this.restoreSelection(ids);
 	}
 
@@ -507,6 +517,7 @@ export class OpenPostFabricAdapter {
 		this.objectByLayerID.clear();
 		this.decorationsByLayerID.clear();
 		this.layerSnapshots.clear();
+		this.clearAltOriginGhost();
 		this.canvas?.dispose();
 		this.canvas = null;
 		this.fabric = null;
@@ -523,8 +534,32 @@ export class OpenPostFabricAdapter {
 				pointerEvent.altKey &&
 				Boolean(event.target);
 		});
+		canvas.on('mouse:move:before', (event) => {
+			if (event.transform?.action !== 'rotate') return;
+			applyStudioRotationConstraint(
+				event.transform.target as FabricObject,
+				(event.e as MouseEvent).shiftKey
+			);
+		});
+		canvas.on('mouse:down', (event) => {
+			const pointerEvent = event.e as MouseEvent;
+			const target = event.target as FabricObject | undefined;
+			if (
+				this.interactionTool !== 'select' ||
+				pointerEvent.button !== 0 ||
+				!pointerEvent.altKey ||
+				!target
+			) {
+				return;
+			}
+			this.altDuplicatePending = true;
+			this.createAltOriginGhost(target);
+		});
 		canvas.on('mouse:up', () => {
+			const activeObject = canvas.getActiveObject() as FabricObject | undefined;
+			if (activeObject) applyStudioRotationConstraint(activeObject, false);
 			queueMicrotask(() => {
+				this.clearAltOriginGhost();
 				this.altDuplicatePending = false;
 			});
 		});
@@ -541,10 +576,6 @@ export class OpenPostFabricAdapter {
 		);
 		canvas.on('object:rotating', (event) => {
 			const target = event.target as FabricObject;
-			if ((event.e as MouseEvent).shiftKey) {
-				target.angle = studioRotationForGesture(target.angle ?? 0, true);
-				target.setCoords();
-			}
 			this.syncDecorationTransform(target);
 		});
 		canvas.on('object:modified', (event) => {
@@ -555,6 +586,7 @@ export class OpenPostFabricAdapter {
 				this.interactionTool === 'select' &&
 				(this.altDuplicatePending || Boolean(pointerEvent?.altKey))
 			) {
+				this.clearAltOriginGhost();
 				this.onAltDuplicate(this.transformEntries(target));
 				this.altDuplicatePending = false;
 			} else {
@@ -564,6 +596,38 @@ export class OpenPostFabricAdapter {
 		canvas.on('text:changed', (event) => this.emitTextChange(event.target as FabricTextObject));
 		canvas.on('text:editing:entered', () => this.onTextEditingChange(true));
 		canvas.on('text:editing:exited', () => this.onTextEditingChange(false));
+	}
+
+	private createAltOriginGhost(target: FabricObject): void {
+		if (!this.fabric) return;
+		const canvas = this.interactiveCanvas();
+		if (!canvas) return;
+		this.clearAltOriginGhost();
+		const bounds = target.getBoundingRect();
+		const snapshot = target.toCanvasElement({
+			withoutShadow: false,
+			enableRetinaScaling: false
+		});
+		const ghost = new this.fabric.FabricImage(snapshot, {
+			left: bounds.left,
+			top: bounds.top,
+			originX: 'left',
+			originY: 'top',
+			selectable: false,
+			evented: false,
+			opacity: target.opacity,
+			excludeFromExport: true
+		}) as FabricObject;
+		const targetIndex = Math.max(0, canvas.getObjects().indexOf(target));
+		canvas.insertAt(targetIndex, ghost);
+		this.altOriginGhost = ghost;
+		canvas.requestRenderAll();
+	}
+
+	private clearAltOriginGhost(): void {
+		if (!this.altOriginGhost) return;
+		this.canvas?.remove(this.altOriginGhost);
+		this.altOriginGhost = null;
 	}
 
 	private flushPendingTextEditing(): void {

@@ -8,11 +8,15 @@ import {
 	mergeSelectionIDs,
 	normalizeSelectionBounds,
 	pixelMaskBounds,
+	pixelMaskContainsPoint,
+	pixelSpansToMask,
 	pixelMaskToSpans,
 	pointInPolygon,
 	polygonIntersectsBounds,
 	rectanglePixelMask,
-	strokePixelMask
+	strokePixelMask,
+	subtractPixelMasks,
+	translatePixelMask
 } from './selection';
 
 describe('Studio area selection geometry', () => {
@@ -103,6 +107,64 @@ describe('Studio selection composition', () => {
 
 		expect(spans.length).toBeGreaterThan(0);
 		expect(spans.some((span) => span.width >= 7)).toBe(true);
+	});
+
+	it('adds deterministic edge texture to rough pencil strokes', () => {
+		const smooth = strokePixelMask(
+			32,
+			20,
+			[
+				{ x: 4, y: 10 },
+				{ x: 28, y: 10 }
+			],
+			9
+		);
+		const rough = strokePixelMask(
+			32,
+			20,
+			[
+				{ x: 4, y: 10 },
+				{ x: 28, y: 10 }
+			],
+			9,
+			1
+		);
+
+		expect(rough.reduce((total, value) => total + value, 0)).toBeLessThan(
+			smooth.reduce((total, value) => total + value, 0)
+		);
+		expect(rough).toEqual(
+			strokePixelMask(
+				32,
+				20,
+				[
+					{ x: 4, y: 10 },
+					{ x: 28, y: 10 }
+				],
+				9,
+				1
+			)
+		);
+	});
+
+	it('moves a pixel selection without leaving a stale copy', () => {
+		const original = rectanglePixelMask(8, 6, { x: 1, y: 1, width: 3, height: 2 });
+		const moved = translatePixelMask(original, 8, 6, 2, 1);
+
+		expect(pixelMaskContainsPoint(moved, 8, 6, { x: 3, y: 2 })).toBe(true);
+		expect(pixelMaskContainsPoint(moved, 8, 6, { x: 1, y: 1 })).toBe(false);
+		expect(moved.reduce((total, value) => total + value, 0)).toBe(6);
+	});
+
+	it('subtracts an erase mask from compact paint spans', () => {
+		const paint = pixelSpansToMask([{ x: 0, y: 1, width: 6 }], 6, 3);
+		const erase = rectanglePixelMask(6, 3, { x: 2, y: 0, width: 2, height: 3 });
+		const result = subtractPixelMasks(paint, erase);
+
+		expect(pixelMaskToSpans(result, 6, 3)).toEqual([
+			{ x: 0, y: 1, width: 2 },
+			{ x: 4, y: 1, width: 2 }
+		]);
 	});
 
 	it('matches flat colors using a normalized tolerance', () => {

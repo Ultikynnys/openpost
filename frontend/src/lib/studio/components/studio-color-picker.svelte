@@ -32,12 +32,14 @@
 
 	let open = $state(false);
 	let mode = $state<'hsl' | 'rgb'>('hsl');
-	let hex = $state('#000000');
-	let rgb = $state<StudioRGB>({ r: 0, g: 0, b: 0 });
-	let hsl = $state<StudioHSL>({ h: 0, s: 0, l: 0 });
+	let hex = $state('#ffffff');
+	let hexInput = $state('#FFFFFF');
+	let rgb = $state<StudioRGB>({ r: 255, g: 255, b: 255 });
+	let hsl = $state<StudioHSL>({ h: 0, s: 0, l: 100 });
 
 	function syncDraft(next: string): void {
-		hex = normalizeHex(next, '#000000');
+		hex = normalizeHex(next, hex);
+		hexInput = hex.toUpperCase();
 		rgb = hexToRGB(hex);
 		hsl = rgbToHSL(rgb);
 	}
@@ -49,19 +51,33 @@
 	}
 
 	function changeHSL(key: keyof StudioHSL, next: number, commit = false): void {
-		hsl = { ...hsl, [key]: next };
+		if (!Number.isFinite(next)) return;
+		const maximum = key === 'h' ? 360 : 100;
+		hsl = { ...hsl, [key]: Math.max(0, Math.min(maximum, next)) };
 		hex = hslToHex(hsl);
+		hexInput = hex.toUpperCase();
 		rgb = hexToRGB(hex);
 		onChange(hex);
 		if (commit) onCommit?.(hex);
 	}
 
 	function changeRGB(key: keyof StudioRGB, next: number, commit = false): void {
-		rgb = { ...rgb, [key]: next };
+		if (!Number.isFinite(next)) return;
+		rgb = { ...rgb, [key]: Math.max(0, Math.min(255, next)) };
 		hex = rgbToHex(rgb);
+		hexInput = hex.toUpperCase();
 		hsl = rgbToHSL(rgb);
 		onChange(hex);
 		if (commit) onCommit?.(hex);
+	}
+
+	function commitHex(): void {
+		const normalized = normalizeHex(hexInput, hex);
+		change(normalized, true);
+	}
+
+	function numericValue(event: Event): number {
+		return Number((event.currentTarget as HTMLInputElement).value);
 	}
 
 	async function pickFromScreen(): Promise<void> {
@@ -159,10 +175,17 @@
 
 		<div class="grid grid-cols-[1fr_auto] gap-2">
 			<Input
-				value={hex}
+				bind:value={hexInput}
 				class="h-9 font-mono uppercase"
 				aria-label={m.studio_hex_color()}
-				onchange={(event) => change(event.currentTarget.value, true)}
+				onchange={commitHex}
+				onkeydown={(event) => {
+					if (event.key === 'Enter') {
+						event.preventDefault();
+						commitHex();
+						event.currentTarget.select();
+					}
+				}}
 			/>
 			<div class="flex rounded-md bg-muted p-0.5">
 				{#each ['hsl', 'rgb'] as colorMode (colorMode)}
@@ -194,17 +217,16 @@
 							trackClass={key === 'h'
 								? '[background:linear-gradient(90deg,#ef4444,#eab308,#22c55e,#06b6d4,#3b82f6,#a855f7,#ef4444)]'
 								: ''}
+							rangeClass={key === 'h' ? 'bg-transparent' : ''}
 							onValueChange={(next) => changeHSL(key as keyof StudioHSL, next)}
 							onValueCommit={(next) => changeHSL(key as keyof StudioHSL, next, true)}
 						/>
 						<Input
-							type="number"
-							min="0"
-							{max}
+							type="text"
+							inputmode="numeric"
 							value={Math.round(hsl[key as keyof StudioHSL])}
 							class="h-8 px-1.5 text-right text-xs"
-							onchange={(event) =>
-								changeHSL(key as keyof StudioHSL, Number(event.currentTarget.value), true)}
+							onchange={(event) => changeHSL(key as keyof StudioHSL, numericValue(event), true)}
 						/>
 					</label>
 				{/each}
@@ -224,13 +246,11 @@
 							onValueCommit={(next) => changeRGB(key as keyof StudioRGB, next, true)}
 						/>
 						<Input
-							type="number"
-							min="0"
-							max="255"
+							type="text"
+							inputmode="numeric"
 							value={Math.round(rgb[key as keyof StudioRGB])}
 							class="h-8 px-1.5 text-right text-xs"
-							onchange={(event) =>
-								changeRGB(key as keyof StudioRGB, Number(event.currentTarget.value), true)}
+							onchange={(event) => changeRGB(key as keyof StudioRGB, numericValue(event), true)}
 						/>
 					</label>
 				{/each}

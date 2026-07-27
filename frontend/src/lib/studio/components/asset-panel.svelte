@@ -16,6 +16,7 @@
 	import ImagePlusIcon from 'lucide-svelte/icons/image-plus';
 	import ReplaceIcon from 'lucide-svelte/icons/replace';
 	import { m } from '$lib/paraglide/messages';
+	import { writeStudioMediaDrag, type StudioMediaDragPayload } from '../media-drag';
 
 	const editor = useStudioEditor();
 	let media = $state<StudioMediaItem[]>([]);
@@ -26,6 +27,7 @@
 	let pickerOpen = $state(false);
 	let replaceMode = $state(false);
 	let loadedWorkspaceID = '';
+	let dragPreview: HTMLElement | null = null;
 
 	$effect(() => {
 		const workspaceID = editor.workspaceID;
@@ -91,6 +93,34 @@
 
 	function addBrandAsset(asset: NonNullable<StudioBrandKit>['assets'][number]): void {
 		editor.addImage({ id: asset.media_id, name: asset.name || asset.role });
+	}
+
+	function startMediaDrag(
+		event: DragEvent,
+		payload: StudioMediaDragPayload,
+		previewURL: string
+	): void {
+		if (!event.dataTransfer || !editor.canEdit) return;
+		writeStudioMediaDrag(event.dataTransfer, payload);
+		const preview = document.createElement('div');
+		preview.style.cssText =
+			'position:fixed;left:-9999px;top:-9999px;display:grid;width:176px;overflow:hidden;border:1px solid rgb(255 255 255 / .22);border-radius:14px;background:#171717;color:white;box-shadow:0 18px 50px rgb(0 0 0 / .4);transform:rotate(2deg);font:600 12px system-ui;';
+		const image = document.createElement('img');
+		image.src = previewURL;
+		image.alt = '';
+		image.style.cssText = 'display:block;width:176px;height:112px;object-fit:cover;';
+		const label = document.createElement('span');
+		label.textContent = m.studio_drag_to_place();
+		label.style.cssText = 'padding:9px 11px;border-top:1px solid rgb(255 255 255 / .12);';
+		preview.append(image, label);
+		document.body.append(preview);
+		dragPreview = preview;
+		event.dataTransfer.setDragImage(preview, 88, 72);
+	}
+
+	function finishMediaDrag(): void {
+		dragPreview?.remove();
+		dragPreview = null;
 	}
 </script>
 
@@ -166,6 +196,14 @@
 								type="button"
 								class="group overflow-hidden rounded-md border bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
 								onclick={() => addBrandAsset(asset)}
+								draggable={editor.canEdit}
+								ondragstart={(event) =>
+									startMediaDrag(
+										event,
+										{ id: asset.media_id, name: asset.name || asset.role },
+										getAuthenticatedMediaURL(`/media/${asset.media_id}/thumb/md`)
+									)}
+								ondragend={finishMediaDrag}
 								disabled={!editor.canEdit}
 								title={asset.name || asset.role}
 							>
@@ -193,6 +231,19 @@
 											type="button"
 											class="group overflow-hidden rounded-md border bg-muted text-left focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
 											onclick={() => addMedia(item)}
+											draggable={editor.canEdit}
+											ondragstart={(event) =>
+												startMediaDrag(
+													event,
+													{
+														id: item.id,
+														name: item.original_filename,
+														width: item.width,
+														height: item.height
+													},
+													getAuthenticatedMediaURL(item.thumbnail_url || item.url)
+												)}
+											ondragend={finishMediaDrag}
 											disabled={!editor.canEdit}
 										>
 											<img
