@@ -226,10 +226,12 @@ test("analytics keeps provider metrics distinct across desktop and phone layouts
   await expect(launch.getByText("8.8K")).toBeVisible();
   await expect(walkthrough.getByText("5.1K")).toBeVisible();
   await expect(walkthrough.getByText("—", { exact: true })).toBeVisible();
-  await walkthrough.getByRole("button", { name: "Show details" }).click();
+  await walkthrough
+    .getByRole("button", { name: "Show platform details" })
+    .click();
   await expect(walkthrough.getByText("OpenPost")).toBeVisible();
   await expect(
-    walkthrough.getByRole("button", { name: "Hide details" }),
+    walkthrough.getByRole("button", { name: "Hide platform details" }),
   ).toBeVisible();
   await expect(
     page.getByText("Two measurements are needed to show a trend."),
@@ -242,7 +244,11 @@ test("analytics keeps provider metrics distinct across desktop and phone layouts
   await expect(
     page.getByRole("button", { name: /All accounts/ }),
   ).toHaveAttribute("aria-pressed", "true");
-  await expect(page.getByText("Reconnect required").first()).toBeVisible();
+  await expect(
+    page.getByText(
+      "@video: Reconnect this account to grant: user.info.stats.",
+    ),
+  ).toBeVisible();
   await page.getByRole("button", { name: /7 days/ }).click();
   await expect.poll(() => requestedRanges.at(-1)).toBe("7");
 

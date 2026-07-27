@@ -15,7 +15,7 @@ describe('AppSelect', () => {
 			onValueChange
 		});
 
-		const trigger = screen.getByRole('combobox', { name: 'Export format' });
+		const trigger = screen.getByRole('button', { name: 'Export format' });
 		await expect.element(trigger).toHaveTextContent('PNG');
 		await trigger.click();
 		await screen.getByRole('option', { name: 'WebP' }).click();

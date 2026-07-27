@@ -176,7 +176,7 @@ test("communications and notifications stay usable across desktop and phone layo
   await expect(
     page.getByRole("link", { name: "Open post on YouTube" }),
   ).toHaveAttribute("href", "https://www.youtube.com/watch?v=walkthrough-1");
-  await page.getByRole("combobox", { name: "All platforms" }).click();
+  await page.getByRole("button", { name: "All platforms" }).click();
   await page.getByRole("option", { name: "YouTube" }).click();
   await expect(
     page.getByText("Could you share the setup guide?"),
