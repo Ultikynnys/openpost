@@ -1771,9 +1771,6 @@
 					"last_message_preview",
 					"last_remote_message_id",
 					"unread_count",
-					"read_at",
-					"archived_at",
-					"messaging_window_expires_at",
 					"created_at",
 					"updated_at"
 				],
@@ -3321,9 +3318,6 @@
 					"can_hide",
 					"can_delete",
 					"hidden",
-					"read_at",
-					"archived_at",
-					"remote_created_at",
 					"last_seen_at",
 					"created_at",
 					"updated_at"
@@ -8126,6 +8120,54 @@
 				],
 				"type": "object"
 			},
+			"StudioEraseMask": {
+				"additionalProperties": false,
+				"properties": {
+					"source_height": {
+						"format": "double",
+						"minimum": 1,
+						"type": "number"
+					},
+					"source_width": {
+						"format": "double",
+						"minimum": 1,
+						"type": "number"
+					},
+					"spans": {
+						"items": {
+							"$ref": "#/components/schemas/StudioPaintSpan"
+						},
+						"type": ["array", "null"]
+					},
+					"strokes": {
+						"items": {
+							"$ref": "#/components/schemas/StudioEraseStroke"
+						},
+						"type": ["array", "null"]
+					}
+				},
+				"required": ["source_width", "source_height", "strokes", "spans"],
+				"type": "object"
+			},
+			"StudioEraseStroke": {
+				"additionalProperties": false,
+				"properties": {
+					"points": {
+						"items": {
+							"$ref": "#/components/schemas/StudioPaintPoint"
+						},
+						"type": ["array", "null"]
+					},
+					"size": {
+						"format": "double",
+						"maximum": 512,
+						"minimum": 1,
+						"type": "number"
+					}
+				},
+				"required": ["size", "points"],
+				"type": "object"
+			},
 			"StudioExportDefaults": {
 				"additionalProperties": false,
 				"properties": {
@@ -8208,6 +8250,10 @@
 						"format": "double",
 						"type": "number"
 					},
+					"hue": {
+						"format": "double",
+						"type": "number"
+					},
 					"saturation": {
 						"format": "double",
 						"type": "number"
@@ -8219,6 +8265,14 @@
 					"temperature": {
 						"format": "double",
 						"type": "number"
+					},
+					"tint": {
+						"format": "double",
+						"type": "number"
+					},
+					"vibrance": {
+						"format": "double",
+						"type": "number"
 					}
 				},
 				"required": [
@@ -8226,6 +8280,9 @@
 					"contrast",
 					"saturation",
 					"temperature",
+					"tint",
+					"vibrance",
+					"hue",
 					"exposure",
 					"highlights",
 					"shadows",
@@ -8269,6 +8326,9 @@
 				"properties": {
 					"effects": {
 						"$ref": "#/components/schemas/StudioLayerEffects"
+					},
+					"erase_mask": {
+						"$ref": "#/components/schemas/StudioEraseMask"
 					},
 					"id": {
 						"type": "string"

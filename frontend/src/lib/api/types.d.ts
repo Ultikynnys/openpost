@@ -3146,7 +3146,7 @@ export interface components {
         };
         Conversation: {
             /** Format: date-time */
-            archived_at: string;
+            archived_at?: string;
             counterpart_avatar_url: string;
             counterpart_handle: string;
             counterpart_name: string;
@@ -3159,10 +3159,10 @@ export interface components {
             last_message_preview: string;
             last_remote_message_id: string;
             /** Format: date-time */
-            messaging_window_expires_at: string;
+            messaging_window_expires_at?: string;
             platform: string;
             /** Format: date-time */
-            read_at: string;
+            read_at?: string;
             remote_conversation_id: string;
             social_account_id: string;
             /** Format: int64 */
@@ -3898,7 +3898,7 @@ export interface components {
         };
         EngagementItem: {
             /** Format: date-time */
-            archived_at: string;
+            archived_at?: string;
             author_avatar_url: string;
             author_handle: string;
             author_name: string;
@@ -3919,9 +3919,9 @@ export interface components {
             platform: string;
             provider_post_url?: string;
             /** Format: date-time */
-            read_at: string;
+            read_at?: string;
             /** Format: date-time */
-            remote_created_at: string;
+            remote_created_at?: string;
             remote_id: string;
             rendition_id: string;
             social_account_id: string;
@@ -6038,6 +6038,19 @@ export interface components {
             updated_at: string;
             workspace_id: string;
         };
+        StudioEraseMask: {
+            /** Format: double */
+            source_height: number;
+            /** Format: double */
+            source_width: number;
+            spans: components["schemas"]["StudioPaintSpan"][] | null;
+            strokes: components["schemas"]["StudioEraseStroke"][] | null;
+        };
+        StudioEraseStroke: {
+            points: components["schemas"]["StudioPaintPoint"][] | null;
+            /** Format: double */
+            size: number;
+        };
         StudioExportDefaults: {
             /** @enum {string} */
             format: "png" | "jpeg" | "webp";
@@ -6069,11 +6082,17 @@ export interface components {
             /** Format: double */
             highlights: number;
             /** Format: double */
+            hue: number;
+            /** Format: double */
             saturation: number;
             /** Format: double */
             shadows: number;
             /** Format: double */
             temperature: number;
+            /** Format: double */
+            tint: number;
+            /** Format: double */
+            vibrance: number;
         };
         StudioImageValue: {
             adjustments: components["schemas"]["StudioImageAdjustments"];
@@ -6089,6 +6108,7 @@ export interface components {
         };
         StudioLayer: {
             effects?: components["schemas"]["StudioLayerEffects"];
+            erase_mask?: components["schemas"]["StudioEraseMask"];
             id: string;
             image?: components["schemas"]["StudioImageValue"];
             locked: boolean;
