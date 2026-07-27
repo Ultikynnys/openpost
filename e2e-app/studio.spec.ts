@@ -46,6 +46,64 @@ test("Studio creates from an original template, adapts to mobile, and exports to
     page.getByRole("treeitem", { name: /A clear update, text/ }),
   ).toBeVisible();
 
+  const designCanvas = page.getByRole("application", {
+    name: "Design canvas",
+  });
+  const stage = page.getByTestId("studio-stage");
+  const [canvasBox, stageBox] = await Promise.all([
+    designCanvas.boundingBox(),
+    stage.boundingBox(),
+  ]);
+  if (!canvasBox || !stageBox) {
+    throw new Error("Studio canvas did not produce measurable bounds");
+  }
+
+  await page.getByRole("treeitem", { name: /A clear update, text/ }).click();
+  await expect(
+    page.getByRole("treeitem", { name: /A clear update, text/ }),
+  ).toHaveAttribute("aria-selected", "true");
+  const headlinePoint = {
+    x: stageBox.x + stageBox.width * 0.35,
+    y: stageBox.y + stageBox.height * 0.4,
+  };
+  await page.keyboard.down("Alt");
+  await page.mouse.move(headlinePoint.x, headlinePoint.y);
+  await page.mouse.down();
+  await page.mouse.move(headlinePoint.x + 60, headlinePoint.y + 24, {
+    steps: 6,
+  });
+  await page.mouse.up();
+  await page.keyboard.up("Alt");
+  await expect(
+    page.getByRole("treeitem", { name: /A clear update copy, text/ }),
+  ).toBeVisible();
+  await page.keyboard.press("Control+z");
+  await expect(
+    page.getByRole("treeitem", { name: /A clear update copy, text/ }),
+  ).toHaveCount(0);
+
+  await page.getByRole("treeitem", { name: /A clear update, text/ }).click();
+  await page.mouse.click(canvasBox.x + 8, canvasBox.y + canvasBox.height / 2);
+  await expect(page.getByRole("treeitem", { selected: true })).toHaveCount(0);
+
+  const stagePosition = () =>
+    stage.evaluate(
+      (element) =>
+        (element.parentElement as HTMLElement | null)?.style.transform ?? "",
+    );
+  const panBefore = await stagePosition();
+  await page.keyboard.down("Space");
+  await page.mouse.move(canvasBox.x + 12, canvasBox.y + canvasBox.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(
+    canvasBox.x + 72,
+    canvasBox.y + canvasBox.height / 2 + 36,
+    { steps: 5 },
+  );
+  await page.mouse.up();
+  await page.keyboard.up("Space");
+  await expect.poll(stagePosition).not.toBe(panBefore);
+
   await page.getByRole("treeitem", { name: /A clear update, text/ }).click();
   const curveSelect = page.getByRole("button", { name: "Text curve" });
   await curveSelect.click();
@@ -113,15 +171,14 @@ test("Studio creates from an original template, adapts to mobile, and exports to
   ).toHaveText("Outside");
 
   await page.getByRole("treeitem", { name: /A clear update, text/ }).click();
-  await expect(
-    page.getByRole("button", { name: "Text curve" }),
-  ).toHaveText("Wave");
+  await expect(page.getByRole("button", { name: "Text curve" })).toHaveText(
+    "Wave",
+  );
   await expect(
     page.getByRole("button", { name: "Remove drop shadow" }),
   ).toBeVisible();
 
-  await page.getByRole("button", { name: "Select pixels" }).click();
-  await page.getByRole("menuitem", { name: /Magic select/ }).click();
+  await page.getByRole("button", { name: "Magic select" }).click();
   await expect(
     page.getByTestId("studio-selection-options").getByText("Tolerance 32"),
   ).toBeVisible();
@@ -314,7 +371,7 @@ test("Studio creates from an original template, adapts to mobile, and exports to
 
   await page.keyboard.press("l");
   await expect(
-    page.getByRole("button", { name: "Lasso select" }),
+    page.getByRole("button", { name: "Lasso select", pressed: true }),
   ).toBeVisible();
   const lassoBounds = await selectionSurface.boundingBox();
   if (!lassoBounds)
@@ -395,12 +452,18 @@ test("Studio creates from an original template, adapts to mobile, and exports to
   ).toBeVisible();
   await page.getByRole("button", { name: "Select objects" }).click();
   await expect(
-    page.getByRole("menuitem", { name: "Magic select" }),
-  ).not.toBeVisible();
+    page.getByRole("button", { name: "Magic select" }),
+  ).toBeVisible();
   await page.getByRole("button", { name: "Select pixels" }).click();
   await expect(
-    page.getByRole("menuitem", { name: "Magic select" }),
+    page.getByRole("menuitem", { name: "Rectangle select" }),
   ).toBeVisible();
+  await expect(
+    page.getByRole("menuitem", { name: "Ellipse select" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("menuitem", { name: "Magic select" }),
+  ).toHaveCount(0);
   await page.keyboard.press("Escape");
 
   await page.getByRole("button", { name: "Text", exact: true }).click();

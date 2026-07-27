@@ -22,7 +22,7 @@
 	import type { StudioGradientType, StudioSelectionMode, StudioSelectionTool } from '../types';
 
 	type AreaSelectionTool = Extract<StudioSelectionTool, 'marquee' | 'ellipse_marquee' | 'lasso'>;
-	type CanvasGestureTool = AreaSelectionTool | 'pencil' | 'gradient';
+	type CanvasGestureTool = AreaSelectionTool | 'pencil' | 'eraser' | 'gradient';
 	interface SelectionGesture {
 		tool: CanvasGestureTool;
 		pointerID: number;
@@ -30,6 +30,7 @@
 		current: SelectionPoint;
 		points: SelectionPoint[];
 		mode: StudioSelectionMode;
+		targetLayerID?: string;
 	}
 
 	const editor = useStudioEditor();
@@ -42,6 +43,7 @@
 	let canvasError = $state('');
 	let canvasAttempt = $state(0);
 	let textEditing = false;
+	let spacePressed = $state(false);
 	let lastAutoEditingLayerID = '';
 	let panning = $state(false);
 	let selectionGesture = $state<SelectionGesture | null>(null);
@@ -72,7 +74,10 @@
 					editor.selectedLayerIDs = ids;
 				},
 				onTransform(id, updates) {
-					editor.updateTransform(id, updates);
+					editor.updateTransform(id, updates, '');
+				},
+				onAltDuplicate(entries) {
+					editor.duplicateSelectedAtTransforms(entries);
 				},
 				onTextChange(id, text) {
 					const layer = editor.activePage?.layers.find((item) => item.id === id);
@@ -234,9 +239,23 @@
 		return (
 			isAreaSelectionTool() ||
 			editor.activeTool === 'pencil' ||
+			editor.activeTool === 'eraser' ||
+			editor.activeTool === 'magic_eraser' ||
 			editor.activeTool === 'bucket' ||
 			editor.activeTool === 'gradient'
 		);
+	}
+
+	function erasableTargetID(point: SelectionPoint): string | null {
+		const selectedID = editor.selectedLayerIDs.at(-1);
+		const selected = editor.activePage?.layers.find((layer) => layer.id === selectedID);
+		if (selected && ['image', 'paint'].includes(selected.type) && !selected.locked)
+			return selected.id;
+		const hitID = adapter?.topmostLayerIDAtPoint(point);
+		const hit = editor.activePage?.layers.find((layer) => layer.id === hitID);
+		if (!hit || !['image', 'paint'].includes(hit.type) || hit.locked) return null;
+		editor.selectLayer(hit.id);
+		return hit.id;
 	}
 
 	function selectionModeForEvent(
@@ -330,6 +349,8 @@
 		if (
 			(!isAreaSelectionTool(tool) &&
 				tool !== 'pencil' &&
+				tool !== 'eraser' &&
+				tool !== 'magic_eraser' &&
 				tool !== 'bucket' &&
 				tool !== 'gradient') ||
 			!adapter ||
@@ -341,6 +362,26 @@
 		const mode = isAreaSelectionTool(tool)
 			? selectionModeForEvent(event, tool)
 			: editor.selectionMode;
+		if (tool === 'magic_eraser') {
+			const targetLayerID = erasableTargetID(point);
+			const sampled = targetLayerID ? adapter.rasterizeLayerAtPoint(targetLayerID, point) : null;
+			if (targetLayerID && sampled) {
+				editor.addMagicErase(
+					targetLayerID,
+					sampled.image.width,
+					sampled.image.height,
+					magicPixelMask(
+						sampled.image,
+						sampled.point,
+						editor.magicEraserTolerance,
+						editor.magicEraserContiguous
+					)
+				);
+			}
+			showMagicPulse(point);
+			event.preventDefault();
+			return true;
+		}
 		if (tool === 'magic_wand') {
 			const sampled = sampledPixels(point);
 			if (sampled) {
@@ -389,8 +430,13 @@
 			start: point,
 			current: point,
 			points: [point],
-			mode
+			mode,
+			targetLayerID: tool === 'eraser' ? (erasableTargetID(point) ?? undefined) : undefined
 		};
+		if (tool === 'eraser' && !selectionGesture.targetLayerID) {
+			selectionGesture = null;
+			return false;
+		}
 		if (event.currentTarget instanceof HTMLDivElement) {
 			event.currentTarget.setPointerCapture(event.pointerId);
 		}
@@ -409,7 +455,7 @@
 			point = constrainGradientPoint(gesture.start, point, event);
 		}
 		const points =
-			(gesture.tool === 'lasso' || gesture.tool === 'pencil') &&
+			(gesture.tool === 'lasso' || gesture.tool === 'pencil' || gesture.tool === 'eraser') &&
 			Math.hypot(
 				point.x - (gesture.points.at(-1)?.x ?? point.x),
 				point.y - (gesture.points.at(-1)?.y ?? point.y)
@@ -442,6 +488,31 @@
 				: Math.hypot(point.x - gesture.start.x, point.y - gesture.start.y);
 		if (gesture.tool === 'pencil') {
 			editor.addPencilStroke([...gesture.points, point]);
+			selectionGesture = null;
+			if (
+				event.currentTarget instanceof HTMLDivElement &&
+				event.currentTarget.hasPointerCapture(event.pointerId)
+			) {
+				event.currentTarget.releasePointerCapture(event.pointerId);
+			}
+			event.preventDefault();
+			return true;
+		}
+		if (gesture.tool === 'eraser' && gesture.targetLayerID) {
+			const stroke = adapter?.localEraseStroke(
+				gesture.targetLayerID,
+				[...gesture.points, point],
+				editor.eraserSize
+			);
+			if (stroke) {
+				editor.addEraseStroke(
+					gesture.targetLayerID,
+					stroke.sourceWidth,
+					stroke.sourceHeight,
+					stroke.points,
+					stroke.size
+				);
+			}
 			selectionGesture = null;
 			if (
 				event.currentTarget instanceof HTMLDivElement &&
@@ -555,18 +626,21 @@
 				return;
 			}
 		}
-		if (startAreaSelection(event)) return;
-		if (editor.activeTool !== 'hand' && event.button !== 1 && !event.altKey) return;
-		panning = true;
-		panStart = {
-			x: event.clientX,
-			y: event.clientY,
-			panX: editor.panX,
-			panY: editor.panY
-		};
-		if (event.currentTarget instanceof HTMLDivElement) {
-			event.currentTarget.setPointerCapture(event.pointerId);
+		if (spacePressed || editor.activeTool === 'hand' || event.button === 1) {
+			panning = true;
+			panStart = {
+				x: event.clientX,
+				y: event.clientY,
+				panX: editor.panX,
+				panY: editor.panY
+			};
+			if (event.currentTarget instanceof HTMLDivElement) {
+				event.currentTarget.setPointerCapture(event.pointerId);
+			}
+			event.preventDefault();
+			return;
 		}
+		if (startAreaSelection(event)) return;
 	}
 
 	function targetsToolSurface(event: PointerEvent): boolean {
@@ -577,7 +651,13 @@
 	}
 
 	function startPasteboardPointer(event: PointerEvent): void {
-		if (!targetsToolSurface(event)) startPan(event);
+		if (targetsToolSurface(event)) return;
+		const outsideStage = !(event.target instanceof Node) || !stageElement?.contains(event.target);
+		if (outsideStage && event.button === 0 && editor.activeTool === 'select' && !spacePressed) {
+			editor.selectLayer('');
+			editor.clearPixelSelection();
+		}
+		startPan(event);
 	}
 
 	function movePasteboardPointer(event: PointerEvent): void {
@@ -635,6 +715,25 @@
 		panning = false;
 	}
 
+	function editableTarget(target: EventTarget | null): boolean {
+		return (
+			target instanceof HTMLInputElement ||
+			target instanceof HTMLTextAreaElement ||
+			target instanceof HTMLSelectElement ||
+			(target instanceof HTMLElement && target.isContentEditable)
+		);
+	}
+
+	function handleCanvasKeydown(event: KeyboardEvent): void {
+		if (event.code !== 'Space' || editableTarget(event.target)) return;
+		event.preventDefault();
+		spacePressed = true;
+	}
+
+	function handleCanvasKeyup(event: KeyboardEvent): void {
+		if (event.code === 'Space') spacePressed = false;
+	}
+
 	function marqueeBounds(gesture: SelectionGesture): SelectionBounds {
 		return normalizeSelectionBounds(gesture.start, gesture.current);
 	}
@@ -644,10 +743,16 @@
 	}
 </script>
 
+<svelte:window
+	onkeydown={handleCanvasKeydown}
+	onkeyup={handleCanvasKeyup}
+	onblur={() => (spacePressed = false)}
+/>
+
 <div
 	{@attach attachViewport}
 	class="studio-pasteboard relative size-full min-h-0 touch-none overflow-hidden bg-neutral-800 dark:bg-neutral-950"
-	class:cursor-grab={editor.activeTool === 'hand' && !panning}
+	class:cursor-grab={(editor.activeTool === 'hand' || spacePressed) && !panning}
 	class:cursor-grabbing={panning}
 	class:cursor-crosshair={usesCanvasSurface() && !panning}
 	onwheel={handleWheel}
@@ -659,7 +764,7 @@
 	aria-label={m.studio_design_canvas()}
 >
 	{#if editor.document}
-		{#if isAreaSelectionTool() || editor.activeTool === 'pencil' || editor.activeTool === 'bucket' || editor.activeTool === 'gradient'}
+		{#if isAreaSelectionTool() || editor.activeTool === 'pencil' || editor.activeTool === 'eraser' || editor.activeTool === 'magic_eraser' || editor.activeTool === 'bucket' || editor.activeTool === 'gradient'}
 			<div
 				class="absolute top-3 left-1/2 z-30 flex max-w-[calc(100%-1.5rem)] -translate-x-1/2 flex-wrap items-center justify-center gap-1 rounded-lg border border-white/10 bg-neutral-950/88 p-1.5 text-neutral-100 shadow-lg backdrop-blur"
 				data-testid="studio-selection-options"
@@ -675,9 +780,13 @@
 									? m.studio_magic_select()
 									: editor.activeTool === 'pencil'
 										? m.studio_pencil()
-										: editor.activeTool === 'gradient'
-											? m.studio_gradient()
-											: m.studio_paint_bucket()}
+										: editor.activeTool === 'eraser'
+											? m.studio_erase()
+											: editor.activeTool === 'magic_eraser'
+												? m.studio_magic_erase()
+												: editor.activeTool === 'gradient'
+													? m.studio_gradient()
+													: m.studio_paint_bucket()}
 				</span>
 				{#if isAreaSelectionTool()}
 					<div
@@ -698,20 +807,24 @@
 						{/each}
 					</div>
 				{/if}
-				{#if editor.activeTool === 'magic_wand' || editor.activeTool === 'bucket'}
+				{#if editor.activeTool === 'magic_wand' || editor.activeTool === 'magic_eraser' || editor.activeTool === 'bucket'}
 					<label class="flex min-w-40 items-center gap-2 px-1 text-xs">
 						<span class="whitespace-nowrap">
 							{m.studio_magic_tolerance({
 								value:
 									editor.activeTool === 'bucket'
 										? editor.bucketTolerance
-										: editor.magicSelectTolerance
+										: editor.activeTool === 'magic_eraser'
+											? editor.magicEraserTolerance
+											: editor.magicSelectTolerance
 							})}
 						</span>
 						<Slider
 							value={editor.activeTool === 'bucket'
 								? editor.bucketTolerance
-								: editor.magicSelectTolerance}
+								: editor.activeTool === 'magic_eraser'
+									? editor.magicEraserTolerance
+									: editor.magicSelectTolerance}
 							min={0}
 							max={255}
 							step={1}
@@ -720,10 +833,13 @@
 								value:
 									editor.activeTool === 'bucket'
 										? editor.bucketTolerance
-										: editor.magicSelectTolerance
+										: editor.activeTool === 'magic_eraser'
+											? editor.magicEraserTolerance
+											: editor.magicSelectTolerance
 							})}
 							onValueChange={(value) => {
 								if (editor.activeTool === 'bucket') editor.bucketTolerance = value;
+								else if (editor.activeTool === 'magic_eraser') editor.magicEraserTolerance = value;
 								else editor.magicSelectTolerance = value;
 							}}
 						/>
@@ -732,7 +848,9 @@
 						variant={(
 							editor.activeTool === 'bucket'
 								? editor.bucketContiguous
-								: editor.magicSelectContiguous
+								: editor.activeTool === 'magic_eraser'
+									? editor.magicEraserContiguous
+									: editor.magicSelectContiguous
 						)
 							? 'secondary'
 							: 'ghost'}
@@ -740,10 +858,14 @@
 						class="h-8 px-2 text-xs text-neutral-100 hover:text-foreground"
 						aria-pressed={editor.activeTool === 'bucket'
 							? editor.bucketContiguous
-							: editor.magicSelectContiguous}
+							: editor.activeTool === 'magic_eraser'
+								? editor.magicEraserContiguous
+								: editor.magicSelectContiguous}
 						onclick={() => {
 							if (editor.activeTool === 'bucket') {
 								editor.bucketContiguous = !editor.bucketContiguous;
+							} else if (editor.activeTool === 'magic_eraser') {
+								editor.magicEraserContiguous = !editor.magicEraserContiguous;
 							} else {
 								editor.magicSelectContiguous = !editor.magicSelectContiguous;
 							}
@@ -751,15 +873,17 @@
 					>
 						{m.studio_contiguous()}
 					</Button>
-					<Button
-						variant={editor.sampleAllLayers ? 'secondary' : 'ghost'}
-						size="sm"
-						class="h-8 px-2 text-xs text-neutral-100 hover:text-foreground"
-						aria-pressed={editor.sampleAllLayers}
-						onclick={() => (editor.sampleAllLayers = !editor.sampleAllLayers)}
-					>
-						{m.studio_sample_all_layers()}
-					</Button>
+					{#if editor.activeTool !== 'magic_eraser'}
+						<Button
+							variant={editor.sampleAllLayers ? 'secondary' : 'ghost'}
+							size="sm"
+							class="h-8 px-2 text-xs text-neutral-100 hover:text-foreground"
+							aria-pressed={editor.sampleAllLayers}
+							onclick={() => (editor.sampleAllLayers = !editor.sampleAllLayers)}
+						>
+							{m.studio_sample_all_layers()}
+						</Button>
+					{/if}
 				{/if}
 				{#if ['pencil', 'bucket', 'gradient'].includes(editor.activeTool)}
 					<PaintColorControls
@@ -800,19 +924,26 @@
 						{m.studio_gradient_reverse()}
 					</Button>
 				{/if}
-				{#if editor.activeTool === 'pencil'}
+				{#if editor.activeTool === 'pencil' || editor.activeTool === 'eraser'}
 					<label class="flex min-w-36 items-center gap-2 px-1 text-xs">
 						<span class="whitespace-nowrap"
-							>{m.studio_brush_size({ value: editor.pencilSize })}</span
+							>{m.studio_brush_size({
+								value: editor.activeTool === 'eraser' ? editor.eraserSize : editor.pencilSize
+							})}</span
 						>
 						<Slider
-							value={editor.pencilSize}
+							value={editor.activeTool === 'eraser' ? editor.eraserSize : editor.pencilSize}
 							min={1}
 							max={256}
 							step={1}
 							class="w-20"
-							ariaLabel={m.studio_brush_size({ value: editor.pencilSize })}
-							onValueChange={(value) => (editor.pencilSize = value)}
+							ariaLabel={m.studio_brush_size({
+								value: editor.activeTool === 'eraser' ? editor.eraserSize : editor.pencilSize
+							})}
+							onValueChange={(value) => {
+								if (editor.activeTool === 'eraser') editor.eraserSize = value;
+								else editor.pencilSize = value;
+							}}
 						/>
 					</label>
 				{/if}
@@ -906,11 +1037,15 @@
 								rx={bounds.width / 2}
 								ry={bounds.height / 2}
 							/>
-						{:else if selectionGesture.tool === 'pencil'}
+						{:else if selectionGesture.tool === 'pencil' || selectionGesture.tool === 'eraser'}
 							<polyline
-								class="studio-pencil-preview"
+								class={selectionGesture.tool === 'eraser'
+									? 'studio-eraser-preview'
+									: 'studio-pencil-preview'}
 								points={lassoPoints(selectionGesture)}
-								stroke-width={editor.pencilSize}
+								stroke-width={selectionGesture.tool === 'eraser'
+									? editor.eraserSize
+									: editor.pencilSize}
 							/>
 						{:else if selectionGesture.tool === 'gradient'}
 							<line
@@ -1019,6 +1154,14 @@
 		stroke-linecap: round;
 		stroke-linejoin: round;
 		opacity: 0.86;
+	}
+
+	.studio-eraser-preview {
+		fill: none;
+		stroke: rgb(255 255 255 / 0.72);
+		stroke-linecap: round;
+		stroke-linejoin: round;
+		filter: drop-shadow(0 0 1px rgb(0 0 0 / 0.9));
 	}
 
 	@keyframes studio-selection-march {

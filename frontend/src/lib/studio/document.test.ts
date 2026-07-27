@@ -77,6 +77,47 @@ describe('Studio document contracts', () => {
 		expect(result.error).toContain('newer OpenPost version');
 	});
 
+	it('fills new image-adjustment defaults when opening an existing document', () => {
+		const document = blankStudioDocument(preset);
+		document.pages[0].layers = [
+			{
+				id: 'existing-image',
+				type: 'image',
+				name: 'Existing image',
+				visible: true,
+				locked: false,
+				opacity: 1,
+				transform: defaultTransform(400, 300),
+				image: {
+					media_id: 'media',
+					source_width: 400,
+					source_height: 300,
+					fit: 'stretch',
+					crop: { x: 0, y: 0, width: 1, height: 1 },
+					adjustments: {
+						brightness: 0,
+						contrast: 0,
+						saturation: 0,
+						temperature: 0,
+						exposure: 0,
+						highlights: 0,
+						shadows: 0,
+						blur: 0
+					} as never
+				}
+			}
+		];
+
+		const result = migrateStudioDocument(document);
+
+		expect(result.readOnly).toBe(false);
+		expect(result.document?.pages[0].layers[0].image?.adjustments).toMatchObject({
+			tint: 0,
+			vibrance: 0,
+			hue: 0
+		});
+	});
+
 	it('validates masks, curved text, blend modes, and layer shadows', () => {
 		const document = blankStudioDocument(preset);
 		document.pages[0].layers = [

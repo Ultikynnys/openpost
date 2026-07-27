@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
 	computeImageGeometry,
 	OpenPostFabricAdapter,
+	studioRotationForGesture,
 	studioLayerRenderOrder
 } from './fabric-adapter';
 import type { StudioDocument, StudioLayer, StudioPage } from './types';
@@ -38,6 +39,9 @@ function imageLayer(
 				contrast: 0,
 				saturation: 0,
 				temperature: 0,
+				tint: 0,
+				vibrance: 0,
+				hue: 0,
 				exposure: 0,
 				highlights: 0,
 				shadows: 0,
@@ -48,6 +52,13 @@ function imageLayer(
 }
 
 describe('Studio image geometry', () => {
+	it('constrains Shift-rotation to Photoshop-style 15 degree increments', () => {
+		expect(studioRotationForGesture(22, true)).toBe(15);
+		expect(studioRotationForGesture(23, true)).toBe(30);
+		expect(studioRotationForGesture(-38, true)).toBe(-45);
+		expect(studioRotationForGesture(22, false)).toBe(22);
+	});
+
 	it('keeps cover pixels flush with a resized frame', () => {
 		const geometry = computeImageGeometry(imageLayer(1200, 1200), 1920, 1080);
 

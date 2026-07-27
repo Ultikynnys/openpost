@@ -21,6 +21,8 @@ export type StudioTool =
 	| 'camera'
 	| 'eyedropper'
 	| 'pencil'
+	| 'eraser'
+	| 'magic_eraser'
 	| 'bucket'
 	| 'gradient'
 	| 'hand'
@@ -77,6 +79,9 @@ export interface StudioImageAdjustments {
 	contrast: number;
 	saturation: number;
 	temperature: number;
+	tint: number;
+	vibrance: number;
+	hue: number;
 	exposure: number;
 	highlights: number;
 	shadows: number;
@@ -117,6 +122,18 @@ export interface StudioPaintSpan {
 	y: number;
 	x: number;
 	width: number;
+}
+
+export interface StudioEraseStroke {
+	size: number;
+	points: StudioPaintPoint[];
+}
+
+export interface StudioEraseMask {
+	source_width: number;
+	source_height: number;
+	strokes: StudioEraseStroke[];
+	spans: StudioPaintSpan[];
 }
 
 export interface StudioGradientStop {
@@ -190,6 +207,7 @@ export interface StudioLayer {
 	paint?: StudioPaintValue;
 	effects?: StudioLayerEffects;
 	mask?: StudioLayerMask;
+	erase_mask?: StudioEraseMask;
 }
 
 export interface StudioPage {

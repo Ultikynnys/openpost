@@ -54,6 +54,9 @@ export class StudioEditor {
 	gradientType = $state<StudioGradientType>('linear');
 	gradientReverse = $state(false);
 	pencilSize = $state(12);
+	eraserSize = $state(32);
+	magicEraserTolerance = $state(32);
+	magicEraserContiguous = $state(true);
 	paintOpacity = $state(1);
 	bucketTolerance = $state(32);
 	bucketContiguous = $state(true);
@@ -228,6 +231,8 @@ export class StudioEditor {
 				'lasso',
 				'magic_wand',
 				'pencil',
+				'eraser',
+				'magic_eraser',
 				'bucket',
 				'gradient'
 			].includes(this.activeTool)
@@ -324,6 +329,71 @@ export class StudioEditor {
 			this.pixelSelection ? intersectPixelMasks(stroke, this.pixelSelection.data) : stroke,
 			m.studio_pencil()
 		);
+	}
+
+	addEraseStroke(
+		id: string,
+		sourceWidth: number,
+		sourceHeight: number,
+		points: SelectionPoint[],
+		size: number
+	): void {
+		if (points.length === 0) return;
+		const layer = this.activePage?.layers.find((candidate) => candidate.id === id);
+		if (!layer || !['image', 'paint'].includes(layer.type) || layer.locked) return;
+		this.mutate(m.studio_erase(), (document) => {
+			const target = document.pages
+				.find((page) => page.id === this.activePageID)
+				?.layers.find((candidate) => candidate.id === id);
+			if (!target) return;
+			const mask =
+				target.erase_mask?.source_width === sourceWidth &&
+				target.erase_mask.source_height === sourceHeight
+					? target.erase_mask
+					: {
+							source_width: sourceWidth,
+							source_height: sourceHeight,
+							strokes: [],
+							spans: []
+						};
+			target.erase_mask = {
+				...mask,
+				strokes: [
+					...mask.strokes,
+					{
+						size: Math.max(1, Math.min(512, size)),
+						points: points.map((point) => ({ ...point }))
+					}
+				]
+			};
+		});
+	}
+
+	addMagicErase(id: string, sourceWidth: number, sourceHeight: number, maskData: Uint8Array): void {
+		const layer = this.activePage?.layers.find((candidate) => candidate.id === id);
+		if (!layer || !['image', 'paint'].includes(layer.type) || layer.locked) return;
+		const spans = pixelMaskToSpans(maskData, sourceWidth, sourceHeight);
+		if (spans.length === 0) return;
+		this.mutate(m.studio_magic_erase(), (document) => {
+			const target = document.pages
+				.find((page) => page.id === this.activePageID)
+				?.layers.find((candidate) => candidate.id === id);
+			if (!target) return;
+			const eraseMask =
+				target.erase_mask?.source_width === sourceWidth &&
+				target.erase_mask.source_height === sourceHeight
+					? target.erase_mask
+					: {
+							source_width: sourceWidth,
+							source_height: sourceHeight,
+							strokes: [],
+							spans: []
+						};
+			target.erase_mask = {
+				...eraseMask,
+				spans: [...eraseMask.spans, ...spans]
+			};
+		});
 	}
 
 	addPaintFill(mask: Uint8Array, name = m.studio_paint_bucket()): void {
@@ -617,6 +687,62 @@ export class StudioEditor {
 		this.mutate('Duplicate layers', (document) => {
 			const page = document.pages.find((item) => item.id === this.activePageID);
 			page?.layers.push(...copies);
+		});
+		this.selectedLayerIDs = roots.map((layer) => idMap.get(layer.id)!).filter(Boolean);
+		this.selectionAnchorID = this.selectedLayerIDs.at(-1) ?? '';
+	}
+
+	duplicateSelectedAtTransforms(
+		entries: Array<{ id: string; transform: StudioLayer['transform'] }>
+	): void {
+		const page = this.activePage;
+		if (!page || entries.length === 0) return;
+		const transforms = new Map(entries.map((entry) => [entry.id, entry.transform] as const));
+		const roots = page.layers.filter((layer) => transforms.has(layer.id));
+		if (roots.length === 0) return;
+		const rootIDs = new SvelteSet(roots.map((layer) => layer.id));
+		const included = this.idsWithDescendants([...rootIDs]);
+		const idMap = new Map<string, string>();
+		for (const layer of page.layers) {
+			if (included.has(layer.id)) idMap.set(layer.id, studioID('layer'));
+		}
+		const rootForLayer = (layer: StudioLayer): StudioLayer | null => {
+			let current = layer;
+			const visited = new SvelteSet<string>();
+			while (!rootIDs.has(current.id) && current.parent_id && !visited.has(current.parent_id)) {
+				visited.add(current.parent_id);
+				const parent = page.layers.find((candidate) => candidate.id === current.parent_id);
+				if (!parent) break;
+				current = parent;
+			}
+			return rootIDs.has(current.id) ? current : null;
+		};
+		const copies = page.layers
+			.filter((layer) => included.has(layer.id))
+			.map((layer) => {
+				const root = rootForLayer(layer);
+				const rootTransform = root ? transforms.get(root.id) : undefined;
+				const transform =
+					root && rootTransform
+						? root.id === layer.id
+							? { ...rootTransform }
+							: {
+									...layer.transform,
+									x: layer.transform.x + rootTransform.x - root.transform.x,
+									y: layer.transform.y + rootTransform.y - root.transform.y
+								}
+						: { ...layer.transform };
+				return {
+					...structuredClone(layer),
+					id: idMap.get(layer.id)!,
+					parent_id: layer.parent_id ? idMap.get(layer.parent_id) : undefined,
+					name: rootIDs.has(layer.id) ? m.studio_layer_copy_name({ name: layer.name }) : layer.name,
+					transform
+				};
+			});
+		this.mutate('Duplicate layers', (document) => {
+			const targetPage = document.pages.find((item) => item.id === this.activePageID);
+			targetPage?.layers.push(...copies);
 		});
 		this.selectedLayerIDs = roots.map((layer) => idMap.get(layer.id)!).filter(Boolean);
 		this.selectionAnchorID = this.selectedLayerIDs.at(-1) ?? '';

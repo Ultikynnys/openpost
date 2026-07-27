@@ -21,7 +21,7 @@
 	import CropIcon from 'lucide-svelte/icons/crop';
 	import ChevronDownIcon from 'lucide-svelte/icons/chevron-down';
 	import { m } from '$lib/paraglide/messages';
-	import type { StudioTextCurveType } from '../types';
+	import type { StudioImageAdjustments, StudioTextCurveType } from '../types';
 
 	const editor = useStudioEditor();
 	let layer = $derived(editor.selectedLayers[0] ?? null);
@@ -89,16 +89,89 @@
 		});
 	}
 
-	const adjustmentControls = [
+	type AdjustmentControl = readonly [string, keyof StudioImageAdjustments, number, number];
+
+	const toneControls: AdjustmentControl[] = [
 		[m.studio_brightness(), 'brightness', -1, 1],
-		[m.studio_contrast(), 'contrast', -1, 1],
-		[m.studio_saturation(), 'saturation', -1, 1],
 		[m.studio_exposure(), 'exposure', -1, 1],
-		[m.studio_temperature(), 'temperature', -1, 1],
+		[m.studio_contrast(), 'contrast', -1, 1],
 		[m.studio_highlights(), 'highlights', -1, 1],
-		[m.studio_shadows(), 'shadows', -1, 1],
-		[m.studio_blur(), 'blur', 0, 1]
-	] as const;
+		[m.studio_shadows(), 'shadows', -1, 1]
+	];
+	const colorControls: AdjustmentControl[] = [
+		[m.studio_temperature(), 'temperature', -1, 1],
+		[m.studio_tint(), 'tint', -1, 1],
+		[m.studio_vibrance(), 'vibrance', -1, 1],
+		[m.studio_saturation(), 'saturation', -1, 1],
+		[m.studio_hue(), 'hue', -1, 1]
+	];
+	const detailControls: AdjustmentControl[] = [[m.studio_blur(), 'blur', 0, 1]];
+	const adjustmentGroups = [
+		{ label: m.studio_tone(), controls: toneControls },
+		{ label: m.studio_color(), controls: colorControls },
+		{ label: m.studio_detail(), controls: detailControls }
+	];
+
+	const quickLooks: Array<{
+		key: 'original' | 'crisp' | 'warm' | 'cool' | 'mono';
+		label: string;
+		adjustments: Partial<StudioImageAdjustments>;
+	}> = [
+		{ key: 'original', label: m.studio_look_original(), adjustments: {} },
+		{
+			key: 'crisp',
+			label: m.studio_look_crisp(),
+			adjustments: { contrast: 0.14, vibrance: 0.12, highlights: -0.08, shadows: 0.08 }
+		},
+		{
+			key: 'warm',
+			label: m.studio_look_warm(),
+			adjustments: { temperature: 0.18, tint: 0.04, vibrance: 0.08 }
+		},
+		{
+			key: 'cool',
+			label: m.studio_look_cool(),
+			adjustments: { temperature: -0.16, tint: -0.03, contrast: 0.05 }
+		},
+		{
+			key: 'mono',
+			label: m.studio_look_mono(),
+			adjustments: { saturation: -1, contrast: 0.12, shadows: 0.08 }
+		}
+	];
+
+	function setAdjustment(key: keyof StudioImageAdjustments, value: number): void {
+		if (!layer?.image) return;
+		editor.updateLayer(
+			layer.id,
+			{
+				image: {
+					...layer.image,
+					adjustments: { ...layer.image.adjustments, [key]: value }
+				}
+			},
+			`image-${key}:${layer.id}`
+		);
+	}
+
+	function applyLook(adjustments: Partial<StudioImageAdjustments>): void {
+		if (!layer?.image) return;
+		editor.updateLayer(layer.id, {
+			image: {
+				...layer.image,
+				adjustments: { ...defaultImageAdjustments(), ...adjustments }
+			}
+		});
+	}
+
+	function lookIsActive(adjustments: Partial<StudioImageAdjustments>): boolean {
+		if (!layer?.image) return false;
+		const target = { ...defaultImageAdjustments(), ...adjustments };
+		return Object.entries(target).every(
+			([key, value]) =>
+				Math.abs(layer!.image!.adjustments[key as keyof StudioImageAdjustments] - value) < 0.001
+		);
+	}
 </script>
 
 <div class="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
@@ -411,6 +484,7 @@
 								<span>{m.studio_weight()}</span>
 								<AppSelect
 									value={String(layer.text.font_weight)}
+									ariaLabel={m.studio_weight()}
 									disabled={!editor.canEdit}
 									onValueChange={(value) =>
 										editor.updateLayer(layer.id, {
@@ -439,6 +513,7 @@
 								<span>{m.studio_style()}</span>
 								<AppSelect
 									value={layer.text.font_style}
+									ariaLabel={m.studio_style()}
 									disabled={!editor.canEdit}
 									onValueChange={(value) =>
 										editor.updateLayer(layer.id, {
@@ -536,6 +611,7 @@
 								<span>{m.studio_text_curve()}</span>
 								<AppSelect
 									value={layer.text.curve?.type ?? 'none'}
+									ariaLabel={m.studio_text_curve()}
 									disabled={!editor.canEdit}
 									onValueChange={(value) => setTextCurveType(value as StudioTextCurveType)}
 									options={[
@@ -697,6 +773,7 @@
 							<span>{m.studio_shape_kind()}</span>
 							<AppSelect
 								value={layer.shape.kind}
+								ariaLabel={m.studio_shape_kind()}
 								disabled={!editor.canEdit}
 								onValueChange={(value) =>
 									editor.updateLayer(layer.id, {
@@ -802,6 +879,7 @@
 							<span>{m.studio_fit()}</span>
 							<AppSelect
 								value={layer.image.fit}
+								ariaLabel={m.studio_fit()}
 								disabled={!editor.canEdit}
 								onValueChange={(value) =>
 									editor.updateLayer(layer.id, {
@@ -888,32 +966,44 @@
 								{m.studio_reset_all()}
 							</Button>
 						</div>
-						{#each adjustmentControls as [label, key, min, max] (key)}
-							<label class="grid gap-1 text-xs">
-								<span>{label}</span>
-								<Slider
-									{min}
-									{max}
-									step={0.01}
-									value={layer.image.adjustments[key as keyof typeof layer.image.adjustments]}
-									disabled={!editor.canEdit}
-									ariaLabel={label}
-									onValueChange={(value) =>
-										editor.updateLayer(
-											layer.id,
-											{
-												image: {
-													...layer.image!,
-													adjustments: {
-														...layer.image!.adjustments,
-														[key]: value
-													}
-												}
-											},
-											`image-${key}:${layer.id}`
-										)}
-								/>
-							</label>
+						<div class="space-y-2">
+							<span class="text-xs font-medium">{m.studio_quick_looks()}</span>
+							<div class="grid grid-cols-3 gap-1">
+								{#each quickLooks as look (look.key)}
+									<Button
+										variant={lookIsActive(look.adjustments) ? 'secondary' : 'outline'}
+										size="xs"
+										aria-pressed={lookIsActive(look.adjustments)}
+										onclick={() => applyLook(look.adjustments)}
+									>
+										{look.label}
+									</Button>
+								{/each}
+							</div>
+						</div>
+						{#each adjustmentGroups as group (group.label)}
+							<div class="space-y-3 border-t pt-3">
+								<h4 class="text-xs font-medium">{group.label}</h4>
+								{#each group.controls as [label, key, min, max] (key)}
+									<label class="grid gap-1 text-xs">
+										<span class="flex items-center justify-between gap-2">
+											<span>{label}</span>
+											<span class="text-muted-foreground tabular-nums">
+												{Math.round(layer.image.adjustments[key] * 100)}
+											</span>
+										</span>
+										<Slider
+											{min}
+											{max}
+											step={0.01}
+											value={layer.image.adjustments[key]}
+											disabled={!editor.canEdit}
+											ariaLabel={label}
+											onValueChange={(value) => setAdjustment(key, value)}
+										/>
+									</label>
+								{/each}
+							</div>
 						{/each}
 					</section>
 				{/if}

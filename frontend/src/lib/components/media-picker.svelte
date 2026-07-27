@@ -2,6 +2,7 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import * as Dialog from '$lib/components/ui/dialog';
+	import * as Sheet from '$lib/components/ui/sheet';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import CameraCapture from './camera-capture.svelte';
@@ -30,6 +31,7 @@
 		purpose = 'post_media',
 		showCreate = true,
 		desktopSize = 'default',
+		presentation = 'dialog',
 		onConfirm,
 		onCreate
 	}: {
@@ -43,6 +45,7 @@
 		purpose?: string;
 		showCreate?: boolean;
 		desktopSize?: 'default' | 'compact';
+		presentation?: 'dialog' | 'sheet';
 		onConfirm: (mediaIDs: string[], media: StudioMediaItem[]) => void | Promise<void>;
 		onCreate?: () => void | Promise<void>;
 	} = $props();
@@ -188,164 +191,185 @@
 	}
 </script>
 
-<Dialog.Root bind:open>
-	<Dialog.Content
-		class="top-0 left-0 flex h-dvh max-h-dvh max-w-none translate-x-0 translate-y-0 flex-col gap-0 rounded-none p-0 sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-xl {desktopSize ===
-		'compact'
-			? 'sm:h-[min(640px,calc(100dvh-2rem))] sm:max-w-3xl'
-			: 'sm:h-[min(760px,calc(100dvh-2rem))] sm:max-w-5xl'}"
-	>
-		<div class="contents" {@attach initializePicker}></div>
-		<Dialog.Header class="border-b px-4 py-3 pr-14">
-			<Dialog.Title>{title}</Dialog.Title>
-			<Dialog.Description>
-				{m.media_picker_selected_count({
-					selected: selectedIDs.length,
-					maximum: maxSelection
-				})}
-			</Dialog.Description>
-		</Dialog.Header>
-
-		{#if mode === 'library'}
-			<div class="grid grid-cols-3 gap-2 border-b px-4 py-3">
-				<label
-					class="inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-lg border bg-background px-3 text-sm font-medium hover:bg-muted"
-				>
-					{#if actionLoading}<LoaderIcon class="size-4 animate-spin" />{:else}<UploadIcon
-							class="size-4"
-						/>{/if}
-					{m.media_picker_upload()}
-					<input
-						{@attach attachUploadInput}
-						type="file"
-						{multiple}
-						accept={accept.join(',')}
-						class="sr-only"
-						disabled={actionLoading}
-						onchange={(event) => uploadFiles(event.currentTarget.files)}
-					/>
-				</label>
+{#snippet pickerBody()}
+	{#if mode === 'library'}
+		<div class="grid grid-cols-2 gap-2 border-b px-4 py-3 {showCreate ? 'sm:grid-cols-3' : ''}">
+			<label
+				class="inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-lg border bg-background px-3 text-sm font-medium focus-within:ring-2 focus-within:ring-ring hover:bg-muted"
+			>
+				{#if actionLoading}<LoaderIcon class="size-4 animate-spin" />{:else}<UploadIcon
+						class="size-4"
+					/>{/if}
+				{m.media_picker_upload()}
+				<input
+					{@attach attachUploadInput}
+					type="file"
+					{multiple}
+					accept={accept.join(',')}
+					class="sr-only"
+					disabled={actionLoading}
+					onchange={(event) => uploadFiles(event.currentTarget.files)}
+				/>
+			</label>
+			<Button
+				variant="outline"
+				class="min-h-11"
+				disabled={actionLoading}
+				onclick={() => (mode = 'camera')}
+			>
+				<CameraIcon />
+				{m.studio_camera()}
+			</Button>
+			{#if showCreate}
 				<Button
 					variant="outline"
-					class="min-h-11"
+					class="min-h-11 max-sm:col-span-2"
 					disabled={actionLoading}
-					onclick={() => (mode = 'camera')}
+					onclick={createDesign}
 				>
-					<CameraIcon />
-					{m.studio_camera()}
+					<PaletteIcon />
+					{m.media_picker_create()}
 				</Button>
-				{#if showCreate}
-					<Button
-						variant="outline"
-						class="min-h-11"
-						disabled={actionLoading}
-						onclick={createDesign}
-					>
-						<PaletteIcon />
-						{m.media_picker_create()}
-					</Button>
-				{:else}
-					<div></div>
-				{/if}
-			</div>
+			{/if}
+		</div>
 
-			<div class="min-h-0 flex-1 overflow-y-auto px-4 py-3">
-				<form
-					class="mb-3 flex gap-2"
-					onsubmit={(event) => {
-						event.preventDefault();
-						void loadMedia();
-					}}
-				>
-					<div class="relative flex-1">
-						<SearchIcon
-							class="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
-						/>
-						<Input bind:value={search} class="pl-9" placeholder={m.media_picker_search()} />
-					</div>
-					<Button
-						variant="outline"
-						type="submit"
-						size="icon"
-						aria-label={m.media_picker_search_action()}
-					>
-						{#if loading}<LoaderIcon class="animate-spin" />{:else}<SearchIcon />{/if}
-					</Button>
-				</form>
-				{#if loading && media.length === 0}
-					<div class="flex min-h-48 items-center justify-center text-muted-foreground">
-						<LoaderIcon class="mr-2 size-5 animate-spin" />
-						{m.media_picker_loading()}
-					</div>
-				{:else if media.length === 0}
-					<div
-						class="flex min-h-48 flex-col items-center justify-center rounded-xl border border-dashed text-center"
-					>
-						<ImageIcon class="mb-3 size-8 text-muted-foreground" />
-						<p class="font-medium">{m.media_picker_no_match()}</p>
-						<p class="mt-1 text-sm text-muted-foreground">{m.media_picker_no_match_body()}</p>
-					</div>
-				{:else}
-					<div class="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-6">
-						{#each media as item (item.id)}
-							<button
-								type="button"
-								class="group relative aspect-square overflow-hidden rounded-lg border bg-muted text-left focus-visible:ring-2 focus-visible:ring-ring {selectedIDs.includes(
-									item.id
-								)
-									? 'ring-2 ring-primary'
-									: ''}"
-								onclick={() => toggleMedia(item.id)}
-								aria-pressed={selectedIDs.includes(item.id)}
-								aria-label={m.media_picker_select_item({ name: item.original_filename })}
-							>
-								<img
-									src={getAuthenticatedMediaURL(item.thumbnail_url || item.url)}
-									alt={item.alt_text || item.original_filename}
-									class="size-full object-cover transition-transform group-hover:scale-[1.02]"
-									loading="lazy"
-								/>
-								{#if selectedIDs.includes(item.id)}
-									<span
-										class="absolute top-2 right-2 flex size-7 items-center justify-center rounded-full bg-primary text-primary-foreground shadow"
-									>
-										<CheckIcon class="size-4" />
-									</span>
-									<span
-										class="absolute right-2 bottom-2 rounded bg-background/90 px-2 py-1 text-xs font-medium"
-									>
-										{selectedIDs.indexOf(item.id) + 1}
-									</span>
-								{/if}
-							</button>
-						{/each}
-					</div>
-				{/if}
-			</div>
-		{:else}
-			<div class="min-h-0 flex-1 overflow-y-auto p-4">
-				<Button variant="ghost" class="mb-3" onclick={() => (mode = 'library')}>
-					<ArrowLeftIcon />
-					{m.media_picker_back_to_library()}
-				</Button>
-				<CameraCapture onCapture={capturePhoto} onCancel={() => (mode = 'library')} />
-			</div>
-		{/if}
-
-		{#if error}
-			<div
-				class="mx-4 mb-2 rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive"
-				role="alert"
+		<div class="min-h-0 flex-1 overflow-y-auto px-4 py-3">
+			<form
+				class="mb-3 flex gap-2"
+				onsubmit={(event) => {
+					event.preventDefault();
+					void loadMedia();
+				}}
 			>
-				{error}
-			</div>
-		{/if}
-		<Dialog.Footer class="border-t px-4 py-3">
+				<div class="relative flex-1">
+					<SearchIcon
+						class="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
+					/>
+					<Input bind:value={search} class="pl-9" placeholder={m.media_picker_search()} />
+				</div>
+				<Button
+					variant="outline"
+					type="submit"
+					size="icon"
+					aria-label={m.media_picker_search_action()}
+				>
+					{#if loading}<LoaderIcon class="animate-spin" />{:else}<SearchIcon />{/if}
+				</Button>
+			</form>
+			{#if loading && media.length === 0}
+				<div class="flex min-h-48 items-center justify-center text-muted-foreground">
+					<LoaderIcon class="mr-2 size-5 animate-spin" />
+					{m.media_picker_loading()}
+				</div>
+			{:else if media.length === 0}
+				<div
+					class="flex min-h-48 flex-col items-center justify-center rounded-xl border border-dashed px-4 text-center"
+				>
+					<ImageIcon class="mb-3 size-8 text-muted-foreground" />
+					<p class="font-medium">{m.media_picker_no_match()}</p>
+					<p class="mt-1 text-sm text-muted-foreground">{m.media_picker_no_match_body()}</p>
+				</div>
+			{:else}
+				<div class="grid grid-cols-[repeat(auto-fill,minmax(7rem,1fr))] gap-2">
+					{#each media as item (item.id)}
+						<button
+							type="button"
+							class="group relative aspect-square overflow-hidden rounded-lg border bg-muted text-left focus-visible:ring-2 focus-visible:ring-ring {selectedIDs.includes(
+								item.id
+							)
+								? 'ring-2 ring-primary'
+								: ''}"
+							onclick={() => toggleMedia(item.id)}
+							aria-pressed={selectedIDs.includes(item.id)}
+							aria-label={m.media_picker_select_item({ name: item.original_filename })}
+						>
+							<img
+								src={getAuthenticatedMediaURL(item.thumbnail_url || item.url)}
+								alt={item.alt_text || item.original_filename}
+								class="size-full object-cover transition-transform group-hover:scale-[1.02]"
+								loading="lazy"
+							/>
+							{#if selectedIDs.includes(item.id)}
+								<span
+									class="absolute top-2 right-2 flex size-7 items-center justify-center rounded-full bg-primary text-primary-foreground shadow"
+								>
+									<CheckIcon class="size-4" />
+								</span>
+								<span
+									class="absolute right-2 bottom-2 rounded bg-background/90 px-2 py-1 text-xs font-medium"
+								>
+									{selectedIDs.indexOf(item.id) + 1}
+								</span>
+							{/if}
+						</button>
+					{/each}
+				</div>
+			{/if}
+		</div>
+	{:else}
+		<div class="min-h-0 flex-1 overflow-y-auto p-4">
+			<Button variant="ghost" class="mb-3" onclick={() => (mode = 'library')}>
+				<ArrowLeftIcon />
+				{m.media_picker_back_to_library()}
+			</Button>
+			<CameraCapture onCapture={capturePhoto} />
+		</div>
+	{/if}
+
+	{#if error}
+		<div
+			class="mx-4 mb-2 rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive"
+			role="alert"
+		>
+			{error}
+		</div>
+	{/if}
+	{#if mode === 'library'}
+		<div class="flex flex-col-reverse gap-2 border-t px-4 py-3 sm:flex-row sm:justify-end">
 			<Button variant="ghost" onclick={() => (open = false)}>{m.common_cancel()}</Button>
 			<Button onclick={confirm} disabled={actionLoading || selectedIDs.length === 0}>
 				{#if actionLoading}<LoaderIcon class="animate-spin" />{/if}
 				{m.media_picker_add_media()}
 			</Button>
-		</Dialog.Footer>
-	</Dialog.Content>
-</Dialog.Root>
+		</div>
+	{/if}
+{/snippet}
+
+{#if presentation === 'sheet'}
+	<Sheet.Root bind:open>
+		<Sheet.Content side="right" class="flex h-dvh w-full flex-col gap-0 p-0 sm:max-w-2xl">
+			<div class="contents" {@attach initializePicker}></div>
+			<Sheet.Header class="border-b px-4 py-3 pr-14 text-left">
+				<Sheet.Title>{title}</Sheet.Title>
+				<Sheet.Description>
+					{m.media_picker_selected_count({
+						selected: selectedIDs.length,
+						maximum: maxSelection
+					})}
+				</Sheet.Description>
+			</Sheet.Header>
+			{@render pickerBody()}
+		</Sheet.Content>
+	</Sheet.Root>
+{:else}
+	<Dialog.Root bind:open>
+		<Dialog.Content
+			class="top-0 left-0 flex h-dvh max-h-dvh max-w-none translate-x-0 translate-y-0 flex-col gap-0 rounded-none p-0 sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-xl {desktopSize ===
+			'compact'
+				? 'sm:h-[min(640px,calc(100dvh-2rem))] sm:max-w-3xl'
+				: 'sm:h-[min(760px,calc(100dvh-2rem))] sm:max-w-5xl'}"
+		>
+			<div class="contents" {@attach initializePicker}></div>
+			<Dialog.Header class="border-b px-4 py-3 pr-14">
+				<Dialog.Title>{title}</Dialog.Title>
+				<Dialog.Description>
+					{m.media_picker_selected_count({
+						selected: selectedIDs.length,
+						maximum: maxSelection
+					})}
+				</Dialog.Description>
+			</Dialog.Header>
+			{@render pickerBody()}
+		</Dialog.Content>
+	</Dialog.Root>
+{/if}

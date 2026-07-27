@@ -25,6 +25,9 @@ export function defaultImageAdjustments(): StudioImageAdjustments {
 		contrast: 0,
 		saturation: 0,
 		temperature: 0,
+		tint: 0,
+		vibrance: 0,
+		hue: 0,
 		exposure: 0,
 		highlights: 0,
 		shadows: 0,
@@ -55,7 +58,17 @@ export function blankStudioDocument(preset: StudioPreset): StudioDocument {
 }
 
 export function cloneStudioDocument(document: StudioDocument): StudioDocument {
-	return structuredClone(document);
+	const clone = structuredClone(document);
+	for (const page of clone.pages) {
+		for (const layer of page.layers) {
+			if (!layer.image) continue;
+			layer.image.adjustments = {
+				...defaultImageAdjustments(),
+				...layer.image.adjustments
+			};
+		}
+	}
+	return clone;
 }
 
 export function cloneStudioPage(page: StudioPage, name: string): StudioPage {
@@ -169,6 +182,9 @@ export function validateStudioDocument(document: StudioDocument): string[] {
 					adjustments.contrast,
 					adjustments.saturation,
 					adjustments.temperature,
+					adjustments.tint,
+					adjustments.vibrance,
+					adjustments.hue,
 					adjustments.exposure,
 					adjustments.highlights,
 					adjustments.shadows
@@ -243,6 +259,30 @@ export function validateStudioDocument(document: StudioDocument): string[] {
 					layer.mask.radius < 0)
 			) {
 				errors.push(`${layer.name} has an invalid mask.`);
+			}
+			if (
+				layer.erase_mask &&
+				(!['image', 'paint'].includes(layer.type) ||
+					![layer.erase_mask.source_width, layer.erase_mask.source_height].every(Number.isFinite) ||
+					layer.erase_mask.source_width <= 0 ||
+					layer.erase_mask.source_height <= 0 ||
+					layer.erase_mask.source_width > STUDIO_LIMITS.maxDimension ||
+					layer.erase_mask.source_height > STUDIO_LIMITS.maxDimension ||
+					layer.erase_mask.strokes.length > 10_000 ||
+					layer.erase_mask.spans.length > 250_000 ||
+					layer.erase_mask.strokes.some(
+						(stroke) =>
+							!Number.isFinite(stroke.size) ||
+							stroke.size <= 0 ||
+							stroke.size > 512 ||
+							stroke.points.length > 100_000 ||
+							stroke.points.some((point) => !Number.isFinite(point.x) || !Number.isFinite(point.y))
+					) ||
+					layer.erase_mask.spans.some(
+						(span) => ![span.x, span.y, span.width].every(Number.isFinite) || span.width <= 0
+					))
+			) {
+				errors.push(`${layer.name} has an invalid erase mask.`);
 			}
 			if (layer.effects) {
 				if (
@@ -336,7 +376,7 @@ export function migrateStudioDocument(raw: unknown): {
 	if (version !== STUDIO_SCHEMA_VERSION) {
 		return { readOnly: true, error: 'This Studio document version cannot be migrated.' };
 	}
-	const document = structuredClone(raw) as StudioDocument;
+	const document = cloneStudioDocument(raw as StudioDocument);
 	const errors = validateStudioDocument(document);
 	return errors.length > 0 ? { readOnly: true, error: errors[0] } : { document, readOnly: false };
 }

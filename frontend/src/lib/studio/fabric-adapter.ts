@@ -53,12 +53,17 @@ interface FabricAdapterOptions {
 	renderScale?: number;
 	onSelection(ids: string[]): void;
 	onTransform(id: string, updates: Partial<StudioLayer['transform']>): void;
+	onAltDuplicate?(entries: Array<{ id: string; transform: StudioLayer['transform'] }>): void;
 	onTextChange(id: string, text: string): void;
 	onTextEditingChange?(editing: boolean): void;
 	onImageDimensions?(id: string, width: number, height: number): void;
 }
 
 const SNAP_SCREEN_PX = 7;
+
+export function studioRotationForGesture(angle: number, constrain: boolean): number {
+	return constrain ? Math.round(angle / 15) * 15 : angle;
+}
 
 export function studioLayerRenderOrder(layers: StudioLayer[]): StudioLayer[] {
 	const layerIDs = new Set(layers.map((layer) => layer.id));
@@ -128,9 +133,11 @@ export class OpenPostFabricAdapter {
 	private readonly renderScale: number;
 	private onSelection: FabricAdapterOptions['onSelection'];
 	private onTransform: FabricAdapterOptions['onTransform'];
+	private onAltDuplicate: NonNullable<FabricAdapterOptions['onAltDuplicate']>;
 	private onTextChange: FabricAdapterOptions['onTextChange'];
 	private onTextEditingChange: NonNullable<FabricAdapterOptions['onTextEditingChange']>;
 	private onImageDimensions: NonNullable<FabricAdapterOptions['onImageDimensions']>;
+	private altDuplicatePending = false;
 
 	constructor(options: FabricAdapterOptions) {
 		this.element = options.canvas;
@@ -141,6 +148,7 @@ export class OpenPostFabricAdapter {
 		this.renderScale = Math.max(0.01, options.renderScale ?? 1);
 		this.onSelection = options.onSelection;
 		this.onTransform = options.onTransform;
+		this.onAltDuplicate = options.onAltDuplicate ?? (() => undefined);
 		this.onTextChange = options.onTextChange;
 		this.onTextEditingChange = options.onTextEditingChange ?? (() => undefined);
 		this.onImageDimensions = options.onImageDimensions ?? (() => undefined);
@@ -388,6 +396,77 @@ export class OpenPostFabricAdapter {
 		}
 	}
 
+	rasterizeLayerAtPoint(
+		id: string,
+		point: SelectionPoint
+	): { image: ImageData; point: SelectionPoint } | null {
+		const object = this.objectByLayerID.get(id);
+		const geometry = this.layerLocalGeometry(id, point);
+		if (!object || !geometry) return null;
+		const canvas = object.toCanvasElement({
+			withoutTransform: true,
+			withoutShadow: true,
+			enableRetinaScaling: false
+		});
+		const context = canvas.getContext('2d', { willReadFrequently: true });
+		if (!context || canvas.width <= 0 || canvas.height <= 0) return null;
+		return {
+			image: context.getImageData(0, 0, canvas.width, canvas.height),
+			point: {
+				x: (geometry.point.x / geometry.width) * canvas.width,
+				y: (geometry.point.y / geometry.height) * canvas.height
+			}
+		};
+	}
+
+	localEraseStroke(
+		id: string,
+		points: SelectionPoint[],
+		size: number
+	): {
+		sourceWidth: number;
+		sourceHeight: number;
+		points: SelectionPoint[];
+		size: number;
+	} | null {
+		const first = points[0];
+		const initial = first ? this.layerLocalGeometry(id, first) : null;
+		if (!initial) return null;
+		const localPoints = points
+			.map((point) => this.layerLocalGeometry(id, point)?.point)
+			.filter((point): point is SelectionPoint => Boolean(point));
+		if (localPoints.length === 0) return null;
+		return {
+			sourceWidth: initial.width,
+			sourceHeight: initial.height,
+			points: localPoints,
+			size: size / Math.max(0.01, initial.scale)
+		};
+	}
+
+	private layerLocalGeometry(
+		id: string,
+		point: SelectionPoint
+	): { point: SelectionPoint; width: number; height: number; scale: number } | null {
+		if (!this.fabric) return null;
+		const object = this.objectByLayerID.get(id);
+		if (!object) return null;
+		const width = Math.max(1, object.width ?? 1);
+		const height = Math.max(1, object.height ?? 1);
+		const inverse = this.fabric.util.invertTransform(object.calcTransformMatrix());
+		const local = this.fabric.util.transformPoint(new this.fabric.Point(point.x, point.y), inverse);
+		const decomposition = this.fabric.util.qrDecompose(object.calcTransformMatrix());
+		return {
+			point: {
+				x: local.x + width / 2,
+				y: local.y + height / 2
+			},
+			width,
+			height,
+			scale: Math.sqrt(Math.max(0.0001, Math.abs(decomposition.scaleX * decomposition.scaleY)))
+		};
+	}
+
 	private refreshInteractivity(): void {
 		const canvas = this.interactiveCanvas();
 		if (!canvas) return;
@@ -436,6 +515,19 @@ export class OpenPostFabricAdapter {
 	private bindEvents(): void {
 		const canvas = this.interactiveCanvas();
 		if (!canvas) return;
+		canvas.on('mouse:down:before', (event) => {
+			const pointerEvent = event.e as MouseEvent;
+			this.altDuplicatePending =
+				this.interactionTool === 'select' &&
+				pointerEvent.button === 0 &&
+				pointerEvent.altKey &&
+				Boolean(event.target);
+		});
+		canvas.on('mouse:up', () => {
+			queueMicrotask(() => {
+				this.altDuplicatePending = false;
+			});
+		});
 		canvas.on('selection:created', () => this.emitSelection());
 		canvas.on('selection:updated', () => this.emitSelection());
 		canvas.on('selection:cleared', () => this.emitSelection());
@@ -447,12 +539,27 @@ export class OpenPostFabricAdapter {
 		canvas.on('object:scaling', (event) =>
 			this.syncDecorationTransform(event.target as FabricObject)
 		);
-		canvas.on('object:rotating', (event) =>
-			this.syncDecorationTransform(event.target as FabricObject)
-		);
+		canvas.on('object:rotating', (event) => {
+			const target = event.target as FabricObject;
+			if ((event.e as MouseEvent).shiftKey) {
+				target.angle = studioRotationForGesture(target.angle ?? 0, true);
+				target.setCoords();
+			}
+			this.syncDecorationTransform(target);
+		});
 		canvas.on('object:modified', (event) => {
 			this.clearGuides();
-			this.emitTransform(event.target as FabricObject);
+			const target = event.target as FabricObject;
+			const pointerEvent = event.e as MouseEvent | undefined;
+			if (
+				this.interactionTool === 'select' &&
+				(this.altDuplicatePending || Boolean(pointerEvent?.altKey))
+			) {
+				this.onAltDuplicate(this.transformEntries(target));
+				this.altDuplicatePending = false;
+			} else {
+				this.emitTransform(target);
+			}
 		});
 		canvas.on('text:changed', (event) => this.emitTextChange(event.target as FabricTextObject));
 		canvas.on('text:editing:entered', () => this.onTextEditingChange(true));
@@ -493,37 +600,55 @@ export class OpenPostFabricAdapter {
 
 	private emitTransform(target?: FabricObject): void {
 		if (!target || this.syncing) return;
-		if (!target.__studioLayerID && this.fabric && 'getObjects' in target) {
-			const selection = target as FabricObject & { getObjects(): FabricObject[] };
-			for (const object of selection.getObjects()) {
-				if (!object.__studioLayerID) continue;
-				const decomposition = this.fabric.util.qrDecompose(object.calcTransformMatrix());
-				const width = Math.max(1, (object.width ?? 1) * Math.abs(decomposition.scaleX));
-				const height = Math.max(1, (object.height ?? 1) * Math.abs(decomposition.scaleY));
-				this.onTransform(object.__studioLayerID, {
-					x: decomposition.translateX - width / 2,
-					y: decomposition.translateY - height / 2,
-					width,
-					height,
-					rotation: decomposition.angle,
-					flip_x: decomposition.scaleX < 0,
-					flip_y: decomposition.scaleY < 0
-				});
-			}
-			return;
+		for (const entry of this.transformEntries(target)) {
+			this.onTransform(entry.id, entry.transform);
 		}
-		if (!target.__studioLayerID) return;
-		const scaledWidth = Math.max(1, target.getScaledWidth());
-		const scaledHeight = Math.max(1, target.getScaledHeight());
-		this.onTransform(target.__studioLayerID, {
-			x: target.left ?? 0,
-			y: target.top ?? 0,
-			width: scaledWidth,
-			height: scaledHeight,
-			rotation: target.angle ?? 0,
-			flip_x: Boolean(target.flipX),
-			flip_y: Boolean(target.flipY)
-		});
+	}
+
+	private transformEntries(
+		target: FabricObject
+	): Array<{ id: string; transform: StudioLayer['transform'] }> {
+		if (!this.fabric) return [];
+		if (!target.__studioLayerID && 'getObjects' in target) {
+			const selection = target as FabricObject & { getObjects(): FabricObject[] };
+			return selection
+				.getObjects()
+				.filter((object): object is FabricObject & { __studioLayerID: string } =>
+					Boolean(object.__studioLayerID)
+				)
+				.map((object) => {
+					const decomposition = this.fabric!.util.qrDecompose(object.calcTransformMatrix());
+					const width = Math.max(1, (object.width ?? 1) * Math.abs(decomposition.scaleX));
+					const height = Math.max(1, (object.height ?? 1) * Math.abs(decomposition.scaleY));
+					return {
+						id: object.__studioLayerID,
+						transform: {
+							x: decomposition.translateX - width / 2,
+							y: decomposition.translateY - height / 2,
+							width,
+							height,
+							rotation: decomposition.angle,
+							flip_x: decomposition.scaleX < 0,
+							flip_y: decomposition.scaleY < 0
+						}
+					};
+				});
+		}
+		if (!target.__studioLayerID) return [];
+		return [
+			{
+				id: target.__studioLayerID,
+				transform: {
+					x: target.left ?? 0,
+					y: target.top ?? 0,
+					width: Math.max(1, target.getScaledWidth()),
+					height: Math.max(1, target.getScaledHeight()),
+					rotation: target.angle ?? 0,
+					flip_x: Boolean(target.flipX),
+					flip_y: Boolean(target.flipY)
+				}
+			}
+		];
 	}
 
 	private emitTextChange(target?: FabricTextObject): void {
@@ -915,17 +1040,13 @@ export class OpenPostFabricAdapter {
 	}
 
 	private createMaskClip(layer: StudioLayer, object: FabricObject): FabricObject | undefined {
-		if (!this.fabric || !layer.mask) return undefined;
+		if (!this.fabric || (!layer.mask && !layer.erase_mask)) return undefined;
 		const scaleX = Math.max(0.01, Math.abs(object.scaleX ?? 1));
 		const scaleY = Math.max(0.01, Math.abs(object.scaleY ?? 1));
-		const width = Math.max(
-			1,
-			(object.width ?? layer.transform.width) - (layer.mask.inset * 2) / scaleX
-		);
-		const height = Math.max(
-			1,
-			(object.height ?? layer.transform.height) - (layer.mask.inset * 2) / scaleY
-		);
+		const objectWidth = Math.max(1, object.width ?? layer.transform.width);
+		const objectHeight = Math.max(1, object.height ?? layer.transform.height);
+		const width = Math.max(1, objectWidth - ((layer.mask?.inset ?? 0) * 2) / scaleX);
+		const height = Math.max(1, objectHeight - ((layer.mask?.inset ?? 0) * 2) / scaleY);
 		const common = {
 			left: 0,
 			top: 0,
@@ -936,6 +1057,52 @@ export class OpenPostFabricAdapter {
 			selectable: false,
 			evented: false
 		};
+		if (layer.erase_mask) {
+			const eraseMask = structuredClone(layer.erase_mask);
+			const renderMask = effectiveMask(layer, object);
+			const clip = new this.fabric.FabricObject({
+				...common,
+				width: objectWidth,
+				height: objectHeight,
+				objectCaching: false
+			}) as FabricCustomObject;
+			clip._render = (context: CanvasRenderingContext2D) => {
+				context.save();
+				context.fillStyle = '#000000';
+				context.beginPath();
+				appendMaskPath(context, objectWidth, objectHeight, renderMask);
+				context.fill();
+				context.globalCompositeOperation = 'destination-out';
+				context.fillStyle = '#000000';
+				context.strokeStyle = '#000000';
+				context.translate(-objectWidth / 2, -objectHeight / 2);
+				context.scale(
+					objectWidth / Math.max(1, eraseMask.source_width),
+					objectHeight / Math.max(1, eraseMask.source_height)
+				);
+				for (const span of eraseMask.spans) {
+					context.fillRect(span.x, span.y, span.width, 1);
+				}
+				context.lineCap = 'round';
+				context.lineJoin = 'round';
+				for (const stroke of eraseMask.strokes) {
+					if (stroke.points.length === 0) continue;
+					context.lineWidth = stroke.size;
+					context.beginPath();
+					if (stroke.points.length === 1) {
+						context.arc(stroke.points[0].x, stroke.points[0].y, stroke.size / 2, 0, Math.PI * 2);
+						context.fill();
+						continue;
+					}
+					context.moveTo(stroke.points[0].x, stroke.points[0].y);
+					for (const point of stroke.points.slice(1)) context.lineTo(point.x, point.y);
+					context.stroke();
+				}
+				context.restore();
+			};
+			return clip;
+		}
+		if (!layer.mask) return undefined;
 		if (layer.mask.shape === 'circle') {
 			return new this.fabric.Circle({
 				...common,
@@ -994,6 +1161,9 @@ export class OpenPostFabricAdapter {
 		effect: NonNullable<NonNullable<StudioLayer['effects']>['stroke']>
 	): FabricObject | null {
 		if (!this.fabric || layer.shape?.kind === 'line') return null;
+		if (layer.type === 'image' || layer.type === 'paint') {
+			return this.createAlphaStrokeDecoration(layer, object, effect);
+		}
 		const width = Math.max(1, object.width ?? layer.transform.width);
 		const height = Math.max(1, object.height ?? layer.transform.height);
 		const decoration = new this.fabric.FabricObject({
@@ -1034,6 +1204,67 @@ export class OpenPostFabricAdapter {
 			appendMaskPath(context, width, height, mask);
 			context.stroke();
 			context.restore();
+		};
+		return decoration;
+	}
+
+	private createAlphaStrokeDecoration(
+		layer: StudioLayer,
+		object: FabricObject,
+		effect: NonNullable<NonNullable<StudioLayer['effects']>['stroke']>
+	): FabricObject | null {
+		if (!this.fabric) return null;
+		const width = Math.max(1, object.width ?? layer.transform.width);
+		const height = Math.max(1, object.height ?? layer.transform.height);
+		const multiplier = Math.min(1, 1024 / Math.max(width, height));
+		const scale = Math.sqrt(
+			Math.max(0.0001, Math.abs((object.scaleX ?? 1) * (object.scaleY ?? 1)))
+		);
+		let source: HTMLCanvasElement;
+		try {
+			source = object.toCanvasElement({
+				multiplier,
+				withoutTransform: true,
+				withoutShadow: true,
+				enableRetinaScaling: false
+			});
+		} catch {
+			return null;
+		}
+		const bitmap = createAlphaStrokeBitmap(
+			source,
+			Math.max(1, (effect.width / scale) * multiplier),
+			effect.position,
+			effect.color
+		);
+		const decoration = new this.fabric.FabricObject({
+			left: object.left,
+			top: object.top,
+			width,
+			height,
+			scaleX: object.scaleX,
+			scaleY: object.scaleY,
+			angle: object.angle,
+			flipX: object.flipX,
+			flipY: object.flipY,
+			originX: object.originX,
+			originY: object.originY,
+			opacity: layer.opacity * effect.opacity,
+			visible: this.layerIsVisible(layer),
+			selectable: false,
+			evented: false,
+			objectCaching: false
+		}) as FabricCustomObject;
+		decoration._render = (context: CanvasRenderingContext2D) => {
+			const renderedWidth = bitmap.width / multiplier;
+			const renderedHeight = bitmap.height / multiplier;
+			context.drawImage(
+				bitmap,
+				-renderedWidth / 2,
+				-renderedHeight / 2,
+				renderedWidth,
+				renderedHeight
+			);
 		};
 		return decoration;
 	}
@@ -1133,6 +1364,8 @@ export class OpenPostFabricAdapter {
 			'lasso',
 			'magic_wand',
 			'pencil',
+			'eraser',
+			'magic_eraser',
 			'bucket',
 			'gradient'
 		].includes(this.interactionTool);
@@ -1224,16 +1457,48 @@ export class OpenPostFabricAdapter {
 				new this.fabric.filters.Contrast({ contrast: clamp(adjustment.contrast, -1, 1) })
 			);
 		}
+		const vibrance = adjustment.vibrance ?? 0;
+		const hue = adjustment.hue ?? 0;
+		const temperature = adjustment.temperature ?? 0;
+		const tintAdjustment = adjustment.tint ?? 0;
+		if (vibrance) {
+			filters.push(new this.fabric.filters.Vibrance({ vibrance: clamp(vibrance, -1, 1) }));
+		}
 		if (adjustment.saturation) {
 			filters.push(
 				new this.fabric.filters.Saturation({ saturation: clamp(adjustment.saturation, -1, 1) })
 			);
 		}
-		if (adjustment.temperature) {
-			const warm = clamp(adjustment.temperature * 0.18, -0.18, 0.18);
+		if (hue) {
+			filters.push(new this.fabric.filters.HueRotation({ rotation: clamp(hue, -1, 1) }));
+		}
+		if (temperature || tintAdjustment) {
+			const warm = clamp(temperature * 0.18, -0.18, 0.18);
+			const tint = clamp(tintAdjustment * 0.14, -0.14, 0.14);
 			filters.push(
 				new this.fabric.filters.ColorMatrix({
-					matrix: [1 + warm, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1 - warm, 0, 0, 0, 0, 0, 1, 0]
+					matrix: [
+						1 + warm + tint * 0.35,
+						0,
+						0,
+						0,
+						0,
+						0,
+						1 - tint,
+						0,
+						0,
+						0,
+						0,
+						0,
+						1 - warm + tint * 0.35,
+						0,
+						0,
+						0,
+						0,
+						0,
+						1,
+						0
+					]
 				})
 			);
 		}
@@ -1395,6 +1660,67 @@ function appendMaskPath(
 	context.lineTo(left, top + radius);
 	context.quadraticCurveTo(left, top, left + radius, top);
 	context.closePath();
+}
+
+function createAlphaStrokeBitmap(
+	source: HTMLCanvasElement,
+	width: number,
+	position: 'inside' | 'center' | 'outside',
+	color: string
+): HTMLCanvasElement {
+	const radius = Math.max(1, position === 'center' ? width / 2 : width);
+	const padding = Math.ceil(radius) + 2;
+	const canvas = globalThis.document.createElement('canvas');
+	canvas.width = Math.max(1, source.width + padding * 2);
+	canvas.height = Math.max(1, source.height + padding * 2);
+	const context = canvas.getContext('2d');
+	if (!context) return canvas;
+
+	const drawDilated = (target: CanvasRenderingContext2D): void => {
+		target.globalCompositeOperation = 'source-over';
+		target.drawImage(source, padding, padding);
+		const samples = Math.max(16, Math.min(64, Math.ceil(radius * 2)));
+		for (let index = 0; index < samples; index++) {
+			const angle = (index / samples) * Math.PI * 2;
+			target.drawImage(
+				source,
+				padding + Math.cos(angle) * radius,
+				padding + Math.sin(angle) * radius
+			);
+		}
+	};
+	const eroded = globalThis.document.createElement('canvas');
+	eroded.width = canvas.width;
+	eroded.height = canvas.height;
+	const erodedContext = eroded.getContext('2d');
+	if (erodedContext) {
+		erodedContext.drawImage(source, padding, padding);
+		const samples = Math.max(16, Math.min(64, Math.ceil(radius * 2)));
+		for (let index = 0; index < samples; index++) {
+			const angle = (index / samples) * Math.PI * 2;
+			erodedContext.globalCompositeOperation = 'destination-in';
+			erodedContext.drawImage(
+				source,
+				padding + Math.cos(angle) * radius,
+				padding + Math.sin(angle) * radius
+			);
+		}
+	}
+
+	if (position === 'inside') {
+		context.drawImage(source, padding, padding);
+		context.globalCompositeOperation = 'destination-out';
+		context.drawImage(eroded, 0, 0);
+	} else {
+		drawDilated(context);
+		context.globalCompositeOperation = 'destination-out';
+		if (position === 'outside') context.drawImage(source, padding, padding);
+		else context.drawImage(eroded, 0, 0);
+	}
+	context.globalCompositeOperation = 'source-in';
+	context.fillStyle = color;
+	context.fillRect(0, 0, canvas.width, canvas.height);
+	return canvas;
 }
 
 function createGradientBitmap(paint: NonNullable<StudioLayer['paint']>): HTMLCanvasElement | null {

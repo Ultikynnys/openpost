@@ -11,6 +11,7 @@ bun.lockb
 
 # Generated files
 src/lib/api/types.d.ts
+.devenv/
 
 # Paraglide / inlang local artifacts (only settings.json is tracked)
 project.inlang/

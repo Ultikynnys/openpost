@@ -82,7 +82,13 @@
 			updateEffects(next);
 			return;
 		}
-		updateEffects({ ...effects, stroke: { ...DEFAULT_STROKE_EFFECT } });
+		updateEffects({
+			...effects,
+			stroke: {
+				...DEFAULT_STROKE_EFFECT,
+				position: layer.type === 'image' ? 'outside' : DEFAULT_STROKE_EFFECT.position
+			}
+		});
 	}
 
 	function updateStroke(updates: Partial<StudioLayerStrokeEffect>, coalesceKey?: string): void {
@@ -266,6 +272,7 @@
 		<span>{m.studio_blend_mode()}</span>
 		<AppSelect
 			value={currentEffects().blend_mode}
+			ariaLabel={m.studio_blend_mode()}
 			disabled={!editor.canEdit}
 			onValueChange={(value) => setBlendMode(value as StudioBlendMode)}
 			options={blendModes.map((mode) => ({ value: mode, label: blendLabel(mode) }))}
@@ -300,10 +307,16 @@
 						onChange={(color) => updateStroke({ color }, `stroke-color:${layer.id}`)}
 						onCommit={(color) => editor.rememberColor(color)}
 					/>
+					{#if layer.type === 'image'}
+						<p class="text-xs leading-relaxed text-muted-foreground">
+							{m.studio_border_follows_content()}
+						</p>
+					{/if}
 					<label class="grid gap-1 text-xs">
 						<span>{m.studio_border_position()}</span>
 						<AppSelect
 							value={stroke.position}
+							ariaLabel={m.studio_border_position()}
 							disabled={!editor.canEdit}
 							onValueChange={(value) =>
 								updateStroke({
@@ -354,6 +367,7 @@
 				<span>{m.studio_mask()}</span>
 				<AppSelect
 					value={layer.mask?.shape ?? 'none'}
+					ariaLabel={m.studio_mask()}
 					disabled={!editor.canEdit}
 					onValueChange={setMask}
 					options={[

@@ -47,7 +47,6 @@
 		StudioDocumentResponse,
 		StudioLayer,
 		StudioRevisionSummary,
-		StudioSelectionTool,
 		StudioTemplate,
 		StudioTool
 	} from '../types';
@@ -71,6 +70,7 @@
 	import WandIcon from 'lucide-svelte/icons/wand-sparkles';
 	import CircleDashedIcon from 'lucide-svelte/icons/circle-dashed';
 	import PencilIcon from 'lucide-svelte/icons/pencil';
+	import EraserIcon from 'lucide-svelte/icons/eraser';
 	import PaintBucketIcon from 'lucide-svelte/icons/paint-bucket';
 	import BlendIcon from 'lucide-svelte/icons/blend';
 	import GroupIcon from 'lucide-svelte/icons/group';
@@ -790,6 +790,11 @@
 			else editor.undo();
 			return;
 		}
+		if (modifier && key === 'y') {
+			event.preventDefault();
+			editor.redo();
+			return;
+		}
 		if (modifier && key === 'j') {
 			event.preventDefault();
 			editor.duplicateSelected();
@@ -848,7 +853,9 @@
 			v: 'select',
 			l: 'lasso',
 			w: 'magic_wand',
+			b: 'pencil',
 			p: 'pencil',
+			e: event.shiftKey ? 'magic_eraser' : 'eraser',
 			g: event.shiftKey ? 'bucket' : 'gradient',
 			t: 'text',
 			h: 'hand',
@@ -1112,14 +1119,26 @@
 	const tools: Array<{ key: StudioTool; label: string; icon: typeof MousePointerIcon }> = [
 		{ key: 'select', label: m.studio_select(), icon: MousePointerIcon },
 		{ key: 'marquee', label: m.studio_pixel_select(), icon: RectangleSelectIcon },
+		{ key: 'lasso', label: m.studio_lasso_select(), icon: LassoSelectIcon },
+		{ key: 'magic_wand', label: m.studio_magic_select(), icon: WandIcon },
 		{ key: 'text', label: m.studio_text(), icon: TypeIcon },
 		{ key: 'pencil', label: m.studio_pencil(), icon: PencilIcon },
+		{ key: 'bucket', label: m.studio_fill(), icon: PaintBucketIcon },
+		{ key: 'eraser', label: m.studio_erase(), icon: EraserIcon },
 		{ key: 'hand', label: m.studio_hand(), icon: HandIcon },
 		{ key: 'zoom', label: m.studio_zoom(), icon: ZoomInIcon }
 	];
 
-	function isPixelSelectionTool(tool: StudioTool): tool is StudioSelectionTool {
-		return ['marquee', 'ellipse_marquee', 'lasso', 'magic_wand'].includes(tool);
+	function isMarqueeTool(tool: StudioTool): boolean {
+		return tool === 'marquee' || tool === 'ellipse_marquee';
+	}
+
+	function isFillTool(tool: StudioTool): boolean {
+		return tool === 'bucket' || tool === 'gradient';
+	}
+
+	function isEraserTool(tool: StudioTool): boolean {
+		return tool === 'eraser' || tool === 'magic_eraser';
 	}
 
 	function selectionToolLabel(tool: StudioTool): string {
@@ -1456,19 +1475,15 @@
 											<Button
 												{...tooltipProps}
 												{...menuProps}
-												variant={isPixelSelectionTool(editor.activeTool) ? 'secondary' : 'ghost'}
+												variant={isMarqueeTool(editor.activeTool) ? 'secondary' : 'ghost'}
 												size="icon-sm"
 												aria-label={selectionToolLabel(editor.activeTool)}
-												aria-pressed={isPixelSelectionTool(editor.activeTool)}
+												aria-pressed={isMarqueeTool(editor.activeTool)}
 											>
 												{#if editor.activeTool === 'marquee'}
 													<RectangleSelectIcon />
 												{:else if editor.activeTool === 'ellipse_marquee'}
 													<CircleDashedIcon />
-												{:else if editor.activeTool === 'lasso'}
-													<LassoSelectIcon />
-												{:else if editor.activeTool === 'magic_wand'}
-													<WandIcon />
 												{:else}
 													<RectangleSelectIcon />
 												{/if}
@@ -1492,19 +1507,9 @@
 								{m.studio_ellipse_select()}
 								<span class="ml-auto text-xs text-muted-foreground">⇧M</span>
 							</DropdownMenu.Item>
-							<DropdownMenu.Item onclick={() => setTool('lasso')}>
-								<LassoSelectIcon />
-								{m.studio_lasso_select()}
-								<span class="ml-auto text-xs text-muted-foreground">L</span>
-							</DropdownMenu.Item>
-							<DropdownMenu.Item onclick={() => setTool('magic_wand')}>
-								<WandIcon />
-								{m.studio_magic_select()}
-								<span class="ml-auto text-xs text-muted-foreground">W</span>
-							</DropdownMenu.Item>
 						</DropdownMenu.Content>
 					</DropdownMenu.Root>
-				{:else if tool.key === 'pencil'}
+				{:else if tool.key === 'bucket'}
 					<DropdownMenu.Root>
 						<Tooltip.Root>
 							<Tooltip.Trigger>
@@ -1514,32 +1519,26 @@
 											<Button
 												{...tooltipProps}
 												{...menuProps}
-												variant={['pencil', 'bucket', 'gradient'].includes(editor.activeTool)
-													? 'secondary'
-													: 'ghost'}
+												variant={isFillTool(editor.activeTool) ? 'secondary' : 'ghost'}
 												size="icon-sm"
-												aria-label={m.studio_paint()}
+												aria-label={editor.activeTool === 'gradient'
+													? m.studio_gradient()
+													: m.studio_paint_bucket()}
 												disabled={!editor.canEdit}
 											>
-												{#if editor.activeTool === 'bucket'}
-													<PaintBucketIcon />
-												{:else if editor.activeTool === 'gradient'}
+												{#if editor.activeTool === 'gradient'}
 													<BlendIcon />
 												{:else}
-													<PencilIcon />
+													<PaintBucketIcon />
 												{/if}
 											</Button>
 										{/snippet}
 									</DropdownMenu.Trigger>
 								{/snippet}
 							</Tooltip.Trigger>
-							<Tooltip.Content side="right">{m.studio_paint()}</Tooltip.Content>
+							<Tooltip.Content side="right">{m.studio_fill()}</Tooltip.Content>
 						</Tooltip.Root>
 						<DropdownMenu.Content side="right" align="start" class="min-w-44">
-							<DropdownMenu.Item onclick={() => setTool('pencil')}>
-								<PencilIcon />
-								{m.studio_pencil()}
-							</DropdownMenu.Item>
 							<DropdownMenu.Item onclick={() => setTool('bucket')}>
 								<PaintBucketIcon />
 								{m.studio_paint_bucket()}
@@ -1549,6 +1548,48 @@
 								<BlendIcon />
 								{m.studio_gradient()}
 								<span class="ml-auto text-xs text-muted-foreground">G</span>
+							</DropdownMenu.Item>
+						</DropdownMenu.Content>
+					</DropdownMenu.Root>
+				{:else if tool.key === 'eraser'}
+					<DropdownMenu.Root>
+						<Tooltip.Root>
+							<Tooltip.Trigger>
+								{#snippet child({ props: tooltipProps })}
+									<DropdownMenu.Trigger>
+										{#snippet child({ props: menuProps })}
+											<Button
+												{...tooltipProps}
+												{...menuProps}
+												variant={isEraserTool(editor.activeTool) ? 'secondary' : 'ghost'}
+												size="icon-sm"
+												aria-label={editor.activeTool === 'magic_eraser'
+													? m.studio_magic_erase()
+													: m.studio_erase()}
+												disabled={!editor.canEdit}
+											>
+												{#if editor.activeTool === 'magic_eraser'}
+													<WandIcon />
+												{:else}
+													<EraserIcon />
+												{/if}
+											</Button>
+										{/snippet}
+									</DropdownMenu.Trigger>
+								{/snippet}
+							</Tooltip.Trigger>
+							<Tooltip.Content side="right">{m.studio_erase()}</Tooltip.Content>
+						</Tooltip.Root>
+						<DropdownMenu.Content side="right" align="start" class="min-w-48">
+							<DropdownMenu.Item onclick={() => setTool('eraser')}>
+								<EraserIcon />
+								{m.studio_erase()}
+								<span class="ml-auto text-xs text-muted-foreground">E</span>
+							</DropdownMenu.Item>
+							<DropdownMenu.Item onclick={() => setTool('magic_eraser')}>
+								<WandIcon />
+								{m.studio_magic_erase()}
+								<span class="ml-auto text-xs text-muted-foreground">⇧E</span>
 							</DropdownMenu.Item>
 						</DropdownMenu.Content>
 					</DropdownMenu.Root>
@@ -1678,7 +1719,7 @@
 			<PanelLeftIcon />
 			{m.studio_add()}
 		</Button>
-		{#each tools.filter( (tool) => ['select', 'marquee', 'text', 'pencil', 'hand'].includes(tool.key) ) as tool (tool.key)}
+		{#each tools.filter( (tool) => ['select', 'marquee', 'lasso', 'magic_wand', 'text', 'pencil', 'bucket', 'eraser', 'hand'].includes(tool.key) ) as tool (tool.key)}
 			{@const Icon = tool.icon}
 			{#if tool.key === 'select'}
 				<Button
@@ -1697,7 +1738,7 @@
 						{#snippet child({ props })}
 							<Button
 								{...props}
-								variant={isPixelSelectionTool(editor.activeTool) ? 'secondary' : 'ghost'}
+								variant={isMarqueeTool(editor.activeTool) ? 'secondary' : 'ghost'}
 								class="h-12 w-16 shrink-0 snap-start flex-col gap-0 px-0 text-[11px] md:h-12"
 								aria-label={m.studio_pixel_select()}
 							>
@@ -1705,10 +1746,6 @@
 									<RectangleSelectIcon />
 								{:else if editor.activeTool === 'ellipse_marquee'}
 									<CircleDashedIcon />
-								{:else if editor.activeTool === 'lasso'}
-									<LassoSelectIcon />
-								{:else if editor.activeTool === 'magic_wand'}
-									<WandIcon />
 								{:else}
 									<RectangleSelectIcon />
 								{/if}
@@ -1725,49 +1762,31 @@
 							<CircleDashedIcon />
 							{m.studio_ellipse_select()}
 						</DropdownMenu.Item>
-						<DropdownMenu.Item onclick={() => setTool('lasso')}>
-							<LassoSelectIcon />
-							{m.studio_lasso_select()}
-						</DropdownMenu.Item>
-						<DropdownMenu.Item onclick={() => setTool('magic_wand')}>
-							<WandIcon />
-							{m.studio_magic_select()}
-						</DropdownMenu.Item>
 					</DropdownMenu.Content>
 				</DropdownMenu.Root>
-			{:else if tool.key === 'pencil'}
+			{:else if tool.key === 'bucket'}
 				<DropdownMenu.Root>
 					<DropdownMenu.Trigger>
 						{#snippet child({ props })}
 							<Button
 								{...props}
-								variant={['pencil', 'bucket', 'gradient'].includes(editor.activeTool)
-									? 'secondary'
-									: 'ghost'}
+								variant={isFillTool(editor.activeTool) ? 'secondary' : 'ghost'}
 								class="h-12 w-16 shrink-0 snap-start flex-col gap-0 px-0 text-[11px] md:h-12"
 								disabled={!editor.canEdit}
-								aria-label={editor.activeTool === 'bucket'
-									? m.studio_paint_bucket()
-									: editor.activeTool === 'gradient'
-										? m.studio_gradient()
-										: m.studio_pencil()}
+								aria-label={editor.activeTool === 'gradient'
+									? m.studio_gradient()
+									: m.studio_paint_bucket()}
 							>
-								{#if editor.activeTool === 'bucket'}
-									<PaintBucketIcon />
-								{:else if editor.activeTool === 'gradient'}
+								{#if editor.activeTool === 'gradient'}
 									<BlendIcon />
 								{:else}
-									<PencilIcon />
+									<PaintBucketIcon />
 								{/if}
-								{m.studio_paint()}
+								{m.studio_fill()}
 							</Button>
 						{/snippet}
 					</DropdownMenu.Trigger>
 					<DropdownMenu.Content side="top" align="start" class="min-w-44">
-						<DropdownMenu.Item onclick={() => setTool('pencil')}>
-							<PencilIcon />
-							{m.studio_pencil()}
-						</DropdownMenu.Item>
 						<DropdownMenu.Item onclick={() => setTool('bucket')}>
 							<PaintBucketIcon />
 							{m.studio_paint_bucket()}
@@ -1775,6 +1794,39 @@
 						<DropdownMenu.Item onclick={() => setTool('gradient')}>
 							<BlendIcon />
 							{m.studio_gradient()}
+						</DropdownMenu.Item>
+					</DropdownMenu.Content>
+				</DropdownMenu.Root>
+			{:else if tool.key === 'eraser'}
+				<DropdownMenu.Root>
+					<DropdownMenu.Trigger>
+						{#snippet child({ props })}
+							<Button
+								{...props}
+								variant={isEraserTool(editor.activeTool) ? 'secondary' : 'ghost'}
+								class="h-12 w-16 shrink-0 snap-start flex-col gap-0 px-0 text-[11px] md:h-12"
+								disabled={!editor.canEdit}
+								aria-label={editor.activeTool === 'magic_eraser'
+									? m.studio_magic_erase()
+									: m.studio_erase()}
+							>
+								{#if editor.activeTool === 'magic_eraser'}
+									<WandIcon />
+								{:else}
+									<EraserIcon />
+								{/if}
+								{m.studio_erase()}
+							</Button>
+						{/snippet}
+					</DropdownMenu.Trigger>
+					<DropdownMenu.Content side="top" align="start" class="min-w-48">
+						<DropdownMenu.Item onclick={() => setTool('eraser')}>
+							<EraserIcon />
+							{m.studio_erase()}
+						</DropdownMenu.Item>
+						<DropdownMenu.Item onclick={() => setTool('magic_eraser')}>
+							<WandIcon />
+							{m.studio_magic_erase()}
 						</DropdownMenu.Item>
 					</DropdownMenu.Content>
 				</DropdownMenu.Root>
@@ -1965,6 +2017,7 @@
 				<span class="font-medium">{m.studio_save_behavior()}</span>
 				<AppSelect
 					value={templateTargetID}
+					ariaLabel={m.studio_save_behavior()}
 					onValueChange={selectTemplateTarget}
 					options={[
 						{ value: 'new', label: m.studio_create_new_template() },
@@ -2059,6 +2112,7 @@
 					<span class="font-medium">{m.studio_format()}</span>
 					<AppSelect
 						value={editor.document?.export_defaults.format ?? 'png'}
+						ariaLabel={m.studio_format()}
 						onValueChange={(value) =>
 							editor.mutate('Change export format', (document) => {
 								document.export_defaults.format = value as 'png' | 'jpeg' | 'webp';

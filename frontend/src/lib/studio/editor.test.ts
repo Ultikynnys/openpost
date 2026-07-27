@@ -180,4 +180,90 @@ describe('Studio editor layer interactions', () => {
 		expect(layer.paint?.gradient?.end).toEqual({ x: 20, y: 0 });
 		expect(layer.paint?.spans).toEqual([{ x: 0, y: 0, width: 20 }]);
 	});
+
+	it('records a completed rotation as its own undoable history entry', () => {
+		const editor = new StudioEditor();
+		editor.load(response());
+
+		editor.updateTransform('front', { rotation: 45 }, '');
+
+		expect(
+			editor.activePage?.layers.find((candidate) => candidate.id === 'front')?.transform.rotation
+		).toBe(45);
+		expect(editor.canUndo).toBe(true);
+
+		editor.undo();
+		expect(
+			editor.activePage?.layers.find((candidate) => candidate.id === 'front')?.transform.rotation
+		).toBe(0);
+
+		editor.redo();
+		expect(
+			editor.activePage?.layers.find((candidate) => candidate.id === 'front')?.transform.rotation
+		).toBe(45);
+	});
+
+	it('duplicates dragged layers at the final Alt-drag transform without moving the originals', () => {
+		const editor = new StudioEditor();
+		editor.load(response());
+		editor.selectLayer('front');
+		const original = structuredClone(editor.selectedLayers[0].transform);
+
+		editor.duplicateSelectedAtTransforms([
+			{
+				id: 'front',
+				transform: { ...original, x: 360, y: 240 }
+			}
+		]);
+
+		const layers = editor.activePage?.layers ?? [];
+		expect(layers).toHaveLength(4);
+		expect(layers.find((candidate) => candidate.id === 'front')?.transform).toEqual(original);
+		expect(editor.selectedLayers[0].transform).toMatchObject({ x: 360, y: 240 });
+
+		editor.undo();
+		expect(editor.activePage?.layers).toHaveLength(3);
+	});
+
+	it('stores regular and magic erasing non-destructively and restores both with undo', () => {
+		const editor = new StudioEditor();
+		editor.load(response());
+		editor.addImage({ id: 'media', width: 100, height: 100, name: 'Logo' });
+		const imageID = editor.selectedLayers[0].id;
+
+		editor.addEraseStroke(
+			imageID,
+			100,
+			100,
+			[
+				{ x: 12, y: 14 },
+				{ x: 40, y: 42 }
+			],
+			18
+		);
+		const mask = new Uint8Array(100 * 100);
+		mask.fill(1, 20 * 100 + 30, 20 * 100 + 38);
+		editor.addMagicErase(imageID, 100, 100, mask);
+
+		const erased = editor.activePage?.layers.find((candidate) => candidate.id === imageID);
+		expect(erased?.erase_mask?.strokes).toEqual([
+			{
+				size: 18,
+				points: [
+					{ x: 12, y: 14 },
+					{ x: 40, y: 42 }
+				]
+			}
+		]);
+		expect(erased?.erase_mask?.spans).toEqual([{ x: 30, y: 20, width: 8 }]);
+
+		editor.undo();
+		expect(
+			editor.activePage?.layers.find((candidate) => candidate.id === imageID)?.erase_mask?.spans
+		).toEqual([]);
+		editor.undo();
+		expect(
+			editor.activePage?.layers.find((candidate) => candidate.id === imageID)?.erase_mask
+		).toBeUndefined();
+	});
 });

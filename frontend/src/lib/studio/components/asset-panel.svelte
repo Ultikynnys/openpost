@@ -160,7 +160,7 @@
 			{#if brand?.assets.length}
 				<section class="mb-4">
 					<h3 class="mb-2 text-xs font-semibold">{m.studio_brand_assets()}</h3>
-					<div class="grid grid-cols-3 gap-1.5">
+					<div class="grid grid-cols-[repeat(auto-fill,minmax(4.5rem,1fr))] gap-1.5">
 						{#each brand.assets as asset (asset.id)}
 							<button
 								type="button"
@@ -183,7 +183,7 @@
 			<section>
 				<h3 class="mb-2 text-xs font-semibold">{m.studio_all_media()}</h3>
 				{#if media.length > 0}
-					<div class="grid grid-cols-2 gap-2">
+					<div class="grid grid-cols-[repeat(auto-fill,minmax(6rem,1fr))] gap-2">
 						{#each media as item (item.id)}
 							<ContextMenu.Root>
 								<ContextMenu.Trigger disabled={!editor.canEdit}>
@@ -249,6 +249,7 @@
 	maxSelection={1}
 	multiple={false}
 	showCreate={false}
+	presentation="sheet"
 	desktopSize="compact"
 	title={m.studio_add_image()}
 	onConfirm={async (ids) => {
