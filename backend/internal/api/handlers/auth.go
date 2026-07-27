@@ -209,6 +209,13 @@ type MeOutput struct {
 	Body *UserProfile
 }
 
+type AuthSessionStateOutput struct {
+	Body struct {
+		Authenticated bool         `json:"authenticated" doc:"Whether the request has a valid OpenPost session"`
+		User          *UserProfile `json:"user,omitempty"`
+	}
+}
+
 type PasskeySummary struct {
 	ID         string    `json:"id" doc:"Passkey ID"`
 	Name       string    `json:"name" doc:"User-visible passkey label"`
@@ -642,6 +649,36 @@ func (h *AuthHandler) Me(api huma.API) {
 		}
 
 		return &MeOutput{Body: h.toUserProfile(user)}, nil
+	})
+}
+
+func (h *AuthHandler) SessionState(api huma.API) {
+	huma.Register(api, huma.Operation{
+		OperationID: "get-auth-session-state",
+		Method:      http.MethodGet,
+		Path:        "/auth/session-state",
+		Summary:     "Get optional web session state",
+		Description: "Returns an anonymous state instead of an authorization error when no valid session is present.",
+		Tags:        []string{tagAuth},
+		Middlewares: huma.Middlewares{middleware.OptionalAuthMiddleware(h.authenticator)},
+	}, func(ctx context.Context, _ *struct{}) (*AuthSessionStateOutput, error) {
+		out := &AuthSessionStateOutput{}
+		userID := middleware.GetUserID(ctx)
+		if userID == "" {
+			return out, nil
+		}
+
+		user, err := h.getUserByID(ctx, userID)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return out, nil
+			}
+			return nil, huma.Error500InternalServerError("failed to load session user")
+		}
+
+		out.Body.Authenticated = true
+		out.Body.User = h.toUserProfile(user)
+		return out, nil
 	})
 }
 

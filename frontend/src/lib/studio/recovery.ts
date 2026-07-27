@@ -1,9 +1,7 @@
 import { browser } from '$app/environment';
 import type { ComposerRecoverySnapshot, StudioDocument } from './types';
+import { openStudioDatabase, STUDIO_RECOVERY_STORE } from './local-persistence';
 
-const DB_NAME = 'openpost-studio';
-const DB_VERSION = 1;
-const STORE = 'documents';
 const COMPOSER_PREFIX = 'openpost:studio:return:';
 
 interface LocalStudioRecovery {
@@ -15,25 +13,11 @@ interface LocalStudioRecovery {
 	expires_at: string;
 }
 
-async function openRecoveryDB(): Promise<IDBDatabase> {
-	return await new Promise((resolve, reject) => {
-		const request = indexedDB.open(DB_NAME, DB_VERSION);
-		request.onupgradeneeded = () => {
-			const db = request.result;
-			if (!db.objectStoreNames.contains(STORE)) {
-				db.createObjectStore(STORE, { keyPath: 'design_id' });
-			}
-		};
-		request.onsuccess = () => resolve(request.result);
-		request.onerror = () => reject(request.error ?? new Error('Could not open Studio recovery.'));
-	});
-}
-
 export async function storeLocalStudioRecovery(
 	recovery: Omit<LocalStudioRecovery, 'updated_at' | 'expires_at'>
 ): Promise<void> {
 	if (!browser) return;
-	const db = await openRecoveryDB();
+	const db = await openStudioDatabase();
 	const now = new Date();
 	const record: LocalStudioRecovery = {
 		...recovery,
@@ -41,8 +25,8 @@ export async function storeLocalStudioRecovery(
 		expires_at: new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString()
 	};
 	await new Promise<void>((resolve, reject) => {
-		const transaction = db.transaction(STORE, 'readwrite');
-		transaction.objectStore(STORE).put(record);
+		const transaction = db.transaction(STUDIO_RECOVERY_STORE, 'readwrite');
+		transaction.objectStore(STUDIO_RECOVERY_STORE).put(record);
 		transaction.oncomplete = () => resolve();
 		transaction.onerror = () => reject(transaction.error);
 	});
@@ -53,9 +37,12 @@ export async function loadLocalStudioRecovery(
 	designID: string
 ): Promise<LocalStudioRecovery | null> {
 	if (!browser) return null;
-	const db = await openRecoveryDB();
+	const db = await openStudioDatabase();
 	const record = await new Promise<LocalStudioRecovery | undefined>((resolve, reject) => {
-		const request = db.transaction(STORE).objectStore(STORE).get(designID);
+		const request = db
+			.transaction(STUDIO_RECOVERY_STORE)
+			.objectStore(STUDIO_RECOVERY_STORE)
+			.get(designID);
 		request.onsuccess = () => resolve(request.result as LocalStudioRecovery | undefined);
 		request.onerror = () => reject(request.error);
 	});
@@ -70,10 +57,10 @@ export async function loadLocalStudioRecovery(
 
 export async function clearLocalStudioRecovery(designID: string): Promise<void> {
 	if (!browser) return;
-	const db = await openRecoveryDB();
+	const db = await openStudioDatabase();
 	await new Promise<void>((resolve, reject) => {
-		const transaction = db.transaction(STORE, 'readwrite');
-		transaction.objectStore(STORE).delete(designID);
+		const transaction = db.transaction(STUDIO_RECOVERY_STORE, 'readwrite');
+		transaction.objectStore(STUDIO_RECOVERY_STORE).delete(designID);
 		transaction.oncomplete = () => resolve();
 		transaction.onerror = () => reject(transaction.error);
 	});

@@ -175,6 +175,12 @@
 	function templateName(template: StudioTemplate): string {
 		if (!template.built_in) return template.name;
 		switch (template.id) {
+			case 'builtin-quick-announcement':
+				return m.studio_template_quick_announcement();
+			case 'builtin-quote-card':
+				return m.studio_template_quote_card();
+			case 'builtin-how-to-carousel':
+				return m.studio_template_how_to_carousel();
 			case 'builtin-bold-announcement':
 				return m.studio_template_bold_announcement();
 			case 'builtin-photo-caption':

@@ -15,6 +15,7 @@ import (
 	"github.com/openpost/backend/internal/models"
 	"github.com/openpost/backend/internal/services/apitokens"
 	"github.com/openpost/backend/internal/services/auth"
+	"github.com/openpost/backend/internal/services/identity"
 	"github.com/uptrace/bun"
 )
 
@@ -25,6 +26,7 @@ const (
 	EmailKey       contextKey = "email"
 	WorkspaceIDKey contextKey = "workspace_id"
 	SessionIDKey   contextKey = "session_id"
+	TokenIDKey     contextKey = "token_id"
 	UserAgentKey   contextKey = "user_agent"
 	ClientIPKey    contextKey = "client_ip"
 	SecureKey      contextKey = "secure_request"
@@ -48,6 +50,7 @@ type Principal struct {
 	ClientName  string
 	TokenPrefix string
 	SessionID   string
+	TokenID     string
 }
 
 type Authenticator interface {
@@ -136,6 +139,7 @@ func (s *CompositeService) AuthenticateBearer(ctx context.Context, token string)
 		WorkspaceID: apiPrincipal.WorkspaceID,
 		Audience:    apiPrincipal.Audience,
 		ClientID:    apiPrincipal.TokenID,
+		TokenID:     apiPrincipal.TokenID,
 		ClientName:  apiPrincipal.TokenName,
 		TokenPrefix: apiPrincipal.TokenPrefix,
 	}, nil
@@ -171,6 +175,45 @@ func AuthMiddleware(api huma.API, authenticator Authenticator) func(ctx huma.Con
 		if principal.SessionID != "" {
 			ctx = huma.WithValue(ctx, SessionIDKey, principal.SessionID)
 		}
+		if principal.TokenID != "" {
+			ctx = huma.WithValue(ctx, TokenIDKey, principal.TokenID)
+		}
+		next(ctx)
+	}
+}
+
+// OptionalAuthMiddleware attaches a valid REST principal when one is present
+// and otherwise continues anonymously. Use it only for read-only endpoints
+// whose response explicitly supports an unauthenticated state.
+func OptionalAuthMiddleware(authenticator Authenticator) func(ctx huma.Context, next func(huma.Context)) {
+	return func(ctx huma.Context, next func(huma.Context)) {
+		authHeader := ctx.Header("Authorization")
+		token, cookieAuth := requestAuthToken(authHeader, ctx.Header("Cookie"))
+		if token == "" {
+			next(ctx)
+			return
+		}
+		if cookieAuth && !cookieRequestAllowed(ctx.Method(), ctx.Header("Origin"), ctx.Host()) {
+			next(ctx)
+			return
+		}
+		principal, err := authenticator.AuthenticateBearer(ctx.Context(), token)
+		if err != nil || !principalCanAccessREST(principal) {
+			next(ctx)
+			return
+		}
+
+		ctx = huma.WithValue(ctx, UserIDKey, principal.UserID)
+		ctx = huma.WithValue(ctx, EmailKey, principal.Email)
+		if principal.WorkspaceID != "" {
+			ctx = huma.WithValue(ctx, WorkspaceIDKey, principal.WorkspaceID)
+		}
+		if principal.SessionID != "" {
+			ctx = huma.WithValue(ctx, SessionIDKey, principal.SessionID)
+		}
+		if principal.TokenID != "" {
+			ctx = huma.WithValue(ctx, TokenIDKey, principal.TokenID)
+		}
 		next(ctx)
 	}
 }
@@ -198,6 +241,13 @@ func GetWorkspaceID(ctx context.Context) string {
 
 func GetSessionID(ctx context.Context) string {
 	if v, ok := ctx.Value(SessionIDKey).(string); ok {
+		return v
+	}
+	return ""
+}
+
+func GetTokenID(ctx context.Context) string {
+	if v, ok := ctx.Value(TokenIDKey).(string); ok {
 		return v
 	}
 	return ""
@@ -269,6 +319,20 @@ func WorkspaceRole(ctx context.Context, db *bun.DB, workspaceID, userID string) 
 	}
 	if err != nil {
 		return "", false, err
+	}
+	decision, err := identity.EvaluateWorkspaceAccess(
+		ctx,
+		db,
+		workspaceID,
+		userID,
+		GetSessionID(ctx),
+		GetTokenID(ctx),
+	)
+	if err != nil {
+		return "", false, err
+	}
+	if !decision.Allowed {
+		return "", false, nil
 	}
 	return member.Role, true, nil
 }
@@ -366,6 +430,10 @@ func BearerMiddleware(authenticator Authenticator) echo.MiddlewareFunc {
 			if principal.SessionID != "" {
 				c.Set(string(SessionIDKey), principal.SessionID)
 				requestCtx = context.WithValue(requestCtx, SessionIDKey, principal.SessionID)
+			}
+			if principal.TokenID != "" {
+				c.Set(string(TokenIDKey), principal.TokenID)
+				requestCtx = context.WithValue(requestCtx, TokenIDKey, principal.TokenID)
 			}
 			c.SetRequest(c.Request().WithContext(requestCtx))
 

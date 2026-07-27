@@ -2,14 +2,33 @@ import {
 	STUDIO_LIMITS,
 	STUDIO_SCHEMA_VERSION,
 	type StudioDocument,
+	type StudioGradientValue,
 	type StudioImageAdjustments,
 	type StudioLayer,
 	type StudioPage,
+	type StudioPageBackground,
 	type StudioPreset,
 	type StudioTransform
 } from './types';
 
 const HEX_COLOR = /^#[0-9a-f]{6}([0-9a-f]{2})?$/i;
+
+function studioGradientIsValid(gradient?: StudioGradientValue): boolean {
+	return Boolean(
+		gradient &&
+		['linear', 'radial', 'angle', 'reflected', 'diamond'].includes(gradient.type) &&
+		[gradient.start.x, gradient.start.y, gradient.end.x, gradient.end.y].every(Number.isFinite) &&
+		gradient.stops.length >= 2 &&
+		gradient.stops.length <= 32 &&
+		gradient.stops.every(
+			(stop) =>
+				Number.isFinite(stop.offset) &&
+				stop.offset >= 0 &&
+				stop.offset <= 1 &&
+				HEX_COLOR.test(stop.color)
+		)
+	);
+}
 
 export function studioID(prefix: string): string {
 	return `${prefix}_${crypto.randomUUID()}`;
@@ -40,6 +59,7 @@ export function blankStudioPage(name = 'Page 1'): StudioPage {
 		id: studioID('page'),
 		name,
 		background_color: '#ffffff',
+		background: defaultStudioPageBackground(),
 		layers: []
 	};
 }
@@ -52,14 +72,19 @@ export function blankStudioDocument(preset: StudioPreset): StudioDocument {
 		width_px: preset.width_px,
 		height_px: preset.height_px,
 		brand_kit_revision: 0,
-		export_defaults: { format: preset.default_format, quality: 0.92 },
+		export_defaults: { format: preset.default_format, quality: 0.92, matte_color: '#ffffff' },
 		pages: [blankStudioPage()]
 	};
 }
 
 export function cloneStudioDocument(document: StudioDocument): StudioDocument {
 	const clone = structuredClone(document);
+	clone.export_defaults = {
+		...clone.export_defaults,
+		matte_color: clone.export_defaults.matte_color || '#ffffff'
+	};
 	for (const page of clone.pages) {
+		page.background = studioPageBackground(page);
 		for (const layer of page.layers) {
 			if (!layer.image) continue;
 			layer.image.adjustments = {
@@ -69,6 +94,69 @@ export function cloneStudioDocument(document: StudioDocument): StudioDocument {
 		}
 	}
 	return clone;
+}
+
+export function defaultStudioPageBackground(color = '#ffffff'): StudioPageBackground {
+	return { type: 'solid', color, opacity: 1 };
+}
+
+export function defaultStudioPageGradient(width: number, height: number): StudioGradientValue {
+	return {
+		type: 'linear',
+		start: { x: 0, y: height / 2 },
+		end: { x: width, y: height / 2 },
+		stops: [
+			{ offset: 0, color: '#f97316' },
+			{ offset: 1, color: '#7c3aed' }
+		],
+		reverse: false
+	};
+}
+
+export function studioPageBackground(
+	page: Pick<StudioPage, 'background' | 'background_color'>
+): StudioPageBackground {
+	if (!page.background) return defaultStudioPageBackground(page.background_color || '#ffffff');
+	const background = structuredClone(page.background);
+	if (background.type === 'transparent') {
+		return { type: 'transparent', opacity: 0 };
+	}
+	if (background.type === 'solid') {
+		return {
+			type: 'solid',
+			color: background.color || page.background_color || '#ffffff',
+			opacity: clamp(background.opacity, 0, 1)
+		};
+	}
+	if (background.type === 'gradient') {
+		return {
+			type: 'gradient',
+			opacity: clamp(background.opacity, 0, 1),
+			gradient: background.gradient
+		};
+	}
+	return {
+		type: 'image',
+		opacity: clamp(background.opacity, 0, 1),
+		image: background.image
+	};
+}
+
+export function studioPageHasTransparency(page: StudioPage): boolean {
+	const background = studioPageBackground(page);
+	if (background.type === 'transparent' || background.opacity < 1) return true;
+	if (background.type === 'image') return true;
+	if (background.type === 'solid') return colorHasTransparency(background.color);
+	return Boolean(background.gradient?.stops.some((stop) => colorHasTransparency(stop.color)));
+}
+
+function colorHasTransparency(color?: string): boolean {
+	const hex = color?.trim().replace('#', '') ?? '';
+	return hex.length === 8 && Number.parseInt(hex.slice(6, 8), 16) < 255;
+}
+
+function clamp(value: number, minimum: number, maximum: number): number {
+	return Number.isFinite(value) ? Math.max(minimum, Math.min(maximum, value)) : minimum;
 }
 
 export function cloneStudioPage(page: StudioPage, name: string): StudioPage {
@@ -114,6 +202,15 @@ export function validateStudioDocument(document: StudioDocument): string[] {
 		errors.push('The design title must be between 1 and 160 characters.');
 	}
 	if (
+		!['png', 'jpeg', 'webp'].includes(document.export_defaults.format) ||
+		!Number.isFinite(document.export_defaults.quality) ||
+		document.export_defaults.quality < 0.1 ||
+		document.export_defaults.quality > 1 ||
+		!HEX_COLOR.test(document.export_defaults.matte_color)
+	) {
+		errors.push('The export settings are invalid.');
+	}
+	if (
 		document.width_px < STUDIO_LIMITS.minDimension ||
 		document.height_px < STUDIO_LIMITS.minDimension ||
 		document.width_px > STUDIO_LIMITS.maxDimension ||
@@ -132,6 +229,19 @@ export function validateStudioDocument(document: StudioDocument): string[] {
 		pageIDs.add(page.id);
 		if (!HEX_COLOR.test(page.background_color))
 			errors.push(`${page.name} has an invalid background.`);
+		const background = studioPageBackground(page);
+		if (
+			!Number.isFinite(background.opacity) ||
+			background.opacity < 0 ||
+			background.opacity > 1 ||
+			(background.type === 'solid' && !HEX_COLOR.test(background.color ?? '')) ||
+			(background.type === 'gradient' && !studioGradientIsValid(background.gradient)) ||
+			(background.type === 'image' &&
+				(!background.image?.media_id ||
+					!['cover', 'contain', 'stretch'].includes(background.image.fit)))
+		) {
+			errors.push(`${page.name} has an invalid background.`);
+		}
 		if (page.layers.length > STUDIO_LIMITS.maxLayersPerPage) {
 			errors.push(`${page.name} has too many layers.`);
 		}

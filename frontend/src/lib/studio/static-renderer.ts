@@ -49,8 +49,12 @@ export async function renderStudioPage(
 			: studioDocument.export_defaults.format === 'webp'
 				? 'image/webp'
 				: 'image/png';
+	const outputCanvas =
+		format === 'image/jpeg'
+			? flattenCanvas(canvas, studioDocument.export_defaults.matte_color || '#ffffff')
+			: canvas;
 	const blob = await new Promise<Blob>((resolve, reject) => {
-		canvas.toBlob(
+		outputCanvas.toBlob(
 			(result) => (result ? resolve(result) : reject(new Error(m.studio_page_render_failed()))),
 			format,
 			studioDocument.export_defaults.quality
@@ -62,6 +66,18 @@ export async function renderStudioPage(
 		filename: `${sanitizeFilename(studioDocument.title)}-page-${String(pageIndex + 1).padStart(2, '0')}.${extensionForFormat(format)}`,
 		blob
 	};
+}
+
+function flattenCanvas(source: HTMLCanvasElement, matteColor: string): HTMLCanvasElement {
+	const flattened = globalThis.document.createElement('canvas');
+	flattened.width = source.width;
+	flattened.height = source.height;
+	const context = flattened.getContext('2d');
+	if (!context) return source;
+	context.fillStyle = matteColor;
+	context.fillRect(0, 0, flattened.width, flattened.height);
+	context.drawImage(source, 0, 0);
+	return flattened;
 }
 
 export async function renderStudioPreview(

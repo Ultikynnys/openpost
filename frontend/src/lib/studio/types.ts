@@ -149,6 +149,19 @@ export interface StudioGradientValue {
 	reverse: boolean;
 }
 
+export interface StudioPageBackgroundImage {
+	media_id: string;
+	fit: 'cover' | 'contain' | 'stretch';
+}
+
+export interface StudioPageBackground {
+	type: 'transparent' | 'solid' | 'gradient' | 'image';
+	color?: string;
+	opacity: number;
+	gradient?: StudioGradientValue;
+	image?: StudioPageBackgroundImage;
+}
+
 export interface StudioPaintValue {
 	kind: 'stroke' | 'fill' | 'gradient';
 	color: string;
@@ -214,6 +227,7 @@ export interface StudioPage {
 	id: string;
 	name: string;
 	background_color: string;
+	background?: StudioPageBackground;
 	layers: StudioLayer[];
 	preview_media_id?: string;
 	latest_export_media_id?: string;
@@ -230,6 +244,7 @@ export interface StudioDocument {
 	export_defaults: {
 		format: 'png' | 'jpeg' | 'webp';
 		quality: number;
+		matte_color: string;
 	};
 	pages: StudioPage[];
 }
@@ -360,6 +375,15 @@ export interface StudioMediaItem {
 	usage_count: number;
 	can_delete: boolean;
 	processing_status: string;
+	processing_progress: number;
+	analysis_status: string;
+	analysis_error?: string;
+	poster_thumbnail_url?: string;
+	duration_ms: number;
+	frame_rate: number;
+	container_format?: string;
+	video_codec?: string;
+	audio_codec?: string;
 	source: string;
 	asset_kind: string;
 	parent_media_id?: string;

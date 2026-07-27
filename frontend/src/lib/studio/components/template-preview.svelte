@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { getAuthenticatedMediaURL } from '$lib/media-url';
 	import type { StudioDocument, StudioLayer, StudioPage } from '../types';
+	import { studioPageBackground } from '../document';
+	import { normalizedGradientStops } from '../gradient';
 
 	let {
 		document,
@@ -17,6 +19,12 @@
 	} = $props();
 
 	let page = $derived(explicitPage ?? document.pages[0]);
+	let background = $derived(page ? studioPageBackground(page) : null);
+	let backgroundGradientStops = $derived(
+		background?.type === 'gradient' && background.gradient
+			? normalizedGradientStops(background.gradient.stops, background.gradient.reverse)
+			: []
+	);
 	let isWide = $derived(document.width_px / document.height_px >= 4 / 3);
 
 	function layerTransform(layer: StudioLayer): string {
@@ -34,6 +42,11 @@
 	function imageFit(layer: StudioLayer): string {
 		if (layer.image?.fit === 'stretch') return 'none';
 		return layer.image?.fit === 'contain' ? 'xMidYMid meet' : 'xMidYMid slice';
+	}
+
+	function backgroundImageFit(): string {
+		if (background?.type !== 'image' || background.image?.fit === 'stretch') return 'none';
+		return background.image?.fit === 'contain' ? 'xMidYMid meet' : 'xMidYMid slice';
 	}
 
 	function paintX(layer: StudioLayer, value: number): number {
@@ -63,11 +76,65 @@
 			viewBox={`0 0 ${document.width_px} ${document.height_px}`}
 			role="img"
 			aria-label={label || document.title}
-			class="block max-h-full max-w-full shadow-sm"
+			class="template-preview-frame block max-h-full max-w-full shadow-sm"
 			style:width={isWide ? '100%' : 'auto'}
 			style:height={isWide ? 'auto' : '100%'}
 		>
-			<rect width={document.width_px} height={document.height_px} fill={page.background_color} />
+			{#if background?.type === 'gradient' && background.gradient}
+				<defs>
+					{#if background.gradient.type === 'radial'}
+						<radialGradient
+							id={`page-background-${page.id}`}
+							cx={background.gradient.start.x / document.width_px}
+							cy={background.gradient.start.y / document.height_px}
+							r={Math.hypot(
+								background.gradient.end.x - background.gradient.start.x,
+								background.gradient.end.y - background.gradient.start.y
+							) / Math.max(document.width_px, document.height_px)}
+						>
+							{#each backgroundGradientStops as stop (`${stop.offset}:${stop.color}`)}
+								<stop offset={stop.offset} stop-color={stop.color} />
+							{/each}
+						</radialGradient>
+					{:else}
+						<linearGradient
+							id={`page-background-${page.id}`}
+							gradientUnits="userSpaceOnUse"
+							x1={background.gradient.start.x}
+							y1={background.gradient.start.y}
+							x2={background.gradient.end.x}
+							y2={background.gradient.end.y}
+						>
+							{#each backgroundGradientStops as stop (`${stop.offset}:${stop.color}`)}
+								<stop offset={stop.offset} stop-color={stop.color} />
+							{/each}
+						</linearGradient>
+					{/if}
+				</defs>
+			{/if}
+			{#if background?.type === 'solid'}
+				<rect
+					width={document.width_px}
+					height={document.height_px}
+					fill={background.color || page.background_color}
+					opacity={background.opacity}
+				/>
+			{:else if background?.type === 'gradient' && background.gradient}
+				<rect
+					width={document.width_px}
+					height={document.height_px}
+					fill={`url(#page-background-${page.id})`}
+					opacity={background.opacity}
+				/>
+			{:else if background?.type === 'image' && background.image}
+				<image
+					href={getAuthenticatedMediaURL(`/media/${background.image.media_id}`)}
+					width={document.width_px}
+					height={document.height_px}
+					opacity={background.opacity}
+					preserveAspectRatio={backgroundImageFit()}
+				/>
+			{/if}
 			{#each page.layers as layer (layer.id)}
 				{#if layer.visible && layer.type !== 'group'}
 					<g transform={layerTransform(layer)} opacity={layer.opacity}>
@@ -174,3 +241,22 @@
 		</svg>
 	{/if}
 </div>
+
+<style>
+	.template-preview-frame {
+		--studio-checker-light: color-mix(in oklch, var(--background) 72%, var(--foreground));
+		--studio-checker-dark: color-mix(in oklch, var(--background) 58%, var(--foreground));
+		background-color: var(--studio-checker-light);
+		background-image:
+			linear-gradient(45deg, var(--studio-checker-dark) 25%, transparent 25%),
+			linear-gradient(-45deg, var(--studio-checker-dark) 25%, transparent 25%),
+			linear-gradient(45deg, transparent 75%, var(--studio-checker-dark) 75%),
+			linear-gradient(-45deg, transparent 75%, var(--studio-checker-dark) 75%);
+		background-position:
+			0 0,
+			0 8px,
+			8px -8px,
+			-8px 0;
+		background-size: 16px 16px;
+	}
+</style>

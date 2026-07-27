@@ -1240,6 +1240,23 @@
 </div>
 
 <style>
+	.fabric-stage {
+		--studio-checker-light: color-mix(in oklch, var(--background) 72%, var(--foreground));
+		--studio-checker-dark: color-mix(in oklch, var(--background) 58%, var(--foreground));
+		background-color: var(--studio-checker-light);
+		background-image:
+			linear-gradient(45deg, var(--studio-checker-dark) 25%, transparent 25%),
+			linear-gradient(-45deg, var(--studio-checker-dark) 25%, transparent 25%),
+			linear-gradient(45deg, transparent 75%, var(--studio-checker-dark) 75%),
+			linear-gradient(-45deg, transparent 75%, var(--studio-checker-dark) 75%);
+		background-position:
+			0 0,
+			0 8px,
+			8px -8px,
+			-8px 0;
+		background-size: 16px 16px;
+	}
+
 	.fabric-stage :global(.canvas-container) {
 		transform: scale(var(--studio-zoom));
 		transform-origin: top left;

@@ -1,6 +1,12 @@
 # OpenPost Studio
 
-Studio is OpenPost's still-image editor for social posts, carousel pages, and slideshow images. Open it from **Media → Create → Create design**, from a Media asset's detail view, or from the composer's media picker.
+Studio is OpenPost's still-image editor for social posts, carousel pages, and slideshow images. Use the free public editor at [app.openpost.social/studio](https://app.openpost.social/studio), or open the workspace version from **Media → Create → Create design**, from a Media asset's detail view, or from the composer's media picker.
+
+## Use Studio without an account
+
+The public editor works without signing in and adds no watermark. Start with a social format, an original OpenPost template, or a PNG, JPEG, or WebP image. Designs and imported images stay in that browser, using persistent browser storage when available. Clearing site data, using private browsing, or browser storage eviction can remove local work.
+
+You can return to local designs on the same device and export PNG, JPEG, or WebP files at any time. **Save to OpenPost** creates an account or uses your current account, uploads the local images, and copies the editable design into your workspace. The local copy remains available in the original browser.
 
 ## Create and edit
 
@@ -8,7 +14,7 @@ Start with a social preset, an original OpenPost starter template, a workspace t
 
 Desktop Studio provides the canvas, asset and brand panes, Layers, Properties, and the page strip at the same time. On a phone, use the bottom tool rail and open one editing sheet at a time. The mobile editor supports adding and transforming layers, crop and image adjustments, text and shape properties, layer order and visibility, page management, undo and redo, background removal, and export.
 
-Studio saves after 750ms of inactivity. The top bar shows the current save state. Unsynced changes are also written to this browser for seven days. If another browser changes the same design, Studio does not overwrite it; reload the server version, save the local version as a copy, or continue locally until you decide.
+Studio saves after 750ms of inactivity. Public designs are saved on the current device. Workspace designs are saved to OpenPost, and unsynced workspace changes are also written to this browser for seven days. If another browser changes the same workspace design, Studio does not overwrite it; reload the server version, save the local version as a copy, or continue locally until you decide.
 
 ## Versions and templates
 

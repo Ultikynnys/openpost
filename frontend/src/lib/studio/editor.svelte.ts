@@ -31,6 +31,7 @@ import type {
 	StudioBrandKit,
 	StudioLayer,
 	StudioPage,
+	StudioPageBackground,
 	StudioSelectionMode,
 	StudioSaveState,
 	StudioTool
@@ -70,6 +71,7 @@ export class StudioEditor {
 	panX = $state(0);
 	panY = $state(0);
 	leftPanel = $state<'media' | null>('media');
+	backgroundImagePickerActive = $state(false);
 	rightPanelVisible = $state(true);
 	layersPanelOpen = $state(false);
 	pagesExpanded = $state(true);
@@ -596,6 +598,26 @@ export class StudioEditor {
 			effects: defaultLayerEffects()
 		};
 		this.addLayer(layer);
+	}
+
+	setPageBackground(background: StudioPageBackground): void {
+		this.mutate('Change page background', (document) => {
+			const page = document.pages.find((item) => item.id === this.activePageID);
+			if (!page) return;
+			page.background = structuredClone(background);
+			if (background.type === 'solid' && background.color) {
+				page.background_color = background.color;
+			}
+		});
+	}
+
+	setPageBackgroundImage(mediaID: string): void {
+		this.setPageBackground({
+			type: 'image',
+			opacity: 1,
+			image: { media_id: mediaID, fit: 'cover' }
+		});
+		this.backgroundImagePickerActive = false;
 	}
 
 	resolveImageDimensions(id: string, sourceWidth: number, sourceHeight: number): void {

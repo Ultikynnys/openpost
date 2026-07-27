@@ -44,6 +44,12 @@ type ListStudioTemplatesOutput struct {
 	}
 }
 
+type ListPublicStudioTemplatesOutput struct {
+	Body struct {
+		Templates []StudioTemplateResponse `json:"templates"`
+	}
+}
+
 type CreateStudioTemplateInput struct {
 	Body struct {
 		WorkspaceID    string                `json:"workspace_id"`
@@ -307,6 +313,14 @@ type ReplaceMediaTagItemsOutput struct {
 
 func (h *StudioHandler) registerTemplates(api huma.API) {
 	huma.Register(api, huma.Operation{
+		OperationID: "list-public-studio-templates",
+		Method:      http.MethodGet,
+		Path:        "/studio/public-templates",
+		Summary:     "List built-in Studio templates available without a workspace",
+		Tags:        []string{tagStudio},
+	}, h.listPublicTemplates)
+
+	huma.Register(api, huma.Operation{
 		OperationID: "list-studio-templates",
 		Method:      http.MethodGet,
 		Path:        "/studio/templates",
@@ -461,6 +475,12 @@ func (h *StudioHandler) registerMediaOrganization(api huma.API) {
 		Tags:        []string{tagMedia},
 		Middlewares: huma.Middlewares{middleware.AuthMiddleware(api, h.auth)},
 	}, h.replaceTagItems)
+}
+
+func (h *StudioHandler) listPublicTemplates(_ context.Context, _ *struct{}) (*ListPublicStudioTemplatesOutput, error) {
+	out := &ListPublicStudioTemplatesOutput{}
+	out.Body.Templates = builtinStudioTemplates()
+	return out, nil
 }
 
 func (h *StudioHandler) listTemplates(ctx context.Context, input *ListStudioTemplatesInput) (*ListStudioTemplatesOutput, error) {

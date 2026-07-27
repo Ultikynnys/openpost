@@ -3,6 +3,7 @@
 	import { useStudioEditor } from '../editor.svelte';
 	import { listStudioMedia, loadStudioBrandKit } from '../api';
 	import { loadStudioBrandFonts } from '../fonts';
+	import { listGuestStudioMedia, storeGuestStudioMedia } from '../local-persistence';
 	import type { StudioBrandKit, StudioMediaItem } from '../types';
 	import { getAuthenticatedMediaURL } from '$lib/media-url';
 	import { Button } from '$lib/components/ui/button';
@@ -15,9 +16,15 @@
 	import LoaderIcon from 'lucide-svelte/icons/loader-2';
 	import ImagePlusIcon from 'lucide-svelte/icons/image-plus';
 	import ReplaceIcon from 'lucide-svelte/icons/replace';
+	import SquareIcon from 'lucide-svelte/icons/square';
+	import CircleIcon from 'lucide-svelte/icons/circle';
+	import MinusIcon from 'lucide-svelte/icons/minus';
+	import TypeIcon from 'lucide-svelte/icons/type';
+	import WallpaperIcon from 'lucide-svelte/icons/wallpaper';
 	import { m } from '$lib/paraglide/messages';
 	import { writeStudioMediaDrag, type StudioMediaDragPayload } from '../media-drag';
 
+	let { guestMode = false }: { guestMode?: boolean } = $props();
 	const editor = useStudioEditor();
 	let media = $state<StudioMediaItem[]>([]);
 	let brand = $state<StudioBrandKit | null>(null);
@@ -28,11 +35,12 @@
 	let replaceMode = $state(false);
 	let loadedWorkspaceID = '';
 	let dragPreview: HTMLElement | null = null;
+	let guestFileInput: HTMLInputElement;
 
 	$effect(() => {
-		const workspaceID = editor.workspaceID;
-		if (!workspaceID || workspaceID === loadedWorkspaceID) return;
-		loadedWorkspaceID = workspaceID;
+		const scopeID = guestMode ? editor.id : editor.workspaceID;
+		if (!scopeID || scopeID === loadedWorkspaceID) return;
+		loadedWorkspaceID = scopeID;
 		void loadAll();
 	});
 
@@ -40,6 +48,12 @@
 		loading = true;
 		error = '';
 		try {
+			if (guestMode) {
+				media = await listGuestStudioMedia(editor.id);
+				brand = null;
+				editor.setBrandKit(null);
+				return;
+			}
 			const [nextMedia, nextBrand] = await Promise.all([
 				listStudioMedia(editor.workspaceID),
 				loadStudioBrandKit(editor.workspaceID)
@@ -59,7 +73,9 @@
 		loading = true;
 		error = '';
 		try {
-			media = await listStudioMedia(editor.workspaceID, search);
+			media = guestMode
+				? await listGuestStudioMedia(editor.id, search)
+				: await listStudioMedia(editor.workspaceID, search);
 		} catch (cause) {
 			error = cause instanceof Error ? cause.message : m.studio_search_failed();
 		} finally {
@@ -68,6 +84,10 @@
 	}
 
 	function addMedia(item: StudioMediaItem, replace = replaceMode): void {
+		if (editor.backgroundImagePickerActive) {
+			editor.setPageBackgroundImage(item.id);
+			return;
+		}
 		const selected = editor.selectedLayers[0];
 		if (replace && selected?.image) {
 			editor.updateLayer(selected.id, {
@@ -92,6 +112,10 @@
 	}
 
 	function addBrandAsset(asset: NonNullable<StudioBrandKit>['assets'][number]): void {
+		if (editor.backgroundImagePickerActive) {
+			editor.setPageBackgroundImage(asset.media_id);
+			return;
+		}
 		editor.addImage({ id: asset.media_id, name: asset.name || asset.role });
 	}
 
@@ -122,6 +146,26 @@
 		dragPreview?.remove();
 		dragPreview = null;
 	}
+
+	async function uploadGuestMedia(event: Event): Promise<void> {
+		const input = event.currentTarget as HTMLInputElement;
+		const files = Array.from(input.files ?? []);
+		if (files.length === 0) return;
+		loading = true;
+		error = '';
+		try {
+			for (const file of files) {
+				const item = await storeGuestStudioMedia(editor.id, file);
+				media = [item, ...media];
+			}
+			if (files.length === 1) addMedia(media[0]);
+		} catch (cause) {
+			error = cause instanceof Error ? cause.message : m.studio_search_failed();
+		} finally {
+			loading = false;
+			input.value = '';
+		}
+	}
 </script>
 
 <div class="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
@@ -136,6 +180,56 @@
 		</div>
 	{/if}
 	<div class="min-h-0 flex-1 overflow-y-auto p-2">
+		<section class="mb-4">
+			<h3 class="mb-2 text-xs font-semibold">{m.studio_add()}</h3>
+			<div class="grid grid-cols-2 gap-1.5">
+				<Button
+					variant="outline"
+					size="sm"
+					class="min-h-11 justify-start"
+					onclick={() => editor.addText()}
+				>
+					<TypeIcon />
+					{m.studio_text()}
+				</Button>
+				<Button
+					variant="outline"
+					size="sm"
+					class="min-h-11 justify-start"
+					onclick={() => editor.addShape('rectangle')}
+				>
+					<SquareIcon />
+					{m.studio_rectangle()}
+				</Button>
+				<Button
+					variant="outline"
+					size="sm"
+					class="min-h-11 justify-start"
+					onclick={() => editor.addShape('rounded_rectangle')}
+				>
+					<SquareIcon class="rounded-sm" />
+					{m.studio_rounded_rectangle()}
+				</Button>
+				<Button
+					variant="outline"
+					size="sm"
+					class="min-h-11 justify-start"
+					onclick={() => editor.addShape('ellipse')}
+				>
+					<CircleIcon />
+					{m.studio_ellipse()}
+				</Button>
+				<Button
+					variant="outline"
+					size="sm"
+					class="col-span-2 min-h-11 justify-start"
+					onclick={() => editor.addShape('line')}
+				>
+					<MinusIcon />
+					{m.studio_line()}
+				</Button>
+			</div>
+		</section>
 		<form
 			class="mb-2 flex gap-1"
 			onsubmit={(event) => {
@@ -166,10 +260,38 @@
 				<Tooltip.Content>{m.studio_search_media()}</Tooltip.Content>
 			</Tooltip.Root>
 		</form>
-		<Button variant="outline" size="sm" class="mb-2 w-full" onclick={() => (pickerOpen = true)}>
+		<input
+			bind:this={guestFileInput}
+			type="file"
+			accept="image/png,image/jpeg,image/webp"
+			multiple
+			class="sr-only"
+			onchange={uploadGuestMedia}
+		/>
+		<Button
+			variant="outline"
+			size="sm"
+			class="mb-2 w-full"
+			onclick={() => (guestMode ? guestFileInput?.click() : (pickerOpen = true))}
+		>
 			<PlusIcon />
 			{m.studio_upload_camera()}
 		</Button>
+		{#if editor.backgroundImagePickerActive}
+			<div
+				class="mb-3 flex items-center gap-2 rounded-lg border border-primary/40 bg-primary/8 p-2 text-xs"
+			>
+				<WallpaperIcon class="size-4 shrink-0 text-primary" />
+				<span class="min-w-0 flex-1">{m.studio_choose_background_image()}</span>
+				<Button
+					variant="ghost"
+					size="xs"
+					onclick={() => (editor.backgroundImagePickerActive = false)}
+				>
+					{m.common_cancel()}
+				</Button>
+			</div>
+		{/if}
 		{#if editor.selectedLayers[0]?.image}
 			<Button
 				variant={replaceMode ? 'secondary' : 'ghost'}
@@ -277,6 +399,13 @@
 											<ReplaceIcon class="size-4" />
 											{m.studio_replace_selected()}
 										</ContextMenu.Item>
+										<ContextMenu.Item
+											class="flex min-h-9 cursor-default items-center gap-2 rounded-md px-2 outline-none data-highlighted:bg-muted"
+											onclick={() => editor.setPageBackgroundImage(item.id)}
+										>
+											<WallpaperIcon class="size-4" />
+											{m.studio_set_page_background()}
+										</ContextMenu.Item>
 									</ContextMenu.Content>
 								</ContextMenu.Portal>
 							</ContextMenu.Root>
@@ -292,33 +421,35 @@
 	</div>
 </div>
 
-<MediaPicker
-	bind:open={pickerOpen}
-	workspaceId={editor.workspaceID}
-	currentSelection={[]}
-	accept={['image/*']}
-	maxSelection={1}
-	multiple={false}
-	showCreate={false}
-	presentation="sheet"
-	desktopSize="compact"
-	title={m.studio_add_image()}
-	onConfirm={async (ids) => {
-		const id = ids[0];
-		if (!id) return;
-		const item = media.find((entry) => entry.id === id);
-		if (item) addMedia(item);
-		else if (replaceMode && editor.selectedLayers[0]?.image) {
-			const selected = editor.selectedLayers[0];
-			editor.updateLayer(selected.id, {
-				image: {
-					...selected.image!,
-					media_id: id,
-					crop: { x: 0, y: 0, width: 1, height: 1 }
-				}
-			});
-			replaceMode = false;
-		} else editor.addImage({ id });
-		await loadAll();
-	}}
-/>
+{#if !guestMode}
+	<MediaPicker
+		bind:open={pickerOpen}
+		workspaceId={editor.workspaceID}
+		currentSelection={[]}
+		accept={['image/*']}
+		maxSelection={1}
+		multiple={false}
+		showCreate={false}
+		presentation="sheet"
+		desktopSize="compact"
+		title={m.studio_add_image()}
+		onConfirm={async (ids) => {
+			const id = ids[0];
+			if (!id) return;
+			const item = media.find((entry) => entry.id === id);
+			if (item) addMedia(item);
+			else if (replaceMode && editor.selectedLayers[0]?.image) {
+				const selected = editor.selectedLayers[0];
+				editor.updateLayer(selected.id, {
+					image: {
+						...selected.image!,
+						media_id: id,
+						crop: { x: 0, y: 0, width: 1, height: 1 }
+					}
+				});
+				replaceMode = false;
+			} else editor.addImage({ id });
+			await loadAll();
+		}}
+	/>
+{/if}

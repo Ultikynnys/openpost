@@ -232,18 +232,40 @@ type StudioLayer struct {
 	EraseMask *StudioEraseMask    `json:"erase_mask,omitempty"`
 }
 
+type StudioPageBackgroundImage struct {
+	MediaID string `json:"media_id"`
+	Fit     string `json:"fit" enum:"cover,contain,stretch"`
+}
+
+type StudioPageBackground struct {
+	Type     string                     `json:"type" enum:"transparent,solid,gradient,image"`
+	Color    string                     `json:"color,omitempty"`
+	Opacity  float64                    `json:"opacity" minimum:"0" maximum:"1"`
+	Gradient *StudioGradientValue       `json:"gradient,omitempty"`
+	Image    *StudioPageBackgroundImage `json:"image,omitempty"`
+}
+
 type StudioPagePayload struct {
-	ID                  string        `json:"id"`
-	Name                string        `json:"name"`
-	BackgroundColor     string        `json:"background_color"`
-	Layers              []StudioLayer `json:"layers"`
-	PreviewMediaID      string        `json:"preview_media_id,omitempty"`
-	LatestExportMediaID string        `json:"latest_export_media_id,omitempty"`
+	ID                  string                `json:"id"`
+	Name                string                `json:"name"`
+	BackgroundColor     string                `json:"background_color"`
+	Background          *StudioPageBackground `json:"background,omitempty"`
+	Layers              []StudioLayer         `json:"layers"`
+	PreviewMediaID      string                `json:"preview_media_id,omitempty"`
+	LatestExportMediaID string                `json:"latest_export_media_id,omitempty"`
+}
+
+func (page StudioPagePayload) BackgroundMediaID() string {
+	if page.Background == nil || page.Background.Type != "image" || page.Background.Image == nil {
+		return ""
+	}
+	return strings.TrimSpace(page.Background.Image.MediaID)
 }
 
 type StudioExportDefaults struct {
-	Format  string  `json:"format" enum:"png,jpeg,webp"`
-	Quality float64 `json:"quality" minimum:"0.1" maximum:"1"`
+	Format     string  `json:"format" enum:"png,jpeg,webp"`
+	Quality    float64 `json:"quality" minimum:"0.1" maximum:"1"`
+	MatteColor string  `json:"matte_color"`
 }
 
 type StudioDocumentPayload struct {
@@ -326,12 +348,13 @@ type ListStudioDesignsOutput struct {
 
 type CreateStudioDesignInput struct {
 	Body struct {
-		WorkspaceID   string `json:"workspace_id"`
-		Title         string `json:"title" maxLength:"160"`
-		PresetKey     string `json:"preset_key"`
-		WidthPX       int    `json:"width_px"`
-		HeightPX      int    `json:"height_px"`
-		SourceMediaID string `json:"source_media_id,omitempty"`
+		WorkspaceID     string `json:"workspace_id"`
+		Title           string `json:"title" maxLength:"160"`
+		PresetKey       string `json:"preset_key"`
+		WidthPX         int    `json:"width_px"`
+		HeightPX        int    `json:"height_px"`
+		SourceMediaID   string `json:"source_media_id,omitempty"`
+		ClientRequestID string `json:"client_request_id,omitempty" maxLength:"200" doc:"Stable client request ID used to make design creation idempotent"`
 	}
 }
 
@@ -744,6 +767,20 @@ func (h *StudioHandler) createDesign(ctx context.Context, input *CreateStudioDes
 	if _, err := h.requireAccess(ctx, workspaceID, true); err != nil {
 		return nil, err
 	}
+	userID := middleware.GetUserID(ctx)
+	clientRequestID := strings.TrimSpace(input.Body.ClientRequestID)
+	documentID, existing, err := h.resolveCreateDesignRequest(
+		ctx,
+		userID,
+		workspaceID,
+		clientRequestID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	if existing != nil {
+		return &CreateStudioDesignOutput{Body: *existing}, nil
+	}
 	width, height, presetKey, err := resolveStudioDimensions(input.Body.PresetKey, input.Body.WidthPX, input.Body.HeightPX)
 	if err != nil {
 		return nil, huma.Error400BadRequest(err.Error())
@@ -754,61 +791,61 @@ func (h *StudioHandler) createDesign(ctx context.Context, input *CreateStudioDes
 	}
 	now := time.Now().UTC()
 	document := &models.DesignDocument{
-		ID:            uuid.NewString(),
-		WorkspaceID:   workspaceID,
-		CreatedByID:   middleware.GetUserID(ctx),
-		Title:         title,
-		SchemaVersion: studioSchemaVersion,
-		Revision:      1,
-		PresetKey:     presetKey,
-		WidthPX:       width,
-		HeightPX:      height,
-		ExportFormat:  defaultStudioFormat(presetKey),
-		ExportQuality: 0.92,
-		CreatedAt:     now,
-		UpdatedAt:     now,
+		ID:               documentID,
+		WorkspaceID:      workspaceID,
+		CreatedByID:      userID,
+		Title:            title,
+		SchemaVersion:    studioSchemaVersion,
+		Revision:         1,
+		PresetKey:        presetKey,
+		WidthPX:          width,
+		HeightPX:         height,
+		ExportFormat:     defaultStudioFormat(presetKey),
+		ExportQuality:    0.92,
+		ExportMatteColor: "#ffffff",
+		CreatedAt:        now,
+		UpdatedAt:        now,
 	}
 	page := StudioPagePayload{
 		ID:              uuid.NewString(),
 		Name:            "Page 1",
 		BackgroundColor: "#ffffff",
+		Background:      defaultStudioPageBackground("#ffffff"),
 		Layers:          []StudioLayer{},
 	}
-	if sourceID := strings.TrimSpace(input.Body.SourceMediaID); sourceID != "" {
-		var media models.MediaAttachment
-		err := h.db.NewSelect().Model(&media).
-			Where("id = ? AND workspace_id = ? AND asset_kind = ?", sourceID, workspaceID, "library").
-			Scan(ctx)
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, huma.Error404NotFound(errMediaNotFound)
-		}
-		if err != nil {
-			return nil, huma.Error500InternalServerError("failed to load source media")
-		}
-		document.CoverPreviewMediaID = media.ID
-		page.Layers = append(page.Layers, newStudioImageLayer(media, width, height))
+	if err := h.attachCreateDesignSource(
+		ctx,
+		workspaceID,
+		input.Body.SourceMediaID,
+		width,
+		height,
+		document,
+		&page,
+	); err != nil {
+		return nil, err
 	}
 	payload := StudioDocumentPayload{
-		SchemaVersion:  studioSchemaVersion,
-		Title:          title,
-		PresetKey:      presetKey,
-		WidthPX:        width,
-		HeightPX:       height,
-		ExportDefaults: StudioExportDefaults{Format: defaultStudioFormat(presetKey), Quality: 0.92},
-		Pages:          []StudioPagePayload{page},
+		SchemaVersion: studioSchemaVersion,
+		Title:         title,
+		PresetKey:     presetKey,
+		WidthPX:       width,
+		HeightPX:      height,
+		ExportDefaults: StudioExportDefaults{
+			Format:     defaultStudioFormat(presetKey),
+			Quality:    0.92,
+			MatteColor: "#ffffff",
+		},
+		Pages: []StudioPagePayload{page},
 	}
 	if err := validateStudioPayload(payload); err != nil {
 		return nil, huma.Error400BadRequest(err.Error())
 	}
-	if err := h.db.RunInTx(ctx, &sql.TxOptions{}, func(txCtx context.Context, tx bun.Tx) error {
-		if _, err := tx.NewInsert().Model(document).Exec(txCtx); err != nil {
-			return err
+	if err := h.insertCreatedDesign(ctx, document, payload.Pages, now); err != nil {
+		if clientRequestID != "" {
+			if response, responseErr := h.documentResponse(ctx, documentID); responseErr == nil {
+				return &CreateStudioDesignOutput{Body: *response}, nil
+			}
 		}
-		if err := insertStudioPages(txCtx, tx, document.ID, payload.Pages, now); err != nil {
-			return err
-		}
-		return replaceStudioMediaReferences(txCtx, tx, document, payload.Pages)
-	}); err != nil {
 		return nil, huma.Error500InternalServerError("failed to create Studio design")
 	}
 	response, err := h.documentResponse(ctx, document.ID)
@@ -816,6 +853,81 @@ func (h *StudioHandler) createDesign(ctx context.Context, input *CreateStudioDes
 		return nil, err
 	}
 	return &CreateStudioDesignOutput{Body: *response}, nil
+}
+
+func (h *StudioHandler) resolveCreateDesignRequest(
+	ctx context.Context,
+	userID string,
+	workspaceID string,
+	clientRequestID string,
+) (string, *StudioDocumentResponse, error) {
+	if clientRequestID == "" {
+		return uuid.NewString(), nil, nil
+	}
+	documentID := uuid.NewSHA1(
+		uuid.NameSpaceURL,
+		[]byte(fmt.Sprintf("openpost:studio-design:%s:%s:%s", userID, workspaceID, clientRequestID)),
+	).String()
+	exists, err := h.db.NewSelect().
+		Model((*models.DesignDocument)(nil)).
+		Where("id = ? AND workspace_id = ? AND created_by_id = ?", documentID, workspaceID, userID).
+		Exists(ctx)
+	if err != nil {
+		return "", nil, huma.Error500InternalServerError("failed to check Studio design request")
+	}
+	if !exists {
+		return documentID, nil, nil
+	}
+	response, err := h.documentResponse(ctx, documentID)
+	if err != nil {
+		return "", nil, err
+	}
+	return documentID, response, nil
+}
+
+func (h *StudioHandler) attachCreateDesignSource(
+	ctx context.Context,
+	workspaceID string,
+	sourceMediaID string,
+	width int,
+	height int,
+	document *models.DesignDocument,
+	page *StudioPagePayload,
+) error {
+	sourceID := strings.TrimSpace(sourceMediaID)
+	if sourceID == "" {
+		return nil
+	}
+	var media models.MediaAttachment
+	err := h.db.NewSelect().Model(&media).
+		Where("id = ? AND workspace_id = ? AND asset_kind = ?", sourceID, workspaceID, "library").
+		Scan(ctx)
+	if errors.Is(err, sql.ErrNoRows) {
+		return huma.Error404NotFound(errMediaNotFound)
+	}
+	if err != nil {
+		return huma.Error500InternalServerError("failed to load source media")
+	}
+	document.CoverPreviewMediaID = media.ID
+	page.Layers = append(page.Layers, newStudioImageLayer(media, width, height))
+	return nil
+}
+
+func (h *StudioHandler) insertCreatedDesign(
+	ctx context.Context,
+	document *models.DesignDocument,
+	pages []StudioPagePayload,
+	now time.Time,
+) error {
+	return h.db.RunInTx(ctx, &sql.TxOptions{}, func(txCtx context.Context, tx bun.Tx) error {
+		if _, err := tx.NewInsert().Model(document).Exec(txCtx); err != nil {
+			return err
+		}
+		if err := insertStudioPages(txCtx, tx, document.ID, pages, now); err != nil {
+			return err
+		}
+		return replaceStudioMediaReferences(txCtx, tx, document, pages)
+	})
 }
 
 func (h *StudioHandler) getDesign(ctx context.Context, input *GetStudioDesignInput) (*GetStudioDesignOutput, error) {
@@ -867,12 +979,13 @@ func (h *StudioHandler) updateDesign(ctx context.Context, input *UpdateStudioDes
 	document.BrandKitRevision = input.Body.Document.BrandKitRevision
 	document.ExportFormat = input.Body.Document.ExportDefaults.Format
 	document.ExportQuality = input.Body.Document.ExportDefaults.Quality
+	document.ExportMatteColor = defaultStudioBackground(input.Body.Document.ExportDefaults.MatteColor)
 	document.CoverPreviewMediaID = strings.TrimSpace(input.Body.CoverPreviewID)
 	document.UpdatedAt = now
 
 	err = h.db.RunInTx(ctx, &sql.TxOptions{}, func(txCtx context.Context, tx bun.Tx) error {
 		result, err := tx.NewUpdate().Model(document).
-			Column("title", "schema_version", "revision", "preset_key", "width_px", "height_px", "brand_kit_id", "brand_kit_revision", "export_format", "export_quality", "cover_preview_media_id", "updated_at").
+			Column("title", "schema_version", "revision", "preset_key", "width_px", "height_px", "brand_kit_id", "brand_kit_revision", "export_format", "export_quality", "export_matte_color", "cover_preview_media_id", "updated_at").
 			WherePK().
 			Where("revision = ?", input.Body.ExpectedRevision).
 			Exec(txCtx)
@@ -999,6 +1112,7 @@ func (h *StudioHandler) duplicateDesign(ctx context.Context, input *DuplicateStu
 		BrandKitRevision:    payload.BrandKitRevision,
 		ExportFormat:        payload.ExportDefaults.Format,
 		ExportQuality:       payload.ExportDefaults.Quality,
+		ExportMatteColor:    defaultStudioBackground(payload.ExportDefaults.MatteColor),
 		CoverPreviewMediaID: source.CoverPreviewMediaID,
 		CreatedAt:           now,
 		UpdatedAt:           now,
@@ -1395,8 +1509,9 @@ func (h *StudioHandler) documentResponse(ctx context.Context, id string) (*Studi
 		BrandKitID:       document.BrandKitID,
 		BrandKitRevision: document.BrandKitRevision,
 		ExportDefaults: StudioExportDefaults{
-			Format:  document.ExportFormat,
-			Quality: document.ExportQuality,
+			Format:     document.ExportFormat,
+			Quality:    document.ExportQuality,
+			MatteColor: defaultStudioBackground(document.ExportMatteColor),
 		},
 		Pages: make([]StudioPagePayload, 0, len(pages)),
 	}
@@ -1405,10 +1520,19 @@ func (h *StudioHandler) documentResponse(ctx context.Context, id string) (*Studi
 		if err := json.Unmarshal([]byte(page.SceneJSON), &layers); err != nil {
 			return nil, huma.Error500InternalServerError("Studio design contains an invalid page")
 		}
+		background := defaultStudioPageBackground(page.BackgroundColor)
+		if encoded := strings.TrimSpace(page.BackgroundJSON); encoded != "" && encoded != "{}" {
+			var stored StudioPageBackground
+			if err := json.Unmarshal([]byte(encoded), &stored); err != nil {
+				return nil, huma.Error500InternalServerError("Studio design contains an invalid page background")
+			}
+			background = normalizeStudioPageBackground(&stored, page.BackgroundColor)
+		}
 		payload.Pages = append(payload.Pages, StudioPagePayload{
 			ID:                  page.ID,
 			Name:                page.Name,
 			BackgroundColor:     page.BackgroundColor,
+			Background:          background,
 			Layers:              layers,
 			PreviewMediaID:      page.PreviewMediaID,
 			LatestExportMediaID: page.LatestExportMediaID,
@@ -1505,6 +1629,14 @@ func validateStudioPayload(payload StudioDocumentPayload) error {
 	if len(payload.Pages) == 0 || len(payload.Pages) > studioMaxPages {
 		return fmt.Errorf("studio designs must contain between 1 and %d pages", studioMaxPages)
 	}
+	if !oneOfStudioString(payload.ExportDefaults.Format, "png", "jpeg", "webp") ||
+		!finiteStudioNumber(payload.ExportDefaults.Quality) ||
+		payload.ExportDefaults.Quality < 0.1 ||
+		payload.ExportDefaults.Quality > 1 ||
+		(payload.ExportDefaults.MatteColor != "" &&
+			!studioHexColor.MatchString(payload.ExportDefaults.MatteColor)) {
+		return fmt.Errorf("studio export defaults are invalid")
+	}
 	encoded, err := json.Marshal(payload)
 	if err != nil || len(encoded) > studioMaxDocumentBytes {
 		return fmt.Errorf("studio design exceeds the %d MiB document limit", studioMaxDocumentBytes>>20)
@@ -1522,8 +1654,8 @@ func validateStudioPayload(payload StudioDocumentPayload) error {
 		if len(page.Layers) > studioMaxLayersPerPage {
 			return fmt.Errorf("a Studio page cannot contain more than %d layers", studioMaxLayersPerPage)
 		}
-		if !studioHexColor.MatchString(page.BackgroundColor) {
-			return fmt.Errorf("studio page backgrounds must use hexadecimal colors")
+		if err := validateStudioPageBackground(page); err != nil {
+			return err
 		}
 		pageLayerIDs := make(map[string]struct{}, len(page.Layers))
 		parents := make(map[string]string, len(page.Layers))
@@ -1556,6 +1688,66 @@ func validateStudioPayload(payload StudioDocumentPayload) error {
 				seen[current] = true
 			}
 		}
+	}
+	return nil
+}
+
+func validateStudioPageBackground(page StudioPagePayload) error {
+	if !studioHexColor.MatchString(page.BackgroundColor) {
+		return fmt.Errorf("studio page backgrounds must use hexadecimal colors")
+	}
+	if page.Background == nil {
+		return nil
+	}
+	background := page.Background
+	if !oneOfStudioString(background.Type, "transparent", "solid", "gradient", "image") ||
+		!finiteStudioNumber(background.Opacity) ||
+		background.Opacity < 0 ||
+		background.Opacity > 1 {
+		return fmt.Errorf("studio page background is invalid")
+	}
+	switch background.Type {
+	case "transparent":
+		return validateTransparentStudioBackground(background)
+	case "solid":
+		return validateSolidStudioBackground(background)
+	case "gradient":
+		return validateGradientStudioBackground(background)
+	case "image":
+		return validateImageStudioBackground(background)
+	}
+	return nil
+}
+
+func validateTransparentStudioBackground(background *StudioPageBackground) error {
+	if background.Gradient != nil || background.Image != nil {
+		return fmt.Errorf("transparent Studio backgrounds cannot include fill properties")
+	}
+	return nil
+}
+
+func validateSolidStudioBackground(background *StudioPageBackground) error {
+	if !studioHexColor.MatchString(background.Color) ||
+		background.Gradient != nil ||
+		background.Image != nil {
+		return fmt.Errorf("solid Studio backgrounds are invalid")
+	}
+	return nil
+}
+
+func validateGradientStudioBackground(background *StudioPageBackground) error {
+	if background.Image != nil {
+		return fmt.Errorf("gradient Studio backgrounds cannot include an image")
+	}
+	return validateStudioGradient(background.Gradient)
+}
+
+func validateImageStudioBackground(background *StudioPageBackground) error {
+	if background.Gradient != nil ||
+		background.Image == nil ||
+		strings.TrimSpace(background.Image.MediaID) == "" ||
+		!oneOfStudioString(background.Image.Fit, "cover", "contain", "stretch") {
+		return fmt.Errorf("image Studio backgrounds are invalid")
 	}
 	return nil
 }
@@ -1877,12 +2069,18 @@ func insertStudioPages(ctx context.Context, tx bun.Tx, documentID string, pages 
 		if err != nil {
 			return err
 		}
+		background := normalizeStudioPageBackground(page.Background, page.BackgroundColor)
+		backgroundJSON, err := json.Marshal(background)
+		if err != nil {
+			return err
+		}
 		rows = append(rows, models.DesignPage{
 			ID:                  page.ID,
 			DesignDocumentID:    documentID,
 			Name:                defaultStudioPageName(page.Name, index),
 			DisplayOrder:        index,
 			BackgroundColor:     defaultStudioBackground(page.BackgroundColor),
+			BackgroundJSON:      string(backgroundJSON),
 			SceneJSON:           string(scene),
 			PreviewMediaID:      page.PreviewMediaID,
 			LatestExportMediaID: page.LatestExportMediaID,
@@ -1906,6 +2104,17 @@ func replaceStudioMediaReferences(ctx context.Context, tx bun.Tx, document *mode
 	refs := make([]models.DesignMediaReference, 0)
 	seen := make(map[string]bool)
 	for _, page := range pages {
+		if mediaID := strings.TrimSpace(page.BackgroundMediaID()); mediaID != "" {
+			key := page.ID + "\x00" + mediaID
+			seen[key] = true
+			refs = append(refs, models.DesignMediaReference{
+				DesignDocumentID: document.ID,
+				DesignPageID:     page.ID,
+				MediaID:          mediaID,
+				Usage:            "background",
+				CreatedAt:        time.Now().UTC(),
+			})
+		}
 		for _, layer := range page.Layers {
 			mediaID := ""
 			usage := ""
@@ -2035,6 +2244,9 @@ func studioMediaIDs(pages []StudioPagePayload) []string {
 		if strings.TrimSpace(page.LatestExportMediaID) != "" {
 			set[page.LatestExportMediaID] = struct{}{}
 		}
+		if mediaID := page.BackgroundMediaID(); mediaID != "" {
+			set[mediaID] = struct{}{}
+		}
 		for _, layer := range page.Layers {
 			if layer.Image != nil && strings.TrimSpace(layer.Image.MediaID) != "" {
 				set[layer.Image.MediaID] = struct{}{}
@@ -2160,6 +2372,42 @@ func defaultStudioBackground(value string) string {
 		return trimmed
 	}
 	return "#ffffff"
+}
+
+func defaultStudioPageBackground(color string) *StudioPageBackground {
+	return &StudioPageBackground{
+		Type:    "solid",
+		Color:   defaultStudioBackground(color),
+		Opacity: 1,
+	}
+}
+
+func normalizeStudioPageBackground(
+	background *StudioPageBackground,
+	legacyColor string,
+) *StudioPageBackground {
+	if background == nil || !oneOfStudioString(background.Type, "transparent", "solid", "gradient", "image") {
+		return defaultStudioPageBackground(legacyColor)
+	}
+	normalized := *background
+	switch normalized.Type {
+	case "transparent":
+		normalized.Color = ""
+		normalized.Opacity = 0
+		normalized.Gradient = nil
+		normalized.Image = nil
+	case "solid":
+		normalized.Color = defaultStudioBackground(normalized.Color)
+		normalized.Gradient = nil
+		normalized.Image = nil
+	case "gradient":
+		normalized.Color = ""
+		normalized.Image = nil
+	case "image":
+		normalized.Color = ""
+		normalized.Gradient = nil
+	}
+	return &normalized
 }
 
 func defaultStudioLayerName(value, fallback string) string {

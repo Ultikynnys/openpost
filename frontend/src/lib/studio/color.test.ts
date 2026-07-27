@@ -4,6 +4,7 @@ import { hexToRGB, hslToHex, normalizeHex, rgbToHSL, rgbToHex } from './color';
 describe('Studio color conversion', () => {
 	it('normalizes shorthand colors', () => {
 		expect(normalizeHex('#f80')).toBe('#ff8800');
+		expect(normalizeHex('#bb567aff')).toBe('#bb567a');
 		expect(normalizeHex('invalid', '#ffffff')).toBe('#ffffff');
 	});
 

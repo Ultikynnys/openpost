@@ -11,6 +11,7 @@
 	import StudioColorPicker from './studio-color-picker.svelte';
 	import StudioFontPicker from './studio-font-picker.svelte';
 	import LayerEffectsPanel from './layer-effects-panel.svelte';
+	import PageBackgroundEditor from './page-background-editor.svelte';
 	import CopyIcon from 'lucide-svelte/icons/copy';
 	import TrashIcon from 'lucide-svelte/icons/trash-2';
 	import BringToFrontIcon from 'lucide-svelte/icons/bring-to-front';
@@ -22,6 +23,8 @@
 	import ChevronDownIcon from 'lucide-svelte/icons/chevron-down';
 	import { m } from '$lib/paraglide/messages';
 	import type { StudioImageAdjustments, StudioTextCurveType } from '../types';
+
+	let { onOpenMedia = () => undefined }: { onOpenMedia?: () => void } = $props();
 
 	const editor = useStudioEditor();
 	let layer = $derived(editor.selectedLayers[0] ?? null);
@@ -184,32 +187,7 @@
 		class="studio-properties-scroll min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto p-3"
 	>
 		{#if !layer}
-			<section class="space-y-3">
-				<div>
-					<label for="page-background" class="mb-1 block text-xs font-medium"
-						>{m.studio_page_background()}</label
-					>
-					<StudioColorPicker
-						id="page-background"
-						label={m.studio_page_background()}
-						value={editor.activePage?.background_color ?? '#ffffff'}
-						disabled={!editor.canEdit}
-						{brandColors}
-						recentColors={editor.recentColors}
-						onChange={(value) =>
-							editor.mutate(
-								'Change page background',
-								(document) => {
-									const page = document.pages.find((item) => item.id === editor.activePageID);
-									if (page) page.background_color = value;
-								},
-								'page-background'
-							)}
-						onCommit={(value) => editor.rememberColor(value)}
-					/>
-				</div>
-				<p class="text-sm text-muted-foreground">{m.studio_select_layer_help()}</p>
-			</section>
+			<PageBackgroundEditor {onOpenMedia} />
 		{:else}
 			<div class="space-y-5">
 				<section class="space-y-2">

@@ -1,6 +1,106 @@
 import { expect, test } from "@playwright/test";
 import { authenticatePage, createWorkspace, registerUser } from "./helpers";
 
+test("public Studio creates and restores a local design without authentication", async ({
+  page,
+}) => {
+  test.setTimeout(60_000);
+  const browserErrors: string[] = [];
+  const workspaceWrites: string[] = [];
+  page.on("pageerror", (error) => browserErrors.push(error.message));
+  page.on("console", (message) => {
+    if (message.type() === "error") browserErrors.push(message.text());
+  });
+  page.on("request", (request) => {
+    if (
+      request.method() !== "GET" &&
+      request.url().includes("/api/v1/studio/designs")
+    ) {
+      workspaceWrites.push(`${request.method()} ${request.url()}`);
+    }
+  });
+  await page.addInitScript(() => {
+    const events = JSON.parse(
+      sessionStorage.getItem("public-studio-test-events") || "[]",
+    ) as string[];
+    Object.defineProperty(window, "__publicStudioEvents", {
+      value: events,
+      configurable: true,
+    });
+    window.addEventListener("openpost:public-studio-event", (event) => {
+      events.push((event as CustomEvent<{ name: string }>).detail.name);
+      sessionStorage.setItem(
+        "public-studio-test-events",
+        JSON.stringify(events),
+      );
+    });
+  });
+
+  await page.goto("/studio");
+  await expect(
+    page.getByRole("heading", { name: "Free social media image editor" }),
+  ).toBeVisible();
+  await expect(page.getByText("No account or watermark.")).toBeVisible();
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBe(true);
+  await page.getByRole("button", { name: /Instagram square/ }).click();
+
+  await expect(page).toHaveURL(/\/studio\/local_design_/);
+  await expect(
+    page.getByRole("application", { name: "Design canvas" }),
+  ).toBeVisible();
+  const title = page.getByRole("textbox", { name: "Design title" });
+  await title.fill("Local launch design");
+  await expect(
+    page.getByRole("banner").getByText("Saved on this device"),
+  ).toBeVisible();
+
+  await page.reload();
+  await expect(title).toHaveValue("Local launch design");
+  const localDesignURL = page.url();
+  await title.fill("Latest conversion edit");
+  await page.getByRole("button", { name: "Save to OpenPost" }).click();
+  await expect(page).toHaveURL(/\/register\?redirect=/);
+  await page.goto(localDesignURL);
+  await expect(title).toHaveValue("Latest conversion edit");
+
+  await page.getByRole("button", { name: "Export" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Export design" }),
+  ).toBeVisible();
+  const download = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Download" }).click();
+  await download;
+  await expect(
+    page.getByRole("heading", { name: "Export complete" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Keep editing" }).click();
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.getByRole("button", { name: "Export" })).toBeVisible();
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBe(true);
+
+  const trackedEvents = await page.evaluate(
+    () =>
+      (window as Window & { __publicStudioEvents?: string[] })
+        .__publicStudioEvents ?? [],
+  );
+  expect(trackedEvents).toContain("studio_design_started");
+  expect(trackedEvents).toContain("studio_meaningful_edit");
+  expect(trackedEvents).toContain("studio_export_completed");
+  expect(workspaceWrites).toEqual([]);
+  expect(
+    browserErrors.filter((message) => !message.includes("401 (Unauthorized)")),
+  ).toEqual([]);
+});
+
 test("Studio creates from an original template, adapts to mobile, and exports to Media", async ({
   page,
   request,
@@ -698,9 +798,7 @@ test("Studio creates from an original template, adapts to mobile, and exports to
   await page.getByRole("button", { name: "Export" }).click();
   const exportDialog = page.getByRole("dialog", { name: "Export design" });
   await expect(exportDialog).toBeVisible();
-  await exportDialog
-    .getByRole("button", { name: "Media", exact: true })
-    .click();
+  await exportDialog.getByRole("radio", { name: "Media", exact: true }).click();
   await exportDialog
     .getByRole("button", { name: "Export to Media", exact: true })
     .click();

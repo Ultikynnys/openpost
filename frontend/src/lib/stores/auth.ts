@@ -33,13 +33,23 @@ function createAuthStore() {
 
 	return {
 		subscribe,
-		async initialize() {
+		async initialize(options: { optional?: boolean } = {}) {
 			if (!browser) return;
 
 			// Recreate client in case instance URL was just set
 			recreateClient();
 
 			try {
+				if (options.optional) {
+					const { data, error } = await client.GET('/auth/session-state');
+					if (error || !data?.authenticated || !data.user) {
+						setToken(null);
+						set({ user: null, isLoading: false, isAuthenticated: false });
+						return;
+					}
+					set({ user: data.user, isLoading: false, isAuthenticated: true });
+					return;
+				}
 				const { data, error } = await client.GET('/auth/me');
 				if (error || !data) throw new Error('Failed to fetch user');
 				set({ user: data, isLoading: false, isAuthenticated: true });

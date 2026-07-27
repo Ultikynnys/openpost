@@ -4,6 +4,7 @@ import {
 	cloneStudioPage,
 	defaultTransform,
 	migrateStudioDocument,
+	studioPageHasTransparency,
 	validateStudioDocument
 } from './document';
 import { STUDIO_LIMITS, type StudioLayer, type StudioPreset } from './types';
@@ -36,6 +37,40 @@ describe('Studio document contracts', () => {
 		expect(validateStudioDocument(document)).toEqual([]);
 		expect(document.pages).toHaveLength(1);
 		expect(document.width_px).toBe(1080);
+		expect(document.export_defaults.matte_color).toBe('#ffffff');
+	});
+
+	it('supports transparent, gradient, and image page backgrounds', () => {
+		const document = blankStudioDocument(preset);
+		document.pages[0].background = { type: 'transparent', opacity: 0 };
+		expect(validateStudioDocument(document)).toEqual([]);
+		expect(studioPageHasTransparency(document.pages[0])).toBe(true);
+
+		document.pages[0].background = {
+			type: 'gradient',
+			opacity: 1,
+			gradient: {
+				type: 'linear',
+				start: { x: 0, y: 540 },
+				end: { x: 1080, y: 540 },
+				reverse: false,
+				stops: [
+					{ offset: 0, color: '#f97316' },
+					{ offset: 0.5, color: '#ec4899' },
+					{ offset: 1, color: '#7c3aed' }
+				]
+			}
+		};
+		expect(validateStudioDocument(document)).toEqual([]);
+		expect(studioPageHasTransparency(document.pages[0])).toBe(false);
+
+		document.pages[0].background = {
+			type: 'image',
+			opacity: 1,
+			image: { media_id: 'media-background', fit: 'cover' }
+		};
+		expect(validateStudioDocument(document)).toEqual([]);
+		expect(studioPageHasTransparency(document.pages[0])).toBe(true);
 	});
 
 	it('enforces page, pixel, and layer limits', () => {
@@ -79,6 +114,8 @@ describe('Studio document contracts', () => {
 
 	it('fills new image-adjustment defaults when opening an existing document', () => {
 		const document = blankStudioDocument(preset);
+		delete document.pages[0].background;
+		delete (document.export_defaults as Partial<typeof document.export_defaults>).matte_color;
 		document.pages[0].layers = [
 			{
 				id: 'existing-image',
@@ -116,6 +153,12 @@ describe('Studio document contracts', () => {
 			vibrance: 0,
 			hue: 0
 		});
+		expect(result.document?.pages[0].background).toEqual({
+			type: 'solid',
+			color: '#ffffff',
+			opacity: 1
+		});
+		expect(result.document?.export_defaults.matte_color).toBe('#ffffff');
 	});
 
 	it('validates masks, curved text, blend modes, and layer shadows', () => {

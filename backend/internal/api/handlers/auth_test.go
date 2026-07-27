@@ -217,11 +217,64 @@ func TestAuthHandlerListsAndRevokesSessions(t *testing.T) {
 	require.False(t, revoked.RevokedAt.IsZero())
 }
 
+func TestAuthSessionStateSupportsAnonymousAndAuthenticatedRequests(t *testing.T) {
+	t.Parallel()
+
+	db := createHandlerTestDB(t, (*models.User)(nil))
+	ctx := t.Context()
+	user := &models.User{
+		ID:           "user-1",
+		Email:        "user@example.com",
+		PasswordHash: "hash",
+		CreatedAt:    time.Now().UTC(),
+	}
+	_, err := db.NewInsert().Model(user).Exec(ctx)
+	require.NoError(t, err)
+
+	authService := auth.NewService("test-secret")
+	token, err := authService.GenerateToken(user.ID, user.Email)
+	require.NoError(t, err)
+
+	e := echo.New()
+	api := humaecho.NewWithGroup(e, e.Group("/api/v1"), huma.DefaultConfig("Test", "1.0.0"))
+	handler := NewAuthHandler(
+		db,
+		authService,
+		middleware.NewJWTAuthenticator(authService),
+		nil,
+		nil,
+		false,
+	)
+	handler.SessionState(api)
+
+	anonymous := authSessionRequest(t, e, http.MethodGet, "/api/v1/auth/session-state", "")
+	require.Equal(t, http.StatusOK, anonymous.Code, anonymous.Body.String())
+	var anonymousBody AuthSessionStateOutput
+	require.NoError(t, json.Unmarshal(anonymous.Body.Bytes(), &anonymousBody.Body))
+	require.False(t, anonymousBody.Body.Authenticated)
+	require.Nil(t, anonymousBody.Body.User)
+
+	authenticated := authSessionRequest(t, e, http.MethodGet, "/api/v1/auth/session-state", token)
+	require.Equal(t, http.StatusOK, authenticated.Code, authenticated.Body.String())
+	var authenticatedBody AuthSessionStateOutput
+	require.NoError(t, json.Unmarshal(authenticated.Body.Bytes(), &authenticatedBody.Body))
+	require.True(t, authenticatedBody.Body.Authenticated)
+	require.Equal(t, user.ID, authenticatedBody.Body.User.ID)
+
+	invalid := authSessionRequest(t, e, http.MethodGet, "/api/v1/auth/session-state", "invalid")
+	require.Equal(t, http.StatusOK, invalid.Code, invalid.Body.String())
+	var invalidBody AuthSessionStateOutput
+	require.NoError(t, json.Unmarshal(invalid.Body.Bytes(), &invalidBody.Body))
+	require.False(t, invalidBody.Body.Authenticated)
+}
+
 func authSessionRequest(t *testing.T, e *echo.Echo, method, path, token string) *httptest.ResponseRecorder {
 	t.Helper()
 
 	req := httptest.NewRequestWithContext(t.Context(), method, path, nil)
-	req.Header.Set("Authorization", "Bearer "+token)
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
 	rec := httptest.NewRecorder()
 	e.ServeHTTP(rec, req)
 	return rec

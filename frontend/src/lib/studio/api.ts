@@ -39,6 +39,7 @@ export async function createStudioDesign(
 		width_px?: number;
 		height_px?: number;
 		source_media_id?: string;
+		client_request_id?: string;
 	}
 ): Promise<StudioDocumentResponse> {
 	const { data, error } = await client.POST('/studio/designs', {
@@ -48,7 +49,8 @@ export async function createStudioDesign(
 			preset_key: input.preset_key,
 			width_px: input.width_px ?? 0,
 			height_px: input.height_px ?? 0,
-			...(input.source_media_id ? { source_media_id: input.source_media_id } : {})
+			...(input.source_media_id ? { source_media_id: input.source_media_id } : {}),
+			...(input.client_request_id ? { client_request_id: input.client_request_id } : {})
 		}
 	});
 	if (error || !data) throw new Error(problemMessage(error, 'Could not create the design.'));
@@ -120,6 +122,13 @@ export async function listStudioTemplates(workspaceID: string): Promise<StudioTe
 		params: { query: { workspace_id: workspaceID } }
 	});
 	if (error || !data) throw new Error(problemMessage(error, 'Could not load templates.'));
+	return (data.templates ?? []) as unknown as StudioTemplate[];
+}
+
+export async function listPublicStudioTemplates(): Promise<StudioTemplate[]> {
+	const { data, error } = await client.GET('/studio/public-templates', {});
+	if (error || !data)
+		throw new Error(problemMessage(error, 'Could not load Studio starter templates.'));
 	return (data.templates ?? []) as unknown as StudioTemplate[];
 }
 
@@ -215,14 +224,15 @@ export async function saveStudioBrandKit(
 
 export async function listStudioMedia(
 	workspaceID: string,
-	search = ''
+	search = '',
+	mediaType: 'image' | 'video' | 'all' = 'image'
 ): Promise<StudioMediaItem[]> {
 	const { data, error } = await client.GET('/media', {
 		params: {
 			query: {
 				workspace_id: workspaceID,
 				search,
-				type: 'image',
+				type: mediaType,
 				asset_kind: 'library',
 				sort: 'newest',
 				limit: 100,

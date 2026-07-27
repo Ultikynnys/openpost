@@ -13,6 +13,9 @@ export interface StudioHSL {
 export function normalizeHex(value: string, fallback = '#000000'): string {
 	const candidate = value.trim().toLowerCase();
 	if (/^#[0-9a-f]{6}$/.test(candidate)) return candidate;
+	if (/^#[0-9a-f]{8}$/.test(candidate) && candidate.endsWith('ff')) {
+		return candidate.slice(0, 7);
+	}
 	if (/^#[0-9a-f]{3}$/.test(candidate)) {
 		return `#${candidate
 			.slice(1)

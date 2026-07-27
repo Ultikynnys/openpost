@@ -62,7 +62,19 @@ func TestStudioDesignSaveUsesOptimisticConcurrencyAndTracksMedia(t *testing.T) {
 
 	payload := created.Body.Document
 	payload.Title = "Launch updated"
-	payload.ExportDefaults = StudioExportDefaults{Format: "webp", Quality: 0.78}
+	payload.ExportDefaults = StudioExportDefaults{
+		Format:     "webp",
+		Quality:    0.78,
+		MatteColor: "#f5f5f4",
+	}
+	payload.Pages[0].Background = &StudioPageBackground{
+		Type:    "image",
+		Opacity: 0.8,
+		Image: &StudioPageBackgroundImage{
+			MediaID: "media-1",
+			Fit:     "cover",
+		},
+	}
 	payload.Pages[0].Layers = append(payload.Pages[0].Layers, StudioLayer{
 		ID:      "image-layer-1",
 		Type:    "image",
@@ -192,15 +204,19 @@ func TestStudioDesignSaveUsesOptimisticConcurrencyAndTracksMedia(t *testing.T) {
 	require.Equal(t, "stroke", saved.Body.Document.Pages[0].Layers[1].Paint.Kind)
 	require.Equal(t, "gradient", saved.Body.Document.Pages[0].Layers[2].Paint.Kind)
 	require.Equal(t, "outside", saved.Body.Document.Pages[0].Layers[0].Effects.Stroke.Position)
-	require.Equal(t, StudioExportDefaults{Format: "webp", Quality: 0.78}, saved.Body.Document.ExportDefaults)
+	require.Equal(t, "image", saved.Body.Document.Pages[0].Background.Type)
+	require.Equal(t, "media-1", saved.Body.Document.Pages[0].Background.Image.MediaID)
+	require.Equal(t, payload.ExportDefaults, saved.Body.Document.ExportDefaults)
 
 	reloaded, err := handler.getDesign(ctx, &GetStudioDesignInput{PathID: created.Body.ID})
 	require.NoError(t, err)
-	require.Equal(t, StudioExportDefaults{Format: "webp", Quality: 0.78}, reloaded.Body.Document.ExportDefaults)
+	require.Equal(t, payload.ExportDefaults, reloaded.Body.Document.ExportDefaults)
+	require.Equal(t, payload.Pages[0].Background, reloaded.Body.Document.Pages[0].Background)
 
 	duplicated, err := handler.duplicateDesign(ctx, &DuplicateStudioDesignInput{PathID: created.Body.ID})
 	require.NoError(t, err)
-	require.Equal(t, StudioExportDefaults{Format: "webp", Quality: 0.78}, duplicated.Body.Document.ExportDefaults)
+	require.Equal(t, payload.ExportDefaults, duplicated.Body.Document.ExportDefaults)
+	require.Equal(t, "image", duplicated.Body.Document.Pages[0].Background.Type)
 
 	count, err := handler.db.NewSelect().Model((*models.DesignMediaReference)(nil)).
 		Where("design_document_id = ? AND media_id = ?", created.Body.ID, "media-1").
@@ -208,9 +224,38 @@ func TestStudioDesignSaveUsesOptimisticConcurrencyAndTracksMedia(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 1, count)
 
+	var reference models.DesignMediaReference
+	require.NoError(t, handler.db.NewSelect().Model(&reference).
+		Where("design_document_id = ? AND media_id = ?", created.Body.ID, "media-1").
+		Scan(ctx))
+	require.Equal(t, "background", reference.Usage)
+
 	_, err = handler.updateDesign(ctx, update)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "changed elsewhere")
+}
+
+func TestStudioDesignCreationIsIdempotentForClientRequest(t *testing.T) {
+	t.Parallel()
+	handler, ctx := newStudioHandlerTest(t)
+	input := &CreateStudioDesignInput{}
+	input.Body.WorkspaceID = "workspace-1"
+	input.Body.Title = "Imported local design"
+	input.Body.PresetKey = "instagram-square"
+	input.Body.ClientRequestID = "local_design_123"
+
+	first, err := handler.createDesign(ctx, input)
+	require.NoError(t, err)
+	second, err := handler.createDesign(ctx, input)
+	require.NoError(t, err)
+
+	require.Equal(t, first.Body.ID, second.Body.ID)
+	count, err := handler.db.NewSelect().
+		Model((*models.DesignDocument)(nil)).
+		Where("workspace_id = ? AND created_by_id = ?", "workspace-1", "user-1").
+		Count(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 1, count)
 }
 
 func TestStudioSourceDesignUsesItsImageAsTheLibraryPreview(t *testing.T) {
@@ -443,6 +488,21 @@ func TestBuiltinStudioTemplatesIncludeOriginalMultipageSets(t *testing.T) {
 		}
 	}
 	require.Equal(t, 1, multipage)
+}
+
+func TestPublicStudioTemplatesExposeOnlyBuiltins(t *testing.T) {
+	t.Parallel()
+	handler, _ := newStudioHandlerTest(t)
+	handler.enabled = false
+
+	response, err := handler.listPublicTemplates(context.Background(), &struct{}{})
+
+	require.NoError(t, err)
+	require.NotEmpty(t, response.Body.Templates)
+	for _, template := range response.Body.Templates {
+		require.True(t, template.BuiltIn)
+		require.Empty(t, template.WorkspaceID)
+	}
 }
 
 func TestStudioRejectsCrossWorkspacePreviewReferences(t *testing.T) {

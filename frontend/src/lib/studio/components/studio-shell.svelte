@@ -18,6 +18,7 @@
 	import LayerTree from './layer-tree.svelte';
 	import PropertiesPanel from './properties-panel.svelte';
 	import PageStrip from './page-strip.svelte';
+	import StudioColorPicker from './studio-color-picker.svelte';
 	import { provideStudioEditor, StudioEditor } from '../editor.svelte';
 	import {
 		completeStudioReturnToken,
@@ -36,7 +37,9 @@
 		loadLocalStudioRecovery,
 		storeLocalStudioRecovery
 	} from '../recovery';
-	import { cloneStudioLayer, validateStudioDocument } from '../document';
+	import { saveGuestStudioDesign, storeGuestStudioMedia } from '../local-persistence';
+	import { publicStudioPageCountBucket, trackPublicStudioEvent } from '../public-telemetry';
+	import { cloneStudioLayer, studioPageHasTransparency, validateStudioDocument } from '../document';
 	import {
 		downloadRenderedPages,
 		renderStudioPages,
@@ -78,6 +81,9 @@
 	import UngroupIcon from 'lucide-svelte/icons/ungroup';
 	import MoreIcon from 'lucide-svelte/icons/ellipsis';
 	import CheckIcon from 'lucide-svelte/icons/check';
+	import SquareIcon from 'lucide-svelte/icons/square';
+	import CircleIcon from 'lucide-svelte/icons/circle';
+	import MinusIcon from 'lucide-svelte/icons/minus';
 	import { m } from '$lib/paraglide/messages';
 	import { startStudioMetric } from '../telemetry';
 
@@ -87,7 +93,9 @@
 		backgroundModelBaseURL = '/studio-models',
 		initialAction = '',
 		readOnlyReason = '',
-		initialBrandKit = null
+		initialBrandKit = null,
+		guestMode = false,
+		onSaveToOpenPost
 	}: {
 		initial: StudioDocumentResponse;
 		returnToken?: string;
@@ -95,6 +103,8 @@
 		initialAction?: string;
 		readOnlyReason?: string;
 		initialBrandKit?: StudioBrandKit | null;
+		guestMode?: boolean;
+		onSaveToOpenPost?: () => void | Promise<void>;
 	} = $props();
 
 	const editor = provideStudioEditor(new StudioEditor());
@@ -122,6 +132,7 @@
 	let lastPreviewAt = 0;
 	let coverPreviewMediaID = '';
 	let exportDialogOpen = $state(false);
+	let postExportDialogOpen = $state(false);
 	let conflictDialogOpen = $state(false);
 	let historyDialogOpen = $state(false);
 	let checkpointDialogOpen = $state(false);
@@ -157,10 +168,12 @@
 	let marqueeSlotTool = $state<'marquee' | 'ellipse_marquee'>('marquee');
 	let fillSlotTool = $state<'bucket' | 'gradient'>('bucket');
 	let eraserSlotTool = $state<'eraser' | 'magic_eraser'>('eraser');
+	let shapeSlotKind = $state<'rectangle' | 'rounded_rectangle' | 'ellipse' | 'line'>('rectangle');
 	let assetPanelWidth = $state(260);
 	let inspectorPanelWidth = $state(320);
 	let layersPanelHeight = $state(280);
 	let inspectorElement = $state<HTMLElement>();
+	let meaningfulEditTracked = false;
 	let panelResize:
 		| {
 				panel: 'assets' | 'inspector' | 'layers';
@@ -169,6 +182,18 @@
 				startSize: number;
 		  }
 		| undefined;
+	let exportPages = $derived.by(() => {
+		if (!editor.document) return [];
+		return exportAllPages
+			? editor.document.pages
+			: editor.document.pages.filter((page) => page.id === editor.activePageID);
+	});
+	let exportHasTransparency = $derived(exportPages.some(studioPageHasTransparency));
+	let exportFormat = $derived(editor.document?.export_defaults.format ?? 'png');
+	let exportSupportsTransparency = $derived(exportFormat !== 'jpeg');
+	let exportPixelCount = $derived(
+		(editor.document?.width_px ?? 0) * (editor.document?.height_px ?? 0) * exportPages.length
+	);
 
 	function initializeShell() {
 		if (!editor.document) {
@@ -179,10 +204,15 @@
 	}
 
 	function openExport(mode: 'download' | 'media' | 'attach'): void {
-		exportMode = mode;
+		exportMode = guestMode ? 'download' : mode;
 		exportError = '';
 		exportSuccessfulByPage = {};
 		exportDialogOpen = true;
+	}
+
+	async function saveToOpenPost(): Promise<void> {
+		if (guestMode && !(await saveNow(undefined, 'close'))) return;
+		await onSaveToOpenPost?.();
 	}
 
 	onMount(() => {
@@ -211,8 +241,12 @@
 		}
 		const unsubscribe = editor.onChange(() => {
 			clearTimeout(saveTimer);
-			previewPending = true;
-			if (editor.document) {
+			previewPending = !guestMode;
+			if (guestMode && !meaningfulEditTracked) {
+				meaningfulEditTracked = true;
+				trackPublicStudioEvent('studio_meaningful_edit', { source: 'editor' });
+			}
+			if (editor.document && !guestMode) {
 				void storeLocalStudioRecovery({
 					design_id: editor.id,
 					workspace_id: editor.workspaceID,
@@ -409,6 +443,7 @@
 	}
 
 	async function restoreLocalIfNewer(): Promise<void> {
+		if (guestMode) return;
 		const local = await loadLocalStudioRecovery(editor.id);
 		if (!local || local.revision < editor.revision) return;
 		if (local.updated_at <= initial.updated_at) return;
@@ -487,25 +522,29 @@
 		editor.saveMessage = m.common_saving();
 		const finishMetric = startStudioMetric('autosave');
 		try {
-			const response = await saveStudioDesign(
-				editor.id,
-				editor.revision,
-				submittedDocument,
-				request.coverPreviewMediaID ?? coverPreviewMediaID,
-				request.recoveryReason
-			);
+			const response = guestMode
+				? await saveGuestStudioDesign(editor.id, submittedDocument)
+				: await saveStudioDesign(
+						editor.id,
+						editor.revision,
+						submittedDocument,
+						request.coverPreviewMediaID ?? coverPreviewMediaID,
+						request.recoveryReason
+					);
 			editor.revision = response.revision;
 			coverPreviewMediaID = response.cover_preview_media_id ?? '';
 			if (editor.document === submittedDocument) {
 				editor.document = response.document;
 				editor.saveState = 'saved';
-				editor.saveMessage = m.studio_saved();
+				editor.saveMessage = guestMode ? m.studio_public_saved_device() : m.studio_saved();
 				showSavedIndicator();
-				await clearLocalStudioRecovery(editor.id);
+				if (!guestMode) await clearLocalStudioRecovery(editor.id);
 				if (Date.now() >= suppressSavedAnnouncementUntil) {
-					statusAnnouncement = m.studio_saved_announcement();
+					statusAnnouncement = guestMode
+						? m.studio_public_saved_device()
+						: m.studio_saved_announcement();
 				}
-				if (request.recoveryReason === 'idle' && previewPending) schedulePreview();
+				if (!guestMode && request.recoveryReason === 'idle' && previewPending) schedulePreview();
 			}
 			saveRetryDelay = INITIAL_SAVE_RETRY_DELAY;
 			finishMetric();
@@ -533,7 +572,7 @@
 	}
 
 	function schedulePreview(): void {
-		if (!editor.canEdit || previewBusy || !previewPending) return;
+		if (guestMode || !editor.canEdit || previewBusy || !previewPending) return;
 		clearTimeout(previewTimer);
 		const wait = Math.max(1000, 30_000 - (Date.now() - lastPreviewAt));
 		previewTimer = setTimeout(() => void runPreview(), wait);
@@ -550,7 +589,7 @@
 	}
 
 	async function generatePreview(recoveryReason: 'idle' | 'close' = 'idle'): Promise<void> {
-		if (!editor.document || !editor.canEdit || previewBusy || !previewPending) return;
+		if (guestMode || !editor.document || !editor.canEdit || previewBusy || !previewPending) return;
 		const page = editor.document.pages.find((item) => item.id === editor.activePageID);
 		if (!page) return;
 		previewBusy = true;
@@ -612,13 +651,14 @@
 		if (editor.canEdit) {
 			const saved = editor.saveState === 'saved' ? true : await saveNow(undefined, 'close');
 			if (previewTask) await previewTask;
-			if (saved && previewPending) await runPreview('close');
+			if (!guestMode && saved && previewPending) await runPreview('close');
 		}
 		if (history.length > 1) history.back();
-		else void goto(resolve('/media' as '/'));
+		else void goto(resolve((guestMode ? '/studio' : '/media') as '/'));
 	}
 
 	async function openHistory(): Promise<void> {
+		if (guestMode) return;
 		historyDialogOpen = true;
 		historyBusy = true;
 		historyError = '';
@@ -762,6 +802,10 @@
 	}
 
 	function setTool(tool: StudioTool): void {
+		if (tool === 'shape') {
+			insertShape(shapeSlotKind);
+			return;
+		}
 		editor.activeTool = tool;
 		if (isMarqueeTool(tool)) marqueeSlotTool = tool;
 		if (isFillTool(tool)) fillSlotTool = tool;
@@ -771,6 +815,18 @@
 			editor.leftPanel = 'media';
 			if (window.innerWidth < 1024) mobileSheet = 'assets';
 		}
+	}
+
+	function insertShape(kind: typeof shapeSlotKind): void {
+		shapeSlotKind = kind;
+		editor.addShape(kind);
+		editor.activeTool = 'select';
+	}
+
+	function openBackgroundMediaPicker(): void {
+		editor.backgroundImagePickerActive = true;
+		editor.leftPanel = 'media';
+		if (window.innerWidth < 1024) mobileSheet = 'assets';
 	}
 
 	function editableTarget(target: EventTarget | null): boolean {
@@ -879,13 +935,13 @@
 			h: 'hand',
 			z: 'zoom'
 		};
+		if (key === 'u') {
+			insertShape(shapeSlotKind);
+			return;
+		}
 		if (key === 'm') setTool(event.shiftKey ? 'ellipse_marquee' : 'marquee');
 		else if (tools[key]) setTool(tools[key]);
 		if (key === 'f') focusedCanvas = !focusedCanvas;
-		if (key === 'tab') {
-			event.preventDefault();
-			editor.rightPanelVisible = !editor.rightPanelVisible;
-		}
 	}
 
 	async function copySelection(): Promise<void> {
@@ -930,12 +986,22 @@
 			// Use the sanitized in-session clipboard.
 		}
 		if (source.length === 0 && externalImage) {
-			const extension = externalImage.type === 'image/png' ? 'png' : 'jpg';
-			const uploaded = await uploadMediaFile({
-				workspaceId: editor.workspaceID,
-				file: new File([externalImage], `pasted-image.${extension}`, { type: externalImage.type }),
-				source: 'upload'
+			const extension =
+				externalImage.type === 'image/png'
+					? 'png'
+					: externalImage.type === 'image/webp'
+						? 'webp'
+						: 'jpg';
+			const file = new File([externalImage], `pasted-image.${extension}`, {
+				type: externalImage.type
 			});
+			const uploaded = guestMode
+				? await storeGuestStudioMedia(editor.id, file)
+				: await uploadMediaFile({
+						workspaceId: editor.workspaceID,
+						file,
+						source: 'upload'
+					});
 			editor.addImage({ id: uploaded.id, name: m.studio_pasted_image() });
 			return;
 		}
@@ -998,16 +1064,19 @@
 				backgroundProgress = `${progress.stage} ${Math.round(progress.progress * 100)}%`;
 			});
 			backgroundProgress = m.studio_background_saving();
-			const uploaded = await uploadMediaFile({
-				workspaceId: editor.workspaceID,
-				file: new File([result], `${layer.name || 'image'}-no-background.png`, {
-					type: 'image/png'
-				}),
-				source: 'background_removal',
-				parentMediaId: layer.image.media_id,
-				designDocumentId: editor.id,
-				designPageId: editor.activePageID
+			const file = new File([result], `${layer.name || 'image'}-no-background.png`, {
+				type: 'image/png'
 			});
+			const uploaded = guestMode
+				? await storeGuestStudioMedia(editor.id, file)
+				: await uploadMediaFile({
+						workspaceId: editor.workspaceID,
+						file,
+						source: 'background_removal',
+						parentMediaId: layer.image.media_id,
+						designDocumentId: editor.id,
+						designPageId: editor.activePageID
+					});
 			editor.updateLayer(layer.id, {
 				image: { ...layer.image, media_id: uploaded.id }
 			});
@@ -1071,6 +1140,13 @@
 				exportSuccessfulByPage = {};
 				suppressSavedAnnouncementUntil = Date.now() + 5_000;
 				statusAnnouncement = m.studio_export_downloaded();
+				if (guestMode) {
+					trackPublicStudioEvent('studio_export_completed', {
+						format: exportFormat,
+						pages: publicStudioPageCountBucket(rendered.length)
+					});
+					postExportDialogOpen = true;
+				}
 				finishMetric();
 				return;
 			}
@@ -1140,6 +1216,7 @@
 		{ key: 'lasso', label: m.studio_lasso_select(), icon: LassoSelectIcon },
 		{ key: 'magic_wand', label: m.studio_magic_select(), icon: WandIcon },
 		{ key: 'text', label: m.studio_text(), icon: TypeIcon },
+		{ key: 'shape', label: m.studio_shape(), icon: SquareIcon },
 		{ key: 'pencil', label: m.studio_pencil(), icon: PencilIcon },
 		{ key: 'bucket', label: m.studio_fill(), icon: PaintBucketIcon },
 		{ key: 'eraser', label: m.studio_erase(), icon: EraserIcon },
@@ -1221,19 +1298,25 @@
 							onclick={() => saveNow()}
 							disabled={!editor.canEdit}><SaveIcon class="size-4" /> {m.common_save()}</Menubar.Item
 						>
-						<Menubar.Item class="studio-menubar-item" onclick={openHistory}
-							>{m.studio_version_history()}</Menubar.Item
-						>
-						<Menubar.Item
-							class="studio-menubar-item"
-							onclick={() => (checkpointDialogOpen = true)}
-							disabled={!editor.canEdit}>{m.studio_create_checkpoint()}</Menubar.Item
-						>
-						<Menubar.Item
-							class="studio-menubar-item"
-							onclick={openTemplateDialog}
-							disabled={!editor.canEdit}>{m.studio_save_template()}</Menubar.Item
-						>
+						{#if guestMode}
+							<Menubar.Item class="studio-menubar-item" onclick={saveToOpenPost}
+								>{m.studio_public_save_openpost()}</Menubar.Item
+							>
+						{:else}
+							<Menubar.Item class="studio-menubar-item" onclick={openHistory}
+								>{m.studio_version_history()}</Menubar.Item
+							>
+							<Menubar.Item
+								class="studio-menubar-item"
+								onclick={() => (checkpointDialogOpen = true)}
+								disabled={!editor.canEdit}>{m.studio_create_checkpoint()}</Menubar.Item
+							>
+							<Menubar.Item
+								class="studio-menubar-item"
+								onclick={openTemplateDialog}
+								disabled={!editor.canEdit}>{m.studio_save_template()}</Menubar.Item
+							>
+						{/if}
 						<Menubar.Item
 							class="studio-menubar-item"
 							onclick={openResizeDialog}
@@ -1350,7 +1433,7 @@
 				class="hidden min-w-0 animate-in items-center gap-1.5 px-2 text-xs text-muted-foreground zoom-in-95 fade-in motion-reduce:animate-none sm:flex"
 			>
 				<CheckIcon class="size-3.5 text-primary" />
-				<span>{m.studio_saved()}</span>
+				<span>{guestMode ? m.studio_public_saved_device() : m.studio_saved()}</span>
 			</div>
 		{:else if ['local', 'offline', 'conflict', 'error'].includes(editor.saveState)}
 			<div
@@ -1408,11 +1491,18 @@
 					<DropdownMenu.Item onclick={() => saveNow()} disabled={!editor.canEdit}
 						>{m.common_save()}</DropdownMenu.Item
 					>
-					<DropdownMenu.Item onclick={openHistory}>{m.studio_version_history()}</DropdownMenu.Item>
-					<DropdownMenu.Item
-						onclick={() => (checkpointDialogOpen = true)}
-						disabled={!editor.canEdit}>{m.studio_create_checkpoint()}</DropdownMenu.Item
-					>
+					{#if guestMode}
+						<DropdownMenu.Item onclick={saveToOpenPost}
+							>{m.studio_public_save_openpost()}</DropdownMenu.Item
+						>
+					{:else}
+						<DropdownMenu.Item onclick={openHistory}>{m.studio_version_history()}</DropdownMenu.Item
+						>
+						<DropdownMenu.Item
+							onclick={() => (checkpointDialogOpen = true)}
+							disabled={!editor.canEdit}>{m.studio_create_checkpoint()}</DropdownMenu.Item
+						>
+					{/if}
 					<DropdownMenu.Item onclick={() => (mobileSheet = 'layers')}
 						>{m.studio_layers()}</DropdownMenu.Item
 					>
@@ -1426,10 +1516,20 @@
 					>
 				</DropdownMenu.Content>
 			</DropdownMenu.Root>
+			{#if guestMode}
+				<Button
+					variant="outline"
+					size="sm"
+					class="hidden h-8 xl:inline-flex"
+					onclick={saveToOpenPost}
+				>
+					{m.studio_public_save_openpost()}
+				</Button>
+			{/if}
 			<Button
 				size="sm"
 				class="h-11 md:h-11 lg:h-8"
-				onclick={() => openExport(editor.canEdit ? (returnToken ? 'attach' : 'media') : 'download')}
+				onclick={() => openExport(returnToken && editor.canEdit ? 'attach' : 'download')}
 			>
 				{#if returnToken}{m.studio_attach()}{:else}{m.studio_export()}{/if}
 			</Button>
@@ -1543,6 +1643,74 @@
 									<CircleDashedIcon />
 									{m.studio_ellipse_select()}
 									<span class="ml-auto text-xs text-muted-foreground">⇧M</span>
+								</ContextMenu.Item>
+							</ContextMenu.Content>
+						</ContextMenu.Portal>
+					</ContextMenu.Root>
+				{:else if tool.key === 'shape'}
+					<ContextMenu.Root>
+						<Tooltip.Root>
+							<Tooltip.Trigger>
+								{#snippet child({ props: tooltipProps })}
+									<ContextMenu.Trigger disabled={!editor.canEdit}>
+										{#snippet child({ props: menuProps })}
+											<Button
+												{...tooltipProps}
+												{...menuProps}
+												variant="ghost"
+												size="icon-sm"
+												class="relative"
+												onclick={() => insertShape(shapeSlotKind)}
+												aria-label={m.studio_add_shape()}
+												disabled={!editor.canEdit}
+											>
+												{#if shapeSlotKind === 'ellipse'}
+													<CircleIcon />
+												{:else if shapeSlotKind === 'line'}
+													<MinusIcon />
+												{:else}
+													<SquareIcon />
+												{/if}
+												{@render toolGroupIndicator()}
+											</Button>
+										{/snippet}
+									</ContextMenu.Trigger>
+								{/snippet}
+							</Tooltip.Trigger>
+							<Tooltip.Content side="right">{m.studio_add_shape()} · U</Tooltip.Content>
+						</Tooltip.Root>
+						<ContextMenu.Portal>
+							<ContextMenu.Content
+								class="z-50 min-w-52 rounded-lg bg-popover/95 p-1 text-sm text-popover-foreground shadow-md ring-1 ring-foreground/10 backdrop-blur outline-none"
+							>
+								<ContextMenu.Item
+									class="flex min-h-9 cursor-default items-center gap-2 rounded-md px-2 outline-none data-highlighted:bg-muted"
+									onclick={() => insertShape('rectangle')}
+								>
+									<SquareIcon />
+									{m.studio_rectangle()}
+									<span class="ml-auto text-xs text-muted-foreground">U</span>
+								</ContextMenu.Item>
+								<ContextMenu.Item
+									class="flex min-h-9 cursor-default items-center gap-2 rounded-md px-2 outline-none data-highlighted:bg-muted"
+									onclick={() => insertShape('rounded_rectangle')}
+								>
+									<SquareIcon />
+									{m.studio_rounded_rectangle()}
+								</ContextMenu.Item>
+								<ContextMenu.Item
+									class="flex min-h-9 cursor-default items-center gap-2 rounded-md px-2 outline-none data-highlighted:bg-muted"
+									onclick={() => insertShape('ellipse')}
+								>
+									<CircleIcon />
+									{m.studio_ellipse()}
+								</ContextMenu.Item>
+								<ContextMenu.Item
+									class="flex min-h-9 cursor-default items-center gap-2 rounded-md px-2 outline-none data-highlighted:bg-muted"
+									onclick={() => insertShape('line')}
+								>
+									<MinusIcon />
+									{m.studio_line()}
 								</ContextMenu.Item>
 							</ContextMenu.Content>
 						</ContextMenu.Portal>
@@ -1683,7 +1851,7 @@
 			<aside
 				class="relative hidden min-h-0 min-w-0 overflow-hidden border-r bg-background lg:block"
 			>
-				<AssetPanel />
+				<AssetPanel {guestMode} />
 				<button
 					type="button"
 					aria-label={m.studio_resize_asset_panel()}
@@ -1766,7 +1934,9 @@
 					onpointerdown={(event) => startPanelResize(event, 'layers')}
 					onkeydown={(event) => resizePanelWithKeyboard(event, 'layers')}
 				></button>
-				<div class="min-h-0 min-w-0 overflow-hidden"><PropertiesPanel /></div>
+				<div class="min-h-0 min-w-0 overflow-hidden">
+					<PropertiesPanel onOpenMedia={openBackgroundMediaPicker} />
+				</div>
 			</aside>
 		{/if}
 	</div>
@@ -1947,11 +2117,11 @@
 		</Sheet.Header>
 		<div class={mobileSheet === 'layers' ? 'h-full pt-14' : 'max-h-[82dvh] overflow-y-auto pt-12'}>
 			{#if mobileSheet === 'assets'}
-				<div class="h-[70dvh]"><AssetPanel /></div>
+				<div class="h-[70dvh]"><AssetPanel {guestMode} /></div>
 			{:else if mobileSheet === 'layers'}
 				<LayerTree />
 			{:else if mobileSheet === 'properties'}
-				<PropertiesPanel />
+				<PropertiesPanel onOpenMedia={openBackgroundMediaPicker} />
 			{/if}
 		</div>
 	</Sheet.Content>
@@ -2145,13 +2315,13 @@
 				<label
 					class="flex min-h-11 cursor-pointer items-center gap-2 rounded-lg border px-3 text-sm has-data-[state=checked]:border-primary has-data-[state=checked]:bg-primary/5"
 				>
-					<RadioGroup.Item value="scale" />
+					<RadioGroup.Item value="scale" aria-label={m.studio_scale_content()} />
 					<span>{m.studio_scale_content()}</span>
 				</label>
 				<label
 					class="flex min-h-11 cursor-pointer items-center gap-2 rounded-lg border px-3 text-sm has-data-[state=checked]:border-primary has-data-[state=checked]:bg-primary/5"
 				>
-					<RadioGroup.Item value="preserve" />
+					<RadioGroup.Item value="preserve" aria-label={m.studio_preserve_content()} />
 					<span>{m.studio_preserve_content()}</span>
 				</label>
 			</RadioGroup.Root>
@@ -2176,16 +2346,52 @@
 			<Dialog.Description>{m.studio_export_body()}</Dialog.Description>
 		</Dialog.Header>
 		<div class="space-y-4">
-			<label class="flex min-h-11 items-center gap-2 rounded-lg border px-3">
-				<Checkbox bind:checked={exportAllPages} />
-				<span>{m.studio_export_all_pages({ count: editor.document?.pages.length ?? 0 })}</span>
-			</label>
-			<div class="grid grid-cols-2 gap-3">
+			<div class="rounded-xl border bg-muted/35 p-3">
+				<div class="flex flex-wrap items-center justify-between gap-2">
+					<div>
+						<p class="text-sm font-semibold">
+							{exportFormat.toUpperCase()} · {editor.document?.width_px ?? 0} ×
+							{editor.document?.height_px ?? 0}
+						</p>
+						<p class="mt-0.5 text-xs text-muted-foreground">
+							{m.studio_export_summary({
+								pages: exportPages.length,
+								suffix: exportPages.length === 1 ? '' : 's',
+								megapixels: (exportPixelCount / 1_000_000).toFixed(1)
+							})}
+						</p>
+					</div>
+					<span
+						class={[
+							'rounded-full border px-2 py-1 text-xs font-medium',
+							exportHasTransparency && exportSupportsTransparency
+								? 'border-primary/40 bg-primary/8'
+								: ''
+						]}
+					>
+						{exportHasTransparency && exportSupportsTransparency
+							? m.studio_transparency_preserved()
+							: exportHasTransparency
+								? m.studio_transparency_flattened()
+								: m.studio_opaque_output()}
+					</span>
+				</div>
+			</div>
+
+			{#if (editor.document?.pages.length ?? 0) > 1}
+				<label class="flex min-h-11 items-center gap-2 rounded-lg border px-3">
+					<Checkbox bind:checked={exportAllPages} />
+					<span>{m.studio_export_all_pages({ count: editor.document?.pages.length ?? 0 })}</span>
+				</label>
+			{/if}
+
+			<div class="grid gap-3 sm:grid-cols-2">
 				<label class="grid gap-1.5 text-sm">
 					<span class="font-medium">{m.studio_format()}</span>
 					<AppSelect
 						value={editor.document?.export_defaults.format ?? 'png'}
 						ariaLabel={m.studio_format()}
+						disabled={!editor.canEdit}
 						onValueChange={(value) =>
 							editor.mutate('Change export format', (document) => {
 								document.export_defaults.format = value as 'png' | 'jpeg' | 'webp';
@@ -2210,7 +2416,7 @@
 						max={1}
 						step={0.01}
 						value={editor.document?.export_defaults.quality ?? 0.92}
-						disabled={editor.document?.export_defaults.format === 'png'}
+						disabled={!editor.canEdit || editor.document?.export_defaults.format === 'png'}
 						ariaLabel={m.studio_quality({
 							quality: Math.round((editor.document?.export_defaults.quality ?? 0.92) * 100)
 						})}
@@ -2225,22 +2431,73 @@
 					/>
 				</label>
 			</div>
-			<div class="grid grid-cols-3 gap-2">
-				<Button
-					variant={exportMode === 'download' ? 'secondary' : 'outline'}
-					onclick={() => (exportMode = 'download')}>{m.studio_download()}</Button
-				>
-				<Button
-					variant={exportMode === 'media' ? 'secondary' : 'outline'}
-					onclick={() => (exportMode = 'media')}
-					disabled={!editor.canEdit}>{m.studio_media()}</Button
-				>
-				<Button
-					variant={exportMode === 'attach' ? 'secondary' : 'outline'}
-					onclick={() => (exportMode = 'attach')}
-					disabled={!returnToken || !editor.canEdit}>{m.studio_attach()}</Button
-				>
-			</div>
+
+			{#if exportHasTransparency && !exportSupportsTransparency}
+				<div class="space-y-3 rounded-lg border border-amber-500/35 bg-amber-500/8 p-3">
+					<p class="text-sm leading-relaxed">{m.studio_jpeg_transparency_warning()}</p>
+					<StudioColorPicker
+						label={m.studio_jpeg_matte_color()}
+						value={editor.document?.export_defaults.matte_color ?? '#ffffff'}
+						disabled={!editor.canEdit}
+						brandColors={editor.brandKit?.colors ?? []}
+						recentColors={editor.recentColors}
+						onChange={(matteColor) =>
+							editor.mutate(
+								'Change export matte color',
+								(document) => {
+									document.export_defaults.matte_color = matteColor;
+								},
+								'export-matte-color'
+							)}
+						onCommit={(color) => editor.rememberColor(color)}
+					/>
+				</div>
+			{/if}
+
+			{#if !guestMode}
+				<div class="space-y-2">
+					<p class="text-sm font-medium">{m.studio_export_destination()}</p>
+					<RadioGroup.Root bind:value={exportMode} class="grid gap-2 sm:grid-cols-2">
+						<label
+							class="flex min-h-14 cursor-pointer items-start gap-2 rounded-lg border p-3 has-data-[state=checked]:border-primary has-data-[state=checked]:bg-primary/5"
+						>
+							<RadioGroup.Item value="download" aria-label={m.studio_download()} />
+							<span class="grid gap-0.5">
+								<span class="text-sm font-medium">{m.studio_download()}</span>
+								<span class="text-xs text-muted-foreground">{m.studio_download_description()}</span>
+							</span>
+						</label>
+						<label
+							class="flex min-h-14 cursor-pointer items-start gap-2 rounded-lg border p-3 has-data-[state=checked]:border-primary has-data-[state=checked]:bg-primary/5 has-data-disabled:cursor-not-allowed has-data-disabled:opacity-50"
+						>
+							<RadioGroup.Item
+								value="media"
+								disabled={!editor.canEdit}
+								aria-label={m.studio_media()}
+							/>
+							<span class="grid gap-0.5">
+								<span class="text-sm font-medium">{m.studio_media()}</span>
+								<span class="text-xs text-muted-foreground">{m.studio_media_description()}</span>
+							</span>
+						</label>
+						{#if returnToken}
+							<label
+								class="flex min-h-14 cursor-pointer items-start gap-2 rounded-lg border p-3 has-data-[state=checked]:border-primary has-data-[state=checked]:bg-primary/5 sm:col-span-2"
+							>
+								<RadioGroup.Item
+									value="attach"
+									disabled={!editor.canEdit}
+									aria-label={m.studio_attach()}
+								/>
+								<span class="grid gap-0.5">
+									<span class="text-sm font-medium">{m.studio_attach()}</span>
+									<span class="text-xs text-muted-foreground">{m.studio_attach_description()}</span>
+								</span>
+							</label>
+						{/if}
+					</RadioGroup.Root>
+				</div>
+			{/if}
 			{#if exportProgress}
 				<p class="text-sm text-muted-foreground" aria-live="polite">{exportProgress}</p>
 			{/if}
@@ -2262,6 +2519,29 @@
 						? m.studio_export_attach()
 						: m.studio_export_media()}
 			</Button>
+		</Dialog.Footer>
+	</Dialog.Content>
+</Dialog.Root>
+
+<Dialog.Root bind:open={postExportDialogOpen}>
+	<Dialog.Content class="sm:max-w-md">
+		<Dialog.Header>
+			<Dialog.Title>{m.studio_public_export_title()}</Dialog.Title>
+			<Dialog.Description>{m.studio_public_export_description()}</Dialog.Description>
+		</Dialog.Header>
+		<div class="rounded-lg border bg-muted/35 p-3 text-sm text-muted-foreground">
+			{m.studio_public_cloud_value()}
+		</div>
+		<Dialog.Footer>
+			<Button variant="ghost" onclick={() => (postExportDialogOpen = false)}
+				>{m.studio_public_keep_editing()}</Button
+			>
+			<Button
+				onclick={() => {
+					postExportDialogOpen = false;
+					void saveToOpenPost();
+				}}>{m.studio_public_save_openpost()}</Button
+			>
 		</Dialog.Footer>
 	</Dialog.Content>
 </Dialog.Root>

@@ -1,5 +1,6 @@
 import { getAuthenticatedMediaURL } from '$lib/media-url';
 import type { StudioDocument, StudioLayer, StudioPage, StudioTool } from './types';
+import { studioPageBackground } from './document';
 import { createTextCurvePath, shadowColor, shadowOffset, textCurveStartOffset } from './effects';
 import { createStudioCanvasGradient, gradientColorAt } from './gradient';
 import {
@@ -130,6 +131,8 @@ export class OpenPostFabricAdapter {
 	private desiredSelectionIDs: string[] = [];
 	private pendingTextEditingID = '';
 	private guideObjects: FabricObject[] = [];
+	private backgroundObject: FabricObject | null = null;
+	private backgroundSnapshot = '';
 	private syncing = false;
 	private renderSequence = 0;
 	private document: StudioDocument;
@@ -151,6 +154,7 @@ export class OpenPostFabricAdapter {
 		this.element = options.canvas;
 		this.document = options.document;
 		this.page = options.page;
+		this.backgroundSnapshot = JSON.stringify(studioPageBackground(options.page));
 		this.readOnly = options.readOnly;
 		this.staticMode = Boolean(options.staticCanvas);
 		this.renderScale = Math.max(0.01, options.renderScale ?? 1);
@@ -168,14 +172,14 @@ export class OpenPostFabricAdapter {
 			? new this.fabric.StaticCanvas(this.element, {
 					width: Math.max(1, Math.round(this.document.width_px * this.renderScale)),
 					height: Math.max(1, Math.round(this.document.height_px * this.renderScale)),
-					backgroundColor: this.page.background_color,
+					backgroundColor: 'transparent',
 					renderOnAddRemove: false,
 					enableRetinaScaling: false
 				})
 			: new this.fabric.Canvas(this.element, {
 					width: this.document.width_px,
 					height: this.document.height_px,
-					backgroundColor: this.page.background_color,
+					backgroundColor: 'transparent',
 					selection: !this.readOnly,
 					preserveObjectStacking: true,
 					renderOnAddRemove: false,
@@ -199,12 +203,23 @@ export class OpenPostFabricAdapter {
 		this.decorationsByLayerID.clear();
 		this.layerSnapshots.clear();
 		this.guideObjects = [];
+		this.backgroundObject = null;
 		this.canvas.setDimensions({
 			width: Math.max(1, Math.round(document.width_px * this.renderScale)),
 			height: Math.max(1, Math.round(document.height_px * this.renderScale))
 		});
 		if (this.staticMode) this.canvas.setZoom(this.renderScale);
-		this.canvas.backgroundColor = page.background_color;
+		this.canvas.backgroundColor = 'transparent';
+		const backgroundObject = await this.createPageBackgroundObject(page);
+		if (sequence !== this.renderSequence) {
+			if (backgroundObject) this.releaseObjectURL(backgroundObject);
+			return;
+		}
+		if (backgroundObject) {
+			this.backgroundObject = backgroundObject;
+			this.canvas.add(backgroundObject);
+		}
+		this.backgroundSnapshot = JSON.stringify(studioPageBackground(page));
 		for (const layer of studioLayerRenderOrder(page.layers)) {
 			const object = await this.createObject(layer);
 			if (sequence !== this.renderSequence) {
@@ -230,7 +245,9 @@ export class OpenPostFabricAdapter {
 			document.width_px !== this.document.width_px ||
 			document.height_px !== this.document.height_px;
 		const pageChanged = page.id !== this.page.id;
-		if (dimensionsChanged || pageChanged) {
+		const backgroundChanged =
+			JSON.stringify(studioPageBackground(page)) !== this.backgroundSnapshot;
+		if (dimensionsChanged || pageChanged || backgroundChanged) {
 			await this.render(document, page);
 			return;
 		}
@@ -242,7 +259,6 @@ export class OpenPostFabricAdapter {
 		this.syncing = true;
 		const nextLayerIDs = new Set(page.layers.map((layer) => layer.id));
 		try {
-			this.canvas.backgroundColor = page.background_color;
 			for (const [id, object] of this.objectByLayerID) {
 				if (nextLayerIDs.has(id)) continue;
 				this.removeLayerObjects(id, object);
@@ -299,6 +315,7 @@ export class OpenPostFabricAdapter {
 		this.layerSnapshots = new Map(
 			page.layers.map((layer) => [layer.id, structuredClone(layer)] as const)
 		);
+		this.backgroundSnapshot = JSON.stringify(studioPageBackground(page));
 	}
 
 	setReadOnly(readOnly: boolean): void {
@@ -517,6 +534,8 @@ export class OpenPostFabricAdapter {
 		this.objectByLayerID.clear();
 		this.decorationsByLayerID.clear();
 		this.layerSnapshots.clear();
+		this.backgroundObject = null;
+		this.backgroundSnapshot = '';
 		this.clearAltOriginGhost();
 		this.canvas?.dispose();
 		this.canvas = null;
@@ -787,6 +806,82 @@ export class OpenPostFabricAdapter {
 		if (!this.canvas || this.guideObjects.length === 0) return;
 		for (const guide of this.guideObjects) this.canvas.remove(guide);
 		this.guideObjects = [];
+	}
+
+	private async createPageBackgroundObject(page: StudioPage): Promise<FabricObject | null> {
+		if (!this.fabric || !this.canvas) return null;
+		const background = studioPageBackground(page);
+		if (background.type === 'transparent') return null;
+		if (background.type === 'solid') {
+			this.canvas.backgroundColor = colorWithOpacity(
+				background.color ?? '#ffffff',
+				background.opacity
+			);
+			return null;
+		}
+		const width = this.document.width_px;
+		const height = this.document.height_px;
+		if (background.type === 'gradient' && background.gradient) {
+			const gradient = structuredClone(background.gradient);
+			const object = new this.fabric.FabricObject({
+				left: 0,
+				top: 0,
+				width,
+				height,
+				originX: 'left',
+				originY: 'top',
+				opacity: background.opacity,
+				selectable: false,
+				evented: false,
+				objectCaching: false
+			}) as FabricCustomObject;
+			object._render = (context: CanvasRenderingContext2D) => {
+				context.save();
+				context.translate(-width / 2, -height / 2);
+				context.fillStyle = createStudioCanvasGradient(context, gradient);
+				context.fillRect(0, 0, width, height);
+				context.restore();
+			};
+			return object;
+		}
+		if (background.type !== 'image' || !background.image?.media_id) return null;
+		const response = await fetch(getAuthenticatedMediaURL(`/media/${background.image.media_id}`), {
+			credentials: 'include'
+		});
+		if (!response.ok) return null;
+		const objectURL = URL.createObjectURL(await response.blob());
+		this.objectURLs.add(objectURL);
+		let image: InstanceType<FabricModule['FabricImage']>;
+		try {
+			image = await this.fabric.FabricImage.fromURL(objectURL);
+		} catch (cause) {
+			this.revokeObjectURL(objectURL);
+			throw cause;
+		}
+		const sourceWidth = Math.max(1, image.width);
+		const sourceHeight = Math.max(1, image.height);
+		const fit = background.image.fit;
+		const scaleX = width / sourceWidth;
+		const scaleY = height / sourceHeight;
+		const scale = fit === 'cover' ? Math.max(scaleX, scaleY) : Math.min(scaleX, scaleY);
+		const resolvedScaleX = fit === 'stretch' ? scaleX : scale;
+		const resolvedScaleY = fit === 'stretch' ? scaleY : scale;
+		const renderedWidth = sourceWidth * resolvedScaleX;
+		const renderedHeight = sourceHeight * resolvedScaleY;
+		image.set({
+			left: (width - renderedWidth) / 2,
+			top: (height - renderedHeight) / 2,
+			scaleX: resolvedScaleX,
+			scaleY: resolvedScaleY,
+			originX: 'left',
+			originY: 'top',
+			opacity: background.opacity,
+			selectable: false,
+			evented: false
+		});
+		const object = image as FabricObject;
+		object.__studioObjectURL = objectURL;
+		return object;
 	}
 
 	private async createObject(layer: StudioLayer): Promise<FabricObject | null> {
@@ -1403,7 +1498,7 @@ export class OpenPostFabricAdapter {
 
 	private syncObjectOrder(): void {
 		if (!this.canvas) return;
-		let index = 0;
+		let index = this.backgroundObject ? 1 : 0;
 		for (const layer of studioLayerRenderOrder(this.page.layers)) {
 			const object = this.objectByLayerID.get(layer.id);
 			if (object) this.canvas.moveObjectTo(object, index++);
@@ -1817,6 +1912,16 @@ function createGradientBitmap(paint: NonNullable<StudioLayer['paint']>): HTMLCan
 
 function clamp(value: number, min: number, max: number): number {
 	return Math.max(min, Math.min(max, value));
+}
+
+function colorWithOpacity(color: string, opacity: number): string {
+	const match = /^#([\da-f]{6})([\da-f]{2})?$/i.exec(color.trim());
+	if (!match) return color;
+	const red = Number.parseInt(match[1].slice(0, 2), 16);
+	const green = Number.parseInt(match[1].slice(2, 4), 16);
+	const blue = Number.parseInt(match[1].slice(4, 6), 16);
+	const colorOpacity = match[2] ? Number.parseInt(match[2], 16) / 255 : 1;
+	return `rgba(${red}, ${green}, ${blue}, ${clamp(opacity * colorOpacity, 0, 1)})`;
 }
 
 export function computeImageGeometry(

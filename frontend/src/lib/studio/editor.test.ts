@@ -45,7 +45,7 @@ function response(): StudioDocumentResponse {
 			width_px: 1080,
 			height_px: 1080,
 			brand_kit_revision: 0,
-			export_defaults: { format: 'png', quality: 0.92 },
+			export_defaults: { format: 'png', quality: 0.92, matte_color: '#ffffff' },
 			pages: [
 				{
 					id: 'page',

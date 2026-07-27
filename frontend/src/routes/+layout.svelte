@@ -57,7 +57,15 @@
 		'/accounts/callback'
 	];
 	let isStandaloneRoute = $derived(
-		standaloneRoutes.includes(currentPath) || currentPath.startsWith('/studio/')
+		standaloneRoutes.includes(currentPath) ||
+			currentPath === '/studio' ||
+			currentPath.startsWith('/studio/')
+	);
+	let isPublicStudioRoute = $derived(
+		currentPath === '/studio' || currentPath.startsWith('/studio/local_design_')
+	);
+	let isPublicRoute = $derived(
+		isPublicStudioRoute || publicRoutes.some((route) => currentPath.startsWith(route))
 	);
 
 	let needsOnboarding = $state(false);
@@ -74,11 +82,67 @@
 		return target;
 	}
 
+	function onboardingTarget() {
+		const target = onboardingPathForPlan($page.url.searchParams.get('plan'));
+		if (
+			!currentPath.startsWith('/studio/local_design_') ||
+			$page.url.searchParams.get('import') !== '1'
+		) {
+			return target;
+		}
+		const returnPath = `${currentPath}${$page.url.search}`;
+		const separator = target.includes('?') ? '&' : '?';
+		return `${target}${separator}redirect=${encodeURIComponent(returnPath)}`;
+	}
+
+	let pendingRedirect = $derived.by(() => {
+		if (instance.isLoading || authState.isLoading) return null;
+
+		if (IS_CAPACITOR && !isInstanceConfigured() && currentPath !== '/connect') {
+			return '/connect';
+		}
+
+		const isOnboardingPage = currentPath === '/onboarding';
+		if (!authState.isAuthenticated && !isPublicRoute && !isOnboardingPage) {
+			return '/login';
+		}
+
+		if (!authState.isAuthenticated) return null;
+
+		if (authState.user?.legal_acceptance_required) {
+			return currentPath === '/legal-acceptance' ? null : '/legal-acceptance';
+		}
+		if (currentPath === '/legal-acceptance') return '/';
+		if (!onboardingChecked) return null;
+
+		if (needsOnboarding) {
+			if (
+				isPublicStudioRoute &&
+				!(
+					currentPath.startsWith('/studio/local_design_') &&
+					$page.url.searchParams.get('import') === '1'
+				)
+			) {
+				return null;
+			}
+			if (!isOnboardingPage && currentPath !== '/invite' && onboardingCheckedPath === currentPath) {
+				return onboardingTarget();
+			}
+			return null;
+		}
+
+		if (currentPath === '/login' || currentPath === '/register') {
+			return authenticatedPublicTarget();
+		}
+
+		return null;
+	});
+
 	onMount(() => {
 		feedbackDiagnostics.initialize();
 		soundPreferences.initialize();
 		instance.initialize();
-		auth.initialize();
+		auth.initialize({ optional: isPublicRoute });
 	});
 
 	$effect(() => {
@@ -86,42 +150,7 @@
 	});
 
 	$effect(() => {
-		if (instance.isLoading) return;
-
-		if (IS_CAPACITOR && !isInstanceConfigured() && currentPath !== '/connect') {
-			goto(resolve('/connect'));
-			return;
-		}
-
-		if (authState.isLoading) return;
-
-		const isPublicRoute = publicRoutes.some((route) => currentPath.startsWith(route));
-		const isOnboardingPage = currentPath === '/onboarding';
-
-		if (!authState.isAuthenticated && !isPublicRoute && !isOnboardingPage) {
-			goto(resolve('/login'));
-		}
-
-		if (authState.isAuthenticated) {
-			if (authState.user?.legal_acceptance_required) {
-				if (currentPath !== '/legal-acceptance') goto(resolve('/legal-acceptance'));
-				return;
-			}
-			if (currentPath === '/legal-acceptance') {
-				goto(resolve('/'));
-				return;
-			}
-			if (!onboardingChecked) return;
-
-			if (needsOnboarding) {
-				if (!isOnboardingPage && currentPath !== '/invite') {
-					if (onboardingCheckedPath !== currentPath) return;
-					goto(resolve(onboardingPathForPlan($page.url.searchParams.get('plan')) as '/'));
-				}
-			} else if (currentPath === '/login' || currentPath === '/register') {
-				goto(resolve(authenticatedPublicTarget() as '/'));
-			}
-		}
+		if (pendingRedirect) void goto(resolve(pendingRedirect as '/'));
 	});
 
 	async function checkOnboarding(path: string) {
@@ -174,12 +203,14 @@
 </svelte:head>
 
 <ModeWatcher />
-{#if instance.isLoading || authState.isLoading || (authState.isAuthenticated && !authState.user?.legal_acceptance_required && !onboardingChecked)}
+{#if instance.isLoading || authState.isLoading || pendingRedirect || (authState.isAuthenticated && !authState.user?.legal_acceptance_required && !onboardingChecked)}
 	<AppLoading label={m.common_loading()} />
 {:else if !authState.isAuthenticated}
-	<div class="fixed top-4 right-4 z-20">
-		<LanguageSwitcher compact />
-	</div>
+	{#if currentPath !== '/studio' && !currentPath.startsWith('/studio/')}
+		<div class="fixed top-4 right-4 z-20">
+			<LanguageSwitcher compact />
+		</div>
+	{/if}
 	{#if currentPath === '/'}
 		<div class="flex min-h-[80vh] items-center justify-center">
 			<div class="mx-auto max-w-md px-4 py-12 text-center">
