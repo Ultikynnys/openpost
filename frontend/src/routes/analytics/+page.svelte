@@ -11,6 +11,7 @@ FORM: Publications are the primary rows; provider renditions disclose in place w
 	import type { components } from '$lib/api/types';
 	import { workspaceCtx } from '$lib/stores/workspace.svelte';
 	import { Button } from '$lib/components/ui/button';
+	import * as Select from '$lib/components/ui/select';
 	import PageContainer from '$lib/components/page-container.svelte';
 	import EmptyState from '$lib/components/empty-state.svelte';
 	import InlineNotice from '$lib/components/inline-notice.svelte';
@@ -21,8 +22,15 @@ FORM: Publications are the primary rows; provider renditions disclose in place w
 	import AccountsIcon from 'lucide-svelte/icons/users';
 	import ChevronDownIcon from 'lucide-svelte/icons/chevron-down';
 	import RefreshIcon from 'lucide-svelte/icons/refresh-cw';
+	import ExternalLinkIcon from 'lucide-svelte/icons/external-link';
 	import { m } from '$lib/paraglide/messages';
 	import { getLocaleTag } from '$lib/i18n';
+	import {
+		filterAnalyticsPublications,
+		hasEngagementMeasurement,
+		selectedAnalyticsSummary,
+		type AnalyticsSortMode
+	} from '$lib/analytics-overview';
 
 	type AnalyticsOverview = components['schemas']['Overview'];
 	type AnalyticsAccount = components['schemas']['AccountOverview'];
@@ -34,6 +42,7 @@ FORM: Publications are the primary rows; provider renditions disclose in place w
 	let overview = $state.raw<AnalyticsOverview | null>(null);
 	let rangeDays = $state<RangeDays>(30);
 	let selectedAccountID = $state('all');
+	let sortMode = $state<AnalyticsSortMode>('engagement');
 	let expandedPublicationID = $state('');
 	let loading = $state(true);
 	let refreshing = $state(false);
@@ -44,7 +53,7 @@ FORM: Publications are the primary rows; provider renditions disclose in place w
 
 	const currentWorkspaceID = $derived(workspaceCtx.currentWorkspace?.id ?? '');
 	const accounts = $derived(overview?.accounts ?? []);
-	const publications = $derived(overview?.publications ?? []);
+	const allPublications = $derived(overview?.publications ?? []);
 	const selectedAccount = $derived(
 		selectedAccountID === 'all'
 			? undefined
@@ -56,13 +65,23 @@ FORM: Publications are the primary rows; provider renditions disclose in place w
 	const accountsNeedingReconnect = $derived(
 		accounts.filter(
 			(account) =>
-				account.status === 'permission_required' ||
-				(account.missing_account_scopes?.length ?? 0) > 0 ||
-				(account.missing_content_scopes?.length ?? 0) > 0
+				(selectedAccountID === 'all' || account.id === selectedAccountID) &&
+				(account.status === 'permission_required' ||
+					(account.missing_account_scopes?.length ?? 0) > 0 ||
+					(account.missing_content_scopes?.length ?? 0) > 0)
 		)
 	);
+	const publications = $derived.by(() => {
+		return filterAnalyticsPublications(allPublications, selectedAccountID, sortMode);
+	});
+	const displayedSummary = $derived.by(() => {
+		if (!overview) return null;
+		return selectedAnalyticsSummary(overview, selectedAccount, publications);
+	});
 	const hasMeasurements = $derived(
-		accounts.some((account) => Boolean(account.last_synced_at)) ||
+		(selectedAccount
+			? Boolean(selectedAccount.last_synced_at)
+			: accounts.some((account) => Boolean(account.last_synced_at))) ||
 			publications.some((publication) =>
 				(publication.renditions ?? []).some((rendition) => Boolean(rendition.last_synced_at))
 			)
@@ -71,7 +90,7 @@ FORM: Publications are the primary rows; provider renditions disclose in place w
 		Boolean(currentWorkspaceID) && loading && (!overview || dataWorkspaceID !== currentWorkspaceID)
 	);
 	const summaryMetrics = $derived.by(() => {
-		const summary = overview?.summary;
+		const summary = displayedSummary;
 		if (!summary) return [];
 		return [
 			{ label: m.analytics_summary_followers(), metric: summary.followers },
@@ -192,7 +211,14 @@ FORM: Publications are the primary rows; provider renditions disclose in place w
 		}
 		if (account.status === 'rate_limited') return m.analytics_rate_limited();
 		if (account.status === 'not_found') return m.analytics_not_found();
+		if (account.status === 'temporarily_unavailable')
+			return account.error_message || m.analytics_collection_delayed();
 		if (account.status === 'failed') return m.analytics_collection_failed();
+		if (account.stale) {
+			return account.next_sync_at
+				? m.analytics_stale_retry({ date: formatDateTime(account.next_sync_at) })
+				: m.analytics_stale();
+		}
 		if (!account.last_synced_at) return m.analytics_no_measurement();
 		return '';
 	}
@@ -214,24 +240,44 @@ FORM: Publications are the primary rows; provider renditions disclose in place w
 			return item.error_message || m.analytics_permission_required();
 		if (item.status === 'unsupported') return item.error_message || m.analytics_unsupported();
 		if (item.status === 'rate_limited') return m.analytics_rate_limited();
+		if (item.status === 'temporarily_unavailable')
+			return item.error_message || m.analytics_collection_delayed();
 		if (item.status === 'failed') return m.analytics_collection_failed();
+		if (item.stale) {
+			return item.next_sync_at
+				? m.analytics_stale_retry({ date: formatDateTime(item.next_sync_at) })
+				: m.analytics_stale();
+		}
 		if (!item.last_synced_at) return m.analytics_no_measurement();
 		return '';
-	}
-
-	function hasEngagementMeasurement(item: AnalyticsContent) {
-		return ['likes', 'comments', 'reposts', 'quotes', 'shares', 'saves', 'clicks'].some(
-			(metric) => metric in item.metrics
-		);
 	}
 
 	function publicationExposure(publication: AnalyticsPublication) {
 		return exposureMetrics(publication.metrics, publication.measured);
 	}
 
+	function engagementMetrics(metrics: Record<string, number>, measured: Record<string, number>) {
+		return [
+			{ key: 'likes', label: m.analytics_likes() },
+			{ key: 'comments', label: m.analytics_comments() },
+			{ key: 'reposts', label: m.analytics_reposts() },
+			{ key: 'quotes', label: m.analytics_quotes() },
+			{ key: 'shares', label: m.analytics_shares() },
+			{ key: 'saves', label: m.analytics_saves() },
+			{ key: 'clicks', label: m.analytics_clicks() }
+		]
+			.filter((metric) => (measured[metric.key] ?? 0) > 0)
+			.map((metric) => ({ ...metric, value: metrics[metric.key] ?? 0 }));
+	}
+
 	function renditionExposure(item: AnalyticsContent) {
 		const measured = Object.fromEntries(Object.keys(item.metrics).map((metric) => [metric, 1]));
 		return exposureMetrics(item.metrics, measured);
+	}
+
+	function renditionEngagement(item: AnalyticsContent) {
+		const measured = Object.fromEntries(Object.keys(item.metrics).map((metric) => [metric, 1]));
+		return engagementMetrics(item.metrics, measured);
 	}
 
 	function exposureMetrics(metrics: Record<string, number>, measured: Record<string, number>) {
@@ -341,6 +387,14 @@ FORM: Publications are the primary rows; provider renditions disclose in place w
 					{/snippet}
 				</InlineNotice>
 			{/each}
+			{#if selectedAccount?.stale}
+				<InlineNotice
+					tone="info"
+					message={selectedAccount.next_sync_at
+						? m.analytics_stale_retry({ date: formatDateTime(selectedAccount.next_sync_at) })
+						: m.analytics_stale()}
+				/>
+			{/if}
 
 			<section aria-label={m.analytics_title()} class="border-y border-border">
 				<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6">
@@ -360,7 +414,7 @@ FORM: Publications are the primary rows; provider renditions disclose in place w
 					<div class="min-w-0 px-3 py-4">
 						<p class="text-xs text-muted-foreground">{m.analytics_published()}</p>
 						<p class="mt-1 text-2xl font-semibold tracking-tight tabular-nums">
-							{formatNumber(overview?.summary.published ?? 0)}
+							{formatNumber(displayedSummary?.published ?? 0)}
 						</p>
 						<p class="mt-1 text-xs text-muted-foreground">
 							{m.analytics_range_days({ days: rangeDays })}
@@ -479,11 +533,35 @@ FORM: Publications are the primary rows; provider renditions disclose in place w
 			</div>
 
 			<section aria-labelledby="analytics-content-heading">
-				<div class="mb-4">
-					<h2 id="analytics-content-heading" class="text-base font-semibold">
-						{m.analytics_content_title()}
-					</h2>
-					<p class="mt-1 text-sm text-muted-foreground">{m.analytics_content_description()}</p>
+				<div class="mb-4 flex flex-wrap items-end justify-between gap-3">
+					<div>
+						<h2 id="analytics-content-heading" class="text-base font-semibold">
+							{m.analytics_content_title()}
+						</h2>
+						<p class="mt-1 text-sm text-muted-foreground">
+							{selectedAccount
+								? m.analytics_content_for_account({ account: selectedAccount.username })
+								: m.analytics_content_description()}
+						</p>
+					</div>
+					<Select.Root
+						type="single"
+						value={sortMode}
+						onValueChange={(value) => (sortMode = value as AnalyticsSortMode)}
+					>
+						<Select.Trigger class="h-11 w-44 sm:h-9" aria-label={m.analytics_sort_label()}>
+							{sortMode === 'newest'
+								? m.analytics_sort_newest()
+								: sortMode === 'views'
+									? m.analytics_sort_views()
+									: m.analytics_sort_engagement()}
+						</Select.Trigger>
+						<Select.Content>
+							<Select.Item value="engagement">{m.analytics_sort_engagement()}</Select.Item>
+							<Select.Item value="views">{m.analytics_sort_views()}</Select.Item>
+							<Select.Item value="newest">{m.analytics_sort_newest()}</Select.Item>
+						</Select.Content>
+					</Select.Root>
 				</div>
 				{#if publications.length === 0}
 					<p class="border-y border-dashed border-border py-8 text-sm text-muted-foreground">
@@ -562,6 +640,7 @@ FORM: Publications are the primary rows; provider renditions disclose in place w
 									>
 										{#each renditions as rendition (rendition.rendition_id)}
 											{@const renditionExposures = renditionExposure(rendition)}
+											{@const renditionEngagementMetrics = renditionEngagement(rendition)}
 											<div
 												class="grid min-w-0 gap-3 border-b border-border py-3 last:border-b-0 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
 											>
@@ -602,6 +681,25 @@ FORM: Publications are the primary rows; provider renditions disclose in place w
 															{formatNumber(metric.value)}
 														</span>
 													{/each}
+													{#each renditionEngagementMetrics as metric (metric.key)}
+														<span>
+															<span class="text-muted-foreground">{metric.label}:</span>
+															{formatNumber(metric.value)}
+														</span>
+													{/each}
+													{#if rendition.external_url}
+														<Button
+															href={rendition.external_url}
+															target="_blank"
+															rel="noreferrer"
+															variant="ghost"
+															size="sm"
+															class="h-7 px-2"
+														>
+															<ExternalLinkIcon class="size-3.5" />
+															{m.analytics_open_native()}
+														</Button>
+													{/if}
 												</div>
 											</div>
 										{/each}

@@ -86,6 +86,28 @@ func TestAccountSyncStoresHistoryAndBacksOffWhenUnchanged(t *testing.T) {
 	require.True(t, due)
 }
 
+func TestAccountSyncDeduplicatesSameCaptureWindow(t *testing.T) {
+	db := newAnalyticsTestDB(t)
+	ctx := context.Background()
+	account := seedAnalyticsAccount(t, db, "")
+	now := time.Date(2026, 7, 26, 10, 0, 30, 0, time.UTC)
+	service := NewService(db, staticTokenSource{})
+	service.now = func() time.Time { return now }
+	service.SetProvider("test", &fakeAnalyticsAdapter{
+		support: platform.AnalyticsSupport{Account: true},
+		account: platform.AnalyticsValues{platform.MetricFollowers: 42},
+	})
+
+	require.NoError(t, service.syncAccount(ctx, account.ID))
+	require.NoError(t, service.syncAccount(ctx, account.ID))
+	count, err := db.NewSelect().
+		Model((*models.AnalyticsAccountSnapshot)(nil)).
+		Where("social_account_id = ?", account.ID).
+		Count(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 1, count)
+}
+
 func TestRefreshRecordsMissingScopeWithoutCallingProvider(t *testing.T) {
 	db := newAnalyticsTestDB(t)
 	ctx := context.Background()

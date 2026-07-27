@@ -144,7 +144,6 @@ type SaveTextPostDraftInput struct {
 	PathID string `path:"id" doc:"Text post draft ID"`
 	Body   struct {
 		ExpectedRevision   int                      `json:"expected_revision" minimum:"1" doc:"Revision loaded by the editor"`
-		Force              bool                     `json:"force,omitempty" doc:"Confirms an explicit overwrite after reviewing the latest revision"`
 		Content            string                   `json:"content" doc:"First post content"`
 		ScheduledAt        *string                  `json:"scheduled_at,omitempty" doc:"Proposed schedule time; empty clears it"`
 		SocialAccountIDs   []string                 `json:"social_account_ids" doc:"Replacement destinations"`
@@ -2063,6 +2062,10 @@ func (h *PostHandler) textPostRevisionConflict(
 	if len(domains) == 0 {
 		domains = []string{"draft"}
 	}
+	editorName, err := drafts.LatestEditorName(ctx, db, drafts.AggregateTextPost, post.ID, expectedRevision)
+	if err != nil {
+		return err
+	}
 	return drafts.NewConflictError(drafts.ConflictMetadata{
 		AggregateType:    drafts.AggregateTextPost,
 		AggregateID:      post.ID,
@@ -2070,6 +2073,7 @@ func (h *PostHandler) textPostRevisionConflict(
 		CurrentRevision:  post.Revision,
 		Status:           post.Status,
 		UpdatedAt:        formatOptionalTime(post.UpdatedAt),
+		ChangedByName:    editorName,
 		ChangedDomains:   domains,
 	})
 }

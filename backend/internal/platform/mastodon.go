@@ -138,8 +138,9 @@ func (m *MastodonAdapter) ResolveAccountPublishingCapabilities(ctx context.Conte
 				MaxExpiration          int `json:"max_expiration"`
 			} `json:"polls"`
 			MediaAttachments struct {
-				ImageSizeLimit int64 `json:"image_size_limit"`
-				VideoSizeLimit int64 `json:"video_size_limit"`
+				ImageSizeLimit     int64    `json:"image_size_limit"`
+				VideoSizeLimit     int64    `json:"video_size_limit"`
+				SupportedMIMETypes []string `json:"supported_mime_types"`
 			} `json:"media_attachments"`
 		} `json:"configuration"`
 	}
@@ -158,6 +159,12 @@ func (m *MastodonAdapter) ResolveAccountPublishingCapabilities(ctx context.Conte
 	}
 	if instance.Configuration.Statuses.MaxMediaAttachments > 0 {
 		constraints["media_max_count"] = instance.Configuration.Statuses.MaxMediaAttachments
+	}
+	if instance.Configuration.MediaAttachments.VideoSizeLimit > 0 {
+		constraints["max_video_size_bytes"] = instance.Configuration.MediaAttachments.VideoSizeLimit
+	}
+	if len(instance.Configuration.MediaAttachments.SupportedMIMETypes) > 0 {
+		constraints["allowed_mimes"] = instance.Configuration.MediaAttachments.SupportedMIMETypes
 	}
 	if instance.Configuration.Polls.MaxOptions > 0 {
 		constraints["poll_max_options"] = instance.Configuration.Polls.MaxOptions
@@ -300,7 +307,7 @@ func (m *MastodonAdapter) Publish(ctx context.Context, accessToken, _ string, re
 
 func buildMastodonStatusForm(req *PublishRequest) (url.Values, error) {
 	formValues := url.Values{}
-	formValues.Set("status", contentWithSettingURL(req.Content, req.Settings))
+	formValues.Set("status", ContentWithSettingURL(req.Content, req.Settings))
 
 	visibility := firstNonEmptyString(settingString(req.Settings, "visibility"), "public")
 	if !validMastodonVisibility(visibility) {

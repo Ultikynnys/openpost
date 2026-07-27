@@ -111,3 +111,29 @@ func TestNotificationListScopesMarksAndDeletesByUser(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, other.Items, 1)
 }
+
+func TestNotificationActionsKeepOnlySafeLocalOperations(t *testing.T) {
+	db := notificationsTestDB(t)
+	service := NewService(db)
+	ctx := context.Background()
+	require.NoError(t, service.Create(ctx, CreateInput{
+		UserID: "user-1", Type: TypePublishFailed, Title: "Partial failure",
+		Actions: []models.NotificationAction{
+			{Label: "Retry failed", Operation: "retry_failed_publication", TargetID: "publication-1", Kind: "primary"},
+			{Label: "View results", Href: "/activity?tab=failed"},
+			{Label: "Mixed", Href: "https://provider.example/private", Operation: "retry_failed_publication", TargetID: "publication-2"},
+			{Label: "Unsafe", Href: "https://provider.example/private"},
+			{Label: "Backslash", Href: `/\provider.example/private`},
+			{Label: "Unknown", Operation: "delete_everything", TargetID: "publication-1"},
+		},
+	}))
+
+	page, err := service.List(ctx, "user-1", "", "", 30)
+	require.NoError(t, err)
+	require.Len(t, page.Items, 1)
+	require.Equal(t, []models.NotificationAction{
+		{Label: "Retry failed", Kind: "primary", Operation: "retry_failed_publication", TargetID: "publication-1"},
+		{Label: "View results", Href: "/activity?tab=failed", Kind: "secondary"},
+		{Label: "Mixed", Kind: "secondary", Operation: "retry_failed_publication", TargetID: "publication-2"},
+	}, page.Items[0].Actions)
+}

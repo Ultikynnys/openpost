@@ -14,7 +14,9 @@
 
 	let authState = $derived($auth);
 	let token = $derived($page.url.searchParams.get('token') ?? '');
-	let attemptedToken = $state('');
+	let invitationID = $derived($page.url.searchParams.get('id') ?? '');
+	let invitationKey = $derived(invitationID ? `id:${invitationID}` : token ? `token:${token}` : '');
+	let attemptedInvitation = $state('');
 	let loading = $state(false);
 	let accepted = $state(false);
 	let error = $state('');
@@ -26,21 +28,24 @@
 	let workspaceRefreshRequestSequence = 0;
 	const invitationPending = $derived(loading || (!accepted && !error));
 
-	function loginRedirect(inviteToken: string) {
-		return `/login?redirect=${encodeURIComponent(`/invite?token=${encodeURIComponent(inviteToken)}`)}`;
+	function loginRedirect() {
+		const query = invitationID
+			? `id=${encodeURIComponent(invitationID)}`
+			: `token=${encodeURIComponent(token)}`;
+		return `/login?redirect=${encodeURIComponent(`/invite?${query}`)}`;
 	}
 
 	async function refreshAcceptedWorkspace(
 		targetWorkspaceID: string,
 		acceptanceRequestSequence = invitationRequestSequence,
-		inviteToken = token
+		acceptedInvitation = invitationKey
 	) {
 		if (!targetWorkspaceID || !accepted) return;
 		const refreshRequestSequence = ++workspaceRefreshRequestSequence;
 		const isCurrentRequest = () =>
 			refreshRequestSequence === workspaceRefreshRequestSequence &&
 			acceptanceRequestSequence === invitationRequestSequence &&
-			token === inviteToken &&
+			invitationKey === acceptedInvitation &&
 			accepted &&
 			workspaceID === targetWorkspaceID;
 		workspaceRefreshPending = true;
@@ -56,12 +61,12 @@
 		}
 	}
 
-	async function acceptInvitation(inviteToken: string, retry = false) {
-		if (!inviteToken || (!retry && attemptedToken === inviteToken)) return;
+	async function acceptInvitation(key: string, retry = false) {
+		if (!key || (!retry && attemptedInvitation === key)) return;
 		const requestSequence = ++invitationRequestSequence;
 		const isCurrentRequest = () =>
-			requestSequence === invitationRequestSequence && token === inviteToken;
-		attemptedToken = inviteToken;
+			requestSequence === invitationRequestSequence && invitationKey === key;
+		attemptedInvitation = key;
 		workspaceRefreshRequestSequence++;
 		loading = true;
 		accepted = false;
@@ -69,9 +74,14 @@
 		workspaceRefreshError = '';
 		workspaceRefreshPending = false;
 		try {
-			const { data, error: apiError } = await client.POST('/workspace-invitations/accept', {
-				body: { token: inviteToken }
-			});
+			const response = invitationID
+				? await client.POST('/workspace-invitations/{id}/accept', {
+						params: { path: { id: invitationID } }
+					})
+				: await client.POST('/workspace-invitations/accept', {
+						body: { token }
+					});
+			const { data, error: apiError } = response;
 			if (apiError || !data) {
 				throw new Error(apiError?.detail || m.invite_accept_failed());
 			}
@@ -80,7 +90,7 @@
 			role = data.role;
 			accepted = true;
 			loading = false;
-			await refreshAcceptedWorkspace(data.workspace_id, requestSequence, inviteToken);
+			await refreshAcceptedWorkspace(data.workspace_id, requestSequence, key);
 		} catch (e) {
 			if (!isCurrentRequest()) return;
 			accepted = false;
@@ -93,10 +103,10 @@
 	$effect(() => {
 		if (authState.isLoading) return;
 
-		if (!token) {
+		if (!invitationKey) {
 			invitationRequestSequence++;
 			workspaceRefreshRequestSequence++;
-			attemptedToken = '';
+			attemptedInvitation = '';
 			loading = false;
 			accepted = false;
 			error = m.invite_missing_token();
@@ -106,11 +116,11 @@
 		}
 
 		if (!authState.isAuthenticated) {
-			goto(resolve(loginRedirect(token) as '/'));
+			goto(resolve(loginRedirect() as '/'));
 			return;
 		}
 
-		acceptInvitation(token);
+		acceptInvitation(invitationKey);
 	});
 </script>
 
@@ -130,8 +140,8 @@
 	<Button
 		variant="outline"
 		size="sm"
-		onclick={() => acceptInvitation(token, true)}
-		disabled={!token || loading}
+		onclick={() => acceptInvitation(invitationKey, true)}
+		disabled={!invitationKey || loading}
 	>
 		{m.common_retry()}
 	</Button>

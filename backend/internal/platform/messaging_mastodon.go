@@ -16,10 +16,12 @@ import (
 var mastodonHTMLTags = regexp.MustCompile(`<[^>]+>`)
 
 type mastodonMessageStatus struct {
-	ID        string `json:"id"`
-	Content   string `json:"content"`
-	CreatedAt string `json:"created_at"`
-	Account   struct {
+	ID         string `json:"id"`
+	Content    string `json:"content"`
+	CreatedAt  string `json:"created_at"`
+	EditedAt   string `json:"edited_at"`
+	Favourited bool   `json:"favourited"`
+	Account    struct {
 		ID          string `json:"id"`
 		Acct        string `json:"acct"`
 		DisplayName string `json:"display_name"`

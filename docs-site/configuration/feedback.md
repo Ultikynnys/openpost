@@ -47,6 +47,7 @@ Normal logs contain job and destination failure status, not report diagnostics o
 
 ## Current decisions
 
-- Feedback is available only to authenticated users and is limited to five submissions per user per minute.
+- Feedback is available only to authenticated users and is limited to five submissions per user per minute. The fixed window is stored in the database, so a restart or a second hosted app instance does not reset the limit.
 - The destination is server-configured; there is no browser-to-webhook path and no maintainer endpoint.
-- Publishing retries still use the existing publication job. Manual retry can target one failed rendition, but OpenPost does not create a separate queue job for every destination in this pass.
+- Queued delivery and failed attempts remain visible through the existing jobs administration surface. Normal logs do not contain the report body or diagnostics.
+- Publishing retries still use the existing publication job. Manual recovery can target one failed rendition or all retryable failed renditions, but OpenPost does not create a separate queue job for every destination in this pass.

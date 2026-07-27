@@ -12,7 +12,7 @@ import (
 )
 
 func (m *MastodonAdapter) EngagementSupport() EngagementSupport {
-	return EngagementSupport{Enabled: true, CanReply: true, CanDelete: true}
+	return EngagementSupport{Enabled: true, CanReply: true, CanDelete: true, CanLike: true}
 }
 
 func (m *MastodonAdapter) ListComments(ctx context.Context, accessToken, accountID, externalID string) ([]Comment, error) {
@@ -30,11 +30,22 @@ func (m *MastodonAdapter) ListComments(ctx context.Context, accessToken, account
 	}
 	comments := make([]Comment, 0, len(response.Descendants))
 	for _, status := range response.Descendants {
+		attachments := make([]CommentAttachment, 0, len(status.MediaAttachments))
+		for _, attachment := range status.MediaAttachments {
+			attachments = append(attachments, CommentAttachment{
+				Type:      attachment.Type,
+				URL:       attachment.URL,
+				Thumbnail: attachment.PreviewURL,
+				AltText:   attachment.Description,
+			})
+		}
 		comments = append(comments, Comment{
 			ID: status.ID, AuthorID: status.Account.ID, AuthorName: status.Account.DisplayName,
 			AuthorHandle: prefixHandle(status.Account.Acct), AuthorAvatarURL: status.Account.Avatar,
-			Text: mastodonPlainText(status.Content), CreatedAt: status.CreatedAt,
-			IsOurs: status.Account.ID == accountID, CanReply: true, CanDelete: status.Account.ID == accountID,
+			Text: mastodonPlainText(status.Content), CreatedAt: status.CreatedAt, UpdatedAt: status.EditedAt,
+			Attachments: attachments, IsOurs: status.Account.ID == accountID, CanReply: true,
+			CanDelete: status.Account.ID == accountID, CanLike: !status.Favourited,
+			CanUnlike: status.Favourited, Liked: status.Favourited, LikeStateKnown: true,
 		})
 	}
 	return comments, nil
@@ -50,6 +61,20 @@ func (m *MastodonAdapter) HideComment(context.Context, string, string, string) e
 
 func (m *MastodonAdapter) DeleteComment(ctx context.Context, accessToken, _ string, commentID string) error {
 	_, err := DoRequest(ctx, http.MethodDelete, m.instanceURL+"/api/v1/statuses/"+url.PathEscape(commentID), nil, map[string]string{
+		headerAuthorization: bearerPrefix + accessToken,
+	})
+	return err
+}
+
+func (m *MastodonAdapter) LikeComment(ctx context.Context, accessToken, _ string, commentID string) error {
+	_, err := DoRequest(ctx, http.MethodPost, m.instanceURL+"/api/v1/statuses/"+url.PathEscape(commentID)+"/favourite", nil, map[string]string{
+		headerAuthorization: bearerPrefix + accessToken,
+	})
+	return err
+}
+
+func (m *MastodonAdapter) UnlikeComment(ctx context.Context, accessToken, _ string, commentID string) error {
+	_, err := DoRequest(ctx, http.MethodPost, m.instanceURL+"/api/v1/statuses/"+url.PathEscape(commentID)+"/unfavourite", nil, map[string]string{
 		headerAuthorization: bearerPrefix + accessToken,
 	})
 	return err
@@ -154,7 +179,7 @@ func (b *BlueskyAdapter) DeleteComment(ctx context.Context, accessToken, account
 
 func (x *XAdapter) EngagementSupport() EngagementSupport {
 	return EngagementSupport{
-		Enabled: true, CanReply: true, CanDelete: true,
+		Enabled: true, CanReply: true, CanDelete: true, CanLike: true,
 		Unavailable: "X recent search collects replies from the provider's current search window.",
 	}
 }
@@ -162,9 +187,10 @@ func (x *XAdapter) EngagementSupport() EngagementSupport {
 func (x *XAdapter) ListComments(ctx context.Context, accessToken, accountID, externalID string) ([]Comment, error) {
 	query := url.Values{
 		"query":        {"conversation_id:" + externalID},
-		"tweet.fields": {"author_id,created_at,conversation_id,in_reply_to_user_id"},
-		"expansions":   {"author_id"},
+		"tweet.fields": {"author_id,created_at,conversation_id,in_reply_to_user_id,referenced_tweets,attachments"},
+		"expansions":   {"author_id,attachments.media_keys"},
 		"user.fields":  {"username,name,profile_image_url"},
+		"media.fields": {"media_key,type,url,preview_image_url,alt_text"},
 		"max_results":  {"100"},
 	}
 	body, err := x.doSignedRequest(ctx, accessToken, http.MethodGet, x.apiURL("/2/tweets/search/recent")+"?"+query.Encode(), nil, nil)
@@ -178,6 +204,13 @@ func (x *XAdapter) ListComments(ctx context.Context, accessToken, accountID, ext
 			AuthorID       string `json:"author_id"`
 			CreatedAt      string `json:"created_at"`
 			ConversationID string `json:"conversation_id"`
+			Attachments    struct {
+				MediaKeys []string `json:"media_keys"`
+			} `json:"attachments"`
+			ReferencedTweets []struct {
+				Type string `json:"type"`
+				ID   string `json:"id"`
+			} `json:"referenced_tweets"`
 		} `json:"data"`
 		Includes struct {
 			Users []struct {
@@ -186,6 +219,13 @@ func (x *XAdapter) ListComments(ctx context.Context, accessToken, accountID, ext
 				Name            string `json:"name"`
 				ProfileImageURL string `json:"profile_image_url"`
 			} `json:"users"`
+			Media []struct {
+				MediaKey        string `json:"media_key"`
+				Type            string `json:"type"`
+				URL             string `json:"url"`
+				PreviewImageURL string `json:"preview_image_url"`
+				AltText         string `json:"alt_text"`
+			} `json:"media"`
 		} `json:"includes"`
 	}
 	if err := json.Unmarshal(body, &response); err != nil {
@@ -195,17 +235,37 @@ func (x *XAdapter) ListComments(ctx context.Context, accessToken, accountID, ext
 	for _, user := range response.Includes.Users {
 		users[user.ID] = struct{ Username, Name, Avatar string }{user.Username, user.Name, user.ProfileImageURL}
 	}
+	media := make(map[string]CommentAttachment, len(response.Includes.Media))
+	for _, item := range response.Includes.Media {
+		media[item.MediaKey] = CommentAttachment{
+			Type: item.Type, URL: item.URL, Thumbnail: item.PreviewImageURL, AltText: item.AltText,
+		}
+	}
 	comments := make([]Comment, 0, len(response.Data))
 	for _, tweet := range response.Data {
 		if tweet.ID == externalID {
 			continue
 		}
 		user := users[tweet.AuthorID]
+		parentID := ""
+		for _, reference := range tweet.ReferencedTweets {
+			if reference.Type == "replied_to" {
+				parentID = reference.ID
+				break
+			}
+		}
+		attachments := make([]CommentAttachment, 0, len(tweet.Attachments.MediaKeys))
+		for _, mediaKey := range tweet.Attachments.MediaKeys {
+			if item, ok := media[mediaKey]; ok {
+				attachments = append(attachments, item)
+			}
+		}
 		comments = append(comments, Comment{
-			ID: tweet.ID, ConversationID: tweet.ConversationID, AuthorID: tweet.AuthorID,
+			ID: tweet.ID, ParentID: parentID, ConversationID: tweet.ConversationID, AuthorID: tweet.AuthorID,
 			AuthorName: user.Name, AuthorHandle: prefixHandle(user.Username), AuthorAvatarURL: user.Avatar,
 			Text: tweet.Text, CreatedAt: tweet.CreatedAt, IsOurs: tweet.AuthorID == accountID,
-			CanReply: true, CanDelete: tweet.AuthorID == accountID,
+			Attachments: attachments, CanReply: true, CanDelete: tweet.AuthorID == accountID,
+			CanLike: true, CanUnlike: true,
 		})
 	}
 	return comments, nil
@@ -221,6 +281,22 @@ func (x *XAdapter) HideComment(context.Context, string, string, string) error {
 
 func (x *XAdapter) DeleteComment(ctx context.Context, accessToken, _ string, commentID string) error {
 	_, err := x.doSignedRequest(ctx, accessToken, http.MethodDelete, x.apiURL("/2/tweets/")+url.PathEscape(commentID), nil, nil)
+	return err
+}
+
+func (x *XAdapter) LikeComment(ctx context.Context, accessToken, accountID, commentID string) error {
+	body, err := json.Marshal(map[string]string{"tweet_id": commentID})
+	if err != nil {
+		return err
+	}
+	_, err = x.doSignedRequest(ctx, accessToken, http.MethodPost, x.apiURL("/2/users/")+url.PathEscape(accountID)+"/likes", bytes.NewReader(body), map[string]string{
+		headerContentType: contentTypeJSON,
+	})
+	return err
+}
+
+func (x *XAdapter) UnlikeComment(ctx context.Context, accessToken, accountID, commentID string) error {
+	_, err := x.doSignedRequest(ctx, accessToken, http.MethodDelete, x.apiURL("/2/users/")+url.PathEscape(accountID)+"/likes/"+url.PathEscape(commentID), nil, nil)
 	return err
 }
 

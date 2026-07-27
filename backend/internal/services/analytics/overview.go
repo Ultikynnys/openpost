@@ -51,6 +51,8 @@ type AccountOverview struct {
 	FollowerDelta        *int64                   `json:"follower_delta,omitempty"`
 	FollowerSeries       []SeriesPoint            `json:"follower_series"`
 	LastSyncedAt         time.Time                `json:"last_synced_at,omitempty"`
+	NextSyncAt           time.Time                `json:"next_sync_at,omitempty"`
+	Stale                bool                     `json:"stale"`
 }
 
 type ContentOverview struct {
@@ -69,6 +71,8 @@ type ContentOverview struct {
 	Metrics       platform.AnalyticsValues `json:"metrics"`
 	Engagement    int64                    `json:"engagement"`
 	LastSyncedAt  time.Time                `json:"last_synced_at,omitempty"`
+	NextSyncAt    time.Time                `json:"next_sync_at,omitempty"`
+	Stale         bool                     `json:"stale"`
 }
 
 type PublicationOverview struct {
@@ -137,7 +141,7 @@ func (s *Service) Overview(ctx context.Context, workspaceID string, days int) (O
 	if err != nil {
 		return Overview{}, err
 	}
-	result.Content = buildContentOverviews(renditions, publicationByID, accountByID, stateByID, &result.Summary)
+	result.Content = buildContentOverviews(renditions, publicationByID, accountByID, stateByID, now, &result.Summary)
 	result.Publications = buildPublicationOverviews(result.Content)
 	return result, nil
 }
@@ -291,6 +295,8 @@ func (s *Service) buildAccountOverview(account models.SocialAccount, state model
 		overview.ErrorCode = state.ErrorCode
 		overview.ErrorMessage = state.ErrorMessage
 		overview.LastSyncedAt = state.LastSuccessAt
+		overview.NextSyncAt = state.NextSyncAt
+		overview.Stale = analyticsStateStale(state, s.now())
 		overview.Metrics = decodeAnalyticsValues(state.MetricsJSON)
 	}
 	return overview
@@ -331,6 +337,7 @@ func buildContentOverviews(
 	publicationByID map[string]models.Publication,
 	accountByID map[string]models.SocialAccount,
 	stateByID map[string]models.AnalyticsSyncState,
+	now time.Time,
 	summary *Summary,
 ) []ContentOverview {
 	content := make([]ContentOverview, 0, len(renditions))
@@ -349,6 +356,7 @@ func buildContentOverviews(
 			publication,
 			account,
 			state,
+			now,
 		)
 		item.Engagement = platform.EngagementTotal(item.Metrics)
 		summary.Engagement.Value += item.Engagement
@@ -374,6 +382,7 @@ func buildContentOverview(
 	publication models.Publication,
 	account models.SocialAccount,
 	state models.AnalyticsSyncState,
+	now time.Time,
 ) ContentOverview {
 	publishedAt := publication.ActualRunAt
 	if publishedAt.IsZero() {
@@ -397,9 +406,15 @@ func buildContentOverview(
 		item.ErrorCode = state.ErrorCode
 		item.ErrorMessage = state.ErrorMessage
 		item.LastSyncedAt = state.LastSuccessAt
+		item.NextSyncAt = state.NextSyncAt
+		item.Stale = analyticsStateStale(state, now)
 		item.Metrics = decodeAnalyticsValues(state.MetricsJSON)
 	}
 	return item
+}
+
+func analyticsStateStale(state models.AnalyticsSyncState, now time.Time) bool {
+	return !state.LastSuccessAt.IsZero() && !state.NextSyncAt.IsZero() && now.After(state.NextSyncAt)
 }
 
 func buildPublicationOverviews(content []ContentOverview) []PublicationOverview {

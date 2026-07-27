@@ -44,6 +44,11 @@
 		</Dialog.Header>
 		<p class="rounded-md border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
 			{m.draft_conflict_changed({ domains: changedDomains })}
+			{#if conflict?.conflict.changed_by_name}
+				<span class="mt-1 block">
+					{m.draft_conflict_changed_by({ name: conflict.conflict.changed_by_name })}
+				</span>
+			{/if}
 		</p>
 		<Dialog.Footer class="sm:grid sm:grid-cols-2">
 			<Button

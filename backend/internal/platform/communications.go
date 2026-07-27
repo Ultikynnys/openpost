@@ -14,6 +14,7 @@ type EngagementSupport struct {
 	CanReply       bool
 	CanHide        bool
 	CanDelete      bool
+	CanLike        bool
 	Unavailable    string
 }
 

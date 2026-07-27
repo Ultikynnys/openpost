@@ -24,18 +24,20 @@ func NewCommunicationsHandler(db *bun.DB, auth middleware.Authenticator, service
 }
 
 type ListEngagementInput struct {
-	WorkspaceID string `query:"workspace_id" required:"true"`
-	Platform    string `query:"platform"`
-	AccountID   string `query:"account_id"`
-	UnreadOnly  bool   `query:"unread_only"`
-	Archived    bool   `query:"archived"`
-	Limit       int    `query:"limit" default:"50" minimum:"1" maximum:"100"`
-	Offset      int    `query:"offset" default:"0" minimum:"0"`
+	WorkspaceID   string `query:"workspace_id" required:"true"`
+	Platform      string `query:"platform"`
+	AccountID     string `query:"account_id"`
+	PublicationID string `query:"publication_id"`
+	UnreadOnly    bool   `query:"unread_only"`
+	Archived      bool   `query:"archived"`
+	Limit         int    `query:"limit" default:"50" minimum:"1" maximum:"100"`
+	Offset        int    `query:"offset" default:"0" minimum:"0"`
 }
 
 type EngagementPage struct {
-	Items []models.EngagementItem `json:"items"`
-	Total int                     `json:"total"`
+	Items      []models.EngagementItem `json:"items"`
+	Total      int                     `json:"total"`
+	SyncStates []EngagementSyncState   `json:"sync_states"`
 }
 
 type ListEngagementOutput struct{ Body EngagementPage }
@@ -53,7 +55,7 @@ type EngagementActionInput struct {
 	ItemID string `path:"item_id"`
 	Body   struct {
 		WorkspaceID string `json:"workspace_id" required:"true"`
-		Action      string `json:"action" enum:"reply,hide,delete" required:"true"`
+		Action      string `json:"action" enum:"reply,hide,delete,like,unlike" required:"true"`
 		Message     string `json:"message,omitempty"`
 	}
 }
@@ -79,6 +81,20 @@ type ListConversationsOutput struct{ Body ConversationPage }
 // Provider cursors and internal subject bookkeeping stay server-side.
 type MessageSyncState struct {
 	ID              string    `json:"id"`
+	SocialAccountID string    `json:"social_account_id"`
+	Platform        string    `json:"platform"`
+	Status          string    `json:"status"`
+	ErrorCode       string    `json:"error_code"`
+	ErrorMessage    string    `json:"error_message"`
+	LastSuccessAt   time.Time `json:"last_success_at,omitempty"`
+	NextSyncAt      time.Time `json:"next_sync_at,omitempty"`
+}
+
+// EngagementSyncState exposes durable, safe collection health without provider
+// cursors or raw response data.
+type EngagementSyncState struct {
+	ID              string    `json:"id"`
+	RenditionID     string    `json:"rendition_id"`
 	SocialAccountID string    `json:"social_account_id"`
 	Platform        string    `json:"platform"`
 	Status          string    `json:"status"`
@@ -138,11 +154,23 @@ func (h *CommunicationsHandler) RegisterRoutes(api huma.API) {
 		if err := h.requireWorkspace(ctx, input.WorkspaceID, false); err != nil {
 			return nil, err
 		}
-		items, total, err := h.service.ListEngagement(ctx, input.WorkspaceID, input.Platform, input.AccountID, input.UnreadOnly, input.Archived, input.Limit, input.Offset)
+		items, total, err := h.service.ListEngagement(ctx, input.WorkspaceID, input.Platform, input.AccountID, input.PublicationID, input.UnreadOnly, input.Archived, input.Limit, input.Offset)
 		if err != nil {
 			return nil, huma.Error500InternalServerError("failed to load engagement")
 		}
-		return &ListEngagementOutput{Body: EngagementPage{Items: items, Total: total}}, nil
+		states, err := h.service.ListEngagementSyncStates(ctx, input.WorkspaceID)
+		if err != nil {
+			return nil, huma.Error500InternalServerError("failed to load engagement sync state")
+		}
+		safeStates := make([]EngagementSyncState, 0, len(states))
+		for _, state := range states {
+			safeStates = append(safeStates, EngagementSyncState{
+				ID: state.ID, RenditionID: state.SubjectID, SocialAccountID: state.SocialAccountID,
+				Platform: state.Platform, Status: state.Status, ErrorCode: state.ErrorCode,
+				ErrorMessage: state.ErrorMessage, LastSuccessAt: state.LastSuccessAt, NextSyncAt: state.NextSyncAt,
+			})
+		}
+		return &ListEngagementOutput{Body: EngagementPage{Items: items, Total: total, SyncStates: safeStates}}, nil
 	})
 
 	huma.Register(api, huma.Operation{

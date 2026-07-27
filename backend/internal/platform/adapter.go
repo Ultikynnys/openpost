@@ -251,21 +251,37 @@ type Adapter interface {
 	Publish(ctx context.Context, accessToken, accountID string, req *PublishRequest) (string, error)
 }
 
+type CommentAttachment struct {
+	Type      string `json:"type"`
+	URL       string `json:"url"`
+	Name      string `json:"name,omitempty"`
+	MimeType  string `json:"mime_type,omitempty"`
+	Thumbnail string `json:"thumbnail,omitempty"`
+	AltText   string `json:"alt_text,omitempty"`
+}
+
 type Comment struct {
-	ID              string `json:"id"`
-	ParentID        string `json:"parent_id,omitempty"`
-	ConversationID  string `json:"conversation_id,omitempty"`
-	AuthorID        string `json:"author_id,omitempty"`
-	AuthorName      string `json:"author_name,omitempty"`
-	AuthorHandle    string `json:"author_handle,omitempty"`
-	AuthorAvatarURL string `json:"author_avatar_url,omitempty"`
-	Text            string `json:"text"`
-	CreatedAt       string `json:"created_at,omitempty"`
-	IsOurs          bool   `json:"is_ours"`
-	Hidden          bool   `json:"hidden"`
-	CanReply        bool   `json:"can_reply"`
-	CanHide         bool   `json:"can_hide"`
-	CanDelete       bool   `json:"can_delete"`
+	ID              string              `json:"id"`
+	ParentID        string              `json:"parent_id,omitempty"`
+	ConversationID  string              `json:"conversation_id,omitempty"`
+	AuthorID        string              `json:"author_id,omitempty"`
+	AuthorName      string              `json:"author_name,omitempty"`
+	AuthorHandle    string              `json:"author_handle,omitempty"`
+	AuthorAvatarURL string              `json:"author_avatar_url,omitempty"`
+	Text            string              `json:"text"`
+	CreatedAt       string              `json:"created_at,omitempty"`
+	UpdatedAt       string              `json:"updated_at,omitempty"`
+	Attachments     []CommentAttachment `json:"attachments,omitempty"`
+	Deleted         bool                `json:"deleted"`
+	IsOurs          bool                `json:"is_ours"`
+	Hidden          bool                `json:"hidden"`
+	CanReply        bool                `json:"can_reply"`
+	CanHide         bool                `json:"can_hide"`
+	CanDelete       bool                `json:"can_delete"`
+	CanLike         bool                `json:"can_like"`
+	CanUnlike       bool                `json:"can_unlike"`
+	Liked           bool                `json:"liked"`
+	LikeStateKnown  bool                `json:"-"`
 }
 
 type CommentAdapter interface {
@@ -273,6 +289,13 @@ type CommentAdapter interface {
 	ReplyToComment(ctx context.Context, accessToken, accountID, commentID, message string) (string, error)
 	HideComment(ctx context.Context, accessToken, accountID, commentID string) error
 	DeleteComment(ctx context.Context, accessToken, accountID, commentID string) error
+}
+
+// CommentReactionAdapter is an optional provider write capability. It stays
+// separate because many providers do not support reactions through their API.
+type CommentReactionAdapter interface {
+	LikeComment(ctx context.Context, accessToken, accountID, commentID string) error
+	UnlikeComment(ctx context.Context, accessToken, accountID, commentID string) error
 }
 
 // ContentURLResolver is an optional read capability for providers whose

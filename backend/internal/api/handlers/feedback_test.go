@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humaecho"
@@ -49,7 +50,21 @@ func TestFeedbackHandlerRequiresAuthenticationAndConfiguredDestination(t *testin
 }
 
 func TestFeedbackHandlerQueuesOptionalReportAndRateLimits(t *testing.T) {
-	db := createHandlerTestDB(t, (*models.Job)(nil))
+	db := createHandlerTestDB(t, (*models.Job)(nil), (*models.User)(nil))
+	_, err := db.ExecContext(context.Background(), `
+		CREATE TABLE feedback_rate_limit_windows (
+			user_id TEXT NOT NULL,
+			window_start TIMESTAMP NOT NULL,
+			request_count INTEGER NOT NULL DEFAULT 0 CHECK (request_count >= 0),
+			PRIMARY KEY (user_id, window_start),
+			FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+		)
+	`)
+	require.NoError(t, err)
+	_, err = db.NewInsert().Model(&models.User{
+		ID: "user-1", Email: "user@example.com", PasswordHash: "test",
+	}).Exec(context.Background())
+	require.NoError(t, err)
 	service := feedback.NewService(db, feedback.Config{
 		Enabled:    true,
 		Recipient:  "OpenPost team",
@@ -87,6 +102,11 @@ func TestFeedbackHandlerQueuesOptionalReportAndRateLimits(t *testing.T) {
 	limitedRec := httptest.NewRecorder()
 	e.ServeHTTP(limitedRec, limited)
 	require.Equal(t, http.StatusTooManyRequests, limitedRec.Code, limitedRec.Body.String())
+	allowedAfterRestart, err := feedback.NewService(db, feedback.Config{
+		Enabled: true, Recipient: "OpenPost team", AppVersion: "1.2.3",
+	}, feedbackTestDestination{}).AllowSubmission(context.Background(), "user-1", feedbackRateLimit, time.Minute)
+	require.NoError(t, err)
+	require.False(t, allowedAfterRestart)
 
 	var jobs []models.Job
 	require.NoError(t, db.NewSelect().Model(&jobs).Order("run_at ASC").Scan(context.Background()))

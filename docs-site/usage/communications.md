@@ -6,18 +6,20 @@ OpenPost keeps provider reads out of page requests. Background jobs collect norm
 
 The Engagement page combines comments and replies from supported published renditions. It keeps provider-specific actions behind one normalized model without pretending every provider has the same controls.
 
-| Provider | Read | Reply | Hide or moderate | Delete own |
-| --- | --- | --- | --- | --- |
-| X | Yes | Yes | No | Yes |
-| Mastodon | Yes | Yes | No | Yes |
-| Bluesky | Yes | Yes | No | Yes |
-| LinkedIn | Yes | Yes | No | Where LinkedIn permits |
-| Threads | Yes | Yes | Yes | Yes |
-| Facebook Pages | Yes | Yes | Yes | Yes |
-| Instagram Professional | Yes | Yes | Yes | Yes |
-| YouTube | Yes | Yes | Moderate | Yes |
+| Provider | Read | Reply | Like | Hide or moderate | Delete own |
+| --- | --- | --- | --- | --- | --- |
+| X | Yes | Yes | Yes | No | Yes |
+| Mastodon | Yes | Yes | Yes | No | Yes |
+| Bluesky | Yes | Yes | No | No | Yes |
+| LinkedIn | Yes | Yes | No | No | Where LinkedIn permits |
+| Threads | Yes | Yes | No | Yes | Yes |
+| Facebook Pages | Yes | Yes | No | Yes | Yes |
+| Instagram Professional | Yes | Yes | No | Yes | Yes |
+| YouTube | Yes | Yes | No | Moderate | Yes |
 
-OpenPost syncs recent published content on an adaptive cadence. It preserves the last successful records when a provider reports a permission, rate-limit, unsupported, or transient failure. Replies and moderation actions use durable jobs and are never performed by a page-load request.
+The page groups reply threads under the OpenPost publication and connected account, with filters for provider, account, publication, read state, and archive state. Safe attachment links, edited state, provider-deleted state, and the native post link stay attached to each normalized item. OpenPost does not retain raw provider responses or attachment contents.
+
+OpenPost syncs recent published content on an adaptive cadence. It preserves the last successful records when a provider reports a permission, rate-limit, unsupported, or transient failure, and shows the next eligible collection time when it has one. Replies and moderation actions use one-attempt durable jobs and are never performed by a page-load request. Like controls appear only for X and Mastodon because those are the reaction writes verified in this release.
 
 ## Unified inbox
 
@@ -36,6 +38,8 @@ OpenPost currently polls supported provider APIs. The capability contracts and s
 
 ## Personal notifications
 
-OpenPost creates per-user in-app notifications for publish failures, account attention, new engagement, new messages, reply failures, workspace invitations, and successful publishes. Each user can mark items read, delete them, or change preferences. Critical failures remain enabled in-app.
+OpenPost creates per-user in-app notifications for publish failures, account attention, new engagement, new messages, reply failures, workspace invitations, and successful publishes. Partial publishing notifications name the successful and failed destinations and provide the relevant edit, reconnect, or retry action. A retry action queues only retryable failed renditions and leaves successful destinations unchanged.
+
+Workspace invitations for an already registered email use an authenticated invitation ID in the notification. The raw invitation token is not stored in the notification payload. Each user can mark items read, delete them, or change preferences. Critical failures remain enabled in-app.
 
 Notification preferences are separate from provider inbox opt-in. Turning off an OpenPost notification does not start or stop collection from a social account.

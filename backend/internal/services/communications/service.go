@@ -170,8 +170,13 @@ func (s *Service) RefreshWorkspace(ctx context.Context, workspaceID string, forc
 		if account.ID == "" {
 			continue
 		}
-		adapter := s.adapter(account)
-		if _, ok := adapter.(platform.CommentAdapter); !ok {
+		engagement, ok := s.adapter(account).(platform.EngagementAdapter)
+		if !ok || !engagement.EngagementSupport().Enabled {
+			continue
+		}
+		support := engagement.EngagementSupport()
+		if missing := platform.MissingAnalyticsScopes(account.GrantedScopes, support.RequiredScopes); len(missing) > 0 {
+			_ = s.recordState(ctx, capabilityEngagement, subjectRendition, rendition.ID, account, "permission_required", "missing_scope", "Reconnect this account and grant engagement access.", "", false, 24*time.Hour, 0)
 			continue
 		}
 		if !force && !s.due(ctx, capabilityEngagement, subjectRendition, rendition.ID, now) {
@@ -232,31 +237,29 @@ func (s *Service) syncEngagement(ctx context.Context, renditionID string) error 
 	if account.ID == "" {
 		return nil
 	}
-	commenter, ok := s.adapter(account).(platform.CommentAdapter)
-	if !ok {
+	commenter, ok := s.adapter(account).(platform.EngagementAdapter)
+	if !ok || !commenter.EngagementSupport().Enabled {
 		return s.recordState(ctx, capabilityEngagement, subjectRendition, rendition.ID, account, "unsupported", "unsupported", "Engagement collection is not supported for this provider.", "", true, 0, 0)
+	}
+	support := commenter.EngagementSupport()
+	if missing := platform.MissingAnalyticsScopes(account.GrantedScopes, support.RequiredScopes); len(missing) > 0 {
+		return s.recordState(ctx, capabilityEngagement, subjectRendition, rendition.ID, account, "permission_required", "missing_scope", "Reconnect this account and grant engagement access.", "", false, 24*time.Hour, 0)
 	}
 	token, err := s.tokenSource.GetValidAccessToken(ctx, account.ID)
 	if err != nil {
-		return s.recordState(ctx, capabilityEngagement, subjectRendition, rendition.ID, account, "failed", "authentication", "Reconnect this account to resume engagement collection.", "", true, time.Hour, 0)
+		return s.recordState(ctx, capabilityEngagement, subjectRendition, rendition.ID, account, "permission_required", "authentication", "Reconnect this account to resume engagement collection.", "", true, 24*time.Hour, 0)
 	}
 	s.resolveAndStoreContentURL(ctx, commenter, token, account, &rendition)
 	comments, err := commenter.ListComments(ctx, token, account.AccountID, rendition.ExternalID)
 	if err != nil {
-		return s.recordState(ctx, capabilityEngagement, subjectRendition, rendition.ID, account, "failed", "provider_error", "OpenPost could not collect engagement from this provider.", "", true, time.Hour, 0)
+		status, code, message, cadence := classifyCommunicationReadError(err)
+		return s.recordState(ctx, capabilityEngagement, subjectRendition, rendition.ID, account, status, code, message, "", true, cadence, 0)
 	}
 	now := s.now()
-	newItems, err := s.persistEngagementComments(ctx, rendition, account, comments, now)
-	if err != nil {
-		return err
-	}
 	var publication models.Publication
 	_ = s.db.NewSelect().Model(&publication).Where("id = ?", rendition.PublicationID).Scan(ctx)
-	for _, item := range newItems {
-		_ = s.notify(ctx, publication.CreatedByID, account.WorkspaceID, notifications.TypeNewEngagement,
-			"New "+providerLabel(account.Platform)+" engagement",
-			firstNonEmpty(item.AuthorName, item.AuthorHandle, "Someone")+" replied to your post.",
-			"/engagement?item="+item.ID)
+	if _, err := s.persistEngagementComments(ctx, rendition, account, publication, comments, now); err != nil {
+		return err
 	}
 	publishedAt := publication.ActualRunAt
 	if publishedAt.IsZero() {
@@ -270,73 +273,187 @@ func (s *Service) persistEngagementComments(
 	ctx context.Context,
 	rendition models.Rendition,
 	account models.SocialAccount,
+	publication models.Publication,
 	comments []platform.Comment,
 	now time.Time,
 ) ([]models.EngagementItem, error) {
 	newItems := make([]models.EngagementItem, 0)
 	err := s.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
 		for _, comment := range comments {
-			if strings.TrimSpace(comment.ID) == "" {
+			item, isNew, err := persistEngagementComment(ctx, tx, rendition, account, comment, now)
+			if err != nil {
+				return err
+			}
+			if !isNew {
 				continue
 			}
-			exists, err := tx.NewSelect().Model((*models.EngagementItem)(nil)).
-				Where("social_account_id = ? AND remote_id = ?", account.ID, comment.ID).
-				Exists(ctx)
-			if err != nil {
+			newItems = append(newItems, item)
+			if err := s.notifyNewEngagement(ctx, tx, publication, rendition, account, item); err != nil {
 				return err
-			}
-			item := models.EngagementItem{
-				ID:                   uuid.NewString(),
-				WorkspaceID:          account.WorkspaceID,
-				RenditionID:          rendition.ID,
-				SocialAccountID:      account.ID,
-				Platform:             account.Platform,
-				RemoteID:             comment.ID,
-				ParentRemoteID:       comment.ParentID,
-				ConversationRemoteID: comment.ConversationID,
-				AuthorRemoteID:       comment.AuthorID,
-				AuthorName:           comment.AuthorName,
-				AuthorHandle:         comment.AuthorHandle,
-				AuthorAvatarURL:      comment.AuthorAvatarURL,
-				Body:                 comment.Text,
-				IsOurs:               comment.IsOurs,
-				CanReply:             comment.CanReply,
-				CanHide:              comment.CanHide,
-				CanDelete:            comment.CanDelete,
-				Hidden:               comment.Hidden,
-				RemoteCreatedAt:      parseProviderTime(comment.CreatedAt),
-				LastSeenAt:           now,
-				CreatedAt:            now,
-				UpdatedAt:            now,
-			}
-			_, err = tx.NewInsert().Model(&item).
-				On("CONFLICT (social_account_id, remote_id) DO UPDATE").
-				Set("parent_remote_id = EXCLUDED.parent_remote_id").
-				Set("conversation_remote_id = EXCLUDED.conversation_remote_id").
-				Set("author_remote_id = EXCLUDED.author_remote_id").
-				Set("author_name = EXCLUDED.author_name").
-				Set("author_handle = EXCLUDED.author_handle").
-				Set("author_avatar_url = EXCLUDED.author_avatar_url").
-				Set("body = EXCLUDED.body").
-				Set("is_ours = EXCLUDED.is_ours").
-				Set("can_reply = EXCLUDED.can_reply").
-				Set("can_hide = EXCLUDED.can_hide").
-				Set("can_delete = EXCLUDED.can_delete").
-				Set("hidden = EXCLUDED.hidden").
-				Set("remote_created_at = EXCLUDED.remote_created_at").
-				Set("last_seen_at = EXCLUDED.last_seen_at").
-				Set("updated_at = EXCLUDED.updated_at").
-				Exec(ctx)
-			if err != nil {
-				return err
-			}
-			if !exists && !comment.IsOurs {
-				newItems = append(newItems, item)
 			}
 		}
 		return nil
 	})
 	return newItems, err
+}
+
+func persistEngagementComment(
+	ctx context.Context,
+	tx bun.Tx,
+	rendition models.Rendition,
+	account models.SocialAccount,
+	comment platform.Comment,
+	now time.Time,
+) (models.EngagementItem, bool, error) {
+	if strings.TrimSpace(comment.ID) == "" {
+		return models.EngagementItem{}, false, nil
+	}
+	var existing models.EngagementItem
+	existingErr := tx.NewSelect().Model(&existing).
+		Where("social_account_id = ? AND remote_id = ?", account.ID, comment.ID).
+		Scan(ctx)
+	exists := existingErr == nil
+	if existingErr != nil && !errors.Is(existingErr, sql.ErrNoRows) {
+		return models.EngagementItem{}, false, existingErr
+	}
+	item := engagementItemFromComment(rendition, account, existing, comment, now)
+	_, err := tx.NewInsert().Model(&item).
+		On("CONFLICT (social_account_id, remote_id) DO UPDATE").
+		Set("parent_remote_id = EXCLUDED.parent_remote_id").
+		Set("conversation_remote_id = EXCLUDED.conversation_remote_id").
+		Set("author_remote_id = EXCLUDED.author_remote_id").
+		Set("author_name = EXCLUDED.author_name").
+		Set("author_handle = EXCLUDED.author_handle").
+		Set("author_avatar_url = EXCLUDED.author_avatar_url").
+		Set("body = EXCLUDED.body").
+		Set("attachments_json = EXCLUDED.attachments_json").
+		Set("is_ours = EXCLUDED.is_ours").
+		Set("can_reply = EXCLUDED.can_reply").
+		Set("can_hide = EXCLUDED.can_hide").
+		Set("can_delete = EXCLUDED.can_delete").
+		Set("can_like = EXCLUDED.can_like").
+		Set("can_unlike = EXCLUDED.can_unlike").
+		Set("liked = EXCLUDED.liked").
+		Set("hidden = EXCLUDED.hidden").
+		Set("edited_at = EXCLUDED.edited_at").
+		Set("deleted_at = EXCLUDED.deleted_at").
+		Set("remote_created_at = EXCLUDED.remote_created_at").
+		Set("last_seen_at = EXCLUDED.last_seen_at").
+		Set("updated_at = EXCLUDED.updated_at").
+		Exec(ctx)
+	return item, !exists && !comment.IsOurs, err
+}
+
+func engagementItemFromComment(
+	rendition models.Rendition,
+	account models.SocialAccount,
+	existing models.EngagementItem,
+	comment platform.Comment,
+	now time.Time,
+) models.EngagementItem {
+	attachments, safeAttachments := sanitizeCommentAttachments(comment.Attachments)
+	body := boundedText(comment.Text, 10000)
+	if comment.Deleted {
+		body = ""
+	}
+	itemID := existing.ID
+	if itemID == "" {
+		itemID = uuid.NewString()
+	}
+	liked := comment.Liked
+	canLike := comment.CanLike
+	canUnlike := comment.CanUnlike
+	if !comment.LikeStateKnown {
+		if existing.ID != "" {
+			liked = existing.Liked
+		}
+		canLike = comment.CanLike && !liked
+		canUnlike = comment.CanUnlike && liked
+	}
+	return models.EngagementItem{
+		ID:                   itemID,
+		WorkspaceID:          account.WorkspaceID,
+		RenditionID:          rendition.ID,
+		SocialAccountID:      account.ID,
+		Platform:             account.Platform,
+		RemoteID:             boundedText(comment.ID, 512),
+		ParentRemoteID:       boundedText(comment.ParentID, 512),
+		ConversationRemoteID: boundedText(comment.ConversationID, 512),
+		AuthorRemoteID:       boundedText(comment.AuthorID, 512),
+		AuthorName:           boundedText(comment.AuthorName, 200),
+		AuthorHandle:         boundedText(comment.AuthorHandle, 200),
+		AuthorAvatarURL:      safeExternalURL(comment.AuthorAvatarURL),
+		Body:                 body,
+		AttachmentsJSON:      attachments,
+		IsOurs:               comment.IsOurs,
+		CanReply:             comment.CanReply,
+		CanHide:              comment.CanHide,
+		CanDelete:            comment.CanDelete,
+		CanLike:              canLike,
+		CanUnlike:            canUnlike,
+		Liked:                liked,
+		Hidden:               comment.Hidden,
+		ReadAt:               existing.ReadAt,
+		ArchivedAt:           existing.ArchivedAt,
+		EditedAt:             engagementEditedAt(existing, comment, attachments, now),
+		DeletedAt:            engagementDeletedAt(existing, comment, now),
+		RemoteCreatedAt:      firstNonZeroTime(parseProviderTime(comment.CreatedAt), existing.RemoteCreatedAt),
+		LastSeenAt:           now,
+		CreatedAt:            firstNonZeroTime(existing.CreatedAt, now),
+		UpdatedAt:            now,
+		Attachments:          safeAttachments,
+	}
+}
+
+func engagementEditedAt(existing models.EngagementItem, comment platform.Comment, attachments string, now time.Time) time.Time {
+	remoteUpdatedAt := parseProviderTime(comment.UpdatedAt)
+	if !remoteUpdatedAt.IsZero() && remoteUpdatedAt.After(parseProviderTime(comment.CreatedAt)) {
+		return remoteUpdatedAt
+	}
+	if existing.ID != "" &&
+		(existing.Body != boundedText(comment.Text, 10000) || existing.AttachmentsJSON != attachments) {
+		return now
+	}
+	return existing.EditedAt
+}
+
+func engagementDeletedAt(existing models.EngagementItem, comment platform.Comment, now time.Time) time.Time {
+	if comment.Deleted && existing.DeletedAt.IsZero() {
+		return now
+	}
+	return existing.DeletedAt
+}
+
+func (s *Service) notifyNewEngagement(
+	ctx context.Context,
+	db bun.IDB,
+	publication models.Publication,
+	rendition models.Rendition,
+	account models.SocialAccount,
+	item models.EngagementItem,
+) error {
+	if s.notifications == nil || publication.CreatedByID == "" {
+		return nil
+	}
+	return s.notifications.CreateWithDB(ctx, db, notifications.CreateInput{
+		UserID:      publication.CreatedByID,
+		WorkspaceID: account.WorkspaceID,
+		Type:        notifications.TypeNewEngagement,
+		Title:       "New " + providerLabel(account.Platform) + " engagement",
+		Body:        firstNonEmpty(item.AuthorName, item.AuthorHandle, "Someone") + " replied to your post.",
+		Href:        "/engagement?item=" + item.ID,
+		DedupKey:    "engagement:" + account.ID + ":" + item.RemoteID,
+		Payload: map[string]any{
+			"engagement_item_id": item.ID,
+			"publication_id":     publication.ID,
+			"rendition_id":       rendition.ID,
+		},
+		Actions: []models.NotificationAction{{
+			Label: "Open reply",
+			Href:  "/engagement?item=" + item.ID,
+			Kind:  "primary",
+		}},
+	})
 }
 
 func (s *Service) resolveAndStoreContentURL(
@@ -561,6 +678,14 @@ func (s *Service) QueueEngagementAction(ctx context.Context, itemID, action, mes
 		if !item.CanDelete {
 			return fmt.Errorf("this item cannot be deleted by the connected account")
 		}
+	case "like":
+		if !item.CanLike || item.Liked {
+			return fmt.Errorf("this provider does not allow this item to be liked")
+		}
+	case "unlike":
+		if !item.CanUnlike || !item.Liked {
+			return fmt.Errorf("this provider does not allow this item's like to be removed")
+		}
 	default:
 		return fmt.Errorf("unsupported engagement action %q", action)
 	}
@@ -586,28 +711,105 @@ func (s *Service) performEngagementAction(ctx context.Context, input engagementA
 	if err != nil {
 		return err
 	}
+	err = s.executeEngagementAction(ctx, commenter, token, account, &item, input)
+	if err != nil {
+		_ = s.notify(ctx, input.UserID, item.WorkspaceID, notifications.TypeReplyFailed, "Engagement action failed", "OpenPost could not complete the action. Try again.", "/engagement?item="+item.ID)
+	}
+	return err
+}
+
+func (s *Service) executeEngagementAction(
+	ctx context.Context,
+	commenter platform.CommentAdapter,
+	token string,
+	account models.SocialAccount,
+	item *models.EngagementItem,
+	input engagementActionJob,
+) error {
 	switch input.Action {
 	case "reply":
 		if strings.TrimSpace(input.Message) == "" {
 			return fmt.Errorf("reply message is required")
 		}
-		_, err = commenter.ReplyToComment(ctx, token, account.AccountID, item.RemoteID, input.Message)
+		_, err := commenter.ReplyToComment(ctx, token, account.AccountID, item.RemoteID, input.Message)
+		return err
 	case "hide":
-		err = commenter.HideComment(ctx, token, account.AccountID, item.RemoteID)
-		if err == nil {
-			_, err = s.db.NewUpdate().Model(&item).Set("hidden = ?", true).WherePK().Exec(ctx)
-		}
+		return s.hideEngagementItem(ctx, commenter, token, account, item)
 	case "delete":
-		err = commenter.DeleteComment(ctx, token, account.AccountID, item.RemoteID)
-		if err == nil {
-			_, err = s.db.NewDelete().Model(&item).WherePK().Exec(ctx)
-		}
+		return s.deleteEngagementItem(ctx, commenter, token, account, item)
+	case "like", "unlike":
+		return s.reactToEngagementItem(ctx, commenter, token, account, item, input.Action == "like")
 	default:
 		return fmt.Errorf("unsupported engagement action %q", input.Action)
 	}
-	if err != nil {
-		_ = s.notify(ctx, input.UserID, item.WorkspaceID, notifications.TypeReplyFailed, "Engagement action failed", "OpenPost could not complete the action. Try again.", "/engagement?item="+item.ID)
+}
+
+func (s *Service) hideEngagementItem(
+	ctx context.Context,
+	commenter platform.CommentAdapter,
+	token string,
+	account models.SocialAccount,
+	item *models.EngagementItem,
+) error {
+	if err := commenter.HideComment(ctx, token, account.AccountID, item.RemoteID); err != nil {
+		return err
 	}
+	_, err := s.db.NewUpdate().Model(item).Set("hidden = ?", true).WherePK().Exec(ctx)
+	return err
+}
+
+func (s *Service) deleteEngagementItem(
+	ctx context.Context,
+	commenter platform.CommentAdapter,
+	token string,
+	account models.SocialAccount,
+	item *models.EngagementItem,
+) error {
+	if err := commenter.DeleteComment(ctx, token, account.AccountID, item.RemoteID); err != nil {
+		return err
+	}
+	now := s.now()
+	_, err := s.db.NewUpdate().Model(item).
+		Set("body = ''").
+		Set("attachments_json = '[]'").
+		Set("deleted_at = ?", now).
+		Set("can_reply = ?", false).
+		Set("can_hide = ?", false).
+		Set("can_delete = ?", false).
+		Set("can_like = ?", false).
+		Set("can_unlike = ?", false).
+		Set("updated_at = ?", now).
+		WherePK().Exec(ctx)
+	return err
+}
+
+func (s *Service) reactToEngagementItem(
+	ctx context.Context,
+	commenter platform.CommentAdapter,
+	token string,
+	account models.SocialAccount,
+	item *models.EngagementItem,
+	liked bool,
+) error {
+	reactions, supported := commenter.(platform.CommentReactionAdapter)
+	if !supported {
+		return fmt.Errorf("reactions are unsupported")
+	}
+	var err error
+	if liked {
+		err = reactions.LikeComment(ctx, token, account.AccountID, item.RemoteID)
+	} else {
+		err = reactions.UnlikeComment(ctx, token, account.AccountID, item.RemoteID)
+	}
+	if err != nil {
+		return err
+	}
+	_, err = s.db.NewUpdate().Model(item).
+		Set("liked = ?", liked).
+		Set("can_like = ?", !liked).
+		Set("can_unlike = ?", liked).
+		Set("updated_at = ?", s.now()).
+		WherePK().Exec(ctx)
 	return err
 }
 
@@ -736,19 +938,19 @@ func (s *Service) sendMessage(ctx context.Context, messageID string) error {
 	})
 }
 
-func (s *Service) ListEngagement(ctx context.Context, workspaceID, platformName, accountID string, unreadOnly, archived bool, limit, offset int) ([]models.EngagementItem, int, error) {
+func (s *Service) ListEngagement(ctx context.Context, workspaceID, platformName, accountID, publicationID string, unreadOnly, archived bool, limit, offset int) ([]models.EngagementItem, int, error) {
 	if limit <= 0 || limit > 100 {
 		limit = 50
 	}
 	query := s.db.NewSelect().Model((*models.EngagementItem)(nil)).Where("workspace_id = ?", workspaceID)
-	query = engagementFilters(query, platformName, accountID, unreadOnly, archived)
+	query = engagementFilters(query, platformName, accountID, publicationID, unreadOnly, archived)
 	count, err := query.Count(ctx)
 	if err != nil {
 		return nil, 0, err
 	}
 	var items []models.EngagementItem
 	query = s.db.NewSelect().Model(&items).Where("workspace_id = ?", workspaceID)
-	query = engagementFilters(query, platformName, accountID, unreadOnly, archived)
+	query = engagementFilters(query, platformName, accountID, publicationID, unreadOnly, archived)
 	err = query.Order("remote_created_at DESC", "created_at DESC").Limit(limit).Offset(max(0, offset)).Scan(ctx)
 	if err != nil {
 		return nil, 0, err
@@ -763,6 +965,38 @@ func (s *Service) hydrateEngagementProviderURLs(ctx context.Context, items []mod
 	if len(items) == 0 {
 		return nil
 	}
+	hydration, err := s.loadEngagementHydrationContext(ctx, items)
+	if err != nil {
+		return err
+	}
+	for index := range items {
+		rendition, renditionOK := hydration.renditions[items[index].RenditionID]
+		account, accountOK := hydration.accounts[items[index].SocialAccountID]
+		if renditionOK && accountOK {
+			items[index].ProviderPostURL = providerPostURL(rendition, account)
+			items[index].AccountUsername = account.AccountUsername
+			publication := hydration.publications[rendition.PublicationID]
+			items[index].PublicationID = publication.ID
+			items[index].PublicationTitle = boundedText(publication.Title, 200)
+			items[index].PublicationExcerpt = boundedText(publication.SourceText, 280)
+		}
+		if json.Unmarshal([]byte(items[index].AttachmentsJSON), &items[index].Attachments) != nil {
+			items[index].Attachments = []models.EngagementAttachment{}
+		}
+	}
+	return nil
+}
+
+type engagementHydrationContext struct {
+	renditions   map[string]models.Rendition
+	accounts     map[string]models.SocialAccount
+	publications map[string]models.Publication
+}
+
+func (s *Service) loadEngagementHydrationContext(
+	ctx context.Context,
+	items []models.EngagementItem,
+) (engagementHydrationContext, error) {
 	renditionIDs := make([]string, 0, len(items))
 	accountIDs := make([]string, 0, len(items))
 	for _, item := range items {
@@ -771,28 +1005,37 @@ func (s *Service) hydrateEngagementProviderURLs(ctx context.Context, items []mod
 	}
 	var renditions []models.Rendition
 	if err := s.db.NewSelect().Model(&renditions).Where("id IN (?)", bun.List(renditionIDs)).Scan(ctx); err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return fmt.Errorf("load engagement renditions: %w", err)
+		return engagementHydrationContext{}, fmt.Errorf("load engagement renditions: %w", err)
 	}
 	var accounts []models.SocialAccount
 	if err := s.db.NewSelect().Model(&accounts).Where("id IN (?)", bun.List(accountIDs)).Scan(ctx); err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return fmt.Errorf("load engagement accounts: %w", err)
+		return engagementHydrationContext{}, fmt.Errorf("load engagement accounts: %w", err)
 	}
 	renditionByID := make(map[string]models.Rendition, len(renditions))
+	publicationIDs := make([]string, 0, len(renditions))
 	for _, rendition := range renditions {
 		renditionByID[rendition.ID] = rendition
+		publicationIDs = append(publicationIDs, rendition.PublicationID)
+	}
+	var publications []models.Publication
+	if len(publicationIDs) > 0 {
+		if err := s.db.NewSelect().Model(&publications).Where("id IN (?)", bun.List(publicationIDs)).Scan(ctx); err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return engagementHydrationContext{}, fmt.Errorf("load engagement publications: %w", err)
+		}
+	}
+	publicationByID := make(map[string]models.Publication, len(publications))
+	for _, publication := range publications {
+		publicationByID[publication.ID] = publication
 	}
 	accountByID := make(map[string]models.SocialAccount, len(accounts))
 	for _, account := range accounts {
 		accountByID[account.ID] = account
 	}
-	for index := range items {
-		rendition, renditionOK := renditionByID[items[index].RenditionID]
-		account, accountOK := accountByID[items[index].SocialAccountID]
-		if renditionOK && accountOK {
-			items[index].ProviderPostURL = providerPostURL(rendition, account)
-		}
-	}
-	return nil
+	return engagementHydrationContext{
+		renditions:   renditionByID,
+		accounts:     accountByID,
+		publications: publicationByID,
+	}, nil
 }
 
 func providerPostURL(rendition models.Rendition, account models.SocialAccount) string {
@@ -913,12 +1156,15 @@ func isSafeProviderPostURL(value string) bool {
 	return err == nil && parsed.Scheme == "https" && parsed.Host != ""
 }
 
-func engagementFilters(query *bun.SelectQuery, platformName, accountID string, unreadOnly, archived bool) *bun.SelectQuery {
+func engagementFilters(query *bun.SelectQuery, platformName, accountID, publicationID string, unreadOnly, archived bool) *bun.SelectQuery {
 	if platformName != "" {
 		query = query.Where("platform = ?", platformName)
 	}
 	if accountID != "" {
 		query = query.Where("social_account_id = ?", accountID)
+	}
+	if publicationID != "" {
+		query = query.Where("rendition_id IN (SELECT id FROM renditions WHERE publication_id = ?)", publicationID)
 	}
 	if unreadOnly {
 		query = query.Where("read_at IS NULL")
@@ -929,6 +1175,18 @@ func engagementFilters(query *bun.SelectQuery, platformName, accountID string, u
 		query = query.Where("archived_at IS NULL")
 	}
 	return query
+}
+
+func (s *Service) ListEngagementSyncStates(ctx context.Context, workspaceID string) ([]models.CommunicationSyncState, error) {
+	var states []models.CommunicationSyncState
+	err := s.db.NewSelect().Model(&states).
+		Where("workspace_id = ? AND capability = ?", workspaceID, capabilityEngagement).
+		Order("platform ASC", "social_account_id ASC").
+		Scan(ctx)
+	if errors.Is(err, sql.ErrNoRows) {
+		return states, nil
+	}
+	return states, err
 }
 
 func (s *Service) SetEngagementState(ctx context.Context, workspaceID string, ids []string, read, archived *bool) error {
@@ -1194,4 +1452,69 @@ func boolToInt(value bool) int {
 		return 1
 	}
 	return 0
+}
+
+func classifyCommunicationReadError(err error) (status, code, message string, cadence time.Duration) {
+	var providerErr *platform.HTTPError
+	if errors.As(err, &providerErr) {
+		switch {
+		case providerErr.StatusCode == 401 || providerErr.StatusCode == 403:
+			return "permission_required", firstNonEmpty(providerErr.Code, "authentication"), "Reconnect this account to resume engagement collection.", 24 * time.Hour
+		case providerErr.StatusCode == 404:
+			return "not_found", firstNonEmpty(providerErr.Code, "not_found"), "The provider no longer exposes this post or its replies.", 7 * 24 * time.Hour
+		case providerErr.StatusCode == 429:
+			retryAfter := providerErr.RetryAfter
+			if retryAfter <= 0 {
+				retryAfter = time.Hour
+			}
+			return "rate_limited", firstNonEmpty(providerErr.Code, "rate_limited"), "The provider asked OpenPost to wait before collecting replies again.", retryAfter
+		case providerErr.StatusCode >= 500:
+			return "temporarily_unavailable", firstNonEmpty(providerErr.Code, "provider_server"), "The provider is temporarily unavailable. OpenPost will try again.", time.Hour
+		default:
+			return "failed", firstNonEmpty(providerErr.Code, "provider_error"), "OpenPost could not collect engagement from this provider.", time.Hour
+		}
+	}
+	return "temporarily_unavailable", "network", "OpenPost could not reach the provider. It will try again.", time.Hour
+}
+
+func sanitizeCommentAttachments(input []platform.CommentAttachment) (string, []models.EngagementAttachment) {
+	attachments := make([]models.EngagementAttachment, 0, min(len(input), 8))
+	for _, attachment := range input {
+		urlValue := safeExternalURL(attachment.URL)
+		thumbnail := safeExternalURL(attachment.Thumbnail)
+		if urlValue == "" && thumbnail == "" {
+			continue
+		}
+		attachments = append(attachments, models.EngagementAttachment{
+			Type:      boundedText(attachment.Type, 32),
+			URL:       urlValue,
+			Name:      boundedText(attachment.Name, 200),
+			MimeType:  boundedText(attachment.MimeType, 100),
+			Thumbnail: thumbnail,
+			AltText:   boundedText(attachment.AltText, 500),
+		})
+		if len(attachments) == 8 {
+			break
+		}
+	}
+	encoded, _ := json.Marshal(attachments)
+	return string(encoded), attachments
+}
+
+func safeExternalURL(value string) string {
+	parsed, err := url.Parse(strings.TrimSpace(value))
+	if err != nil || parsed.Scheme != "https" || parsed.Host == "" {
+		return ""
+	}
+	parsed.Fragment = ""
+	return boundedText(parsed.String(), 2048)
+}
+
+func boundedText(value string, limit int) string {
+	value = strings.TrimSpace(value)
+	runes := []rune(value)
+	if len(runes) <= limit {
+		return value
+	}
+	return string(runes[:limit])
 }

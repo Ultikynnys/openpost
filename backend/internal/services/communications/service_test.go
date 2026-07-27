@@ -27,6 +27,12 @@ type fakeCommenter struct {
 	accountIDs []string
 	comments   []platform.Comment
 	contentURL string
+	likedIDs   []string
+	unlikedIDs []string
+}
+
+func (*fakeCommenter) EngagementSupport() platform.EngagementSupport {
+	return platform.EngagementSupport{Enabled: true, CanReply: true, CanDelete: true}
 }
 
 func (f *fakeCommenter) ListComments(_ context.Context, _ string, accountID, _ string) ([]platform.Comment, error) {
@@ -43,6 +49,16 @@ func (*fakeCommenter) HideComment(context.Context, string, string, string) error
 }
 
 func (*fakeCommenter) DeleteComment(context.Context, string, string, string) error {
+	return nil
+}
+
+func (f *fakeCommenter) LikeComment(_ context.Context, _, _, commentID string) error {
+	f.likedIDs = append(f.likedIDs, commentID)
+	return nil
+}
+
+func (f *fakeCommenter) UnlikeComment(_ context.Context, _, _, commentID string) error {
+	f.unlikedIDs = append(f.unlikedIDs, commentID)
 	return nil
 }
 
@@ -376,4 +392,116 @@ func TestHistoricalRenditionUsesActiveReplacementAfterReconnect(t *testing.T) {
 	require.Equal(t, replacement.ID, item.SocialAccountID)
 	require.NoError(t, db.NewSelect().Model(rendition).WherePK().Scan(ctx))
 	require.Equal(t, commenter.contentURL, rendition.ExternalURL)
+}
+
+func TestEngagementPersistenceTracksEditsDeletionAttachmentsAndLocalReadState(t *testing.T) {
+	db := communicationsTestDB(t)
+	ctx := context.Background()
+	now := time.Date(2026, 7, 26, 12, 0, 0, 0, time.UTC)
+	account := models.SocialAccount{
+		ID: "account-1", WorkspaceID: "workspace-1", Platform: "mastodon",
+		AccountID: "remote-account", AccessTokenEnc: []byte("encrypted"), IsActive: true,
+	}
+	require.NoError(t, func() error {
+		_, err := db.NewInsert().Model(&account).Exec(ctx)
+		return err
+	}())
+	rendition := models.Rendition{ID: "rendition-1", PublicationID: "publication-1"}
+	publication := models.Publication{ID: "publication-1", CreatedByID: "user-1"}
+	service := NewService(db, staticTokenSource{}, nil)
+
+	initial := platform.Comment{
+		ID: "comment-1", Text: "First", CreatedAt: now.Format(time.RFC3339),
+		CanReply: true, CanLike: true, LikeStateKnown: true,
+		Attachments: []platform.CommentAttachment{
+			{Type: "image", URL: "https://cdn.example/image.png", AltText: "Preview"},
+			{Type: "image", URL: "http://private.example/image.png"},
+		},
+	}
+	newItems, err := service.persistEngagementComments(ctx, rendition, account, publication, []platform.Comment{initial}, now)
+	require.NoError(t, err)
+	require.Len(t, newItems, 1)
+
+	readAt := now.Add(time.Minute)
+	_, err = db.NewUpdate().Model((*models.EngagementItem)(nil)).
+		Set("read_at = ?", readAt).
+		Where("remote_id = ?", initial.ID).
+		Exec(ctx)
+	require.NoError(t, err)
+
+	edited := initial
+	edited.Text = "Edited"
+	edited.UpdatedAt = now.Add(2 * time.Minute).Format(time.RFC3339)
+	edited.Liked = true
+	edited.CanUnlike = true
+	_, err = service.persistEngagementComments(ctx, rendition, account, publication, []platform.Comment{edited}, now.Add(2*time.Minute))
+	require.NoError(t, err)
+
+	var item models.EngagementItem
+	require.NoError(t, db.NewSelect().Model(&item).Where("remote_id = ?", initial.ID).Scan(ctx))
+	require.Equal(t, "Edited", item.Body)
+	require.True(t, item.Liked)
+	require.True(t, item.CanUnlike)
+	require.Equal(t, readAt, item.ReadAt)
+	require.False(t, item.EditedAt.IsZero())
+	require.JSONEq(t, `[{"type":"image","url":"https://cdn.example/image.png","alt_text":"Preview"}]`, item.AttachmentsJSON)
+
+	unknownLikeState := edited
+	unknownLikeState.LikeStateKnown = false
+	unknownLikeState.Liked = false
+	unknownLikeState.CanLike = true
+	unknownLikeState.CanUnlike = true
+	_, err = service.persistEngagementComments(
+		ctx,
+		rendition,
+		account,
+		publication,
+		[]platform.Comment{unknownLikeState},
+		now.Add(3*time.Minute),
+	)
+	require.NoError(t, err)
+	require.NoError(t, db.NewSelect().Model(&item).Where("remote_id = ?", initial.ID).Scan(ctx))
+	require.True(t, item.Liked)
+	require.False(t, item.CanLike)
+	require.True(t, item.CanUnlike)
+
+	edited.Deleted = true
+	_, err = service.persistEngagementComments(ctx, rendition, account, publication, []platform.Comment{edited}, now.Add(4*time.Minute))
+	require.NoError(t, err)
+	require.NoError(t, db.NewSelect().Model(&item).Where("remote_id = ?", initial.ID).Scan(ctx))
+	require.Empty(t, item.Body)
+	require.False(t, item.DeletedAt.IsZero())
+}
+
+func TestEngagementReactionUpdatesAvailableInverseAction(t *testing.T) {
+	db := communicationsTestDB(t)
+	ctx := context.Background()
+	now := time.Date(2026, 7, 26, 12, 0, 0, 0, time.UTC)
+	item := &models.EngagementItem{
+		ID: "item-1", WorkspaceID: "workspace-1", RenditionID: "rendition-1",
+		SocialAccountID: "account-1", Platform: "x", RemoteID: "comment-1",
+		CanLike: true, LastSeenAt: now, CreatedAt: now, UpdatedAt: now,
+	}
+	_, err := db.NewInsert().Model(item).Exec(ctx)
+	require.NoError(t, err)
+	commenter := &fakeCommenter{}
+	service := NewService(db, staticTokenSource{}, nil)
+	service.now = func() time.Time { return now.Add(time.Minute) }
+
+	require.NoError(t, service.reactToEngagementItem(
+		ctx,
+		commenter,
+		"token",
+		models.SocialAccount{AccountID: "remote-account"},
+		item,
+		true,
+	))
+	require.Equal(t, []string{"comment-1"}, commenter.likedIDs)
+
+	var stored models.EngagementItem
+	require.NoError(t, db.NewSelect().Model(&stored).Where("id = ?", item.ID).Scan(ctx))
+	require.True(t, stored.Liked)
+	require.False(t, stored.CanLike)
+	require.True(t, stored.CanUnlike)
+	require.NoError(t, service.QueueEngagementAction(ctx, stored.ID, "unlike", "", "user-1"))
 }

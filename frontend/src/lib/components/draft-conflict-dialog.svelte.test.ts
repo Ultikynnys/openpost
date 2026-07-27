@@ -12,6 +12,7 @@ const conflict = {
 		expected_revision: 2,
 		current_revision: 3,
 		status: 'draft',
+		changed_by_name: 'Alex',
 		changed_domains: ['destinations', 'media']
 	}
 };
@@ -36,6 +37,9 @@ describe('DraftConflictDialog', () => {
 		});
 
 		await expect.element(screen.getByText('destinations, media')).toBeVisible();
+		await expect
+			.element(screen.getByText(m.draft_conflict_changed_by({ name: 'Alex' })))
+			.toBeVisible();
 		await screen.getByRole('button', { name: label }).click();
 		expect(callbacks[action]).toHaveBeenCalledOnce();
 	});

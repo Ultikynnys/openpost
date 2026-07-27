@@ -267,7 +267,7 @@ func (t *ThreadsAdapter) createCarouselContainer(ctx context.Context, accessToke
 	}
 
 	payload := map[string]string{
-		jsonFieldText:         contentWithSettingURL(req.Content, req.Settings),
+		jsonFieldText:         ContentWithSettingURL(req.Content, req.Settings),
 		"media_type":          "CAROUSEL",
 		"children":            strings.Join(childIDs, ","),
 		oauthParamAccessToken: accessToken,

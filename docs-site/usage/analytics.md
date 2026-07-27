@@ -9,6 +9,9 @@ OpenPost stores supported account and publication counters so the Analytics page
 - Views, impressions, and reach as separate metrics
 - Results for 7, 30, or 90 days
 - Actionable reconnect, unsupported, rate-limit, and collection-failure states
+- Account filtering that updates summary totals, content rows, and the follower chart together
+- Content sorting by engagement, views, or publish time, plus direct native-post links
+- Last-success, stale, and next-eligible collection timing
 
 A missing metric is not shown as zero. Providers define these counters differently, so OpenPost does not merge views, impressions, and reach into one number.
 
@@ -23,7 +26,7 @@ OpenPost uses its database-backed job worker. No Redis service is required.
 - Publications from 3 to 7 days old are checked daily.
 - Automatic publication checks stop after 7 days.
 
-Repeated unchanged measurements reduce collection frequency, up to 8× the base interval. **Refresh data** queues current account checks and publications from the last 90 days. Provider rate limits can delay a refresh.
+Repeated unchanged measurements reduce collection frequency, up to 8× the base interval. **Refresh data** queues current account checks and publications from the last 90 days. Provider rate limits can delay a refresh. Duplicate worker execution in the same capture window does not create duplicate snapshots.
 
 ## Provider coverage
 

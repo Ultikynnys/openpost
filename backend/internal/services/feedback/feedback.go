@@ -124,6 +124,7 @@ type Service struct {
 	db          *bun.DB
 	config      Config
 	destination Destination
+	now         func() time.Time
 }
 
 func NewService(db *bun.DB, config Config, destination Destination) *Service {
@@ -134,7 +135,50 @@ func NewService(db *bun.DB, config Config, destination Destination) *Service {
 		config.AppVersion = "dev"
 	}
 	config.Enabled = config.Enabled && destination != nil && config.Recipient != ""
-	return &Service{db: db, config: config, destination: destination}
+	return &Service{
+		db: db, config: config, destination: destination,
+		now: func() time.Time { return time.Now().UTC() },
+	}
+}
+
+type rateLimitWindow struct {
+	bun.BaseModel `bun:"table:feedback_rate_limit_windows"`
+
+	UserID       string    `bun:"user_id,pk"`
+	WindowStart  time.Time `bun:"window_start,pk"`
+	RequestCount int       `bun:"request_count,notnull"`
+}
+
+// AllowSubmission uses a fixed database window so the feedback limit survives
+// restarts and is shared by every hosted application instance.
+func (s *Service) AllowSubmission(ctx context.Context, userID string, limit int, window time.Duration) (bool, error) {
+	if s == nil || s.db == nil {
+		return false, errors.New("feedback rate limiter is unavailable")
+	}
+	userID = strings.TrimSpace(userID)
+	if userID == "" || limit <= 0 || window <= 0 {
+		return false, errors.New("invalid feedback rate limit")
+	}
+	windowStart := s.now().UTC().Truncate(window)
+	row := &rateLimitWindow{UserID: userID, WindowStart: windowStart, RequestCount: 1}
+	result, err := s.db.NewInsert().Model(row).
+		On("CONFLICT (user_id, window_start) DO UPDATE").
+		Set("request_count = request_count + 1").
+		Where("request_count < ?", limit).
+		Exec(ctx)
+	if err != nil {
+		return false, fmt.Errorf("apply feedback rate limit: %w", err)
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return false, fmt.Errorf("read feedback rate limit result: %w", err)
+	}
+	if affected > 0 {
+		_, _ = s.db.NewDelete().Model((*rateLimitWindow)(nil)).
+			Where("window_start < ?", windowStart.Add(-24*time.Hour)).
+			Exec(ctx)
+	}
+	return affected > 0, nil
 }
 
 func (s *Service) PublicConfig() PublicConfig {

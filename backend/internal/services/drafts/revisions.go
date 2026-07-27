@@ -2,6 +2,7 @@ package drafts
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -31,6 +32,7 @@ type ConflictMetadata struct {
 	Status           string   `json:"status"`
 	Title            string   `json:"title,omitempty"`
 	UpdatedAt        string   `json:"updated_at,omitempty"`
+	ChangedByName    string   `json:"changed_by_name,omitempty"`
 	ChangedDomains   []string `json:"changed_domains"`
 }
 
@@ -122,6 +124,53 @@ func ChangedDomainsSince(
 		}
 	}
 	return UniqueDomains(domains), nil
+}
+
+// LatestEditorName returns only the user-facing identity needed to explain a
+// conflict. It never includes draft contents or unrelated workspace data.
+func LatestEditorName(
+	ctx context.Context,
+	db bun.IDB,
+	aggregateType string,
+	aggregateID string,
+	revision int,
+) (string, error) {
+	var change models.DraftRevisionChange
+	err := db.NewSelect().
+		Model(&change).
+		Where("aggregate_type = ? AND aggregate_id = ? AND revision > ?", aggregateType, aggregateID, revision).
+		Order("revision DESC").
+		Limit(1).
+		Scan(ctx)
+	if errors.Is(err, sql.ErrNoRows) || isMissingOptionalTable(err) {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(change.ChangedBy) == "" {
+		return "", nil
+	}
+	var user models.User
+	err = db.NewSelect().Model(&user).Where("id = ?", change.ChangedBy).Scan(ctx)
+	if errors.Is(err, sql.ErrNoRows) || isMissingOptionalTable(err) {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	if name := strings.TrimSpace(user.DisplayName); name != "" {
+		return name, nil
+	}
+	return strings.TrimSpace(user.Email), nil
+}
+
+func isMissingOptionalTable(err error) bool {
+	if err == nil {
+		return false
+	}
+	message := strings.ToLower(err.Error())
+	return strings.Contains(message, "no such table") || strings.Contains(message, "does not exist")
 }
 
 func UniqueDomains(domains []string) []string {

@@ -6,6 +6,7 @@ export interface DraftConflictMetadata {
 	status: string;
 	title?: string;
 	updated_at?: string;
+	changed_by_name?: string;
 	changed_domains: string[];
 }
 

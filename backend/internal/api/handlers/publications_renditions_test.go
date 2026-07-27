@@ -23,6 +23,127 @@ func TestPublicationPathIDDecodesLegacyPublicationIDs(t *testing.T) {
 	require.Equal(t, "publication-1", publicationPathID("publication-1"))
 }
 
+func TestRetryFailedPublicationRenditionsQueuesOnlyRetryableFailures(t *testing.T) {
+	db := createHandlerTestDB(t,
+		(*models.WorkspaceMember)(nil),
+		(*models.Publication)(nil),
+		(*models.Rendition)(nil),
+		(*models.Job)(nil),
+		(*models.PublicationLifecycleEvent)(nil),
+	)
+	ctx := context.Background()
+	now := time.Date(2026, time.July, 27, 9, 0, 0, 0, time.UTC)
+	_, err := db.NewInsert().Model(&models.WorkspaceMember{
+		WorkspaceID: "workspace-1",
+		UserID:      "user-1",
+		Role:        models.WorkspaceRoleAdmin,
+	}).Exec(ctx)
+	require.NoError(t, err)
+	_, err = db.NewInsert().Model(&models.Publication{
+		ID:              "publication-1",
+		WorkspaceID:     "workspace-1",
+		CreatedByID:     "user-1",
+		Title:           "Launch",
+		ContentProfile:  models.ContentProfileShortText,
+		SourceText:      "Launch",
+		SourceContent:   "Launch",
+		Status:          models.PublicationStatusFailed,
+		MetadataJSON:    "{}",
+		ReleasePlanJSON: "{}",
+		CreatedAt:       now,
+		UpdatedAt:       now,
+	}).Exec(ctx)
+	require.NoError(t, err)
+	_, err = db.NewInsert().Model(&[]models.Rendition{
+		{
+			ID: "published-rendition", PublicationID: "publication-1", SocialAccountID: "account-1",
+			Platform: "x", Profile: models.ContentProfileShortText, Body: "Launch", SettingsJSON: "{}",
+			Status: models.RenditionStatusPublished,
+		},
+		{
+			ID: "retryable-rendition", PublicationID: "publication-1", SocialAccountID: "account-2",
+			Platform: "mastodon", Profile: models.ContentProfileShortText, Body: "Launch", SettingsJSON: "{}",
+			Status: models.RenditionStatusFailed, ErrorKind: "network", ErrorRetryable: true,
+		},
+		{
+			ID: "permanent-rendition", PublicationID: "publication-1", SocialAccountID: "account-3",
+			Platform: "linkedin", Profile: models.ContentProfileShortText, Body: "Launch", SettingsJSON: "{}",
+			Status: models.RenditionStatusFailed, ErrorKind: "validation", ErrorRetryable: false,
+		},
+	}).Exec(ctx)
+	require.NoError(t, err)
+	_, err = db.NewUpdate().
+		Model((*models.Rendition)(nil)).
+		Set("error_retryable = ?", true).
+		Where("id = ?", "retryable-rendition").
+		Exec(ctx)
+	require.NoError(t, err)
+	var insertedRetryable models.Rendition
+	require.NoError(t, db.NewSelect().Model(&insertedRetryable).Where("id = ?", "retryable-rendition").Scan(ctx))
+	require.True(t, insertedRetryable.ErrorRetryable)
+	require.Equal(t, models.RenditionStatusFailed, insertedRetryable.Status)
+	_, err = db.NewInsert().Model(&models.Job{
+		ID:          "old-pending-job",
+		Type:        jobTypePublishPublication,
+		Payload:     `{"publication_id":"publication-1"}`,
+		Status:      jobStatusPending,
+		RunAt:       now.Add(time.Hour),
+		MaxAttempts: 3,
+	}).Exec(ctx)
+	require.NoError(t, err)
+
+	e := echo.New()
+	api := humaecho.NewWithGroup(e, e.Group("/api/v1"), huma.DefaultConfig("Test", "1.0.0"))
+	NewPublicationHandler(db, testAuthenticator{}, nil).RegisterRoutes(api)
+
+	req := httptest.NewRequestWithContext(
+		ctx,
+		http.MethodPost,
+		"/api/v1/publications/publication-1/retry-failed",
+		nil,
+	)
+	req.Header.Set("Authorization", "Bearer web-token")
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+
+	var renditions []models.Rendition
+	require.NoError(t, db.NewSelect().Model(&renditions).Order("id ASC").Scan(ctx))
+	statusByID := make(map[string]string, len(renditions))
+	for _, rendition := range renditions {
+		statusByID[rendition.ID] = rendition.Status
+	}
+	require.Equal(t, models.RenditionStatusFailed, statusByID["permanent-rendition"])
+	require.Equal(t, models.RenditionStatusPublished, statusByID["published-rendition"])
+	require.Equal(t, models.RenditionStatusScheduled, statusByID["retryable-rendition"])
+
+	var jobs []models.Job
+	require.NoError(t, db.NewSelect().Model(&jobs).Where("status = ?", jobStatusPending).Scan(ctx))
+	require.Len(t, jobs, 1)
+	require.NotEqual(t, "old-pending-job", jobs[0].ID)
+	require.Contains(t, jobs[0].Payload, `"publication_id":"publication-1"`)
+
+	var events []models.PublicationLifecycleEvent
+	require.NoError(t, db.NewSelect().Model(&events).Scan(ctx))
+	require.Len(t, events, 1)
+	require.Equal(t, "Retry queued for failed destinations", events[0].Message)
+
+	retryAgain := httptest.NewRequestWithContext(
+		ctx,
+		http.MethodPost,
+		"/api/v1/publications/publication-1/retry-failed",
+		nil,
+	)
+	retryAgain.Header.Set("Authorization", "Bearer web-token")
+	retryAgainRec := httptest.NewRecorder()
+	e.ServeHTTP(retryAgainRec, retryAgain)
+	require.Equal(t, http.StatusConflict, retryAgainRec.Code, retryAgainRec.Body.String())
+	var jobsAfterConflict []models.Job
+	require.NoError(t, db.NewSelect().Model(&jobsAfterConflict).Where("status = ?", jobStatusPending).Scan(ctx))
+	require.Len(t, jobsAfterConflict, 1)
+	require.Equal(t, jobs[0].ID, jobsAfterConflict[0].ID)
+}
+
 func TestUpsertPublicationRenditionsPreservesOmittedRenditionsUntilExplicitDelete(t *testing.T) {
 	db := createHandlerTestDB(t,
 		(*models.WorkspaceMember)(nil),

@@ -133,7 +133,6 @@ type CreatePublicationInput struct {
 
 type PublicationUpdateBody struct {
 	ExpectedRevision int                       `json:"expected_revision" minimum:"1" doc:"Revision loaded by the editor"`
-	Force            bool                      `json:"force,omitempty" doc:"Confirms an explicit overwrite after reviewing the latest revision"`
 	Title            *string                   `json:"title,omitempty" doc:"Internal publication title"`
 	Intent           *string                   `json:"intent,omitempty" enum:"post,thread,story,short_video,video" doc:"Publishing intent"`
 	ContentProfile   *string                   `json:"content_profile,omitempty" doc:"Content profile"`
@@ -191,6 +190,10 @@ type PublicationActionInput struct {
 type RetryRenditionInput struct {
 	PathID    string `path:"id" doc:"Publication ID"`
 	AccountID string `path:"account_id" doc:"Connected account ID"`
+}
+
+type RetryFailedRenditionsInput struct {
+	PathID string `path:"id" doc:"Publication ID"`
 }
 
 type PublicationMutationActionInput struct {
@@ -383,6 +386,7 @@ func (h *PublicationHandler) RegisterRoutes(api huma.API) {
 	h.validatePublication(api)
 	h.schedulePublication(api)
 	h.publishNow(api)
+	h.retryFailedRenditions(api)
 	h.retryRendition(api)
 	h.replyToRendition(api)
 }
@@ -622,13 +626,9 @@ func (h *PublicationHandler) listPublications(api huma.API) {
 		if err := query.Order("created_at DESC").Limit(limit).Offset(input.Offset).Scan(ctx, &publications); err != nil {
 			return nil, huma.Error500InternalServerError("failed to list publications")
 		}
-		body := make([]PublicationResponse, 0, len(publications))
-		for _, publication := range publications {
-			resp, err := h.loadPublicationResponse(ctx, publication.ID, userID)
-			if err != nil {
-				return nil, err
-			}
-			body = append(body, resp)
+		body, err := h.loadPublicationResponses(ctx, publications)
+		if err != nil {
+			return nil, err
 		}
 		next := input.Offset + len(body)
 		return &PublicationListOutput{
@@ -999,6 +999,10 @@ func (h *PublicationHandler) publicationRevisionConflict(
 	if len(domains) == 0 {
 		domains = []string{"draft"}
 	}
+	editorName, err := drafts.LatestEditorName(ctx, db, drafts.AggregatePublication, publication.ID, expectedRevision)
+	if err != nil {
+		return err
+	}
 	return drafts.NewConflictError(drafts.ConflictMetadata{
 		AggregateType:    drafts.AggregatePublication,
 		AggregateID:      publication.ID,
@@ -1007,6 +1011,7 @@ func (h *PublicationHandler) publicationRevisionConflict(
 		Status:           publication.Status,
 		Title:            publication.Title,
 		UpdatedAt:        formatOptionalTime(publication.UpdatedAt),
+		ChangedByName:    editorName,
 		ChangedDomains:   domains,
 	})
 }
@@ -1047,6 +1052,10 @@ func (h *PublicationHandler) syncTextPostRevisionsTx(
 			if len(changed) == 0 {
 				changed = []string{"draft"}
 			}
+			editorName, err := drafts.LatestEditorName(ctx, tx, drafts.AggregateTextPost, post.ID, expectedRevision)
+			if err != nil {
+				return err
+			}
 			return drafts.NewConflictError(drafts.ConflictMetadata{
 				AggregateType:    drafts.AggregateTextPost,
 				AggregateID:      post.ID,
@@ -1054,6 +1063,7 @@ func (h *PublicationHandler) syncTextPostRevisionsTx(
 				CurrentRevision:  post.Revision,
 				Status:           post.Status,
 				UpdatedAt:        formatOptionalTime(post.UpdatedAt),
+				ChangedByName:    editorName,
 				ChangedDomains:   changed,
 			})
 		}
@@ -1446,6 +1456,104 @@ func (h *PublicationHandler) retryRendition(api huma.API) {
 			return nil, publicationMutationHTTPError(err, "failed to queue destination retry")
 		}
 		return actionMessage("destination retry queued", jobID), nil
+	})
+}
+
+func (h *PublicationHandler) retryFailedRenditions(api huma.API) {
+	huma.Register(api, huma.Operation{
+		OperationID: "retry-failed-publication-renditions",
+		Method:      http.MethodPost,
+		Path:        "/publications/{id}/retry-failed",
+		Summary:     "Retry every retryable failed publication destination",
+		Description: "Queues one publication job. Destinations that already succeeded and failures that require editing or reconnection are left unchanged.",
+		Tags:        []string{tagPublications},
+		Middlewares: huma.Middlewares{middleware.AuthMiddleware(api, h.auth)},
+		Errors:      []int{400, 403, 404, 409},
+	}, func(ctx context.Context, input *RetryFailedRenditionsInput) (*ActionOutput, error) {
+		publication, err := h.loadPublication(ctx, input.PathID, middleware.GetUserID(ctx))
+		if err != nil {
+			return nil, err
+		}
+		if err := h.checkWorkspaceEditAccess(ctx, publication.WorkspaceID, middleware.GetUserID(ctx)); err != nil {
+			return nil, err
+		}
+
+		jobID := uuid.NewString()
+		now := time.Now().UTC()
+		payload := mustJSON(map[string]string{"publication_id": publication.ID})
+		err = h.db.RunInTx(ctx, &sql.TxOptions{}, func(txCtx context.Context, tx bun.Tx) error {
+			if err := lockPublicationMutationTx(txCtx, tx, publication.ID); err != nil {
+				return err
+			}
+			if err := h.lockActivePrimaryPublicationJobsTx(txCtx, tx, publication.ID); err != nil {
+				return err
+			}
+			if err := h.rejectProcessingPrimaryPublicationJobTx(txCtx, tx, publication.ID); err != nil {
+				return err
+			}
+			if err := h.deletePendingPrimaryPublicationJobsTx(txCtx, tx, publication.ID); err != nil {
+				return err
+			}
+			result, err := tx.NewUpdate().
+				Model((*models.Rendition)(nil)).
+				Set("status = ?", models.RenditionStatusScheduled).
+				Set("error_retry_at = NULL").
+				Set("updated_at = ?", now).
+				Where("publication_id = ?", publication.ID).
+				Where("status = ?", models.RenditionStatusFailed).
+				Where("error_retryable = ?", true).
+				Exec(txCtx)
+			if err != nil {
+				return err
+			}
+			affected, _ := result.RowsAffected()
+			if affected == 0 {
+				return huma.Error409Conflict("no retryable failed destinations remain")
+			}
+			if _, err := tx.NewUpdate().
+				Model((*models.Publication)(nil)).
+				Set("status = ?", models.PublicationStatusScheduled).
+				Set("updated_at = ?", now).
+				Where("id = ?", publication.ID).
+				Exec(txCtx); err != nil {
+				return err
+			}
+			if _, err := tx.NewUpdate().
+				Model((*models.Post)(nil)).
+				Set("status = ?", models.PostStatusScheduled).
+				Where("publication_id = ?", publication.ID).
+				Where("status = ?", models.PostStatusFailed).
+				Exec(txCtx); err != nil && !isMissingLegacyPostsTable(err) {
+				return err
+			}
+			if _, err := tx.NewInsert().Model(&models.Job{
+				ID:          jobID,
+				Type:        jobTypePublishPublication,
+				Payload:     payload,
+				Status:      jobStatusPending,
+				RunAt:       now,
+				MaxAttempts: 3,
+			}).Exec(txCtx); err != nil {
+				return err
+			}
+			event := &models.PublicationLifecycleEvent{
+				ID:             uuid.NewString(),
+				WorkspaceID:    publication.WorkspaceID,
+				PublicationID:  publication.ID,
+				Type:           lifecycle.EventRetried,
+				Status:         lifecycle.StatusStarted,
+				Message:        "Retry queued for failed destinations",
+				MetadataJSON:   mustJSON(map[string]any{"destination_count": affected}),
+				IdempotencyKey: "retry-failed:" + jobID,
+				CreatedAt:      now,
+			}
+			_, err = tx.NewInsert().Model(event).Exec(txCtx)
+			return err
+		})
+		if err != nil {
+			return nil, publicationMutationHTTPError(err, "failed to queue destination retries")
+		}
+		return actionMessage("failed destination retries queued", jobID), nil
 	})
 }
 

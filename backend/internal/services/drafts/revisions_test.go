@@ -22,6 +22,12 @@ func TestChangedDomainsSinceReturnsOnlySafeCoarseDomains(t *testing.T) {
 	ctx := context.Background()
 	_, err = db.NewCreateTable().Model((*models.DraftRevisionChange)(nil)).Exec(ctx)
 	require.NoError(t, err)
+	_, err = db.NewCreateTable().Model((*models.User)(nil)).Exec(ctx)
+	require.NoError(t, err)
+	_, err = db.NewInsert().Model(&models.User{
+		ID: "user-2", Email: "alex@example.com", DisplayName: "Alex", PasswordHash: "hash",
+	}).Exec(ctx)
+	require.NoError(t, err)
 
 	now := time.Now().UTC()
 	require.NoError(t, RecordChange(ctx, db, AggregatePublication, "pub-1", 2, []string{"content", "media"}, "user-1", now))
@@ -30,4 +36,7 @@ func TestChangedDomainsSinceReturnsOnlySafeCoarseDomains(t *testing.T) {
 	domains, err := ChangedDomainsSince(ctx, db, AggregatePublication, "pub-1", 1)
 	require.NoError(t, err)
 	require.Equal(t, []string{"content", "destinations", "media"}, domains)
+	editor, err := LatestEditorName(ctx, db, AggregatePublication, "pub-1", 1)
+	require.NoError(t, err)
+	require.Equal(t, "Alex", editor)
 }

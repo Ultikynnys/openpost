@@ -407,6 +407,7 @@ func (s *Service) recordSuccess(
 	}
 
 	return s.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
+		captureKey := subjectType + ":" + subjectID + ":" + now.Truncate(time.Minute).Format(time.RFC3339)
 		if subjectType == subjectAccount {
 			snapshot := &models.AnalyticsAccountSnapshot{
 				ID:              uuid.NewString(),
@@ -415,8 +416,9 @@ func (s *Service) recordSuccess(
 				Platform:        account.Platform,
 				MetricsJSON:     string(metricsJSON),
 				CapturedAt:      now,
+				CaptureKey:      captureKey,
 			}
-			if _, err := tx.NewInsert().Model(snapshot).Exec(ctx); err != nil {
+			if _, err := tx.NewInsert().Model(snapshot).On("CONFLICT DO NOTHING").Exec(ctx); err != nil {
 				return fmt.Errorf("store account analytics snapshot: %w", err)
 			}
 		} else {
@@ -429,8 +431,9 @@ func (s *Service) recordSuccess(
 				Platform:        account.Platform,
 				MetricsJSON:     string(metricsJSON),
 				CapturedAt:      now,
+				CaptureKey:      captureKey,
 			}
-			if _, err := tx.NewInsert().Model(snapshot).Exec(ctx); err != nil {
+			if _, err := tx.NewInsert().Model(snapshot).On("CONFLICT DO NOTHING").Exec(ctx); err != nil {
 				return fmt.Errorf("store rendition analytics snapshot: %w", err)
 			}
 		}

@@ -20,6 +20,7 @@
 	import CheckIcon from 'lucide-svelte/icons/check-check';
 
 	type Notification = components['schemas']['UserNotification'];
+	type NotificationAction = NonNullable<Notification['actions']>[number];
 	type ChannelPreference = components['schemas']['ChannelPreference'];
 	type Preferences = Record<string, ChannelPreference>;
 
@@ -49,6 +50,7 @@
 	let toast = $state('');
 	let toastTone = $state<'success' | 'error'>('success');
 	let deleteDialogOpen = $state(false);
+	let actionPending = $state('');
 
 	const workspaceId = $derived(workspaceCtx.currentWorkspace?.id ?? '');
 
@@ -120,6 +122,30 @@
 		}
 		if (notification.href.startsWith('/')) {
 			await goto(resolve(notification.href as '/'));
+		}
+	}
+
+	async function runNotificationAction(notification: Notification, action: NotificationAction) {
+		actionPending = `${notification.id}:${action.label}`;
+		try {
+			if (action.operation === 'retry_failed_publication' && action.target_id) {
+				const { error: apiError } = await client.POST('/publications/{id}/retry-failed', {
+					params: { path: { id: action.target_id } }
+				});
+				if (apiError) {
+					showToast(apiError.detail || m.notifications_action_failed(), 'error');
+					return;
+				}
+				showToast(m.notifications_retry_queued(), 'success');
+				await openNotification(notification);
+				await load();
+				return;
+			}
+			if (action.href?.startsWith('/')) {
+				await openNotification({ ...notification, href: action.href });
+			}
+		} finally {
+			actionPending = '';
 		}
 	}
 
@@ -233,13 +259,11 @@
 				</div>
 				<div class="divide-y rounded-lg border bg-card">
 					{#each notifications as notification (notification.id)}
-						<button
-							type="button"
+						<article
 							class={[
-								'flex min-h-20 w-full items-start gap-3 p-4 text-left transition-colors hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none focus-visible:ring-inset',
+								'flex min-h-20 w-full items-start gap-3 p-4',
 								!notification.read_at && 'bg-primary/[0.025]'
 							]}
-							onclick={() => void openNotification(notification)}
 						>
 							<span
 								class={[
@@ -248,20 +272,40 @@
 								]}
 								aria-hidden="true"
 							></span>
-							<span class="min-w-0 flex-1">
-								<span class="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-									<span class="text-sm font-semibold">{notification.title}</span>
-									<span class="text-xs text-muted-foreground">
-										{dateLabel(notification.created_at)}
+							<div class="min-w-0 flex-1">
+								<button
+									type="button"
+									class="w-full rounded-sm text-left focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+									onclick={() => void openNotification(notification)}
+								>
+									<span class="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+										<span class="text-sm font-semibold">{notification.title}</span>
+										<span class="text-xs text-muted-foreground">
+											{dateLabel(notification.created_at)}
+										</span>
 									</span>
-								</span>
-								{#if notification.body}
-									<span class="mt-1 block text-sm leading-5 text-muted-foreground">
-										{notification.body}
-									</span>
+									{#if notification.body}
+										<span class="mt-1 block text-sm leading-5 text-muted-foreground">
+											{notification.body}
+										</span>
+									{/if}
+								</button>
+								{#if notification.actions?.length}
+									<div class="mt-3 flex flex-wrap gap-2">
+										{#each notification.actions as action (`${action.label}:${action.href}:${action.operation}`)}
+											<Button
+												variant={action.kind === 'primary' ? 'default' : 'outline'}
+												size="sm"
+												disabled={actionPending !== ''}
+												onclick={() => void runNotificationAction(notification, action)}
+											>
+												{action.label}
+											</Button>
+										{/each}
+									</div>
 								{/if}
-							</span>
-						</button>
+							</div>
+						</article>
 					{/each}
 				</div>
 			</section>

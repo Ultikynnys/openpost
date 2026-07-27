@@ -12,7 +12,6 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/openpost/backend/internal/api/middleware"
 	"github.com/openpost/backend/internal/services/feedback"
-	"github.com/openpost/backend/internal/services/ratelimit"
 )
 
 const feedbackRateLimit = 5
@@ -41,7 +40,6 @@ func FeedbackBodyLimitMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 type FeedbackHandler struct {
 	service *feedback.Service
 	auth    middleware.Authenticator
-	limiter *ratelimit.Limiter
 }
 
 func NewFeedbackHandler(
@@ -51,7 +49,6 @@ func NewFeedbackHandler(
 	return &FeedbackHandler{
 		service: service,
 		auth:    authenticator,
-		limiter: ratelimit.New(),
 	}
 }
 
@@ -100,12 +97,16 @@ func (h *FeedbackHandler) RegisterRoutes(api huma.API) {
 		Errors:      []int{400, 413, 429, 503},
 	}, func(ctx context.Context, input *SubmitFeedbackInput) (*SubmitFeedbackOutput, error) {
 		userID := middleware.GetUserID(ctx)
-		if !h.limiter.Allow("feedback:"+userID, feedbackRateLimit, time.Minute) {
-			return nil, huma.Error429TooManyRequests("feedback limit reached; wait a minute and try again")
-		}
 		config := h.service.PublicConfig()
 		if !config.Enabled {
 			return nil, huma.Error503ServiceUnavailable("feedback delivery is not configured")
+		}
+		allowed, err := h.service.AllowSubmission(ctx, userID, feedbackRateLimit, time.Minute)
+		if err != nil {
+			return nil, huma.Error503ServiceUnavailable("feedback submission is temporarily unavailable")
+		}
+		if !allowed {
+			return nil, huma.Error429TooManyRequests("feedback limit reached; wait a minute and try again")
 		}
 		jobID, err := h.service.Enqueue(ctx, feedback.Report{
 			Category:    input.Body.Category,

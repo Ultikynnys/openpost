@@ -16,6 +16,8 @@ Multiple images stay part of the Post intent. OpenPost resolves them to the prov
 
 Draft publications are the source of truth before publishing. Their ordered segments hold shared content and media. Each selected account has a rendition with its resolved output, destination settings, segment overrides, and media-item settings.
 
+The composer status row identifies the source content or active account override, reports whether the draft is saved, unsaved, saving, or conflicted, and counts destinations that are ready. A custom text rendition has a visible **Reset to shared content** action.
+
 Deselecting an account keeps its rendition and settings. Use **Delete destination** only when you want to remove that saved rendition.
 
 Each draft save includes the revision loaded by the editor. OpenPost saves source content, thread parts, media, destinations, overrides, and settings in one transaction. Saves are serialized, and scheduling or publishing waits for the pending save.
@@ -26,6 +28,8 @@ If another tab or teammate saves first, OpenPost stops instead of overwriting th
 - save your current work as a new draft;
 - overwrite only after reviewing the latest revision;
 - keep editing without taking an action yet.
+
+When the latest change belongs to a known OpenPost user, the dialog names that editor without exposing draft contents or unrelated workspace data. “Overwrite” first adopts the current server revision and then performs the same compare-and-set save; there is no hidden force-write path.
 
 Closing or hiding a tab triggers a best-effort save, but browsers do not guarantee unload requests. Wait for the saved state before closing when the content matters.
 

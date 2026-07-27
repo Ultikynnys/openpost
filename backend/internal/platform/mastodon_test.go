@@ -2,12 +2,53 @@ package platform
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/url"
 	"strings"
 	"testing"
 )
+
+func TestMastodonResolveAccountPublishingCapabilitiesReadsInstanceVideoLimits(t *testing.T) {
+	originalClient := httpClient
+	defer func() { httpClient = originalClient }()
+
+	httpClient = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		if req.URL.String() != "https://mastodon.example/api/v2/instance" {
+			t.Fatalf("unexpected request %s", req.URL.String())
+		}
+		if req.Header.Get(headerAuthorization) != "Bearer access-token" {
+			t.Fatalf("unexpected auth header %q", req.Header.Get(headerAuthorization))
+		}
+		return jsonResponse(req, `{
+			"version":"4.5.0",
+			"configuration":{
+				"statuses":{"max_characters":800,"max_media_attachments":6},
+				"media_attachments":{
+					"video_size_limit":209715200,
+					"supported_mime_types":["image/jpeg","video/mp4","video/webm"]
+				}
+			}
+		}`), nil
+	})}
+
+	adapter := NewMastodonAdapter("client-id", "client-secret", "https://app.example/callback", "https://mastodon.example")
+	result, err := adapter.ResolveAccountPublishingCapabilities(t.Context(), "access-token", AccountCapabilityInput{})
+	if err != nil {
+		t.Fatalf("ResolveAccountPublishingCapabilities returned error: %v", err)
+	}
+	if result.Constraints["max_video_size_bytes"] != int64(209715200) {
+		t.Fatalf("unexpected video size constraint: %#v", result.Constraints)
+	}
+	encoded, err := json.Marshal(result.Constraints["allowed_mimes"])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(encoded) != `["image/jpeg","video/mp4","video/webm"]` {
+		t.Fatalf("unexpected MIME constraints: %s", encoded)
+	}
+}
 
 func TestMastodonPublishAppliesStatusSettings(t *testing.T) {
 	originalClient := httpClient
