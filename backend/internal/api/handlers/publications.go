@@ -23,6 +23,7 @@ import (
 	"github.com/openpost/backend/internal/services/entitlements"
 	"github.com/openpost/backend/internal/services/lifecycle"
 	postservice "github.com/openpost/backend/internal/services/posts"
+	"github.com/openpost/backend/internal/services/publicurl"
 	"github.com/uptrace/bun"
 	"github.com/uptrace/bun/dialect"
 )
@@ -50,11 +51,16 @@ type PublicationHandler struct {
 	entitlement entitlements.Service
 	providers   map[string]platform.Adapter
 	tokenSource AccessTokenSource
+	publicMedia *publicurl.MediaVerifier
 }
 
 func (h *PublicationHandler) SetCapabilityDependencies(providers map[string]platform.Adapter, tokenSource AccessTokenSource) {
 	h.providers = providers
 	h.tokenSource = tokenSource
+}
+
+func (h *PublicationHandler) SetPublicMediaVerifier(verifier *publicurl.MediaVerifier) {
+	h.publicMedia = verifier
 }
 
 func NewPublicationHandler(db *bun.DB, authenticator middleware.Authenticator, entitlement entitlements.Service) *PublicationHandler {
@@ -2476,6 +2482,9 @@ func (h *PublicationHandler) loadRenditionMediaWithDB(ctx context.Context, db bu
 }
 
 func (h *PublicationHandler) validatePublicationByID(ctx context.Context, publicationID string) ([]capabilities.ValidationIssue, error) {
+	if err := h.refreshPublicationPublicMedia(ctx, publicationID); err != nil {
+		return nil, err
+	}
 	issues, err := h.validatePublicationByIDWithDB(ctx, h.db, publicationID)
 	if err != nil {
 		return nil, err
@@ -2485,6 +2494,28 @@ func (h *PublicationHandler) validatePublicationByID(ctx context.Context, public
 		return nil, err
 	}
 	return append(issues, dynamicIssues...), nil
+}
+
+func (h *PublicationHandler) refreshPublicationPublicMedia(ctx context.Context, publicationID string) error {
+	if h.publicMedia == nil {
+		return nil
+	}
+	var media []models.MediaAttachment
+	if err := h.db.NewSelect().
+		TableExpr("media_attachments AS m").
+		ColumnExpr("DISTINCT m.*").
+		Join("JOIN rendition_media AS rm ON rm.media_id = m.id").
+		Join("JOIN renditions AS r ON r.id = rm.rendition_id").
+		Where("r.publication_id = ?", publicationID).
+		Scan(ctx, &media); err != nil {
+		return huma.Error500InternalServerError("failed to load public media status")
+	}
+	for index := range media {
+		if err := refreshPublicMediaState(ctx, h.db, h.publicMedia, &media[index]); err != nil {
+			return huma.Error500InternalServerError("failed to refresh public media status")
+		}
+	}
+	return nil
 }
 
 //nolint:gocyclo

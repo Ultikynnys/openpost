@@ -29,7 +29,7 @@ func TestHTTPVerifierRejectsNonHTTPSURL(t *testing.T) {
 	got := (HTTPVerifier{}).Verify(context.Background(), "http://example.com/video.mp4")
 
 	require.False(t, got.Ready)
-	require.Equal(t, "public media URL must use HTTPS", got.Error)
+	require.Equal(t, MediaURLConfigurationError, got.Error)
 }
 
 func TestHTTPVerifierReportsHTTPFailure(t *testing.T) {

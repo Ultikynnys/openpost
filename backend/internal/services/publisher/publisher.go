@@ -21,6 +21,7 @@ import (
 	"github.com/openpost/backend/internal/services/mediasigner"
 	"github.com/openpost/backend/internal/services/mediastore"
 	"github.com/openpost/backend/internal/services/notifications"
+	"github.com/openpost/backend/internal/services/publicurl"
 	"github.com/openpost/backend/internal/services/tokenmanager"
 	"github.com/openpost/backend/internal/services/usage"
 	"github.com/uptrace/bun"
@@ -1814,36 +1815,13 @@ func (s *Service) loadVariant(ctx context.Context, postID, socialAccountID strin
 }
 
 func (s *Service) getPublicMediaURL(media models.MediaAttachment) string {
-	signedQuery := ""
-	if s.mediaSigner != nil {
-		expiresAt := time.Now().UTC().Add(15 * time.Minute)
-		signedQuery = fmt.Sprintf("?exp=%d&sig=%s", expiresAt.Unix(), s.mediaSigner.Sign(media.ID, expiresAt))
-	}
-	if s.publicMediaURL != "" {
-		return s.publicMediaURL + "/" + media.ID + publicMediaExtension(media.MimeType) + signedQuery
-	}
-	return "/media/" + media.ID + publicMediaExtension(media.MimeType) + signedQuery
-}
-
-func publicMediaExtension(mimeType string) string {
-	switch strings.ToLower(mimeType) {
-	case "image/jpeg", "image/jpg":
-		return ".jpg"
-	case "image/png":
-		return ".png"
-	case "image/gif":
-		return ".gif"
-	case "image/webp":
-		return ".webp"
-	case "video/mp4":
-		return ".mp4"
-	case "video/quicktime":
-		return ".mov"
-	case "video/webm":
-		return ".webm"
-	default:
-		return ""
-	}
+	return publicurl.ResolveMediaURL(
+		s.publicMediaURL,
+		s.storage,
+		s.mediaSigner,
+		media,
+		time.Now().UTC().Add(15*time.Minute),
+	)
 }
 
 func (s *Service) getPreviousPostExternalID(ctx context.Context, currentPostID, socialAccountID string) (string, error) {

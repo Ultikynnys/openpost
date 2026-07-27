@@ -25,6 +25,7 @@ import (
 	"github.com/openpost/backend/internal/services/notifications"
 	"github.com/openpost/backend/internal/services/passwordmail"
 	"github.com/openpost/backend/internal/services/providerapps"
+	"github.com/openpost/backend/internal/services/publicurl"
 	"github.com/openpost/backend/internal/services/sessions"
 	"github.com/uptrace/bun"
 )
@@ -40,6 +41,7 @@ type RouteDeps struct {
 	BillingService               *billing.Service
 	MediaStorage                 mediastore.BlobStorage
 	MediaSigner                  *mediasigner.Signer
+	PublicMediaVerifier          *publicurl.MediaVerifier
 	Entitlement                  entitlements.Service
 	TokenEncryptor               *servicecrypto.TokenEncryptor
 	TokenSource                  handlers.AccessTokenSource
@@ -78,6 +80,7 @@ func RegisterHumaRoutes(api huma.API, deps RouteDeps) {
 		mediaHandler = handlers.NewMediaHandler(deps.DB, deps.MediaStorage, deps.AuthService, deps.Authenticator, deps.MediaSigner)
 		mediaHandler.SetEntitlement(deps.Entitlement)
 	}
+	mediaHandler.SetPublicMediaVerifier(deps.PublicMediaVerifier)
 	mediaHandler.RegisterRoutes(api)
 	handlers.NewStudioHandler(
 		deps.DB,
@@ -138,11 +141,14 @@ func RegisterHumaRoutes(api huma.API, deps RouteDeps) {
 	handlers.NewMCPActivityHandler(deps.DB, deps.Authenticator).RegisterRoutes(api)
 	handlers.NewProviderAppHandler(providerapps.NewService(deps.DB, deps.TokenEncryptor), deps.DB, deps.Authenticator).RegisterRoutes(api)
 	handlers.NewCapabilityHandler().RegisterRoutes(api)
-	handlers.NewCapabilityResolverHandler(deps.DB, deps.Authenticator, deps.Providers, deps.TokenSource).RegisterRoutes(api)
+	capabilityResolverHandler := handlers.NewCapabilityResolverHandler(deps.DB, deps.Authenticator, deps.Providers, deps.TokenSource)
+	capabilityResolverHandler.SetPublicMediaVerifier(deps.PublicMediaVerifier)
+	capabilityResolverHandler.RegisterRoutes(api)
 	handlers.NewProviderReadinessHandler(deps.DB, deps.Authenticator, deps.Providers).RegisterRoutes(api)
 	handlers.NewDestinationOptionsHandler(deps.DB, deps.Authenticator, deps.Providers, deps.TokenSource).RegisterRoutes(api)
 	publicationHandler := handlers.NewPublicationHandler(deps.DB, deps.Authenticator, deps.Entitlement)
 	publicationHandler.SetCapabilityDependencies(deps.Providers, deps.TokenSource)
+	publicationHandler.SetPublicMediaVerifier(deps.PublicMediaVerifier)
 	publicationHandler.RegisterRoutes(api)
 	handlers.NewCommentHandler(deps.DB, deps.Authenticator, deps.Providers, deps.TokenEncryptor).RegisterRoutes(api)
 	handlers.NewAnalyticsHandler(deps.DB, deps.Authenticator, deps.AnalyticsService).RegisterRoutes(api)

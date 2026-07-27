@@ -1423,9 +1423,8 @@ func validateMediaItem(capability Capability, item MediaItem) []ValidationIssue 
 		issues = append(issues, ValidationIssue{Severity: "warning", Code: "media_aspect", Message: "Media should be vertical or square for this profile", Provider: capability.Provider, Profile: capability.Profile, MediaID: item.ID})
 	}
 	if capability.Media.RequiresPublicURL && !item.PublicURLReady {
-		issues = append(issues, ValidationIssue{Severity: "error", Code: "public_url_unreachable", Message: firstNonEmpty(item.PublicURLError, "This provider needs media that is publicly reachable over HTTPS"), Provider: capability.Provider, Profile: capability.Profile, MediaID: item.ID})
-	}
-	if capability.Media.RequiresHTTPSFetchable && item.URL != "" {
+		issues = append(issues, ValidationIssue{Severity: "error", Code: "public_url_unreachable", Message: firstNonEmpty(item.PublicURLError, "Media publishing to this account requires a public HTTPS media URL. Ask an OpenPost administrator to configure OPENPOST_MEDIA_URL."), Provider: capability.Provider, Profile: capability.Profile, MediaID: item.ID})
+	} else if !capability.Media.RequiresPublicURL && capability.Media.RequiresHTTPSFetchable && item.URL != "" {
 		parsed, err := url.Parse(item.URL)
 		if err != nil || parsed.Scheme != "https" || parsed.Host == "" {
 			issues = append(issues, ValidationIssue{Severity: "error", Code: "https_media_required", Message: "Public media URL must be HTTPS", Provider: capability.Provider, Profile: capability.Profile, MediaID: item.ID})

@@ -8,6 +8,8 @@ import (
 	"time"
 )
 
+const MediaURLConfigurationError = "Provider publishing needs a public HTTPS media URL. Ask an OpenPost administrator to configure OPENPOST_MEDIA_URL."
+
 type Result struct {
 	Ready      bool
 	StatusCode int
@@ -27,7 +29,7 @@ func (v HTTPVerifier) Verify(ctx context.Context, rawURL string) Result {
 	now := time.Now().UTC()
 	parsed, err := url.Parse(rawURL)
 	if err != nil || parsed.Scheme != "https" || parsed.Host == "" {
-		return Result{CheckedAt: now, Error: "public media URL must use HTTPS"}
+		return Result{CheckedAt: now, Error: MediaURLConfigurationError}
 	}
 	client := v.Client
 	if client == nil {

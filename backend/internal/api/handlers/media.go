@@ -62,7 +62,7 @@ type MediaHandler struct {
 	quota       entitlements.Service
 	usage       *usage.Service
 	analyzer    mediaanalysis.Analyzer
-	urlVerifier publicurl.Verifier
+	publicMedia *publicurl.MediaVerifier
 }
 
 type mediaUploadBytesInput struct {
@@ -116,7 +116,7 @@ func NewMediaHandler(
 		quota:       entitlements.NewSelfHostedService(),
 		usage:       usage.NewService(db),
 		analyzer:    mediaanalysis.DisabledAnalyzer{},
-		urlVerifier: publicurl.HTTPVerifier{},
+		publicMedia: publicurl.NewMediaVerifier("", storage, signer),
 	}
 }
 
@@ -139,8 +139,15 @@ func (h *MediaHandler) SetAnalyzer(analyzer mediaanalysis.Analyzer) {
 }
 
 func (h *MediaHandler) SetPublicURLVerifier(verifier publicurl.Verifier) {
+	if h.publicMedia == nil {
+		h.publicMedia = publicurl.NewMediaVerifier("", h.storage, h.signer)
+	}
+	h.publicMedia.SetVerifier(verifier)
+}
+
+func (h *MediaHandler) SetPublicMediaVerifier(verifier *publicurl.MediaVerifier) {
 	if verifier != nil {
-		h.urlVerifier = verifier
+		h.publicMedia = verifier
 	}
 }
 
@@ -1394,10 +1401,6 @@ func greatestCommonDivisor(a, b int) int {
 	return a
 }
 
-func mediaPublicURLReady(storageDriver string) bool {
-	return storageDriver != "" && storageDriver != "local"
-}
-
 func (h *MediaHandler) applyVideoAnalysis(ctx context.Context, media *models.MediaAttachment, content []byte) {
 	analyzer := h.analyzer
 	if analyzer == nil {
@@ -1444,26 +1447,10 @@ func (h *MediaHandler) applyVideoAnalysis(ctx context.Context, media *models.Med
 }
 
 func (h *MediaHandler) applyPublicURLVerification(ctx context.Context, media *models.MediaAttachment) {
-	media.PublicURLReady = mediaPublicURLReady(media.StorageType)
-	if !media.PublicURLReady {
-		return
+	if h.publicMedia == nil {
+		h.publicMedia = publicurl.NewMediaVerifier("", h.storage, h.signer)
 	}
-	verifier := h.urlVerifier
-	if verifier == nil {
-		verifier = publicurl.HTTPVerifier{}
-	}
-	result := verifier.Verify(ctx, publicMediaURL(media.ID, media.StorageType))
-	media.PublicURLReady = result.Ready
-	media.PublicURLCheckedAt = result.CheckedAt
-	media.PublicURLStatus = result.StatusCode
-	media.PublicURLError = result.Error
-}
-
-func publicMediaURL(mediaID, storageType string) string {
-	if storageType == "" || storageType == "local" {
-		return "/media/" + mediaID
-	}
-	return "/media/" + mediaID
+	applyPublicMediaResult(media, h.publicMedia.Verify(ctx, *media))
 }
 
 func mediaPosterURL(media models.MediaAttachment) string {

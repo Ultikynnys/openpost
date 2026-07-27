@@ -42,6 +42,7 @@ import (
 	"github.com/openpost/backend/internal/services/notifications"
 	"github.com/openpost/backend/internal/services/passwordmail"
 	"github.com/openpost/backend/internal/services/providerapps"
+	"github.com/openpost/backend/internal/services/publicurl"
 	"github.com/openpost/backend/internal/services/publisher"
 	"github.com/openpost/backend/internal/services/sessions"
 	"github.com/openpost/backend/internal/services/tokenmanager"
@@ -199,8 +200,10 @@ func main() {
 		log.Fatalf("failed to initialize media storage: %v", err)
 	}
 	publishSvc.SetStorage(storage)
+	publicMediaVerifier := publicurl.NewMediaVerifier(cfg.MediaURL, storage, mediaSigner)
 	mediaHandler := handlers.NewMediaHandler(db, storage, authService, authenticator, mediaSigner)
 	mediaHandler.SetEntitlement(entitlementService)
+	mediaHandler.SetPublicMediaVerifier(publicMediaVerifier)
 	profileHandler := handlers.NewProfileHandler(db, authenticator, storage)
 
 	var feedbackDestination feedback.Destination
@@ -312,6 +315,7 @@ func main() {
 		CommunicationsService:        communicationsService,
 		NotificationService:          notificationService,
 		MediaHandler:                 mediaHandler,
+		PublicMediaVerifier:          publicMediaVerifier,
 		ProfileHandler:               profileHandler,
 		BillingHandler:               billingHandler,
 		MCPOAuthHandler:              mcpOAuthHandler,

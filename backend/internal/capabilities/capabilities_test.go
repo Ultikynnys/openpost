@@ -35,6 +35,23 @@ func TestValidateBlocksFailedPublicURLVerification(t *testing.T) {
 	}}, map[string]any{})
 
 	requireIssueCode(t, issues, "public_url_unreachable")
+	requireNoIssueCode(t, issues, "https_media_required")
+}
+
+func TestValidateTrustsVerifiedPublicMediaInsteadOfBrowserURL(t *testing.T) {
+	issues := Validate(ProviderInstagram, models.ContentProfileImagePost, "caption", "", "", []MediaItem{{
+		ID:              "image-1",
+		MimeType:        "image/jpeg",
+		Size:            1024,
+		Width:           1080,
+		Height:          1080,
+		PublicURLReady:  true,
+		PublicURLStatus: 200,
+		URL:             "/media/image-1",
+	}}, map[string]any{})
+
+	requireNoIssueCode(t, issues, "public_url_unreachable")
+	requireNoIssueCode(t, issues, "https_media_required")
 }
 
 func TestResolveMediaFirstIntentsBeforeMediaIsAttached(t *testing.T) {

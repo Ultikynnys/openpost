@@ -14,9 +14,10 @@ import (
 )
 
 type fakePublisherStorage struct {
-	opened []string
-	body   string
-	bodies map[string]string
+	opened    []string
+	body      string
+	bodies    map[string]string
+	publicURL string
 }
 
 func (f *fakePublisherStorage) Driver() string { return "s3" }
@@ -24,8 +25,11 @@ func (f *fakePublisherStorage) Save(string, io.Reader) (string, error) {
 	return "", nil
 }
 func (f *fakePublisherStorage) Delete(string) error { return nil }
-func (f *fakePublisherStorage) GetURL(string) string {
-	return ""
+func (f *fakePublisherStorage) GetURL(id string) string {
+	if f.publicURL == "" {
+		return ""
+	}
+	return strings.TrimRight(f.publicURL, "/") + "/" + id
 }
 func (f *fakePublisherStorage) Open(id string) (io.ReadCloser, error) {
 	f.opened = append(f.opened, id)
@@ -161,6 +165,25 @@ func TestUploadMediaToPlatformUsesPublicURLForTikTok(t *testing.T) {
 	require.Equal(t, "https://media.openpost.test/media/media-1.mp4", got)
 	require.Empty(t, storage.opened)
 	require.Empty(t, adapter.uploadedBody)
+}
+
+func TestUploadMediaToPlatformUsesStoragePublicURLWhenMediaBaseIsRelative(t *testing.T) {
+	storage := &fakePublisherStorage{publicURL: "https://cdn.openpost.test"}
+	service := NewService(nil, nil)
+	service.SetStorage(storage)
+
+	got, err := service.uploadMediaToPlatform(
+		context.Background(),
+		&models.SocialAccount{Platform: "threads", AccountID: "acct-1"},
+		&fakePublisherAdapter{},
+		"token",
+		models.MediaAttachment{ID: "media-1", FilePath: "media/image.jpg", MimeType: "image/jpeg"},
+		"Launch image",
+	)
+
+	require.NoError(t, err)
+	require.Equal(t, "https://cdn.openpost.test/media/image.jpg", got)
+	require.Empty(t, storage.opened)
 }
 
 func TestUploadRenditionMediaToPlatformUsesTikTokFileUploadForUploadMode(t *testing.T) {

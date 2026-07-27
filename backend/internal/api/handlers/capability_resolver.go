@@ -13,6 +13,7 @@ import (
 	"github.com/openpost/backend/internal/capabilities"
 	"github.com/openpost/backend/internal/models"
 	"github.com/openpost/backend/internal/platform"
+	"github.com/openpost/backend/internal/services/publicurl"
 	"github.com/uptrace/bun"
 )
 
@@ -21,6 +22,7 @@ type CapabilityResolverHandler struct {
 	auth        middleware.Authenticator
 	providers   map[string]platform.Adapter
 	tokenSource AccessTokenSource
+	publicMedia *publicurl.MediaVerifier
 	cacheMu     sync.Mutex
 	cache       map[string]accountCapabilityCacheEntry
 }
@@ -43,6 +45,10 @@ func NewCapabilityResolverHandler(
 		tokenSource: tokenSource,
 		cache:       map[string]accountCapabilityCacheEntry{},
 	}
+}
+
+func (h *CapabilityResolverHandler) SetPublicMediaVerifier(verifier *publicurl.MediaVerifier) {
+	h.publicMedia = verifier
 }
 
 type ResolveCapabilityMediaInput struct {
@@ -188,7 +194,11 @@ func (h *CapabilityResolverHandler) resolveSegments(
 		if len(media) != len(ids) {
 			return nil, huma.Error400BadRequest("one or more media attachments are invalid or outside this workspace")
 		}
-		for _, item := range media {
+		for index := range media {
+			if err := refreshPublicMediaState(ctx, h.db, h.publicMedia, &media[index]); err != nil {
+				return nil, huma.Error500InternalServerError("failed to refresh public media status")
+			}
+			item := media[index]
 			mediaByID[item.ID] = item
 		}
 	}
