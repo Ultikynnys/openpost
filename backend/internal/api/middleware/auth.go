@@ -15,7 +15,6 @@ import (
 	"github.com/openpost/backend/internal/models"
 	"github.com/openpost/backend/internal/services/apitokens"
 	"github.com/openpost/backend/internal/services/auth"
-	"github.com/openpost/backend/internal/services/identity"
 	"github.com/uptrace/bun"
 )
 
@@ -319,20 +318,6 @@ func WorkspaceRole(ctx context.Context, db *bun.DB, workspaceID, userID string) 
 	}
 	if err != nil {
 		return "", false, err
-	}
-	decision, err := identity.EvaluateWorkspaceAccess(
-		ctx,
-		db,
-		workspaceID,
-		userID,
-		GetSessionID(ctx),
-		GetTokenID(ctx),
-	)
-	if err != nil {
-		return "", false, err
-	}
-	if !decision.Allowed {
-		return "", false, nil
 	}
 	return member.Role, true, nil
 }
