@@ -843,6 +843,8 @@ type DesignDocument struct {
 	HeightPX            int       `bun:"height_px,notnull" json:"height_px"`
 	BrandKitID          string    `bun:"brand_kit_id,nullzero" json:"brand_kit_id,omitempty"`
 	BrandKitRevision    int       `bun:"brand_kit_revision,notnull,default:0" json:"brand_kit_revision"`
+	ExportFormat        string    `bun:"export_format,notnull,default:'png'" json:"export_format"`
+	ExportQuality       float64   `bun:"export_quality,notnull,default:0.92" json:"export_quality"`
 	CoverPreviewMediaID string    `bun:"cover_preview_media_id,nullzero" json:"cover_preview_media_id,omitempty"`
 	IsFavorite          bool      `bun:"is_favorite,notnull,default:false" json:"is_favorite"`
 	CreatedAt           time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"created_at"`

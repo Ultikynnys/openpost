@@ -763,6 +763,8 @@ func (h *StudioHandler) createDesign(ctx context.Context, input *CreateStudioDes
 		PresetKey:     presetKey,
 		WidthPX:       width,
 		HeightPX:      height,
+		ExportFormat:  defaultStudioFormat(presetKey),
+		ExportQuality: 0.92,
 		CreatedAt:     now,
 		UpdatedAt:     now,
 	}
@@ -863,12 +865,14 @@ func (h *StudioHandler) updateDesign(ctx context.Context, input *UpdateStudioDes
 	document.HeightPX = input.Body.Document.HeightPX
 	document.BrandKitID = input.Body.Document.BrandKitID
 	document.BrandKitRevision = input.Body.Document.BrandKitRevision
+	document.ExportFormat = input.Body.Document.ExportDefaults.Format
+	document.ExportQuality = input.Body.Document.ExportDefaults.Quality
 	document.CoverPreviewMediaID = strings.TrimSpace(input.Body.CoverPreviewID)
 	document.UpdatedAt = now
 
 	err = h.db.RunInTx(ctx, &sql.TxOptions{}, func(txCtx context.Context, tx bun.Tx) error {
 		result, err := tx.NewUpdate().Model(document).
-			Column("title", "schema_version", "revision", "preset_key", "width_px", "height_px", "brand_kit_id", "brand_kit_revision", "cover_preview_media_id", "updated_at").
+			Column("title", "schema_version", "revision", "preset_key", "width_px", "height_px", "brand_kit_id", "brand_kit_revision", "export_format", "export_quality", "cover_preview_media_id", "updated_at").
 			WherePK().
 			Where("revision = ?", input.Body.ExpectedRevision).
 			Exec(txCtx)
@@ -993,6 +997,8 @@ func (h *StudioHandler) duplicateDesign(ctx context.Context, input *DuplicateStu
 		HeightPX:            payload.HeightPX,
 		BrandKitID:          payload.BrandKitID,
 		BrandKitRevision:    payload.BrandKitRevision,
+		ExportFormat:        payload.ExportDefaults.Format,
+		ExportQuality:       payload.ExportDefaults.Quality,
 		CoverPreviewMediaID: source.CoverPreviewMediaID,
 		CreatedAt:           now,
 		UpdatedAt:           now,
@@ -1388,8 +1394,11 @@ func (h *StudioHandler) documentResponse(ctx context.Context, id string) (*Studi
 		HeightPX:         document.HeightPX,
 		BrandKitID:       document.BrandKitID,
 		BrandKitRevision: document.BrandKitRevision,
-		ExportDefaults:   StudioExportDefaults{Format: defaultStudioFormat(document.PresetKey), Quality: 0.92},
-		Pages:            make([]StudioPagePayload, 0, len(pages)),
+		ExportDefaults: StudioExportDefaults{
+			Format:  document.ExportFormat,
+			Quality: document.ExportQuality,
+		},
+		Pages: make([]StudioPagePayload, 0, len(pages)),
 	}
 	for _, page := range pages {
 		var layers []StudioLayer

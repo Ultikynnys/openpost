@@ -62,6 +62,7 @@ func TestStudioDesignSaveUsesOptimisticConcurrencyAndTracksMedia(t *testing.T) {
 
 	payload := created.Body.Document
 	payload.Title = "Launch updated"
+	payload.ExportDefaults = StudioExportDefaults{Format: "webp", Quality: 0.78}
 	payload.Pages[0].Layers = append(payload.Pages[0].Layers, StudioLayer{
 		ID:      "image-layer-1",
 		Type:    "image",
@@ -191,6 +192,15 @@ func TestStudioDesignSaveUsesOptimisticConcurrencyAndTracksMedia(t *testing.T) {
 	require.Equal(t, "stroke", saved.Body.Document.Pages[0].Layers[1].Paint.Kind)
 	require.Equal(t, "gradient", saved.Body.Document.Pages[0].Layers[2].Paint.Kind)
 	require.Equal(t, "outside", saved.Body.Document.Pages[0].Layers[0].Effects.Stroke.Position)
+	require.Equal(t, StudioExportDefaults{Format: "webp", Quality: 0.78}, saved.Body.Document.ExportDefaults)
+
+	reloaded, err := handler.getDesign(ctx, &GetStudioDesignInput{PathID: created.Body.ID})
+	require.NoError(t, err)
+	require.Equal(t, StudioExportDefaults{Format: "webp", Quality: 0.78}, reloaded.Body.Document.ExportDefaults)
+
+	duplicated, err := handler.duplicateDesign(ctx, &DuplicateStudioDesignInput{PathID: created.Body.ID})
+	require.NoError(t, err)
+	require.Equal(t, StudioExportDefaults{Format: "webp", Quality: 0.78}, duplicated.Body.Document.ExportDefaults)
 
 	count, err := handler.db.NewSelect().Model((*models.DesignMediaReference)(nil)).
 		Where("design_document_id = ? AND media_id = ?", created.Body.ID, "media-1").
