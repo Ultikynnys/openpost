@@ -16,26 +16,17 @@ import (
 //go:embed all:public
 var embeddedWeb embed.FS
 
-//nolint:gochecknoinits // build-time safety net: a `go build` that skipped the frontend step would otherwise embed an empty `public/` and silently serve blank HTML at runtime. The panic has to fire before the binary's main() runs, which only `init()` can guarantee.
-func init() {
-	// Guard against a build that skipped the frontend step. The
-	// SvelteKit static adapter writes its output (index.html +
-	// assets) into this directory before `go build` runs. If a
-	// developer clones the repo and runs `go build` without first
-	// running the frontend build, the embedded `public/` is empty
-	// (just the .gitkeep) and the SPA route would silently serve
-	// blank HTML with HTTP 200. Fail loud at startup instead.
-	data, err := fs.ReadFile(embeddedWeb, "public/index.html")
-	if err != nil || len(data) == 0 {
-		panic("openpost: embedded frontend is missing or empty (backend/cmd/openpost/public/index.html). " +
-			"Run the frontend build first: `cd frontend && bun run build` (or use `devenv shell build`).")
-	}
-}
-
 func RegisterSpaRoutes(e *echo.Echo) {
 	webFS, err := fs.Sub(embeddedWeb, "public")
 	if err != nil {
 		panic(err)
+	}
+	// Keep package tests independent of generated frontend output while still
+	// failing immediately when the application starts with an empty embed.
+	data, err := fs.ReadFile(webFS, "index.html")
+	if err != nil || len(data) == 0 {
+		panic("openpost: embedded frontend is missing or empty (backend/cmd/openpost/public/index.html). " +
+			"Run the frontend build first: `cd frontend && pnpm build` (or use `devenv shell -- build`).")
 	}
 	registerSpaRoutes(e, webFS)
 }
