@@ -5,6 +5,7 @@
 	import { Input } from '$lib/components/ui/input';
 	import { Button } from '$lib/components/ui/button';
 	import { Slider } from '$lib/components/ui/slider';
+	import AppSelect from '$lib/components/app-select.svelte';
 	import * as Collapsible from '$lib/components/ui/collapsible';
 	import * as Tooltip from '$lib/components/ui/tooltip';
 	import StudioColorPicker from './studio-color-picker.svelte';
@@ -408,39 +409,50 @@
 							</label>
 							<label class="grid gap-1 text-xs">
 								<span>{m.studio_weight()}</span>
-								<select
-									class="h-9 rounded-md border border-input bg-background px-2"
-									value={layer.text.font_weight}
+								<AppSelect
+									value={String(layer.text.font_weight)}
 									disabled={!editor.canEdit}
-									onchange={(event) =>
+									onValueChange={(value) =>
 										editor.updateLayer(layer.id, {
-											text: { ...layer.text!, font_weight: Number(event.currentTarget.value) }
+											text: { ...layer.text!, font_weight: Number(value) }
 										})}
-								>
-									{#each [[100, m.studio_thin()], [200, m.studio_extra_light()], [300, m.studio_light()], [400, m.studio_regular()], [500, m.studio_medium()], [600, m.studio_semibold()], [700, m.studio_bold()], [800, m.studio_extra_bold()], [900, m.studio_black()]] as [weight, label] (weight)}
-										<option value={weight}>{weight} — {label}</option>
-									{/each}
-								</select>
+									options={[
+										[100, m.studio_thin()],
+										[200, m.studio_extra_light()],
+										[300, m.studio_light()],
+										[400, m.studio_regular()],
+										[500, m.studio_medium()],
+										[600, m.studio_semibold()],
+										[700, m.studio_bold()],
+										[800, m.studio_extra_bold()],
+										[900, m.studio_black()]
+									].map(([weight, label]) => ({
+										value: String(weight),
+										label: `${weight} — ${label}`
+									}))}
+									class="h-9 w-full"
+								/>
 							</label>
 						</div>
 						<div class="grid grid-cols-2 gap-2">
 							<label class="grid gap-1 text-xs">
 								<span>{m.studio_style()}</span>
-								<select
-									class="h-9 rounded-md border border-input bg-background px-2"
+								<AppSelect
 									value={layer.text.font_style}
 									disabled={!editor.canEdit}
-									onchange={(event) =>
+									onValueChange={(value) =>
 										editor.updateLayer(layer.id, {
 											text: {
 												...layer.text!,
-												font_style: event.currentTarget.value as 'normal' | 'italic'
+												font_style: value as 'normal' | 'italic'
 											}
 										})}
-								>
-									<option value="normal">{m.studio_normal()}</option>
-									<option value="italic">{m.studio_italic()}</option>
-								</select>
+									options={[
+										{ value: 'normal', label: m.studio_normal() },
+										{ value: 'italic', label: m.studio_italic() }
+									]}
+									class="h-9 w-full"
+								/>
 							</label>
 							<label class="grid gap-1 text-xs">
 								<span>{m.studio_line_height()}</span>
@@ -522,20 +534,20 @@
 						<div class="space-y-2 rounded-md border p-2">
 							<label class="grid gap-1 text-xs">
 								<span>{m.studio_text_curve()}</span>
-								<select
-									class="h-9 rounded-md border border-input bg-background px-2"
+								<AppSelect
 									value={layer.text.curve?.type ?? 'none'}
 									disabled={!editor.canEdit}
-									onchange={(event) =>
-										setTextCurveType(event.currentTarget.value as StudioTextCurveType)}
-								>
-									<option value="none">{m.studio_curve_none()}</option>
-									<option value="arc_up">{m.studio_curve_arc_up()}</option>
-									<option value="arc_down">{m.studio_curve_arc_down()}</option>
-									<option value="wave">{m.studio_curve_wave()}</option>
-									<option value="circle">{m.studio_curve_circle()}</option>
-									<option value="ellipse">{m.studio_curve_ellipse()}</option>
-								</select>
+									onValueChange={(value) => setTextCurveType(value as StudioTextCurveType)}
+									options={[
+										{ value: 'none', label: m.studio_curve_none() },
+										{ value: 'arc_up', label: m.studio_curve_arc_up() },
+										{ value: 'arc_down', label: m.studio_curve_arc_down() },
+										{ value: 'wave', label: m.studio_curve_wave() },
+										{ value: 'circle', label: m.studio_curve_circle() },
+										{ value: 'ellipse', label: m.studio_curve_ellipse() }
+									]}
+									class="h-9 w-full"
+								/>
 							</label>
 							{#if layer.text.curve && layer.text.curve.type !== 'none'}
 								{#if ['arc_up', 'arc_down', 'wave'].includes(layer.text.curve.type)}
@@ -683,28 +695,28 @@
 						</h3>
 						<label class="grid gap-1 text-xs">
 							<span>{m.studio_shape_kind()}</span>
-							<select
-								class="h-9 rounded-md border border-input bg-background px-2"
+							<AppSelect
 								value={layer.shape.kind}
 								disabled={!editor.canEdit}
-								onchange={(event) =>
+								onValueChange={(value) =>
 									editor.updateLayer(layer.id, {
 										shape: {
 											...layer.shape!,
-											kind: event.currentTarget.value as
-												'rectangle' | 'rounded_rectangle' | 'ellipse' | 'line',
+											kind: value as 'rectangle' | 'rounded_rectangle' | 'ellipse' | 'line',
 											radius:
-												event.currentTarget.value === 'rounded_rectangle'
+												value === 'rounded_rectangle'
 													? Math.max(24, layer.shape!.radius)
 													: layer.shape!.radius
 										}
 									})}
-							>
-								<option value="rectangle">{m.studio_rectangle()}</option>
-								<option value="rounded_rectangle">{m.studio_rounded_rectangle()}</option>
-								<option value="ellipse">{m.studio_ellipse()}</option>
-								<option value="line">{m.studio_line()}</option>
-							</select>
+								options={[
+									{ value: 'rectangle', label: m.studio_rectangle() },
+									{ value: 'rounded_rectangle', label: m.studio_rounded_rectangle() },
+									{ value: 'ellipse', label: m.studio_ellipse() },
+									{ value: 'line', label: m.studio_line() }
+								]}
+								class="h-9 w-full"
+							/>
 						</label>
 						<label class="grid gap-1 text-xs">
 							<span>{m.studio_fill()}</span>
@@ -788,22 +800,23 @@
 						</h3>
 						<label class="grid gap-1 text-xs">
 							<span>{m.studio_fit()}</span>
-							<select
-								class="h-9 rounded-md border border-input bg-background px-2"
+							<AppSelect
 								value={layer.image.fit}
 								disabled={!editor.canEdit}
-								onchange={(event) =>
+								onValueChange={(value) =>
 									editor.updateLayer(layer.id, {
 										image: {
 											...layer.image!,
-											fit: event.currentTarget.value as 'cover' | 'contain' | 'stretch'
+											fit: value as 'cover' | 'contain' | 'stretch'
 										}
 									})}
-							>
-								<option value="cover">{m.studio_cover()}</option>
-								<option value="contain">{m.studio_contain()}</option>
-								<option value="stretch">{m.studio_stretch()}</option>
-							</select>
+								options={[
+									{ value: 'cover', label: m.studio_cover() },
+									{ value: 'contain', label: m.studio_contain() },
+									{ value: 'stretch', label: m.studio_stretch() }
+								]}
+								class="h-9 w-full"
+							/>
 						</label>
 						<Collapsible.Root bind:open={cropOpen} class="rounded-md border">
 							<div class="flex min-h-9 items-center gap-1 px-1">

@@ -11,6 +11,7 @@
 	import { Checkbox } from '$lib/components/ui/checkbox';
 	import { Input } from '$lib/components/ui/input';
 	import { Slider } from '$lib/components/ui/slider';
+	import AppSelect from '$lib/components/app-select.svelte';
 	import StudioCanvas from './studio-canvas.svelte';
 	import AssetPanel from './asset-panel.svelte';
 	import LayerTree from './layer-tree.svelte';
@@ -1957,18 +1958,18 @@
 		<div class="grid gap-3">
 			<label class="grid gap-1.5 text-sm">
 				<span class="font-medium">{m.studio_save_behavior()}</span>
-				<select
-					class="h-10 rounded-md border border-input bg-background px-3"
+				<AppSelect
 					value={templateTargetID}
-					onchange={(event) => selectTemplateTarget(event.currentTarget.value)}
-				>
-					<option value="new">{m.studio_create_new_template()}</option>
-					{#each workspaceTemplates as template (template.id)}
-						<option value={template.id}
-							>{m.studio_replace_named_template({ name: template.name })}</option
-						>
-					{/each}
-				</select>
+					onValueChange={selectTemplateTarget}
+					options={[
+						{ value: 'new', label: m.studio_create_new_template() },
+						...workspaceTemplates.map((template) => ({
+							value: template.id,
+							label: m.studio_replace_named_template({ name: template.name })
+						}))
+					]}
+					class="h-10 w-full"
+				/>
 			</label>
 			<label class="grid gap-1.5 text-sm">
 				<span class="font-medium">{m.studio_template_name()}</span>
@@ -2051,19 +2052,19 @@
 			<div class="grid grid-cols-2 gap-3">
 				<label class="grid gap-1.5 text-sm">
 					<span class="font-medium">{m.studio_format()}</span>
-					<select
-						class="h-10 rounded-md border border-input bg-background px-3"
+					<AppSelect
 						value={editor.document?.export_defaults.format ?? 'png'}
-						onchange={(event) =>
+						onValueChange={(value) =>
 							editor.mutate('Change export format', (document) => {
-								document.export_defaults.format = event.currentTarget.value as
-									'png' | 'jpeg' | 'webp';
+								document.export_defaults.format = value as 'png' | 'jpeg' | 'webp';
 							})}
-					>
-						<option value="png">PNG</option>
-						<option value="jpeg">JPEG</option>
-						<option value="webp">WebP</option>
-					</select>
+						options={[
+							{ value: 'png', label: 'PNG' },
+							{ value: 'jpeg', label: 'JPEG' },
+							{ value: 'webp', label: 'WebP' }
+						]}
+						class="h-10 w-full"
+					/>
 				</label>
 				<label class="grid gap-1.5 text-sm">
 					<span class="font-medium">

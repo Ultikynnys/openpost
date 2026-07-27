@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button';
 	import { Slider } from '$lib/components/ui/slider';
+	import AppSelect from '$lib/components/app-select.svelte';
 	import { m } from '$lib/paraglide/messages';
 	import {
 		defaultLayerEffects,
@@ -263,16 +264,13 @@
 	</h3>
 	<label class="grid gap-1 text-xs">
 		<span>{m.studio_blend_mode()}</span>
-		<select
-			class="h-9 rounded-md border border-input bg-background px-2"
+		<AppSelect
 			value={currentEffects().blend_mode}
 			disabled={!editor.canEdit}
-			onchange={(event) => setBlendMode(event.currentTarget.value as StudioBlendMode)}
-		>
-			{#each blendModes as mode (mode)}
-				<option value={mode}>{blendLabel(mode)}</option>
-			{/each}
-		</select>
+			onValueChange={(value) => setBlendMode(value as StudioBlendMode)}
+			options={blendModes.map((mode) => ({ value: mode, label: blendLabel(mode) }))}
+			class="h-9 w-full"
+		/>
 	</label>
 
 	{#if canUseStroke}
@@ -304,19 +302,20 @@
 					/>
 					<label class="grid gap-1 text-xs">
 						<span>{m.studio_border_position()}</span>
-						<select
-							class="h-9 rounded-md border border-input bg-background px-2"
+						<AppSelect
 							value={stroke.position}
 							disabled={!editor.canEdit}
-							onchange={(event) =>
+							onValueChange={(value) =>
 								updateStroke({
-									position: event.currentTarget.value as StudioLayerStrokeEffect['position']
+									position: value as StudioLayerStrokeEffect['position']
 								})}
-						>
-							<option value="inside">{m.studio_border_inside()}</option>
-							<option value="center">{m.studio_border_center()}</option>
-							<option value="outside">{m.studio_border_outside()}</option>
-						</select>
+							options={[
+								{ value: 'inside', label: m.studio_border_inside() },
+								{ value: 'center', label: m.studio_border_center() },
+								{ value: 'outside', label: m.studio_border_outside() }
+							]}
+							class="h-9 w-full"
+						/>
 					</label>
 					<label class="grid gap-1 text-xs">
 						<span>{m.studio_stroke_width()} · {Math.round(stroke.width)}</span>
@@ -353,19 +352,20 @@
 		<div class="space-y-2">
 			<label class="grid gap-1 text-xs">
 				<span>{m.studio_mask()}</span>
-				<select
-					class="h-9 rounded-md border border-input bg-background px-2"
+				<AppSelect
 					value={layer.mask?.shape ?? 'none'}
 					disabled={!editor.canEdit}
-					onchange={(event) => setMask(event.currentTarget.value)}
-				>
-					<option value="none">{m.studio_mask_none()}</option>
-					<option value="rectangle">{m.studio_mask_rectangle()}</option>
-					<option value="rounded_rectangle">{m.studio_mask_rounded()}</option>
-					<option value="circle">{m.studio_mask_circle()}</option>
-					<option value="ellipse">{m.studio_mask_ellipse()}</option>
-					<option value="diamond">{m.studio_mask_diamond()}</option>
-				</select>
+					onValueChange={setMask}
+					options={[
+						{ value: 'none', label: m.studio_mask_none() },
+						{ value: 'rectangle', label: m.studio_mask_rectangle() },
+						{ value: 'rounded_rectangle', label: m.studio_mask_rounded() },
+						{ value: 'circle', label: m.studio_mask_circle() },
+						{ value: 'ellipse', label: m.studio_mask_ellipse() },
+						{ value: 'diamond', label: m.studio_mask_diamond() }
+					]}
+					class="h-9 w-full"
+				/>
 			</label>
 			{#if layer.mask}
 				<label class="grid gap-1 text-xs">

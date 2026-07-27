@@ -3,6 +3,7 @@
 	import { SvelteMap } from 'svelte/reactivity';
 	import { Button } from '$lib/components/ui/button';
 	import { Slider } from '$lib/components/ui/slider';
+	import AppSelect from '$lib/components/app-select.svelte';
 	import { OpenPostFabricAdapter } from '../fabric-adapter';
 	import { useStudioEditor } from '../editor.svelte';
 	import PaintColorControls from './paint-color-controls.svelte';
@@ -775,19 +776,19 @@
 				{#if editor.activeTool === 'gradient'}
 					<label class="grid gap-0.5 text-xs">
 						<span class="sr-only">{m.studio_gradient_style()}</span>
-						<select
-							class="h-8 rounded-md border border-white/15 bg-neutral-900 px-2"
+						<AppSelect
 							value={editor.gradientType}
-							aria-label={m.studio_gradient_style()}
-							onchange={(event) =>
-								(editor.gradientType = event.currentTarget.value as StudioGradientType)}
-						>
-							<option value="linear">{m.studio_gradient_linear()}</option>
-							<option value="radial">{m.studio_gradient_radial()}</option>
-							<option value="angle">{m.studio_gradient_angle()}</option>
-							<option value="reflected">{m.studio_gradient_reflected()}</option>
-							<option value="diamond">{m.studio_gradient_diamond()}</option>
-						</select>
+							ariaLabel={m.studio_gradient_style()}
+							onValueChange={(value) => (editor.gradientType = value as StudioGradientType)}
+							options={[
+								{ value: 'linear', label: m.studio_gradient_linear() },
+								{ value: 'radial', label: m.studio_gradient_radial() },
+								{ value: 'angle', label: m.studio_gradient_angle() },
+								{ value: 'reflected', label: m.studio_gradient_reflected() },
+								{ value: 'diamond', label: m.studio_gradient_diamond() }
+							]}
+							class="h-8 w-36 border-white/15 bg-neutral-900 text-neutral-100"
+						/>
 					</label>
 					<Button
 						variant={editor.gradientReverse ? 'secondary' : 'ghost'}
