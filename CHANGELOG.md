@@ -15,6 +15,7 @@ All notable changes to this project are documented in this file.
 - Added reusable image and shape masks, drop and inner shadows, glow presets, curved text paths, and layer blend modes to Studio, with the same rendering in the canvas, saved previews, and exports.
 - Added pixel-based rectangle, ellipse, lasso, and color-aware magic selections to Studio, plus persistent hard-edge Pencil and tolerance-aware Paint Bucket tools with selection clipping, brand colors, touch controls, and keyboard shortcuts.
 - Added selection-clipped linear, radial, angle, reflected, and diamond gradients to Studio, plus reusable inside, center, and outside borders for visual layers.
+- Added non-destructive Eraser and Magic Eraser tools, expanded image color controls and quick looks, and outside borders that follow the visible pixels of transparent images.
 - Added account-aware LinkedIn member and Organization Page analytics for approved Community Management API applications.
 - Added a unified follower trend and publication-level content performance with expandable per-platform results.
 - Added direct provider-post links to Engagement, including instance-aware Mastodon and DID-aware Bluesky links.
@@ -31,12 +32,15 @@ All notable changes to this project are documented in this file.
 - Kept the Settings navigation available while managing social accounts so moving between workspace settings no longer opens a disconnected page.
 - Moved CLI and MCP text-post and publication mutations onto the current revision-aware authoring contract, kept linked publications and publish jobs synchronized, and reserved `--profile` for CLI profiles by naming content filters `--content-profile`.
 - Reworked Studio around a media-first asset panel, brand-aware color and font pickers, custom sliders, richer shape and crop controls, transient save feedback, native range selection, inline layer naming, hierarchical groups, and contextual layer and design actions.
-- Separated Studio object selection from pixel selections, moved Pencil, Paint Bucket, and Gradient into one paint menu, and removed shape creation from the main tool rails.
+- Separated Studio object selection from pixel selections, grouped rectangle and ellipse selections, kept Lasso and Magic Select distinct, and split Pencil, fill, and eraser tools into clear groups.
+- Moved Studio media selection into a full-height sheet and made media grids add columns as their panels grow.
 - Renamed the sidebar Communications destination to Inbox, clarified archived engagement actions, and kept filter changes in place without replacing the page with a loading placeholder.
 - Standardized application select controls on the shared shadcn-svelte component.
 
 ### Fixed
 
+- Used the configured public media or S3/R2 URL consistently for verification and provider publishing, refreshed stale failed checks before validation, and removed duplicate HTTPS errors from destination account menus.
+- Made Studio transforms undoable, constrained Shift-rotation to 15-degree steps, assigned Space-drag to panning and Alt-drag to duplication, and allowed pasteboard clicks to clear selection.
 - Kept the sidebar calendar and full Calendar on one canonical occurrence rule so scheduled and published items appear consistently.
 - Loaded the original authenticated Brand asset when a generated thumbnail is unavailable.
 - Gave the full frontend validation program enough bounded Node heap to complete the release gate.
