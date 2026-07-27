@@ -618,9 +618,9 @@ type EngagementItem struct {
 	CanHide              bool      `bun:"can_hide,notnull,default:false" json:"can_hide"`
 	CanDelete            bool      `bun:"can_delete,notnull,default:false" json:"can_delete"`
 	Hidden               bool      `bun:",notnull,default:false" json:"hidden"`
-	ReadAt               time.Time `bun:"read_at,nullzero" json:"read_at"`
-	ArchivedAt           time.Time `bun:"archived_at,nullzero" json:"archived_at"`
-	RemoteCreatedAt      time.Time `bun:"remote_created_at,nullzero" json:"remote_created_at"`
+	ReadAt               time.Time `bun:"read_at,nullzero" json:"read_at,omitempty,omitzero"`
+	ArchivedAt           time.Time `bun:"archived_at,nullzero" json:"archived_at,omitempty,omitzero"`
+	RemoteCreatedAt      time.Time `bun:"remote_created_at,nullzero" json:"remote_created_at,omitempty,omitzero"`
 	LastSeenAt           time.Time `bun:"last_seen_at,notnull" json:"last_seen_at"`
 	CreatedAt            time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"created_at"`
 	UpdatedAt            time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"updated_at"`
@@ -645,9 +645,9 @@ type Conversation struct {
 	LastMessagePreview       string    `bun:"last_message_preview,notnull,default:''" json:"last_message_preview"`
 	LastRemoteMessageID      string    `bun:"last_remote_message_id,notnull,default:''" json:"last_remote_message_id"`
 	UnreadCount              int       `bun:"unread_count,notnull,default:0" json:"unread_count"`
-	ReadAt                   time.Time `bun:"read_at,nullzero" json:"read_at"`
-	ArchivedAt               time.Time `bun:"archived_at,nullzero" json:"archived_at"`
-	MessagingWindowExpiresAt time.Time `bun:"messaging_window_expires_at,nullzero" json:"messaging_window_expires_at"`
+	ReadAt                   time.Time `bun:"read_at,nullzero" json:"read_at,omitempty,omitzero"`
+	ArchivedAt               time.Time `bun:"archived_at,nullzero" json:"archived_at,omitempty,omitzero"`
+	MessagingWindowExpiresAt time.Time `bun:"messaging_window_expires_at,nullzero" json:"messaging_window_expires_at,omitempty,omitzero"`
 	CreatedAt                time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"created_at"`
 	UpdatedAt                time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"updated_at"`
 }

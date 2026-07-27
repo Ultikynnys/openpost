@@ -64,6 +64,9 @@
 	const loadKey = $derived(
 		`${workspaceId}:${platformFilter}:${unreadOnly ? 'unread' : 'all'}:${archived ? 'archived' : 'active'}`
 	);
+	const confirmPlatformName = $derived(
+		confirmItem ? getPlatformName(confirmItem.platform) : m.engagement_heading()
+	);
 
 	onMount(() => void workspaceCtx.initialize());
 
@@ -118,20 +121,45 @@
 		);
 	}
 
-	async function setState(item: EngagementItem, state: { read?: boolean; archived?: boolean }) {
-		if (!workspaceId) return;
+	async function setState(
+		item: EngagementItem,
+		state: { read?: boolean; archived?: boolean },
+		announce = true
+	) {
+		if (!workspaceId) return false;
 		actionInFlight = item.id;
 		const { error: apiError } = await client.POST('/engagement/state', {
 			body: { workspace_id: workspaceId, ids: [item.id], ...state }
 		});
 		actionInFlight = '';
 		if (apiError) {
-			showToast(m.engagement_action_failed(), 'error');
-			return;
+			if (announce) showToast(m.engagement_action_failed(), 'error');
+			return false;
 		}
-		items = items.filter((candidate) => candidate.id !== item.id);
-		total = Math.max(0, total - 1);
-		void loadEngagement();
+		if (state.archived !== undefined || (state.read && unreadOnly)) {
+			items = items.filter((candidate) => candidate.id !== item.id);
+			total = Math.max(0, total - 1);
+		} else if (state.read !== undefined) {
+			items = items.map((candidate) =>
+				candidate.id === item.id
+					? {
+							...candidate,
+							read_at: state.read ? new Date().toISOString() : undefined
+						}
+					: candidate
+			);
+		}
+		if (announce) {
+			showToast(
+				state.archived === true
+					? m.engagement_archived_success()
+					: state.archived === false
+						? m.engagement_restored_success()
+						: m.engagement_read_success(),
+				'success'
+			);
+		}
+		return true;
 	}
 
 	async function queueAction(item: EngagementItem, action: 'reply' | 'hide' | 'delete') {
@@ -154,8 +182,8 @@
 			replyItemId = '';
 			replyBody = '';
 		}
+		await setState(item, { read: true }, false);
 		showToast(m.engagement_action_queued(), 'success');
-		void setState(item, { read: true });
 	}
 
 	function showToast(message: string, tone: 'neutral' | 'success' | 'error') {
@@ -180,7 +208,12 @@
 		return item.author_name || item.author_handle || m.common_untitled_user();
 	}
 
-	function dateLabel(value: string) {
+	function hasTimestamp(value: string | undefined) {
+		return Boolean(value && !value.startsWith('0001-01-01'));
+	}
+
+	function dateLabel(value: string | undefined) {
+		if (!value) return '';
 		const date = new Date(value);
 		if (Number.isNaN(date.getTime())) return '';
 		return new Intl.DateTimeFormat(getLocaleTag(), {
@@ -247,6 +280,9 @@
 			</label>
 			<span class="ms-auto text-sm text-muted-foreground">{total}</span>
 		</div>
+		<p class="-mt-2 max-w-3xl text-xs leading-5 text-muted-foreground">
+			{m.engagement_archive_help()}
+		</p>
 
 		{#if initialLoading}
 			<PageLoading layout="list" label={m.common_loading()} items={5} />
@@ -267,7 +303,8 @@
 				aria-busy={loading}
 			>
 				{#each items as item (item.id)}
-					<article class={['p-4 sm:p-5', !item.read_at && 'bg-primary/[0.025]']}>
+					{@const isRead = hasTimestamp(item.read_at)}
+					<article class={['p-4 sm:p-5', !isRead && 'bg-primary/[0.025]']}>
 						<div class="flex min-w-0 items-start gap-3">
 							<div
 								class="flex size-9 shrink-0 items-center justify-center rounded-full bg-muted"
@@ -312,7 +349,7 @@
 											<ReplyIcon class="size-4" />{m.engagement_reply()}
 										</Button>
 									{/if}
-									{#if !item.read_at}
+									{#if !isRead}
 										<Button
 											variant="ghost"
 											size="sm"
@@ -336,14 +373,14 @@
 										variant="ghost"
 										size="sm"
 										disabled={actionInFlight === item.id}
-										onclick={() => void setState(item, { archived: !item.archived_at })}
+										onclick={() => void setState(item, { archived: !archived })}
 									>
-										{#if item.archived_at}
+										{#if archived}
 											<InboxIcon class="size-4" />
 										{:else}
 											<ArchiveIcon class="size-4" />
 										{/if}
-										{item.archived_at ? m.engagement_restore() : m.engagement_archive()}
+										{archived ? m.engagement_restore() : m.engagement_archive()}
 									</Button>
 									{#if item.can_delete}
 										<Button
@@ -352,7 +389,9 @@
 											class="text-destructive"
 											onclick={() => requestProviderAction(item, 'delete')}
 										>
-											<TrashIcon class="size-4" />{m.engagement_delete()}
+											<TrashIcon class="size-4" />{m.engagement_delete({
+												platform: getPlatformName(item.platform)
+											})}
 										</Button>
 									{/if}
 								</div>
@@ -393,10 +432,14 @@
 
 <DestructiveConfirmDialog
 	bind:open={confirmDialogOpen}
-	title={confirmAction === 'delete' ? m.engagement_delete() : m.engagement_hide()}
+	title={confirmAction === 'delete'
+		? m.engagement_delete({ platform: confirmPlatformName })
+		: m.engagement_hide()}
 	description={confirmAction === 'delete'
-		? m.engagement_delete_confirm_description()
+		? m.engagement_delete_confirm_description({ platform: confirmPlatformName })
 		: m.engagement_hide_confirm_description()}
-	confirmLabel={confirmAction === 'delete' ? m.engagement_delete() : m.engagement_hide()}
+	confirmLabel={confirmAction === 'delete'
+		? m.engagement_delete({ platform: confirmPlatformName })
+		: m.engagement_hide()}
 	onConfirm={confirmProviderAction}
 />

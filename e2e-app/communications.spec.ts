@@ -25,49 +25,64 @@ test("communications and notifications stay usable across desktop and phone layo
     "Communications E2E",
   )) as { id: string };
   await authenticatePage(page, auth.token);
+  let engagementArchived = false;
 
   await page.route("**/api/v1/engagement**", async (route) => {
     const url = new URL(route.request().url());
     if (route.request().method() !== "GET") {
+      if (url.pathname.endsWith("/engagement/state")) {
+        const body = route.request().postDataJSON() as {
+          archived?: boolean;
+        };
+        if (body.archived !== undefined) {
+          engagementArchived = body.archived;
+        }
+      }
       await route.fulfill({ status: 204 });
       return;
     }
     if (url.searchParams.get("platform")) {
       await new Promise((resolve) => setTimeout(resolve, 250));
     }
+    const showingArchived = url.searchParams.get("archived") === "true";
     await route.fulfill({
       contentType: "application/json",
       json: {
-        total: 1,
-        items: [
-          {
-            id: "engagement-1",
-            workspace_id: workspace.id,
-            rendition_id: "rendition-1",
-            social_account_id: "account-youtube",
-            platform: "youtube",
-            remote_id: "comment-1",
-            parent_remote_id: "",
-            conversation_remote_id: "",
-            author_remote_id: "channel-ada",
-            author_name: "Ada",
-            author_handle: "@ada",
-            author_avatar_url: "",
-            body: "Could you share the setup guide?",
-            is_ours: false,
-            can_reply: true,
-            can_hide: false,
-            can_delete: true,
-            hidden: false,
-            read_at: "",
-            archived_at: "",
-            remote_created_at: "2026-07-26T11:45:00Z",
-            last_seen_at: "2026-07-26T12:00:00Z",
-            created_at: "2026-07-26T12:00:00Z",
-            updated_at: "2026-07-26T12:00:00Z",
-            provider_post_url: "https://www.youtube.com/watch?v=walkthrough-1",
-          },
-        ],
+        total: showingArchived === engagementArchived ? 1 : 0,
+        items:
+          showingArchived === engagementArchived
+            ? [
+                {
+                  id: "engagement-1",
+                  workspace_id: workspace.id,
+                  rendition_id: "rendition-1",
+                  social_account_id: "account-youtube",
+                  platform: "youtube",
+                  remote_id: "comment-1",
+                  parent_remote_id: "",
+                  conversation_remote_id: "",
+                  author_remote_id: "channel-ada",
+                  author_name: "Ada",
+                  author_handle: "@ada",
+                  author_avatar_url: "",
+                  body: "Could you share the setup guide?",
+                  is_ours: false,
+                  can_reply: true,
+                  can_hide: false,
+                  can_delete: true,
+                  hidden: false,
+                  ...(engagementArchived
+                    ? { archived_at: "2026-07-26T12:05:00Z" }
+                    : {}),
+                  remote_created_at: "2026-07-26T11:45:00Z",
+                  last_seen_at: "2026-07-26T12:00:00Z",
+                  created_at: "2026-07-26T12:00:00Z",
+                  updated_at: "2026-07-26T12:00:00Z",
+                  provider_post_url:
+                    "https://www.youtube.com/watch?v=walkthrough-1",
+                },
+              ]
+            : [],
       },
     });
   });
@@ -178,11 +193,33 @@ test("communications and notifications stay usable across desktop and phone layo
   await expect(
     page.getByRole("link", { name: "Open post on YouTube" }),
   ).toHaveAttribute("href", "https://www.youtube.com/watch?v=walkthrough-1");
+  await expect(page.getByRole("button", { name: "Archive" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Restore" })).toHaveCount(0);
+  await expect(
+    page.getByText(
+      "Archive removes an item from this inbox without deleting it on the social network.",
+      { exact: false },
+    ),
+  ).toBeVisible();
   await page.getByRole("button", { name: "All platforms" }).click();
   await page.getByRole("option", { name: "YouTube" }).click();
   await expect(
     page.getByText("Could you share the setup guide?"),
   ).toBeVisible();
+  await page.getByRole("button", { name: "Archive" }).click();
+  await expect(page.getByText("Could you share the setup guide?")).toHaveCount(
+    0,
+  );
+  await expect(page.getByText("Item archived.")).toBeVisible();
+  await page.getByText("Archived", { exact: true }).click();
+  await expect(
+    page.getByText("Could you share the setup guide?"),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Restore" }).click();
+  await expect(page.getByText("Could you share the setup guide?")).toHaveCount(
+    0,
+  );
+  await expect(page.getByText("Item restored.")).toBeVisible();
 
   await page.goto(`/messages?workspace=${workspace.id}`);
   await expect(page.getByRole("heading", { name: "Messages" })).toBeVisible();
