@@ -24,8 +24,34 @@ export default defineConfig({
 			registerType: 'autoUpdate',
 			injectRegister: 'auto',
 			workbox: {
-				globPatterns: ['**/*.{js,css,html,ico,png,jpg,jpeg,svg,webp,avif,woff,woff2}'],
+				globPatterns: [],
+				navigateFallback: null,
 				runtimeCaching: [
+					{
+						urlPattern: ({ request }) => request.mode === 'navigate',
+						handler: 'NetworkFirst',
+						options: {
+							cacheName: 'openpost-pages-1',
+							networkTimeoutSeconds: 3,
+							expiration: {
+								maxEntries: 32,
+								maxAgeSeconds: 7 * 24 * 60 * 60
+							},
+							cacheableResponse: { statuses: [0, 200] }
+						}
+					},
+					{
+						urlPattern: ({ url }) => url.pathname.startsWith('/_app/immutable/'),
+						handler: 'CacheFirst',
+						options: {
+							cacheName: 'openpost-app-assets-1',
+							expiration: {
+								maxEntries: 400,
+								maxAgeSeconds: 30 * 24 * 60 * 60
+							},
+							cacheableResponse: { statuses: [0, 200] }
+						}
+					},
 					{
 						urlPattern: ({ url }) => url.pathname.startsWith('/studio-models/'),
 						handler: 'CacheFirst',

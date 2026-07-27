@@ -7,6 +7,8 @@ const config = {
 			pages: '../backend/cmd/openpost/public',
 			assets: '../backend/cmd/openpost/public',
 			fallback: 'index.html',
+			// Text assets are selectively precompressed after the Vite build.
+			// Adapter-wide compression would also duplicate the large Studio model files.
 			precompress: false,
 			strict: true
 		})
