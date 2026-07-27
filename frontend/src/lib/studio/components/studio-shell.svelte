@@ -140,6 +140,7 @@
 	let focusedCanvas = $state(false);
 	let copiedLayers = $state.raw<StudioLayer[]>([]);
 	let statusAnnouncement = $state('');
+	let suppressSavedAnnouncementUntil = 0;
 	let revisions = $state<StudioRevisionSummary[]>([]);
 	let historyBusy = $state(false);
 	let historyError = $state('');
@@ -497,7 +498,9 @@
 				editor.saveMessage = m.studio_saved();
 				showSavedIndicator();
 				await clearLocalStudioRecovery(editor.id);
-				statusAnnouncement = m.studio_saved_announcement();
+				if (Date.now() >= suppressSavedAnnouncementUntil) {
+					statusAnnouncement = m.studio_saved_announcement();
+				}
 				if (request.recoveryReason === 'idle' && previewPending) schedulePreview();
 			}
 			saveRetryDelay = INITIAL_SAVE_RETRY_DELAY;
@@ -1041,6 +1044,7 @@
 				downloadRenderedPages(rendered, editor.document.title);
 				exportDialogOpen = false;
 				exportSuccessfulByPage = {};
+				suppressSavedAnnouncementUntil = Date.now() + 5_000;
 				statusAnnouncement = m.studio_export_downloaded();
 				finishMetric();
 				return;
@@ -1089,6 +1093,7 @@
 			}
 			exportDialogOpen = false;
 			exportSuccessfulByPage = {};
+			suppressSavedAnnouncementUntil = Date.now() + 5_000;
 			statusAnnouncement = m.studio_exported_pages({
 				count: mediaIDs.length,
 				suffix: mediaIDs.length === 1 ? '' : 's'

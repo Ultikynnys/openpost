@@ -47,16 +47,19 @@ test("Studio creates from an original template, adapts to mobile, and exports to
   ).toBeVisible();
 
   await page.getByRole("treeitem", { name: /A clear update, text/ }).click();
-  const curveSelect = page.getByRole("combobox", { name: "Text curve" });
-  await curveSelect.selectOption("circle");
+  const curveSelect = page.getByRole("button", { name: "Text curve" });
+  await curveSelect.click();
+  await page.getByRole("option", { name: "Circle", exact: true }).click();
   await expect(
     page.getByRole("spinbutton", { name: "H", exact: true }),
   ).toHaveValue("886");
-  await curveSelect.selectOption("ellipse");
+  await curveSelect.click();
+  await page.getByRole("option", { name: "Ellipse", exact: true }).click();
   await expect(
     page.getByRole("spinbutton", { name: "H", exact: true }),
   ).toHaveValue("487");
-  await curveSelect.selectOption("wave");
+  await curveSelect.click();
+  await page.getByRole("option", { name: "Wave", exact: true }).click();
   await page.getByRole("button", { name: "Add drop shadow" }).click();
   const textSaved = page.waitForResponse(
     (response) =>
@@ -68,11 +71,11 @@ test("Studio creates from an original template, adapts to mobile, and exports to
   await textSaved;
 
   await page.getByRole("treeitem", { name: /Accent, shape/ }).click();
-  await page.getByRole("combobox", { name: "Mask" }).selectOption("diamond");
+  await page.getByRole("button", { name: "Mask" }).click();
+  await page.getByRole("option", { name: "Diamond", exact: true }).click();
   await page.getByRole("button", { name: "Add border" }).click();
-  await page
-    .getByRole("combobox", { name: "Border position" })
-    .selectOption("outside");
+  await page.getByRole("button", { name: "Border position" }).click();
+  await page.getByRole("option", { name: "Outside", exact: true }).click();
   await page.getByRole("button", { name: "Add drop shadow" }).click();
   await page.getByRole("button", { name: "Add inner shadow" }).click();
   const shapeSaved = page.waitForResponse(
@@ -81,18 +84,17 @@ test("Studio creates from an original template, adapts to mobile, and exports to
       response.url().includes("/api/v1/studio/designs/") &&
       response.ok(),
   );
-  await page
-    .getByRole("combobox", { name: "Blend mode" })
-    .selectOption("multiply");
+  await page.getByRole("button", { name: "Blend mode" }).click();
+  await page.getByRole("option", { name: "Multiply", exact: true }).click();
   await shapeSaved;
 
   await page.reload();
   await page.getByRole("treeitem", { name: /Accent, shape/ }).click();
-  await expect(page.getByRole("combobox", { name: "Mask" })).toHaveValue(
-    "diamond",
+  await expect(page.getByRole("button", { name: "Mask" })).toHaveText(
+    "Diamond",
   );
-  await expect(page.getByRole("combobox", { name: "Blend mode" })).toHaveValue(
-    "multiply",
+  await expect(page.getByRole("button", { name: "Blend mode" })).toHaveText(
+    "Multiply",
   );
   await expect(
     page.getByRole("button", { name: "Remove drop shadow" }),
@@ -102,13 +104,13 @@ test("Studio creates from an original template, adapts to mobile, and exports to
   ).toBeVisible();
   await expect(page.getByTestId("studio-layer-border")).toContainText("Border");
   await expect(
-    page.getByRole("combobox", { name: "Border position" }),
-  ).toHaveValue("outside");
+    page.getByRole("button", { name: "Border position" }),
+  ).toHaveText("Outside");
 
   await page.getByRole("treeitem", { name: /A clear update, text/ }).click();
-  await expect(page.getByRole("combobox", { name: "Text curve" })).toHaveValue(
-    "wave",
-  );
+  await expect(
+    page.getByRole("button", { name: "Text curve" }),
+  ).toHaveText("Wave");
   await expect(
     page.getByRole("button", { name: "Remove drop shadow" }),
   ).toBeVisible();

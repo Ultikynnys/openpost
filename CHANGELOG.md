@@ -58,6 +58,7 @@ All notable changes to this project are documented in this file.
 - Preserved analytics and engagement continuity when OAuth accounts are reconnected, including historical renditions linked to duplicate inactive account rows.
 - Removed content performance for posts that providers report as deleted or unavailable, while keeping the canonical OpenPost publication history.
 - Removed generic provider quota caveats from the composer when there is no actionable account problem.
+- Kept Studio export confirmation ahead of late autosave announcements and aligned end-to-end select interactions with the shared shadcn-svelte control.
 
 ## [1.27.9] - 2026-07-25
 

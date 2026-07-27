@@ -235,7 +235,10 @@ test("Threads destination options stay scoped and touch accessible on mobile", a
   await dialog.getByRole("button", { name: "Poll", exact: true }).click();
   await dialog.getByPlaceholder("Option 1").fill("Ship now");
   await dialog.getByPlaceholder("Option 2").fill("Review first");
-  await dialog.getByLabel("Who can reply").selectOption("followers_only");
+  await dialog.getByRole("button", { name: "Who can reply" }).click();
+  await page
+    .getByRole("option", { name: "followers_only", exact: true })
+    .click();
   await dialog.getByLabel("Text attachment").fill("Long-form context");
   await dialog.getByRole("button", { name: "Done" }).click();
 
