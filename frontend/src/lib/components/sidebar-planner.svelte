@@ -333,7 +333,7 @@
 										onclick={() => onNavigate(draft.href)}
 									>
 										<FileTextIcon class="size-4" />
-										{m.sidebar_resume_draft({ title: draft.title })}
+										{m.sidebar_resume_draft_action()}
 									</ContextMenu.Item>
 									<ContextMenu.Separator class="my-1 h-px bg-border" />
 									<ContextMenu.Item

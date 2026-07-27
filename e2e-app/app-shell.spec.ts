@@ -274,6 +274,12 @@ test("desktop planning sidebar resumes drafts and stays out of mobile navigation
     .toEqual(draftDocumentColors);
 
   await draftToDelete.click({ button: "right" });
+  await expect(
+    page.getByRole("menuitem", { name: "Resume draft", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("menuitem", { name: /Resume draft:/ }),
+  ).toHaveCount(0);
   await page.getByRole("menuitem", { name: "Delete", exact: true }).click();
   await expect(
     page.getByText("Delete this draft?", { exact: true }),
