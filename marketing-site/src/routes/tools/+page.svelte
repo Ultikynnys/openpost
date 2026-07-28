@@ -1,83 +1,131 @@
 <script lang="ts">
-  import { resolve } from "$app/paths";
-  import { ArrowRight } from "lucide-svelte";
-  import PageHero from "../_components/PageHero.svelte";
-  import { siteUrl, tools } from "../_marketing";
+	import { resolve } from '$app/paths';
+	import { ArrowRight, LockKeyhole } from 'lucide-svelte';
+	import { siteUrl, tools } from '../_marketing';
 
-  const outcomes: Record<string, string> = {
-    "social-media-image-editor": "Full editor + clean export",
-    "multi-platform-character-counter": "Compare 9 limits",
-    "post-preview-generator": "Preview 6 layouts",
-    "thread-splitter": "Split without losing text",
-    "fediverse-handle-checker": "Syntax + optional live check",
-    "linkedin-text-formatter": "Readable plain-text structure",
-    "best-time-to-post-calculator": "Local schedule + CSV export",
-  };
+	const groups = [
+		{
+			title: 'Preview',
+			description: 'Check the destination before anything publishes.',
+			slugs: ['post-preview-generator']
+		},
+		{
+			title: 'Write',
+			description: 'Make the copy fit without losing its meaning.',
+			slugs: ['multi-platform-character-counter', 'thread-splitter', 'linkedin-text-formatter']
+		},
+		{
+			title: 'Prepare media',
+			description: 'Build and export the visual asset.',
+			slugs: ['social-media-image-editor']
+		},
+		{
+			title: 'Plan and verify',
+			description: 'Turn a draft into a usable publishing plan.',
+			slugs: ['best-time-to-post-calculator', 'fediverse-handle-checker']
+		}
+	] as const;
+
+	const outcomes: Record<string, string> = {
+		'social-media-image-editor': 'Edit and export images',
+		'multi-platform-character-counter': 'Compare nine limits',
+		'post-preview-generator': 'Preview ten destinations and their formats',
+		'thread-splitter': 'Split without losing text',
+		'fediverse-handle-checker': 'Validate syntax or check live',
+		'linkedin-text-formatter': 'Clean readable plain text',
+		'best-time-to-post-calculator': 'Build and export a weekly plan'
+	};
+
+	function toolsForGroup(slugs: readonly string[]) {
+		return slugs
+			.map((slug) => tools.find((tool) => tool.slug === slug))
+			.filter((tool): tool is (typeof tools)[number] => Boolean(tool));
+	}
 </script>
 
 <svelte:head>
-  <title>Free social media tools - OpenPost</title>
-  <meta
-    name="description"
-    content="Free browser-based social media tools for creating images, counting characters, previewing posts, splitting threads, checking handles, formatting LinkedIn copy, and planning a weekly cadence."
-  />
-  <link rel="canonical" href={`${siteUrl}/tools`} />
-  <meta property="og:type" content="website" />
-  <meta property="og:title" content="Free social media tools - OpenPost" />
-  <meta
-    property="og:description"
-    content="Practical browser-based tools for writing, checking, previewing, and planning social posts."
-  />
-  <meta property="og:url" content={`${siteUrl}/tools`} />
-  <meta property="og:image" content={`${siteUrl}/assets/brand/og-image.png`} />
-  <meta name="twitter:card" content="summary_large_image" />
+	<title>Free social media tools - OpenPost</title>
+	<meta
+		name="description"
+		content="Free browser-based tools for previewing posts, checking character limits, splitting threads, preparing images, validating handles, and planning a publishing cadence."
+	/>
+	<link rel="canonical" href={`${siteUrl}/tools`} />
+	<meta property="og:type" content="website" />
+	<meta property="og:title" content="Free social media tools - OpenPost" />
+	<meta
+		property="og:description"
+		content="Preview, write, prepare, and plan a social post without creating an account."
+	/>
+	<meta property="og:url" content={`${siteUrl}/tools`} />
+	<meta property="og:image" content={`${siteUrl}/assets/brand/og-image.png`} />
+	<meta name="twitter:card" content="summary_large_image" />
 </svelte:head>
 
-<PageHero
-  eyebrow="Free tools"
-  title="Create, write, check, and plan a better social post."
-  description="Design images, count, preview, split, validate, format, and plan in your browser. Every tool works without an account."
-  secondaryHref="/pricing"
-  secondaryLabel="Compare plans"
-/>
+<section class="border-b py-14 sm:py-20">
+	<div class="marketing-shell grid gap-8 lg:grid-cols-[0.9fr_1.1fr] lg:items-end">
+		<div>
+			<p class="section-label">Free tools</p>
+			<h1
+				class="mt-4 max-w-4xl text-4xl leading-[1.02] font-semibold tracking-[-0.035em] text-balance sm:text-6xl"
+			>
+				Finish the post before you sign up.
+			</h1>
+		</div>
+		<div>
+			<p class="marketing-copy">
+				Preview destinations, check limits, split copy, prepare media, and plan a cadence in your
+				browser.
+			</p>
+			<p class="mt-4 inline-flex items-center gap-2 text-sm text-muted-foreground">
+				<LockKeyhole class="size-4 text-primary" />
+				Drafts stay local unless a tool clearly offers a live network check.
+			</p>
+		</div>
+	</div>
+</section>
 
 <section class="section-pad">
-  <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-    <div class="mb-8 max-w-2xl">
-      <h2 class="text-2xl font-semibold sm:text-3xl">
-        Choose the job you need to finish
-      </h2>
-      <p class="text-muted-foreground mt-3 leading-7">
-        Drafts stay in your browser. The handle checker makes a network request
-        only when you ask for a live result.
-      </p>
-    </div>
-    <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-      {#each tools as tool (tool.slug)}
-        {@const Icon = tool.icon}
-        <a
-          href={resolve(`/tools/${tool.slug}`)}
-          class="group bg-card hover:border-primary/30 flex min-h-64 flex-col rounded-xl border p-5 transition hover:-translate-y-0.5 hover:shadow-sm"
-        >
-          <div class="flex items-start justify-between gap-4">
-            <div
-              class="bg-background flex size-10 items-center justify-center rounded-xl border"
-            >
-              <Icon class="text-primary size-5" />
-            </div>
-            <ArrowRight
-              class="text-muted-foreground group-hover:text-foreground size-4 transition group-hover:translate-x-0.5"
-            />
-          </div>
-          <h2 class="mt-5 font-semibold">{tool.name}</h2>
-          <p class="text-muted-foreground mt-3 text-sm leading-6">
-            {tool.description}
-          </p>
-          <p class="text-primary mt-auto pt-5 text-sm font-medium">
-            {outcomes[tool.slug] ?? "Try the tool"}
-          </p>
-        </a>
-      {/each}
-    </div>
-  </div>
+	<div class="marketing-shell grid gap-16">
+		{#each groups as group (group.title)}
+			<section aria-labelledby={`tool-group-${group.title.toLowerCase().replaceAll(' ', '-')}`}>
+				<div class="grid gap-2 border-b pb-5 sm:grid-cols-[0.55fr_1.45fr] sm:items-end">
+					<h2
+						id={`tool-group-${group.title.toLowerCase().replaceAll(' ', '-')}`}
+						class="text-2xl font-semibold tracking-[-0.025em]"
+					>
+						{group.title}
+					</h2>
+					<p class="text-sm leading-6 text-muted-foreground">
+						{group.description}
+					</p>
+				</div>
+				<div>
+					{#each toolsForGroup(group.slugs) as tool (tool.slug)}
+						{@const Icon = tool.icon}
+						<a
+							href={resolve(`/tools/${tool.slug}`)}
+							class="focus-ring group grid min-h-32 gap-4 border-b py-6 sm:grid-cols-[auto_1fr_auto] sm:items-center sm:gap-6"
+						>
+							<span class="grid size-11 place-items-center rounded-lg bg-primary/10 text-primary">
+								<Icon class="size-5" aria-hidden="true" />
+							</span>
+							<span>
+								<strong class="text-lg">{tool.name}</strong>
+								<span class="mt-1 block max-w-2xl text-sm leading-6 text-muted-foreground">
+									{tool.description}
+								</span>
+							</span>
+							<span class="flex items-center gap-2 text-sm font-medium text-primary">
+								{outcomes[tool.slug]}
+								<ArrowRight
+									class="size-4 transition-transform group-hover:translate-x-1"
+									aria-hidden="true"
+								/>
+							</span>
+						</a>
+					{/each}
+				</div>
+			</section>
+		{/each}
+	</div>
 </section>

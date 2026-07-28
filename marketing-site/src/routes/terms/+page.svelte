@@ -1,5 +1,4 @@
 <script lang="ts">
-	import PageHero from '../_components/PageHero.svelte';
 	import { siteUrl } from '../_marketing';
 
 	const effectiveDate = '22 July 2026';
@@ -14,24 +13,29 @@
 	<link rel="canonical" href={`${siteUrl}/terms`} />
 </svelte:head>
 
-<PageHero
-	eyebrow="Legal"
-	title="Terms of Service"
-	description="These terms govern use of the hosted OpenPost service. They do not replace the open-source license for self-hosted software."
-	secondaryHref="/pricing"
-	secondaryLabel="Pricing"
-/>
+<header class="border-b py-14 sm:py-20">
+	<div class="reading-shell">
+		<p class="section-label">Legal</p>
+		<h1 class="mt-4 text-4xl font-semibold tracking-tight text-balance sm:text-5xl">
+			Terms of Service
+		</h1>
+		<p class="mt-5 text-lg leading-8 text-muted-foreground">
+			Terms for the hosted OpenPost service. The open-source license governs self-hosted software.
+		</p>
+		<a href="/pricing" class="mt-5 inline-flex text-sm font-medium text-primary">Pricing</a>
+	</div>
+</header>
 
 <section class="section-pad">
-	<article class="prose prose-invert mx-auto max-w-3xl px-4 sm:px-6 lg:px-8">
+	<article class="reading-shell prose dark:prose-invert">
 		<p><strong>Effective date:</strong> {effectiveDate}</p>
 
 		<h2>1. Agreement and operator</h2>
 		<p>
 			These Terms of Service form an agreement between you and Rodrigo Dias, Porto, Portugal,
 			operator of the hosted OpenPost service at
-			<a href="https://app.openpost.social">app.openpost.social</a>. By creating an account or
-			using the hosted service, you agree to these terms and acknowledge the
+			<a href="https://app.openpost.social">app.openpost.social</a>. By creating an account or using
+			the hosted service, you agree to these terms and acknowledge the
 			<a href="/privacy">Privacy Policy</a>. Contact
 			<a href="mailto:openpost@rgo.pt">openpost@rgo.pt</a> with legal or account questions.
 		</p>
@@ -70,9 +74,9 @@
 		</p>
 		<p>
 			You can disconnect an account in OpenPost and may also revoke access at the provider. A
-			provider may suspend an integration, reject content, delay processing, change an API, or revoke
-			access. OpenPost is not responsible for a provider's service, moderation decision, policy,
-			outage, or data handling.
+			provider may suspend an integration, reject content, delay processing, change an API, or
+			revoke access. OpenPost is not responsible for a provider's service, moderation decision,
+			policy, outage, or data handling.
 		</p>
 		<p>
 			By using OpenPost's YouTube integration, you also agree to the
@@ -96,7 +100,9 @@
 		<p>You must not use OpenPost to:</p>
 		<ul>
 			<li>break the law, infringe rights, threaten people, or facilitate abuse or exploitation;</li>
-			<li>send spam, deceptive campaigns, malware, phishing, or coordinated inauthentic activity;</li>
+			<li>
+				send spam, deceptive campaigns, malware, phishing, or coordinated inauthentic activity;
+			</li>
 			<li>evade provider limits, account restrictions, review requirements, or access controls;</li>
 			<li>probe, disrupt, overload, scrape, or access the service without authorization;</li>
 			<li>share credentials or resell access outside the plan and workspace controls provided;</li>
@@ -124,8 +130,8 @@
 		<p>
 			We may change future prices or plan limits with reasonable advance notice. If payment fails,
 			we may retry it and limit paid features after notice. We will not intentionally delete account
-			data solely because a renewal payment failed without giving a reasonable opportunity to
-			export it.
+			data solely because a renewal payment failed without giving a reasonable opportunity to export
+			it.
 		</p>
 
 		<h2>8. Service changes and availability</h2>
@@ -155,9 +161,9 @@
 
 		<h2>10. Open-source software</h2>
 		<p>
-			The OpenPost source code is available under the license in its repository. That license governs
-			your copying, modification, and self-hosting of the software. These terms govern only the
-			hosted service and related accounts, subscriptions, and support.
+			The OpenPost source code is available under the license in its repository. That license
+			governs your copying, modification, and self-hosting of the software. These terms govern only
+			the hosted service and related accounts, subscriptions, and support.
 		</p>
 
 		<h2>11. Disclaimers</h2>
@@ -171,21 +177,21 @@
 
 		<h2>12. Liability</h2>
 		<p>
-			OpenPost is not liable for indirect, incidental, special, consequential, or lost-profit damages
-			where such exclusions are lawful. For claims arising from the hosted service, total liability
-			is limited to the amount you paid for the service during the 12 months before the event giving
-			rise to the claim. This limit does not apply to fraud, wilful misconduct, death or personal
-			injury caused by negligence, data-protection liability that cannot be limited, or any other
-			liability that law does not allow us to exclude or limit.
+			OpenPost is not liable for indirect, incidental, special, consequential, or lost-profit
+			damages where such exclusions are lawful. For claims arising from the hosted service, total
+			liability is limited to the amount you paid for the service during the 12 months before the
+			event giving rise to the claim. This limit does not apply to fraud, wilful misconduct, death
+			or personal injury caused by negligence, data-protection liability that cannot be limited, or
+			any other liability that law does not allow us to exclude or limit.
 		</p>
 
 		<h2>13. Governing law and disputes</h2>
 		<p>
 			Portuguese law governs these terms, without overriding mandatory protections that apply in
 			your country of residence. Courts in Portugal have jurisdiction, except where consumer law
-			allows you to bring a claim elsewhere. Before filing a claim, contact openpost@rgo.pt so we can
-			try to resolve it. European consumers may also use an applicable consumer dispute-resolution
-			body.
+			allows you to bring a claim elsewhere. Before filing a claim, contact openpost@rgo.pt so we
+			can try to resolve it. European consumers may also use an applicable consumer
+			dispute-resolution body.
 		</p>
 
 		<h2>14. Changes and general terms</h2>

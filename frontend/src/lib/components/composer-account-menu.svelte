@@ -13,6 +13,7 @@
 	import PencilIcon from 'lucide-svelte/icons/pencil';
 	import RotateCcwIcon from 'lucide-svelte/icons/rotate-ccw';
 	import Settings2Icon from 'lucide-svelte/icons/settings-2';
+	import SquareArrowOutUpRightIcon from 'lucide-svelte/icons/square-arrow-out-up-right';
 	import TriangleAlertIcon from 'lucide-svelte/icons/triangle-alert';
 	import RiCheckLine from 'remixicon-svelte/icons/check-line';
 	import DestructiveConfirmDialog from './destructive-confirm-dialog.svelte';
@@ -42,6 +43,7 @@
 		onClearAll: () => void;
 		onEditShared?: () => void;
 		onCustomize?: (account: SocialAccount) => void;
+		onPreview?: (account: SocialAccount) => void;
 		onReset?: (account: SocialAccount) => void;
 		onSettings?: (account: SocialAccount) => void;
 	}
@@ -65,6 +67,7 @@
 		onClearAll,
 		onEditShared,
 		onCustomize,
+		onPreview,
 		onReset,
 		onSettings
 	}: Props = $props();
@@ -111,6 +114,11 @@
 
 	function customize(account: SocialAccount) {
 		onCustomize?.(account);
+		open = false;
+	}
+
+	function preview(account: SocialAccount) {
+		onPreview?.(account);
 		open = false;
 	}
 
@@ -303,7 +311,7 @@
 						</Button>
 					{/if}
 
-					{#if compatible && selected && onCustomize}
+					{#if compatible && selected && (onCustomize || onPreview)}
 						<DropdownMenu.Root>
 							<DropdownMenu.Trigger>
 								{#snippet child({ props })}
@@ -321,16 +329,28 @@
 								{/snippet}
 							</DropdownMenu.Trigger>
 							<DropdownMenu.Content class="w-52" align="end">
-								<DropdownMenu.Item
-									class="min-h-11"
-									onclick={() => customize(account)}
-									data-testid="composer-account-customize"
-								>
-									<PencilIcon class="size-4" />
-									{custom
-										? m.compose_edit_account_version({ account: accountLabel(account) })
-										: m.compose_unsync()}
-								</DropdownMenu.Item>
+								{#if onPreview}
+									<DropdownMenu.Item
+										class="min-h-11"
+										onclick={() => preview(account)}
+										data-testid="composer-account-preview"
+									>
+										<SquareArrowOutUpRightIcon class="size-4" />
+										{m.compose_preview_account({ account: accountLabel(account) })}
+									</DropdownMenu.Item>
+								{/if}
+								{#if onCustomize}
+									<DropdownMenu.Item
+										class="min-h-11"
+										onclick={() => customize(account)}
+										data-testid="composer-account-customize"
+									>
+										<PencilIcon class="size-4" />
+										{custom
+											? m.compose_edit_account_version({ account: accountLabel(account) })
+											: m.compose_unsync()}
+									</DropdownMenu.Item>
+								{/if}
 								{#if custom && onReset}
 									<DropdownMenu.Item
 										class="min-h-11"

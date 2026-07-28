@@ -101,6 +101,8 @@
 	import { sampleCampaignPathForPlan, SAMPLE_CAMPAIGN_DISMISSED_KEY } from '$lib/sample-campaign';
 	import { parseDraftConflict, type DraftConflictProblem } from '$lib/draft-conflict';
 	import { SerializedSaveQueue } from '$lib/serialized-save-queue';
+	import { buildComposerPreview } from '$lib/compose-preview';
+	import { openPreviewWindow, type PreviewWindowSession } from '$lib/preview-window';
 
 	// --------------------------------------------------------------------------
 	// Types
@@ -262,6 +264,7 @@
 	let savedIndicatorVisible = $state(false);
 	let lastSavedSnapshot = $state('');
 	let appliedInitialContextKey = $state('');
+	const previewSessions = new SvelteMap<string, PreviewWindowSession>();
 	const textareaRefs = new SvelteMap<number, HTMLTextAreaElement>();
 	const randomDelayOptions = [0, 5, 10, 15, 30, 45, 60];
 	const desktopComposerControls = new MediaQuery('min-width: 768px');
@@ -731,6 +734,50 @@
 			])
 		);
 	}
+
+	function previewForAccount(account: SocialAccount) {
+		return buildComposerPreview({
+			account,
+			mode: textComposerMode,
+			segments: posts.map((post) => {
+				const mediaIds = getVariantMediaIds(account.id, post.key) ?? post.mediaIds;
+				return {
+					id: post.key,
+					text: getVariantContent(account.id, post.key) ?? post.content,
+					media: mediaIds.map((id) => ({
+						id,
+						mimeType: mediaMimeTypes.get(id),
+						altText: mediaAltTexts.get(id)
+					})),
+					settings: segmentSettingsByPost[post.key]?.[account.id] ?? {}
+				};
+			}),
+			destinationSettings: settingsForAccount(account),
+			linkUrl
+		});
+	}
+
+	function openAccountPreview(account: SocialAccount) {
+		previewSessions.get(account.id)?.close();
+		const session = openPreviewWindow(account.id, previewForAccount(account));
+		if (!session) {
+			error = m.preview_open_failed();
+			return;
+		}
+		previewSessions.set(account.id, session);
+	}
+
+	$effect(() => {
+		for (const [accountId, session] of previewSessions) {
+			const account = accounts.find((candidate) => candidate.id === accountId);
+			if (!account || !selectedAccountIds.includes(accountId)) {
+				session.close();
+				previewSessions.delete(accountId);
+				continue;
+			}
+			session.update(previewForAccount(account));
+		}
+	});
 
 	function updateAccountSetting(account: SocialAccount, key: string, value: unknown) {
 		const definition = visibleSettings(account).find((field) => field.key === key);
@@ -1623,6 +1670,8 @@
 		clearAutoSaveTimer();
 		clearSavedIndicator();
 		if (capabilityResolveTimer) clearTimeout(capabilityResolveTimer);
+		for (const session of previewSessions.values()) session.close();
+		previewSessions.clear();
 	});
 
 	beforeNavigate((navigation) => {
@@ -2851,6 +2900,7 @@
 						onClearAll={clearAllAccounts}
 						onEditShared={() => activateVariantTab(null)}
 						onCustomize={(account) => editAccountVersion(account.id)}
+						onPreview={openAccountPreview}
 						onReset={(account) => resyncAccount(account.id)}
 						onSettings={openDestinationSettings}
 					/>
@@ -2979,6 +3029,7 @@
 						onClearAll={clearAllAccounts}
 						onEditShared={() => activateVariantTab(null)}
 						onCustomize={(account) => editAccountVersion(account.id)}
+						onPreview={openAccountPreview}
 						onReset={(account) => resyncAccount(account.id)}
 						onSettings={openDestinationSettings}
 					/>

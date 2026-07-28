@@ -1,5 +1,4 @@
 <script lang="ts">
-	import PageHero from '../_components/PageHero.svelte';
 	import { siteUrl } from '../_marketing';
 
 	const effectiveDate = '26 July 2026';
@@ -14,79 +13,83 @@
 	<link rel="canonical" href={`${siteUrl}/privacy`} />
 </svelte:head>
 
-<PageHero
-	eyebrow="Legal"
-	title="Privacy Policy"
-	description="This policy explains what the hosted OpenPost service processes, why it does so, and the choices available to you."
-	secondaryHref="/security"
-	secondaryLabel="Security details"
-/>
+<header class="border-b py-14 sm:py-20">
+	<div class="reading-shell">
+		<p class="section-label">Legal</p>
+		<h1 class="mt-4 text-4xl font-semibold tracking-tight text-balance sm:text-5xl">
+			Privacy Policy
+		</h1>
+		<p class="mt-5 text-lg leading-8 text-muted-foreground">
+			What the hosted OpenPost service processes, why it does so, and the choices available to you.
+		</p>
+		<a href="/security" class="mt-5 inline-flex text-sm font-medium text-primary"
+			>Security details</a
+		>
+	</div>
+</header>
 
 <section class="section-pad">
-	<article class="prose prose-invert mx-auto max-w-3xl px-4 sm:px-6 lg:px-8">
+	<article class="reading-shell prose dark:prose-invert">
 		<p><strong>Effective date:</strong> {effectiveDate}</p>
 
 		<h2>1. Who is responsible</h2>
 		<p>
-			The hosted OpenPost service at <a href="https://app.openpost.social"
-				>app.openpost.social</a
-			> is operated by Rodrigo Dias in Porto, Portugal. For privacy requests, email
-			<a href="mailto:openpost@rgo.pt">openpost@rgo.pt</a>. OpenPost is the data controller
-			for account and service data described in this policy.
+			The hosted OpenPost service at <a href="https://app.openpost.social">app.openpost.social</a>
+			is operated by Rodrigo Dias in Porto, Portugal. For privacy requests, email
+			<a href="mailto:openpost@rgo.pt">openpost@rgo.pt</a>. OpenPost is the data controller for
+			account and service data described in this policy.
 		</p>
 		<p>
-			A self-hosted OpenPost installation is controlled by its operator. This policy does not
-			govern an independent self-hosted installation; contact that operator about its practices.
+			A self-hosted OpenPost installation is controlled by its operator. This policy does not govern
+			an independent self-hosted installation; contact that operator about its practices.
 		</p>
 
 		<h2>2. Data we process</h2>
 		<ul>
 			<li>
-				<strong>Account and workspace data:</strong> email address, display name, profile image,
-				workspace and organization details, roles, invitations, and settings.
+				<strong>Account and workspace data:</strong> email address, display name, profile image, workspace
+				and organization details, roles, invitations, and settings.
 			</li>
 			<li>
-				<strong>Publishing data:</strong> drafts, scheduled and published content, media,
-				provider-specific variants, Studio designs and recovery revisions, templates, brand-kit
-				values, prompts, schedules, publication status, and job history.
+				<strong>Publishing data:</strong> drafts, scheduled and published content, media, provider-specific
+				variants, Studio designs and recovery revisions, templates, brand-kit values, prompts, schedules,
+				publication status, and job history.
 			</li>
 			<li>
-				<strong>Analytics data:</strong> normalized account and publication counters, measurement
-				history, collection status, and safe provider error codes. Analytics records do not contain
-				raw provider responses, access tokens, post text, or direct messages.
+				<strong>Analytics data:</strong> normalized account and publication counters, measurement history,
+				collection status, and safe provider error codes. Analytics records do not contain raw provider
+				responses, access tokens, post text, or direct messages.
 			</li>
 			<li>
-				<strong>Brand font records:</strong> custom WOFF2, TTF, or OTF files, family and style
-				metadata, and the account and time associated with the required font-license
-				acknowledgement.
+				<strong>Brand font records:</strong> custom WOFF2, TTF, or OTF files, family and style metadata,
+				and the account and time associated with the required font-license acknowledgement.
 			</li>
 			<li>
-				<strong>Connected-account data:</strong> social provider, account identifier, username,
-				profile and capability metadata such as an X subscription tier, granted permissions, and
-				encrypted access or refresh tokens. OpenPost does not ask for your social-network password.
+				<strong>Connected-account data:</strong> social provider, account identifier, username, profile
+				and capability metadata such as an X subscription tier, granted permissions, and encrypted access
+				or refresh tokens. OpenPost does not ask for your social-network password.
 			</li>
 			<li>
-				<strong>Security data:</strong> password hashes, session identifiers, passkey public-key
-				material, TOTP configuration, API token metadata, IP address, user agent, sign-in and token
-				activity, and password-reset records. OpenPost never stores a readable account password.
+				<strong>Security data:</strong> password hashes, session identifiers, passkey public-key material,
+				TOTP configuration, API token metadata, IP address, user agent, sign-in and token activity, and
+				password-reset records. OpenPost never stores a readable account password.
 			</li>
 			<li>
-				<strong>Billing data:</strong> plan, entitlement, subscription, checkout, customer, and
-				billing-status identifiers received from Polar. OpenPost does not receive or store full
-				payment-card details.
+				<strong>Billing data:</strong> plan, entitlement, subscription, checkout, customer, and billing-status
+				identifiers received from Polar. OpenPost does not receive or store full payment-card details.
 			</li>
 			<li>
-				<strong>Support and service data:</strong> messages you send, operational logs, errors,
-				request timing, usage counters, and abuse-prevention signals.
+				<strong>Support and service data:</strong> messages you send, operational logs, errors, request
+				timing, usage counters, and abuse-prevention signals.
 			</li>
 		</ul>
 
 		<h2>3. How we receive data</h2>
 		<p>
-			We receive data from you when you register, configure a workspace, upload content, connect
-			a provider, buy a plan, or contact support. We also receive account and publication data
-			from providers you connect, billing status from Polar, and limited technical data when your
-			browser or client uses the service.
+			We receive data from you when you register, configure a workspace, upload content, connect a
+			provider, buy a plan, or contact support. We also receive account and publication data from
+			providers you connect, billing status from Polar, and limited technical data when your browser
+			or client uses the service.
 		</p>
 		<p>
 			Camera access is requested only after you choose a camera action. A captured photo is uploaded
@@ -95,7 +98,9 @@
 
 		<h2>4. Why we use data</h2>
 		<ul>
-			<li>Provide, secure, and support accounts, workspaces, publishing, analytics, and automation.</li>
+			<li>
+				Provide, secure, and support accounts, workspaces, publishing, analytics, and automation.
+			</li>
 			<li>Send content to the providers and accounts you select.</li>
 			<li>Process subscriptions, enforce plan limits, and keep billing records.</li>
 			<li>Detect abuse, investigate failures, and protect users and the service.</li>
@@ -103,10 +108,10 @@
 			<li>Improve reliability and usability using service-level operational information.</li>
 		</ul>
 		<p>
-			For users in the European Economic Area, these uses rely on performing our contract with
-			you, our legitimate interests in operating and securing the service, compliance with legal
-			obligations, or consent where consent is required. You can withdraw consent without
-			affecting earlier lawful processing.
+			For users in the European Economic Area, these uses rely on performing our contract with you,
+			our legitimate interests in operating and securing the service, compliance with legal
+			obligations, or consent where consent is required. You can withdraw consent without affecting
+			earlier lawful processing.
 		</p>
 
 		<h2>5. When data is shared</h2>
@@ -118,13 +123,15 @@
 				publishing actions. Their terms and privacy policies then apply.
 			</li>
 			<li>
-				<strong>Infrastructure providers</strong> that host the application, database, media,
-				email delivery, network, and backups under service-provider obligations.
+				<strong>Infrastructure providers</strong> that host the application, database, media, email delivery,
+				network, and backups under service-provider obligations.
 			</li>
-			<li><strong>Polar</strong> for checkout, subscriptions, billing, and customer portals.</li>
 			<li>
-				<strong>Authorities or other parties</strong> when reasonably necessary to comply with
-				law, protect rights and safety, investigate abuse, or complete a business reorganization.
+				<strong>Polar</strong> for checkout, subscriptions, billing, and customer portals.
+			</li>
+			<li>
+				<strong>Authorities or other parties</strong> when reasonably necessary to comply with law, protect
+				rights and safety, investigate abuse, or complete a business reorganization.
 			</li>
 		</ul>
 		<p>
@@ -156,9 +163,9 @@
 		<h2>7. Retention and deletion</h2>
 		<p>
 			We keep account, publishing, and normalized analytics data while your account is active and as
-			needed to provide the service. Single-use reset tokens expire quickly and are invalidated after
-			use. Operational and security records are kept only as long as needed for reliability, abuse
-			prevention, legal obligations, and dispute handling.
+			needed to provide the service. Single-use reset tokens expire quickly and are invalidated
+			after use. Operational and security records are kept only as long as needed for reliability,
+			abuse prevention, legal obligations, and dispute handling.
 		</p>
 		<p>
 			You can download an account export or request permanent deletion from account settings.

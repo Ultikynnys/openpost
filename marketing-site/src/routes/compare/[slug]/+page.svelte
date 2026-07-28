@@ -17,48 +17,62 @@
 		if (!found) error(404, 'Comparison not found');
 		return found;
 	});
-	const otherComparisons = $derived(comparisons.filter((item) => item.slug !== comparison.slug).slice(0, 3));
+	const otherComparisons = $derived(
+		comparisons.filter((item) => item.slug !== comparison.slug).slice(0, 3)
+	);
 </script>
 
 <svelte:head>
 	<title>OpenPost vs {comparison.name}: an honest comparison</title>
-	<meta name="description" content={`${comparison.verdict} Facts reviewed ${comparison.reviewedAt}.`} />
+	<meta
+		name="description"
+		content={`${comparison.verdict} Facts reviewed ${comparison.reviewedAt}.`}
+	/>
 	<link rel="canonical" href={`${siteUrl}/compare/${comparison.slug}`} />
 </svelte:head>
 
-<section class="border-b py-14 sm:py-18 lg:py-24">
-	<div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-		<a href="/compare" class="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
+<section class="border-b py-16 sm:py-24">
+	<div class="marketing-shell">
+		<a
+			href="/compare"
+			class="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
+		>
 			<ArrowLeft class="size-4" />
 			All comparisons
 		</a>
-		<div class="mt-10 grid gap-10 lg:grid-cols-[1fr_24rem] lg:items-end">
+		<div class="mt-10 grid gap-12 lg:grid-cols-[1fr_22rem] lg:items-end">
 			<div class="max-w-4xl">
-				<p class="eyebrow">{comparison.category}</p>
-				<h1 class="mt-4 text-4xl leading-[1.03] font-semibold text-balance sm:text-6xl">
+				<p class="section-label">{comparison.category}</p>
+				<h1 class="marketing-title mt-5">
 					OpenPost vs {comparison.name}
 				</h1>
-				<p class="mt-5 max-w-3xl text-lg leading-8 text-muted-foreground">{comparison.openPostAngle}</p>
+				<p class="marketing-copy mt-6">{comparison.openPostAngle}</p>
 				<div class="mt-8 flex flex-wrap gap-3">
 					<Button href={managedSignupUrl} size="lg">Try the managed app</Button>
 					<Button href={selfHostingDocsUrl} variant="outline" size="lg">Self-host OpenPost</Button>
 				</div>
 			</div>
-			<aside class="rounded-xl border bg-card p-6">
+			<aside class="border-l pl-6">
 				<Scale class="size-5 text-primary" />
 				<p class="mt-4 text-sm font-semibold">Bottom line</p>
-				<p class="mt-2 text-sm leading-6 text-muted-foreground">{comparison.verdict}</p>
-				<p class="mt-5 border-t pt-4 font-mono text-xs text-muted-foreground">Reviewed {comparison.reviewedAt}</p>
+				<p class="mt-2 text-sm leading-6 text-muted-foreground">
+					{comparison.verdict}
+				</p>
+				<p class="mt-5 border-t pt-4 font-mono text-xs text-muted-foreground">
+					Reviewed {comparison.reviewedAt}
+				</p>
 			</aside>
 		</div>
 	</div>
 </section>
 
 <section class="section-pad">
-	<div class="mx-auto grid max-w-7xl gap-6 px-4 sm:px-6 lg:grid-cols-2 lg:px-8">
-		<article class="rounded-xl border bg-card p-6 sm:p-8">
-			<p class="eyebrow">Choose OpenPost when</p>
-			<h2 class="mt-4 text-2xl font-semibold">The agent boundary and publishing state should stay inspectable.</h2>
+	<div class="marketing-shell grid gap-10 lg:grid-cols-2">
+		<article class="border-t pt-6">
+			<p class="section-label">Choose OpenPost when</p>
+			<h2 class="mt-4 text-2xl font-semibold">
+				The agent boundary and publishing state should stay inspectable.
+			</h2>
 			<ul class="mt-6 space-y-4">
 				{#each comparison.chooseOpenPost as item (item)}
 					<li class="flex gap-3 text-sm leading-6 text-muted-foreground">
@@ -68,8 +82,8 @@
 				{/each}
 			</ul>
 		</article>
-		<article class="rounded-xl border bg-muted/25 p-6 sm:p-8">
-			<p class="eyebrow">Choose {comparison.name} when</p>
+		<article class="border-t pt-6">
+			<p class="section-label">Choose {comparison.name} when</p>
 			<h2 class="mt-4 text-2xl font-semibold">{comparison.bestFor}</h2>
 			<ul class="mt-6 space-y-4">
 				{#each comparison.chooseThem as item (item)}
@@ -84,15 +98,36 @@
 </section>
 
 <section class="section-pad border-y bg-muted/20">
-	<div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+	<div class="marketing-shell">
 		<div class="max-w-3xl">
-			<p class="eyebrow">Side by side</p>
-			<h2 class="mt-4 text-3xl leading-tight font-semibold text-balance sm:text-5xl">
-				Compare the product areas that change the decision.
-			</h2>
+			<p class="section-label">Side by side</p>
+			<h2 class="marketing-heading mt-4">Compare the product areas that change the decision.</h2>
 		</div>
-		<div class="mt-10 overflow-x-auto rounded-xl border bg-card">
-			<table class="w-full min-w-[48rem] border-collapse text-left">
+		<div class="mt-10 divide-y border-y lg:hidden">
+			{#each comparison.rows as row (row.area)}
+				<article class="py-6">
+					<h3 class="font-semibold">{row.area}</h3>
+					<div class="mt-5 grid gap-5 sm:grid-cols-2">
+						<div>
+							<p class="text-xs font-semibold text-primary">OpenPost</p>
+							<p class="mt-2 text-sm leading-6 text-muted-foreground">
+								{row.openpost}
+							</p>
+						</div>
+						<div>
+							<p class="text-xs font-semibold text-primary">
+								{comparison.name}
+							</p>
+							<p class="mt-2 text-sm leading-6 text-muted-foreground">
+								{row.competitor}
+							</p>
+						</div>
+					</div>
+				</article>
+			{/each}
+		</div>
+		<div class="mt-10 hidden overflow-hidden rounded-xl border bg-card lg:block">
+			<table class="w-full border-collapse text-left">
 				<thead class="border-b bg-background/70 text-sm">
 					<tr>
 						<th class="px-5 py-4 font-semibold" scope="col">Area</th>
@@ -104,8 +139,12 @@
 					{#each comparison.rows as row (row.area)}
 						<tr>
 							<th class="px-5 py-5 align-top font-medium" scope="row">{row.area}</th>
-							<td class="px-5 py-5 align-top text-sm leading-6 text-muted-foreground">{row.openpost}</td>
-							<td class="px-5 py-5 align-top text-sm leading-6 text-muted-foreground">{row.competitor}</td>
+							<td class="px-5 py-5 align-top text-sm leading-6 text-muted-foreground"
+								>{row.openpost}</td
+							>
+							<td class="px-5 py-5 align-top text-sm leading-6 text-muted-foreground"
+								>{row.competitor}</td
+							>
 						</tr>
 					{/each}
 				</tbody>
@@ -115,13 +154,15 @@
 </section>
 
 <section class="section-pad">
-	<div class="mx-auto grid max-w-7xl gap-10 px-4 sm:px-6 lg:grid-cols-[0.75fr_1.25fr] lg:px-8">
+	<div class="marketing-shell grid gap-10 lg:grid-cols-[0.75fr_1.25fr]">
 		<div>
-			<p class="eyebrow">Pricing model</p>
+			<p class="section-label">Pricing model</p>
 			<h2 class="mt-4 text-3xl font-semibold text-balance">Compare what the price scales with.</h2>
 		</div>
 		<div>
-			<p class="text-lg leading-8 text-muted-foreground">{comparison.pricing}</p>
+			<p class="text-lg leading-8 text-muted-foreground">
+				{comparison.pricing}
+			</p>
 			<div class="mt-8 flex flex-wrap gap-3">
 				<Button href="/pricing">OpenPost plans</Button>
 				{#each comparison.sources.slice(0, 1) as source (source.href)}
@@ -136,18 +177,24 @@
 </section>
 
 <section class="section-pad border-y bg-muted/20">
-	<div class="mx-auto grid max-w-7xl gap-8 px-4 sm:px-6 lg:grid-cols-[0.7fr_1.3fr] lg:px-8">
+	<div class="marketing-shell grid gap-10 lg:grid-cols-[0.7fr_1.3fr]">
 		<div>
-			<p class="eyebrow">Sources</p>
+			<p class="section-label">Sources</p>
 			<h2 class="mt-4 text-3xl font-semibold text-balance">Check the current product pages.</h2>
 			<p class="mt-4 text-sm leading-6 text-muted-foreground">
-				No affiliate links. Competitor facts were reviewed on {comparison.reviewedAt}; prices and features can change.
+				No affiliate links. Competitor facts were reviewed on {comparison.reviewedAt}; prices and
+				features can change.
 			</p>
 		</div>
-		<ul class="divide-y rounded-xl border bg-card">
+		<ul class="divide-y border-y">
 			{#each comparison.sources as source (source.href)}
 				<li>
-					<a href={source.href} target="_blank" rel="noreferrer" class="group flex items-center justify-between gap-4 p-5 hover:bg-muted/25">
+					<a
+						href={source.href}
+						target="_blank"
+						rel="noreferrer"
+						class="group flex items-center justify-between gap-4 p-5 hover:bg-muted/25"
+					>
 						<span class="font-medium">{source.label}</span>
 						<ExternalLink class="size-4 text-muted-foreground group-hover:text-foreground" />
 					</a>
@@ -158,22 +205,24 @@
 </section>
 
 <section class="section-pad">
-	<div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+	<div class="marketing-shell">
 		<div class="flex flex-col justify-between gap-6 sm:flex-row sm:items-end">
 			<div>
-				<p class="eyebrow">Keep comparing</p>
+				<p class="section-label">Keep comparing</p>
 				<h2 class="mt-4 text-3xl font-semibold text-balance">Other tools worth checking</h2>
 			</div>
 			<a href="/compare" class="inline-flex items-center gap-2 text-sm font-medium text-primary">
 				All comparisons <ArrowRight class="size-4" />
 			</a>
 		</div>
-		<div class="mt-8 grid gap-4 md:grid-cols-3">
+		<div class="mt-8 divide-y border-y md:grid md:grid-cols-3 md:divide-x md:divide-y-0">
 			{#each otherComparisons as item (item.slug)}
-				<a href={`/compare/${item.slug}`} class="rounded-xl border bg-card p-5 transition hover:bg-muted/25">
+				<a href={`/compare/${item.slug}`} class="p-5 transition hover:bg-muted/25">
 					<p class="text-xs text-primary">{item.category}</p>
 					<h3 class="mt-2 font-semibold">OpenPost vs {item.name}</h3>
-					<p class="mt-3 text-sm leading-6 text-muted-foreground">{item.bestFor}</p>
+					<p class="mt-3 text-sm leading-6 text-muted-foreground">
+						{item.bestFor}
+					</p>
 				</a>
 			{/each}
 		</div>

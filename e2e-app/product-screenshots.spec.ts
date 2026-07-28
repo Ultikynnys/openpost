@@ -304,6 +304,52 @@ test.describe("product screenshot capture", () => {
         },
       });
     });
+    await page.route("**/api/v1/capabilities/resolve", async (route) => {
+      const body = route.request().postDataJSON() as {
+        account_ids?: string[];
+        intent?: string;
+      };
+      const accounts = (body.account_ids ?? [])
+        .map((accountID) =>
+          connectedAccounts.find((account) => account.id === accountID),
+        )
+        .filter((account): account is (typeof connectedAccounts)[number] =>
+          Boolean(account),
+        )
+        .map((account) => ({
+          account_id: account.id,
+          active_constraints: {},
+          capability_revision: "product-screenshot-v1",
+          compatible: true,
+          intents: ["post", "thread"],
+          issues: [],
+          label:
+            providerFixtures.find(
+              (provider) => provider.platform === account.platform,
+            )?.display_name ?? account.platform,
+          media: {
+            allowed_mimes: ["image/jpeg", "image/png", "video/mp4"],
+            max_count: 4,
+            min_count: 0,
+            requires_https_fetchable: false,
+            requires_public_url: false,
+          },
+          media_shapes: ["landscape", "portrait", "square"],
+          native_scheduling: false,
+          openpost_queued: true,
+          output_profile: account.platform,
+          profile: account.platform,
+          provider: account.platform,
+          requires_app_review: false,
+          requires_public_media: false,
+          setting_groups: [],
+          text_limit: account.platform === "x" ? 280 : 3_000,
+        }));
+      await route.fulfill({
+        contentType: "application/json",
+        json: { accounts },
+      });
+    });
     await page.route("**/api/v1/media?**", async (route) => {
       await route.fulfill({
         contentType: "application/json",

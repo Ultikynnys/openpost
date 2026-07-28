@@ -2,6 +2,8 @@
 @import 'tw-animate-css';
 @import '@fontsource-variable/geist';
 
+@source '../../../packages/social-preview/src';
+
 @custom-variant dark (&:is(.dark *));
 @plugin '@tailwindcss/forms';
 @plugin '@tailwindcss/typography';

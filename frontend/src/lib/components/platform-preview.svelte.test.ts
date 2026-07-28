@@ -54,4 +54,34 @@ describe('PlatformPreview platform views', () => {
 		await expect.element(screen.getByText('@openpost')).toBeVisible();
 		await expect.element(screen.getByText('Launch update')).toBeVisible();
 	});
+
+	it('renders Instagram Stories in a vertical player instead of the feed shell', async () => {
+		const screen = await render(PlatformPreview, {
+			platform: 'instagram',
+			format: 'story',
+			...previewProps
+		});
+
+		await expect.element(screen.getByLabelText('Instagram story player')).toBeVisible();
+	});
+
+	it('renders YouTube Shorts in a vertical player instead of the watch-page shell', async () => {
+		const screen = await render(PlatformPreview, {
+			platform: 'youtube',
+			format: 'short',
+			...previewProps
+		});
+
+		await expect.element(screen.getByLabelText('YouTube short player')).toBeVisible();
+	});
+
+	it('shows an unsupported state instead of falling back to another network', async () => {
+		const screen = await render(PlatformPreview, {
+			platform: 'future-network',
+			...previewProps
+		});
+
+		await expect.element(screen.getByRole('status')).toHaveTextContent('Preview unavailable');
+		await expect.element(screen.getByText('Discord post preview')).not.toBeInTheDocument();
+	});
 });

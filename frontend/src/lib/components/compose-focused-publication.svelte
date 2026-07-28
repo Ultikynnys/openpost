@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onDestroy, onMount, type Snippet } from 'svelte';
-	import { SvelteSet } from 'svelte/reactivity';
+	import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 	import { page } from '$app/stores';
 	import { beforeNavigate, goto, replaceState } from '$app/navigation';
 	import { resolve } from '$app/paths';
@@ -82,6 +82,8 @@
 	import { SerializedSaveQueue } from '$lib/serialized-save-queue';
 	import { effectiveVideoConstraints } from '$lib/video/constraints';
 	import type { VideoPreparationProgress, VideoPreparationStage } from '$lib/video/types';
+	import { buildComposerPreview } from '$lib/compose-preview';
+	import { openPreviewWindow, type PreviewWindowSession } from '$lib/preview-window';
 
 	type Capability = components['schemas']['Capability'];
 	type Publication = components['schemas']['PublicationResponse'];
@@ -218,6 +220,7 @@
 	let resolvedCapabilities = $state<Record<string, ResolvedAccountCapability>>({});
 	let capabilityResolveLoading = $state(false);
 	let capabilityResolveError = $state('');
+	const previewSessions = new SvelteMap<string, PreviewWindowSession>();
 
 	const modeMeta = $derived(composerMode(mode));
 	const compatibleAccounts = $derived(accounts.filter(isAccountCompatible));
@@ -366,6 +369,8 @@
 	onDestroy(() => {
 		clearAutoSaveTimer();
 		clearSavedIndicator();
+		for (const session of previewSessions.values()) session.close();
+		previewSessions.clear();
 	});
 
 	beforeNavigate((navigation) => {
@@ -935,6 +940,55 @@
 			}
 		];
 	}
+
+	function previewForAccount(account: SocialAccount) {
+		const sourceSegments = composerSegments();
+		return buildComposerPreview({
+			account,
+			mode,
+			segments: sourceSegments.map((segment) => ({
+				id: segment.id,
+				text: segment.content,
+				media: segment.media.map((item) => ({
+					id: item.id,
+					mimeType: item.mimeType,
+					altText: item.altText
+				})),
+				settings: segment.settingsByAccount?.[account.id] ?? {}
+			})),
+			media: media.map((item) => ({
+				id: item.id,
+				mimeType: item.mime_type,
+				altText: item.altText
+			})),
+			destinationSettings: settingsForAccount(account),
+			title: fields.videoTitle,
+			subtitle: fields.videoDescription,
+			linkUrl: fields.linkUrl
+		});
+	}
+
+	function openAccountPreview(account: SocialAccount) {
+		previewSessions.get(account.id)?.close();
+		const session = openPreviewWindow(account.id, previewForAccount(account));
+		if (!session) {
+			error = m.preview_open_failed();
+			return;
+		}
+		previewSessions.set(account.id, session);
+	}
+
+	$effect(() => {
+		for (const [accountId, session] of previewSessions) {
+			const account = accounts.find((candidate) => candidate.id === accountId);
+			if (!account || !selectedAccountIds.includes(accountId)) {
+				session.close();
+				previewSessions.delete(accountId);
+				continue;
+			}
+			session.update(previewForAccount(account));
+		}
+	});
 
 	function focusedMediaInputs(items: FocusedMedia[]) {
 		return items.map((item) => ({
@@ -2317,6 +2371,7 @@
 							onToggle={toggleAccount}
 							onSelectAll={selectAllAccounts}
 							onClearAll={clearAllAccounts}
+							onPreview={openAccountPreview}
 							onSettings={openDestinationSettings}
 						/>
 					{/if}

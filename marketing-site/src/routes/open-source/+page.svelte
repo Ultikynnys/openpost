@@ -1,5 +1,15 @@
 <script lang="ts">
-	import { ArrowRight, Box, CheckCircle2, Code2, Database, ExternalLink, GitBranch, Server, Waypoints } from 'lucide-svelte';
+	import {
+		ArrowRight,
+		Box,
+		CheckCircle2,
+		Code2,
+		Database,
+		ExternalLink,
+		GitBranch,
+		Server,
+		Waypoints
+	} from 'lucide-svelte';
 	import { Button } from '$lib/components/ui/button';
 	import {
 		developerDocsUrl,
@@ -12,10 +22,27 @@
 
 	const licenseUrl = `${githubUrl}/blob/main/LICENSE`;
 	const deploymentFacts = [
-		{ title: 'One application', detail: 'The SvelteKit frontend is embedded in the Go server binary.', icon: Box },
-		{ title: 'SQLite by default', detail: 'Use a local database for a compact install; hosted cloud deployments can use PostgreSQL.', icon: Database },
-		{ title: 'Database-backed jobs', detail: 'Scheduled work survives restarts without a required Redis queue.', icon: Waypoints },
-		{ title: 'Configurable media', detail: 'Store media on the local filesystem or a configured object-storage backend.', icon: Server }
+		{
+			title: 'One application',
+			detail: 'The SvelteKit frontend is embedded in the Go server binary.',
+			icon: Box
+		},
+		{
+			title: 'SQLite by default',
+			detail:
+				'Use a local database for a compact install; hosted cloud deployments can use PostgreSQL.',
+			icon: Database
+		},
+		{
+			title: 'Database-backed jobs',
+			detail: 'Scheduled work survives restarts without a required Redis queue.',
+			icon: Waypoints
+		},
+		{
+			title: 'Configurable media',
+			detail: 'Store media on the local filesystem or a configured object-storage backend.',
+			icon: Server
+		}
 	] as const;
 
 	const choices = [
@@ -33,7 +60,11 @@
 		{
 			name: 'Self-hosted OpenPost',
 			bestFor: 'Operators who need deployment and data-path control.',
-			items: ['Run the complete AGPL-licensed server', 'Choose database, media storage, domain, and provider apps', 'Own updates, TLS, secrets, backups, and restore tests'],
+			items: [
+				'Run the complete AGPL-licensed server',
+				'Choose database, media storage, domain, and provider apps',
+				'Own updates, TLS, secrets, backups, and restore tests'
+			],
 			cta: 'Read the self-hosting guide',
 			href: selfHostingDocsUrl
 		}
@@ -49,18 +80,15 @@
 	<link rel="canonical" href={`${siteUrl}/open-source`} />
 </svelte:head>
 
-<section class="border-b py-14 sm:py-18 lg:py-24">
-	<div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-		<div class="grid gap-10 lg:grid-cols-[1fr_22rem] lg:items-end">
+<section class="border-b py-16 sm:py-24">
+	<div class="marketing-shell">
+		<div class="grid gap-12 lg:grid-cols-[1fr_22rem] lg:items-end">
 			<div class="max-w-4xl">
-				<p class="eyebrow">Open source</p>
-				<h1 class="mt-4 text-4xl leading-[1.03] font-semibold text-balance sm:text-6xl">
-					Own the boundary between automation and your social accounts.
-				</h1>
-				<p class="mt-5 max-w-3xl text-lg leading-8 text-muted-foreground">
-					The OpenPost server is licensed under AGPL-3.0-only. Inspect how it scopes clients,
-					stores provider credentials, validates renditions, and runs scheduled jobs—then use the
-					managed app or deploy the same product yourself.
+				<p class="section-label">Open source</p>
+				<h1 class="marketing-title mt-5">Run OpenPost your way.</h1>
+				<p class="marketing-copy mt-6">
+					Use the managed app or deploy the AGPL-licensed server yourself. Both use the same
+					publishing model, destination controls, and visible queue.
 				</p>
 				<div class="mt-8 flex flex-wrap gap-3">
 					<Button href={githubUrl} size="lg">
@@ -70,13 +98,19 @@
 					<Button href={selfHostingDocsUrl} variant="outline" size="lg">Self-hosting guide</Button>
 				</div>
 			</div>
-			<div class="rounded-xl border bg-card p-6">
+			<div class="border-l pl-6">
 				<Code2 class="size-5 text-primary" />
 				<p class="mt-4 font-semibold">AGPL-3.0-only</p>
 				<p class="mt-2 text-sm leading-6 text-muted-foreground">
-					You may use, inspect, and modify the software under the licence terms. Network users of a modified service must be able to receive its corresponding source.
+					You may use, inspect, and modify the software under the licence terms. Network users of a
+					modified service must be able to receive its corresponding source.
 				</p>
-				<a href={licenseUrl} target="_blank" rel="noreferrer" class="mt-5 inline-flex items-center gap-2 text-sm font-medium text-primary">
+				<a
+					href={licenseUrl}
+					target="_blank"
+					rel="noreferrer"
+					class="mt-5 inline-flex items-center gap-2 text-sm font-medium text-primary"
+				>
 					Read the licence <ExternalLink class="size-3.5" />
 				</a>
 			</div>
@@ -85,18 +119,20 @@
 </section>
 
 <section class="section-pad">
-	<div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+	<div class="marketing-shell">
 		<div class="max-w-3xl">
-			<p class="eyebrow">Choose how to run it</p>
-			<h2 class="mt-4 text-3xl leading-tight font-semibold text-balance sm:text-5xl">
+			<p class="section-label">Choose how to run it</p>
+			<h2 class="marketing-heading mt-4">
 				The access model stays the same. The operating responsibility changes.
 			</h2>
 		</div>
-		<div class="mt-10 grid gap-4 lg:grid-cols-2">
+		<div class="mt-10 grid border-y lg:grid-cols-2 lg:divide-x">
 			{#each choices as choice (choice.name)}
-				<article class="flex h-full flex-col rounded-xl border bg-card p-6 sm:p-8">
+				<article class="flex h-full flex-col py-8 lg:px-8 lg:first:pl-0 lg:last:pr-0">
 					<h3 class="text-2xl font-semibold">{choice.name}</h3>
-					<p class="mt-3 text-sm leading-6 text-muted-foreground">{choice.bestFor}</p>
+					<p class="mt-3 text-sm leading-6 text-muted-foreground">
+						{choice.bestFor}
+					</p>
 					<ul class="mt-6 space-y-3">
 						{#each choice.items as item (item)}
 							<li class="flex gap-3 text-sm leading-6 text-muted-foreground">
@@ -105,7 +141,11 @@
 							</li>
 						{/each}
 					</ul>
-					<Button href={choice.href} class="mt-8 self-start" variant={choice.name === 'Managed OpenPost' ? 'default' : 'outline'}>
+					<Button
+						href={choice.href}
+						class="mt-8 self-start"
+						variant={choice.name === 'Managed OpenPost' ? 'default' : 'outline'}
+					>
 						{choice.cta}
 					</Button>
 				</article>
@@ -115,22 +155,27 @@
 </section>
 
 <section class="section-pad border-y bg-muted/20">
-	<div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+	<div class="marketing-shell">
 		<div class="grid gap-10 lg:grid-cols-[0.65fr_1.35fr]">
 			<div>
-				<p class="eyebrow">Compact architecture</p>
-				<h2 class="mt-4 text-3xl font-semibold text-balance">Fewer required services to operate.</h2>
+				<p class="section-label">Compact architecture</p>
+				<h2 class="mt-4 text-3xl font-semibold text-balance">
+					Fewer required services to operate.
+				</h2>
 				<p class="mt-4 text-sm leading-6 text-muted-foreground">
-					The default stack is intentionally small. Portability does not remove the need for secure configuration, monitoring, backups, or provider access.
+					The default stack is intentionally small. Portability does not remove the need for secure
+					configuration, monitoring, backups, or provider access.
 				</p>
 			</div>
-			<div class="grid gap-px overflow-hidden rounded-xl border bg-border sm:grid-cols-2">
+			<div class="grid divide-y border-y sm:grid-cols-2 sm:divide-x sm:divide-y-0">
 				{#each deploymentFacts as fact (fact.title)}
 					{@const Icon = fact.icon}
-					<article class="bg-card p-6">
+					<article class="p-6 odd:border-b sm:odd:border-b">
 						<Icon class="size-5 text-primary" />
 						<h3 class="mt-5 font-semibold">{fact.title}</h3>
-						<p class="mt-2 text-sm leading-6 text-muted-foreground">{fact.detail}</p>
+						<p class="mt-2 text-sm leading-6 text-muted-foreground">
+							{fact.detail}
+						</p>
 					</article>
 				{/each}
 			</div>
@@ -139,24 +184,48 @@
 </section>
 
 <section class="section-pad">
-	<div class="mx-auto grid max-w-7xl gap-12 px-4 sm:px-6 lg:grid-cols-2 lg:px-8">
+	<div class="marketing-shell grid gap-12 lg:grid-cols-2">
 		<div>
-			<p class="eyebrow">Before you self-host</p>
-			<h2 class="mt-4 text-3xl font-semibold text-balance">Plan the data and recovery path first.</h2>
+			<p class="section-label">Before you self-host</p>
+			<h2 class="mt-4 text-3xl font-semibold text-balance">
+				Plan the data and recovery path first.
+			</h2>
 			<ol class="mt-8 space-y-5">
-				<li class="grid grid-cols-[2rem_1fr] gap-4"><span class="font-mono text-sm text-primary">01</span><p class="text-sm leading-6 text-muted-foreground">Choose a public HTTPS origin and configure exact OAuth callbacks.</p></li>
-				<li class="grid grid-cols-[2rem_1fr] gap-4"><span class="font-mono text-sm text-primary">02</span><p class="text-sm leading-6 text-muted-foreground">Generate strong JWT and encryption keys and keep them outside the image and repository.</p></li>
-				<li class="grid grid-cols-[2rem_1fr] gap-4"><span class="font-mono text-sm text-primary">03</span><p class="text-sm leading-6 text-muted-foreground">Choose SQLite or PostgreSQL and local or object media storage for the expected workload.</p></li>
-				<li class="grid grid-cols-[2rem_1fr] gap-4"><span class="font-mono text-sm text-primary">04</span><p class="text-sm leading-6 text-muted-foreground">Back up the database, media, and required secrets together, then prove the restore works.</p></li>
+				<li class="grid grid-cols-[2rem_1fr] gap-4">
+					<span class="font-mono text-sm text-primary">01</span>
+					<p class="text-sm leading-6 text-muted-foreground">
+						Choose a public HTTPS origin and configure exact OAuth callbacks.
+					</p>
+				</li>
+				<li class="grid grid-cols-[2rem_1fr] gap-4">
+					<span class="font-mono text-sm text-primary">02</span>
+					<p class="text-sm leading-6 text-muted-foreground">
+						Generate strong JWT and encryption keys and keep them outside the image and repository.
+					</p>
+				</li>
+				<li class="grid grid-cols-[2rem_1fr] gap-4">
+					<span class="font-mono text-sm text-primary">03</span>
+					<p class="text-sm leading-6 text-muted-foreground">
+						Choose SQLite or PostgreSQL and local or object media storage for the expected workload.
+					</p>
+				</li>
+				<li class="grid grid-cols-[2rem_1fr] gap-4">
+					<span class="font-mono text-sm text-primary">04</span>
+					<p class="text-sm leading-6 text-muted-foreground">
+						Back up the database, media, and required secrets together, then prove the restore
+						works.
+					</p>
+				</li>
 			</ol>
 		</div>
-		<div class="rounded-xl border bg-card p-6 sm:p-8">
-			<div class="flex size-10 items-center justify-center rounded-lg border bg-background">
+		<div class="border-t pt-8">
+			<div class="flex size-10 items-center justify-center">
 				<GitBranch class="size-5 text-primary" />
 			</div>
 			<h2 class="mt-5 text-2xl font-semibold">Contribute from the same project environment</h2>
 			<p class="mt-3 text-sm leading-6 text-muted-foreground">
-				The repository includes Devenv commands for installation, setup, checks, tests, builds, and release verification. Issues and pull requests are public.
+				The repository includes Devenv commands for installation, setup, checks, tests, builds, and
+				release verification. Issues and pull requests are public.
 			</p>
 			<div class="mt-6 flex flex-wrap gap-3">
 				<Button href={developerDocsUrl} variant="outline">Development guide</Button>

@@ -2,6 +2,7 @@ packages:
   - "frontend"
   - "docs-site"
   - "marketing-site"
+  - "packages/*"
 overrides:
   "brace-expansion@^5.0.0": 5.0.8
   cookie: 0.7.2

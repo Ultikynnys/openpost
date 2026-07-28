@@ -63,6 +63,7 @@
 		"vitest-browser-svelte": "^2.0.2"
 	},
 	"dependencies": {
+		"@openpost/social-preview": "workspace:*",
 		"@capacitor/android": "^8.3.0",
 		"@capacitor/app": "^8.1.0",
 		"@capacitor/browser": "^8.0.4",

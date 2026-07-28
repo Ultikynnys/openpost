@@ -50,6 +50,7 @@
 	const standaloneRoutes = [
 		'/onboarding',
 		'/legal-acceptance',
+		'/preview',
 		'/account-deleted',
 		'/connect',
 		'/invite',
