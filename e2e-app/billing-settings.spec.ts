@@ -251,7 +251,10 @@ test("settings account tab updates the user profile", async ({
   await expect(
     page.getByRole("heading", { name: "Profile", level: 1 }),
   ).toBeVisible();
-  await page.getByLabel("Display name").fill("Profile E2E User");
+  await page
+    .locator("section#profile")
+    .getByRole("textbox", { name: "Display name", exact: true })
+    .fill("Profile E2E User");
   await page.getByRole("button", { name: "Save Profile" }).click();
   await expect(page.getByText("Profile updated")).toBeVisible();
 

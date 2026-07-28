@@ -234,7 +234,13 @@ test("composer quick-schedules a publication from the selected time", async ({
   const scheduleDialog = page.getByTestId("schedule-dialog-shell");
   await expect(scheduleDialog).toBeVisible();
   await scheduleDialog
-    .getByRole("button", { name: futureDateLabel, exact: true })
+    .locator("[data-calendar-day]:not([data-outside-month])")
+    .and(
+      scheduleDialog.getByRole("button", {
+        name: futureDateLabel,
+        exact: true,
+      }),
+    )
     .click();
   await scheduleDialog
     .getByRole("button", { name: "10:30", exact: true })
