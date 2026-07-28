@@ -110,6 +110,34 @@ test("marketing index has no horizontal overflow", async ({ page }) => {
   expect(overflow).toBeLessThanOrEqual(1);
 });
 
+test("marketing navigation uses the shared responsive menu patterns", async ({
+  page,
+}) => {
+  await page.goto("/");
+
+  if ((page.viewportSize()?.width ?? 0) >= 1024) {
+    const navigation = page.getByRole("navigation", {
+      name: "Primary navigation",
+    });
+    await expect(navigation).toHaveAttribute("data-slot", "navigation-menu");
+    await navigation.getByRole("button", { name: "Resources" }).click();
+    await expect(
+      navigation.getByRole("link", { name: "Changelog", exact: true }),
+    ).toHaveAttribute("href", "/changelog");
+    await page.keyboard.press("Escape");
+    return;
+  }
+
+  await page.getByRole("button", { name: "Open navigation" }).click();
+  const navigation = page.getByRole("navigation", {
+    name: "Mobile navigation",
+  });
+  await expect(navigation).toBeVisible();
+  await expect(
+    navigation.getByRole("link", { name: "Changelog", exact: true }),
+  ).toHaveAttribute("href", "/changelog");
+});
+
 test("marketing SEO routes expose the current public index", async ({
   request,
 }) => {
@@ -230,7 +258,11 @@ test("public changelog is generated from the canonical release record", async ({
   await page.goto("/changelog");
 
   await expect(
-    page.getByRole("heading", { name: "Unreleased", exact: true }),
+    page
+      .getByRole("heading", {
+        name: /^(?:Unreleased|\d+\.\d+\.\d+)$/,
+      })
+      .first(),
   ).toBeVisible();
   await expect(
     page.getByText(

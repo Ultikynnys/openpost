@@ -46,7 +46,7 @@ FORM: Operate surface extending the established Studio start screen; no marketin
 	let recentDesigns = $state.raw<LocalStudioDesign[]>([]);
 	let customWidth = $state(1080);
 	let customHeight = $state(1080);
-	let fileInput = $state<HTMLInputElement>();
+	let fileInput = $state<HTMLInputElement | null>(null);
 	let pendingDelete = $state<LocalStudioDesign | null>(null);
 	let deleteDialogOpen = $state(false);
 

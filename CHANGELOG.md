@@ -4,6 +4,15 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- Rebuilt the marketing desktop navigation with the shared Shadcn-svelte Navigation Menu while keeping the compact mobile navigation.
+
+### Fixed
+
+- Kept the public Studio start page mountable by initializing its shared file-input reference with the component's nullable binding contract.
+- Made the public changelog browser check accept both active Unreleased entries and versioned sections after release stamping.
+
 ## [1.42.0] - 2026-07-28
 
 ### Added

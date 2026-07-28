@@ -207,6 +207,8 @@ The base corner is gently rounded at 12px. Controls usually resolve to the 10px 
 
 Desktop sidebars, public top navigation, and mobile bottom navigation share compact labels, clear active state, and warm tonal hover feedback. Active app navigation favors foreground contrast or Workshop Orange; public navigation stays quiet until hover. Mobile labels remain readable without horizontal overflow, and menus must render above drawers and sheets.
 
+The marketing desktop header uses the shared Shadcn-svelte `NavigationMenu` for direct links and grouped resources. Its mobile header stays a compact disclosure menu with 44px targets rather than forcing desktop flyouts into a phone viewport.
+
 ### Shared Page Chrome
 
 Authenticated routes use `PageContainer`, `PageHeader`, `SectionHeader`, and content-shaped `PageLoading` recipes. Empty, notice, toast, error, and destructive-confirmation states use the shared primitives so hierarchy and feedback do not drift between routes.
