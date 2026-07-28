@@ -442,7 +442,7 @@
 								{#if renamingID === layer.id}
 									<Input
 										{@attach focusInput}
-										class="h-7 min-w-0 flex-1 px-1.5"
+										class="h-7 min-w-0 flex-1 bg-background px-1.5 text-sm md:text-sm"
 										bind:value={renameDraft}
 										maxlength={120}
 										onclick={(event) => event.stopPropagation()}

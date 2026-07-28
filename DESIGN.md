@@ -202,6 +202,7 @@ The base corner is gently rounded at 12px. Controls usually resolve to the 10px 
 - **Focus:** Semantic border plus a visible 2px ring.
 - **Error / Disabled:** Error uses Failure Red border and ring; disabled controls retain legible text while clearly reducing emphasis.
 - **Implementation:** Use the shared Shadcn-svelte `Input`, `Textarea`, `Select`/`AppSelect`, `Checkbox`, `RadioGroup`, `Slider`, and related primitives in the app, public Studio, and marketing tools. Native controls belong only inside those shared implementations.
+- **Embedded editors:** When a parent surface owns the complete boundary, the shared `Textarea` may use `unstyled` so default field chrome does not leak into the editor. The text-and-thread composer and media alt-text overlay are intentional examples; ordinary forms keep the default treatment.
 
 ### Navigation
 

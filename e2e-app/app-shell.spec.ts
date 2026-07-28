@@ -150,6 +150,57 @@ test("first autosave establishes the draft URL and keeps draft actions in one co
   ).toHaveCount(1);
 });
 
+test("text-and-thread editor keeps its canvas-owned field treatment", async ({
+  page,
+  request,
+}) => {
+  const unique = Date.now().toString(36);
+  const email = `composer-chrome-${unique}@example.com`;
+
+  const auth = await registerUser(request, email);
+  await createWorkspace(request, auth.token, "Composer Chrome E2E");
+  await authenticatePage(page, auth.token);
+  await page.goto("/");
+
+  for (const mode of ["light", "dark"] as const) {
+    await page.evaluate((nextMode) => {
+      localStorage.setItem("mode-watcher-mode", nextMode);
+    }, mode);
+    await page.reload();
+
+    const editor = page.getByLabel("Post text").first();
+    await expect(editor).toBeVisible();
+    await expect(page.locator("html")).toHaveClass(
+      mode === "dark" ? /dark/ : /^(?!.*\bdark\b)/,
+    );
+
+    const restingChrome = await editor.evaluate((element) => {
+      const style = getComputedStyle(element);
+      return {
+        backgroundColor: style.backgroundColor,
+        borderRadius: style.borderRadius,
+        borderWidths: [
+          style.borderTopWidth,
+          style.borderRightWidth,
+          style.borderBottomWidth,
+          style.borderLeftWidth,
+        ],
+      };
+    });
+    expect(restingChrome).toEqual({
+      backgroundColor: "rgba(0, 0, 0, 0)",
+      borderRadius: "0px",
+      borderWidths: ["0px", "0px", "0px", "0px"],
+    });
+
+    await editor.focus();
+    const focusedShadow = await editor.evaluate(
+      (element) => getComputedStyle(element).boxShadow,
+    );
+    expect(focusedShadow).not.toMatch(/\b[1-9]\d*(?:\.\d+)?px\b/);
+  }
+});
+
 test("collapsed sidebar keeps the OpenPost mark without overflowing text", async ({
   page,
   request,

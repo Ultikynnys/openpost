@@ -3345,6 +3345,7 @@
 											<Textarea
 												id="post-textarea-{i}"
 												aria-label={m.compose_post_text()}
+												unstyled
 												{@attach textareaAttachment(i)}
 												value={getEditorContentForPost(post)}
 												oninput={(e) => {
@@ -3513,6 +3514,7 @@
 															>
 																<Textarea
 																	value={mediaAltTexts.get(mediaId) || ''}
+																	unstyled
 																	oninput={(e) =>
 																		setMediaAltText(
 																			mediaId,

@@ -4,6 +4,12 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [1.42.3] - 2026-07-28
+
+### Fixed
+
+- Restored the background-blending text-and-thread composer and media alt-text editors without abandoning the shared Textarea primitive, and preserved Studio's compact inline layer rename treatment.
+
 ## [1.42.2] - 2026-07-28
 
 ### Fixed
