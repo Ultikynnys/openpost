@@ -7,9 +7,11 @@ RUN corepack enable && corepack prepare pnpm@11.7.0 --activate
 # Copy workspace manifests first for dependency caching.
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
 COPY frontend/package.json ./frontend/
+COPY packages/social-preview/package.json ./packages/social-preview/
 RUN pnpm install --frozen-lockfile --filter @openpost/web...
 
 COPY frontend/ ./frontend/
+COPY packages/social-preview/ ./packages/social-preview/
 COPY assets/ ./assets/
 COPY scripts/ ./scripts/
 RUN mkdir -p backend/cmd/openpost/public && pnpm --filter @openpost/web build
