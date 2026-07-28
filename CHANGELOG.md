@@ -4,6 +4,8 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [1.43.0] - 2026-07-28
+
 ### Added
 
 - Added an instance-admin overview with 30-day registration and publishing trends plus a paginated user directory.
