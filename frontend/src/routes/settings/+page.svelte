@@ -492,7 +492,6 @@
 		{ id: 'general', label: m.settings_general() },
 		{ id: 'brand', label: m.media_brand() },
 		{ id: 'schedule', label: m.settings_schedule() },
-		{ id: 'media', label: m.settings_media() },
 		{ id: 'members', label: m.settings_members() },
 		{ id: 'sso', label: m.settings_sso() },
 		{ id: 'plan', label: m.settings_plan() },
@@ -540,7 +539,6 @@
 		if (activeSettingsTab === 'plan') return m.settings_plan();
 		if (activeSettingsTab === 'schedule') return m.settings_schedule();
 		if (activeSettingsTab === 'brand') return m.media_brand();
-		if (activeSettingsTab === 'media') return m.settings_media();
 		return m.settings_general();
 	});
 	const activeSettingsDescription = $derived.by(() => {
@@ -553,7 +551,6 @@
 		if (activeSettingsTab === 'plan') return m.settings_plan_description();
 		if (activeSettingsTab === 'schedule') return m.settings_schedule_description();
 		if (activeSettingsTab === 'brand') return m.media_brand_description();
-		if (activeSettingsTab === 'media') return m.settings_media_description();
 		return m.settings_general_description({
 			workspace: workspaceCtx.currentWorkspace?.name || m.settings_workspace()
 		});
@@ -587,7 +584,7 @@
 		if (value === 'team') return 'members';
 		if (value === 'tokens' || value === 'account')
 			return value === 'tokens' ? 'developer' : 'profile';
-		if (value === 'workspace' || value === 'social-accounts') return 'general';
+		if (value === 'workspace' || value === 'social-accounts' || value === 'media') return 'general';
 		return value && isSettingsTab(value) ? value : 'general';
 	}
 
@@ -3177,7 +3174,7 @@
 
 				<section
 					id="media-cleanup"
-					class:hidden={activeSettingsTab !== 'media'}
+					class:hidden={activeSettingsTab !== 'general'}
 					class="scroll-mt-24 space-y-4"
 				>
 					<SectionHeader title={m.settings_media_cleanup()} icon={ImageIcon} class="mb-4" />
@@ -3580,7 +3577,7 @@
 					</div>
 				</section>
 
-				{#if ['general', 'media', 'schedule'].includes(activeSettingsTab)}
+				{#if ['general', 'schedule'].includes(activeSettingsTab)}
 					<SettingsFormFooter
 						label={m.settings_save_changes()}
 						savingLabel={m.settings_save_changes()}

@@ -1622,7 +1622,7 @@
 	"settings_plan_description": "Current plan, usage, and billing.",
 	"settings_schedule_description": "Reusable publishing times and scheduling defaults.",
 	"settings_media_description": "Control how long unused media is kept.",
-	"settings_general_description": "Workspace identity, timezone, and calendar preferences for {workspace}.",
+	"settings_general_description": "Identity, date and time, and media retention settings for {workspace}.",
 	"settings_loading_workspace": "Loading workspace…",
 	"settings_workspace_load_failed": "Could not load workspace settings.",
 	"settings_display_name": "Display name",

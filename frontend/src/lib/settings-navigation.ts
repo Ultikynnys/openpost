@@ -6,7 +6,6 @@ export const settingsTabIDs = [
 	'general',
 	'brand',
 	'schedule',
-	'media',
 	'members',
 	'sso',
 	'plan'
