@@ -71,6 +71,8 @@
       cd "${config.git.root}"
       pnpm run check:docs &&
       pnpm run check:release-version &&
+      pnpm run check:changelog &&
+      pnpm run check:ui-consistency &&
       frontend-check &&
       pnpm --filter @openpost/site check &&
       pnpm run check:contracts

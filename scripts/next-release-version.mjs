@@ -50,6 +50,11 @@ export function classifyCommitMessages(messages) {
   return hasFeature ? "minor" : "patch";
 }
 
+export function includePendingCommitMessage(messages, pendingMessage) {
+  const normalized = String(pendingMessage ?? "").trim();
+  return normalized ? [...messages, normalized] : [...messages];
+}
+
 export function incrementVersion(currentVersion, bump) {
   const [major, minor, patch] = parseStableVersion(currentVersion);
   switch (bump) {
@@ -129,7 +134,10 @@ function main() {
   }
 
   const range = process.argv[3] || `${currentVersion}..HEAD`;
-  const messages = gitMessages(range);
+  const messages = includePendingCommitMessage(
+    gitMessages(range),
+    process.env.PENDING_COMMIT_MESSAGE,
+  );
   const tag = resolveNextTag(currentVersion, messages, {
     exactVersion: process.env.RELEASE_VERSION,
     bump: process.env.RELEASE_BUMP,

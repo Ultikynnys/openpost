@@ -3556,15 +3556,13 @@
 							</div>
 							<div class="space-y-2">
 								<label class="text-sm font-medium" for="interval">{m.settings_interval()}</label>
-								<input
+								<Input
 									id="interval"
 									type="text"
 									value={intervalInput}
 									oninput={(e) => handleIntervalChange((e.target as HTMLInputElement).value)}
 									placeholder={m.settings_interval_placeholder()}
-									class="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm {intervalError
-										? 'border-destructive'
-										: ''}"
+									class="h-9 {intervalError ? 'border-destructive' : ''}"
 									aria-invalid={Boolean(intervalError)}
 									aria-describedby={intervalError ? 'interval-error' : undefined}
 								/>

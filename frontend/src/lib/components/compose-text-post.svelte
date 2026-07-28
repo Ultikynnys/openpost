@@ -16,6 +16,7 @@
 	import { workspaceCtx } from '$lib/stores/workspace.svelte';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
+	import { Textarea } from '$lib/components/ui/textarea';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
 	import * as Tooltip from '$lib/components/ui/tooltip';
 	import ComposerAccountMenu from './composer-account-menu.svelte';
@@ -3341,7 +3342,7 @@
 
 									<div class="min-w-0 flex-1">
 										<div class="relative">
-											<textarea
+											<Textarea
 												id="post-textarea-{i}"
 												aria-label={m.compose_post_text()}
 												{@attach textareaAttachment(i)}
@@ -3366,7 +3367,7 @@
 												style="min-height: {i === 0 ? '120px' : '56px'};"
 												disabled={isSubmitting ||
 													(!!activeVariantAccountId && !activeVariantIsUnsynced)}
-											></textarea>
+											/>
 
 											{#if activeVariantAccountId && activePostIndex === i && !activeVariantIsUnsynced}
 												<div class="absolute inset-x-0 bottom-0 px-1 pb-2">
@@ -3510,7 +3511,7 @@
 															<div
 																class="absolute inset-x-0 bottom-0 bg-black/70 p-2 backdrop-blur-sm"
 															>
-																<textarea
+																<Textarea
 																	value={mediaAltTexts.get(mediaId) || ''}
 																	oninput={(e) =>
 																		setMediaAltText(
@@ -3521,7 +3522,7 @@
 																	rows={2}
 																	class="w-full resize-none rounded bg-white/10 px-2 py-2 text-base text-white placeholder:text-white/60 focus:ring-2 focus:ring-white/70 focus:outline-none md:py-1 md:text-xs"
 																	aria-label={m.media_alt_text()}
-																></textarea>
+																/>
 																<div class="mt-1 flex justify-end gap-1">
 																	<button
 																		type="button"

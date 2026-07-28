@@ -4,6 +4,7 @@
 	import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 	import { useStudioEditor } from '../editor.svelte';
 	import { Button } from '$lib/components/ui/button';
+	import { Input } from '$lib/components/ui/input';
 	import EyeIcon from 'lucide-svelte/icons/eye';
 	import EyeOffIcon from 'lucide-svelte/icons/eye-off';
 	import LockIcon from 'lucide-svelte/icons/lock';
@@ -439,11 +440,11 @@
 								</button>
 								<Icon class="size-3.5 shrink-0" />
 								{#if renamingID === layer.id}
-									<input
+									<Input
 										{@attach focusInput}
-										class="h-7 min-w-0 flex-1 rounded border border-input bg-background px-1.5 text-sm outline-none focus:ring-2 focus:ring-ring"
+										class="h-7 min-w-0 flex-1 px-1.5"
 										bind:value={renameDraft}
-										maxlength="120"
+										maxlength={120}
 										onclick={(event) => event.stopPropagation()}
 										onblur={() => commitRename(layer)}
 										onkeydown={(event) => {

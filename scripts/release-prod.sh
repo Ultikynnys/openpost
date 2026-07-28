@@ -7,9 +7,9 @@ Usage:
   pnpm release:prod "feat: describe shipped change"
   scripts/release-prod.sh "fix: describe shipped change"
 
-Stages all OpenPost changes, commits them if needed, pushes main, creates the
-next SemVer tag from Conventional Commits, and waits for GitHub Build and
-Release to deploy rgo-vps.
+Stages all OpenPost changes, stamps CHANGELOG.md from its Unreleased section,
+commits when needed, pushes main, creates the next SemVer tag from Conventional
+Commits, and waits for GitHub Build and Release to deploy rgo-vps.
 
 Environment:
   COMMIT_MESSAGE   Commit message when no positional message is passed.
@@ -63,25 +63,30 @@ repo="$(gh repo view --json nameWithOwner --jq .nameWithOwner)"
 latest_tag="$(git tag --list 'v*' --sort=-v:refname | head -n 1)"
 [[ -n "$latest_tag" ]] || die "no v* tags found"
 
-if ! git diff --quiet || ! git diff --cached --quiet || [[ -n "$(git ls-files --others --exclude-standard)" ]]; then
-  [[ -n "$commit_message" ]] || die "uncommitted changes need a commit message"
-  run git add -A
-  run git commit -m "$commit_message"
-else
-  printf 'release-prod: no uncommitted OpenPost changes to commit\n'
-fi
-
 head_tag="$(git tag --points-at HEAD --list 'v*' --sort=-v:refname | head -n 1)"
 create_tag=false
-if [[ -n "$head_tag" ]]; then
+if ! git diff --quiet || ! git diff --cached --quiet || [[ -n "$(git ls-files --others --exclude-standard)" ]]; then
+  [[ -n "$commit_message" ]] || die "uncommitted changes need a commit message"
+  tag="$(
+    PENDING_COMMIT_MESSAGE="$commit_message" \
+      node scripts/next-release-version.mjs "$latest_tag"
+  )"
+  run node scripts/prepare-release-changelog.mjs "$tag"
+  run git add -A
+  run git commit -m "$commit_message"
+  create_tag=true
+elif [[ -n "$head_tag" ]]; then
   tag="$head_tag"
   printf 'release-prod: HEAD is already tagged as %s\n' "$tag"
 else
-  latest_tag="$(git tag --list 'v*' --sort=-v:refname | head -n 1)"
   tag="$(node scripts/next-release-version.mjs "$latest_tag")"
-  printf 'release-prod: %s -> %s\n' "$latest_tag" "$tag"
+  run node scripts/prepare-release-changelog.mjs "$tag"
+  run git add CHANGELOG.md
+  run git commit -m "docs: prepare ${tag} changelog"
   create_tag=true
 fi
+
+printf 'release-prod: %s -> %s\n' "$latest_tag" "$tag"
 
 run git push origin "$branch"
 

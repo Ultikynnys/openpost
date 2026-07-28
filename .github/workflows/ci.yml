@@ -356,6 +356,8 @@ jobs:
           pnpm install --frozen-lockfile
           pnpm run check:docs
           pnpm run check:release-version
+          pnpm run check:changelog
+          pnpm run check:ui-consistency
           pnpm run check:contracts
           pnpm exec playwright install --with-deps chromium
           pnpm --filter @openpost/web test

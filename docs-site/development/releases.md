@@ -20,7 +20,9 @@ devenv shell -- verify
 pnpm release:prod "fix: describe the shipped change"
 ```
 
-The release script stages the complete worktree, creates a commit when needed, inspects every commit since the latest tag, and creates the highest required SemVer bump. It then pushes `main` and the tag, waits for the `Build and Release` workflow, confirms the GitHub release, and checks public readiness.
+The release script stages the complete worktree, derives the next version from every commit since the latest tag plus the pending release commit, and promotes `CHANGELOG.md` from `Unreleased` into that dated version. The tagged workflow uses the same section for GitHub release notes. The script then pushes `main` and the tag, waits for the `Build and Release` workflow, confirms the GitHub release, and checks public readiness.
+
+`CHANGELOG.md` is the release-history source of truth. Add notable work to `Unreleased` while implementing it. Do not edit the public marketing changelog or GitHub release notes separately; both are generated from the canonical file. `pnpm check:changelog` validates the structure before release.
 
 Use `RELEASE_BUMP=minor|major` only to raise the inferred impact for an intentional release boundary. `RELEASE_VERSION=vX.Y.Z` is reserved for an explicit version-line correction or migration. Overrides cannot lower the version required by the commit history.
 

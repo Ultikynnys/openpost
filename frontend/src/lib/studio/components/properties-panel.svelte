@@ -3,6 +3,7 @@
 	import { defaultImageAdjustments } from '../document';
 	import { defaultTextCurve } from '../effects';
 	import { Input } from '$lib/components/ui/input';
+	import { Textarea } from '$lib/components/ui/textarea';
 	import { Button } from '$lib/components/ui/button';
 	import { Slider } from '$lib/components/ui/slider';
 	import AppSelect from '$lib/components/app-select.svelte';
@@ -408,8 +409,8 @@
 						<h3 class="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
 							{m.studio_text()}
 						</h3>
-						<textarea
-							class="min-h-24 w-full resize-y rounded-md border border-input bg-input/20 px-3 py-2 text-sm"
+						<Textarea
+							class="min-h-24"
 							value={layer.text.text}
 							disabled={!editor.canEdit}
 							oninput={(event) =>
@@ -418,7 +419,7 @@
 									{ text: { ...layer.text!, text: event.currentTarget.value } },
 									`text:${layer.id}`
 								)}
-						></textarea>
+						/>
 						<label class="grid gap-1 text-xs">
 							<span>{m.studio_font_family()}</span>
 							<StudioFontPicker

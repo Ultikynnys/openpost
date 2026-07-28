@@ -5,6 +5,7 @@
 	import { Checkbox } from '$lib/components/ui/checkbox';
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
+	import AppSelect from '$lib/components/app-select.svelte';
 	import InlineNotice from '$lib/components/inline-notice.svelte';
 	import PageLoading from '$lib/components/page-loading.svelte';
 	import SectionHeader from '$lib/components/section-header.svelte';
@@ -431,27 +432,33 @@
 				<div class="grid gap-4 sm:grid-cols-2">
 					<div class="space-y-2">
 						<Label for="sso-mode">{m.settings_sso_mode()}</Label>
-						<select
+						<AppSelect
 							id="sso-mode"
-							bind:value={policyMode}
-							class="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-						>
-							<option value="disabled">{m.settings_sso_mode_disabled()}</option>
-							<option value="optional">{m.settings_sso_mode_optional()}</option>
-							<option value="required">{m.settings_sso_mode_required()}</option>
-						</select>
+							value={policyMode}
+							options={[
+								{ value: 'disabled', label: m.settings_sso_mode_disabled() },
+								{ value: 'optional', label: m.settings_sso_mode_optional() },
+								{ value: 'required', label: m.settings_sso_mode_required() }
+							]}
+							class="w-full"
+							ariaLabel={m.settings_sso_mode()}
+							onValueChange={(value) => (policyMode = value as typeof policyMode)}
+						/>
 					</div>
 					<div class="space-y-2">
 						<Label for="sso-token-mode">{m.settings_sso_token_mode()}</Label>
-						<select
+						<AppSelect
 							id="sso-token-mode"
-							bind:value={apiTokenMode}
-							class="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-						>
-							<option value="allow">{m.settings_sso_tokens_allow()}</option>
-							<option value="scoped">{m.settings_sso_tokens_scoped()}</option>
-							<option value="deny">{m.settings_sso_tokens_deny()}</option>
-						</select>
+							value={apiTokenMode}
+							options={[
+								{ value: 'allow', label: m.settings_sso_tokens_allow() },
+								{ value: 'scoped', label: m.settings_sso_tokens_scoped() },
+								{ value: 'deny', label: m.settings_sso_tokens_deny() }
+							]}
+							class="w-full"
+							ariaLabel={m.settings_sso_token_mode()}
+							onValueChange={(value) => (apiTokenMode = value as typeof apiTokenMode)}
+						/>
 					</div>
 					<div class="space-y-2">
 						<Label for="sso-assurance-hours">{m.settings_sso_assurance_hours()}</Label>
@@ -521,16 +528,17 @@
 				</div>
 				<div class="space-y-2">
 					<Label for="sso-domain-provider">{m.settings_sso_provider()}</Label>
-					<select
+					<AppSelect
 						id="sso-domain-provider"
 						bind:value={domainProviderID}
-						class="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-						required
-					>
-						{#each providers as provider (provider.id)}
-							<option value={provider.id}>{provider.name}</option>
-						{/each}
-					</select>
+						options={providers.map((provider) => ({
+							value: provider.id,
+							label: provider.name
+						}))}
+						class="w-full"
+						ariaLabel={m.settings_sso_provider()}
+						disabled={providers.length === 0}
+					/>
 				</div>
 				<div class="flex items-end">
 					<Button type="submit" disabled={busy === 'domain' || providers.length === 0}>

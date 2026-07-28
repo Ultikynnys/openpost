@@ -232,7 +232,7 @@
 					/>
 					{#if activeTab === 'collections'}
 						<label class="flex items-center gap-2 text-sm">
-							<input type="color" bind:value={color} class="h-10 w-12 rounded border p-1" />
+							<Input type="color" bind:value={color} class="h-10 w-12 p-1" />
 							<span>{color}</span>
 						</label>
 					{/if}

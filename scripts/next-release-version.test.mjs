@@ -5,6 +5,7 @@ import {
   classifyCommitMessages,
   compareVersions,
   incrementVersion,
+  includePendingCommitMessage,
   parseStableVersion,
   resolveNextTag,
 } from "./next-release-version.mjs";
@@ -44,6 +45,16 @@ test("uses the highest conventional commit impact", () => {
     ]),
     "major",
   );
+});
+
+test("includes a pending release commit without changing existing messages", () => {
+  const existing = ["fix: repair upload"];
+  assert.deepEqual(
+    includePendingCommitMessage(existing, "feat: add publishing mode"),
+    ["fix: repair upload", "feat: add publishing mode"],
+  );
+  assert.deepEqual(existing, ["fix: repair upload"]);
+  assert.deepEqual(includePendingCommitMessage(existing, "  "), existing);
 });
 
 test("increments and resets lower version components", () => {

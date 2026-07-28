@@ -83,6 +83,8 @@ OpenPost runs as a production self-hosted product and managed service. This page
 - Keep `docs-site/` technical and task-oriented.
 - Keep pricing, platform, comparison, security, open-source, changelog, and tools pages crawlable on `openpost.social`. The public sitemap now covers each current landing page, platform guide, comparison, and tool.
 - Keep the free tools useful without an account. The current set covers social image design, character counting, platform previews, thread splitting, handle checks, LinkedIn formatting, and timezone-aware posting plans, with focused browser checks.
+- Keep app, public Studio, and marketing form controls on the shared Shadcn-svelte primitives so focus, touch targets, dark mode, and interaction states do not drift.
+- Keep `CHANGELOG.md` authoritative. The public changelog and tagged GitHub release notes are generated from it.
 - Keep docs on install, providers, configuration, CLI, operations, and development.
 
 ### 8. Verification

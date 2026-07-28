@@ -19,7 +19,8 @@ Use [Conventional Commits](https://www.conventionalcommits.org/) because release
 Before opening a pull request:
 
 - Run the smallest relevant checks while working, then `devenv shell -- verify`.
-- Update `CHANGELOG.md` and public docs when behavior changes.
+- Add notable behavior, migration, and operator changes to the canonical `CHANGELOG.md` under `Unreleased`; the public changelog and release notes are generated from it.
+- Reuse the shared Shadcn-svelte form controls across app and marketing UI. `pnpm check:ui-consistency` rejects visible native form controls outside those primitives.
 - Include migration notes for database changes and screenshots for visible UI changes.
 - Never commit credentials, provider tokens, local dotenv files, or production data.
 

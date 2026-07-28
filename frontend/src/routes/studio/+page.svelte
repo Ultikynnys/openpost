@@ -276,8 +276,8 @@ FORM: Operate surface extending the established Studio start screen; no marketin
 					{m.studio_public_open_image()}
 				</Button>
 				<p class="text-sm text-muted-foreground">{m.studio_public_no_account()}</p>
-				<input
-					bind:this={fileInput}
+				<Input
+					bind:ref={fileInput}
 					type="file"
 					accept="image/png,image/jpeg,image/webp"
 					class="sr-only"

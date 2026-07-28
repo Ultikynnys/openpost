@@ -35,7 +35,7 @@
 	let replaceMode = $state(false);
 	let loadedWorkspaceID = '';
 	let dragPreview: HTMLElement | null = null;
-	let guestFileInput: HTMLInputElement;
+	let guestFileInput = $state<HTMLInputElement | null>(null);
 
 	$effect(() => {
 		const scopeID = guestMode ? editor.id : editor.workspaceID;
@@ -260,8 +260,8 @@
 				<Tooltip.Content>{m.studio_search_media()}</Tooltip.Content>
 			</Tooltip.Root>
 		</form>
-		<input
-			bind:this={guestFileInput}
+		<Input
+			bind:ref={guestFileInput}
 			type="file"
 			accept="image/png,image/jpeg,image/webp"
 			multiple

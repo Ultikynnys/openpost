@@ -4,6 +4,32 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [1.42.0] - 2026-07-28
+
+### Added
+
+- Added repository checks that keep visible Svelte form controls on the shared Shadcn-svelte primitives and validate the canonical changelog structure in local, CI, and release gates.
+
+### Changed
+
+- Standardized visible inputs, text areas, selects, checkboxes, and sliders across the application, public Studio, marketing pages, and every free tool on the shared Shadcn-svelte control system.
+- Made `CHANGELOG.md` the single source for the public changelog and GitHub release notes, with the production release script promoting `Unreleased` into the new version automatically.
+
+## [1.41.3] - 2026-07-28
+
+### Changed
+
+- Replaced separate YouTube category and playlist search fields with searchable comboboxes, and moved the Studio desktop menus onto the shared shadcn-svelte Menubar.
+
+### Fixed
+
+- Resolved stale LinkedIn rendition profiles from the current media shape so image posts no longer inherit a text-only zero-media limit or reject supported settings, and let Studio object selection begin on the pasteboard.
+- Tightened the desktop schedule dialog around its two-month calendar and made the time picker fill the calendar height with the shared styled scroll area.
+
+## [1.28.0 to 1.41.2] - 2026-07-28
+
+This section consolidates the changes shipped between `v1.28.0` and `v1.41.2` before release-time changelog stamping was automated. GitHub releases remain the per-tag record for that historical range.
+
 ### Added
 
 - Added destination-aware post previews for all supported social networks, including a live, private preview window from each composer account menu and shared preview rendering in the free public tool.
@@ -31,7 +57,6 @@ All notable changes to this project are documented in this file.
 
 ### Changed
 
-- Replaced separate YouTube category and playlist search fields with searchable comboboxes, and moved the Studio desktop menus onto the shared shadcn-svelte Menubar.
 - Rebuilt the marketing site around a shorter product-led homepage, task-first free tools, role-based pricing, clearer platform and comparison guides, and responsive tables that become readable phone layouts.
 - Reused one transient saving and saved indicator across Studio and every composer.
 - Made desktop scheduling show two adjacent months, moved engagement collection issues into a provider- and post-specific status menu, and reduced analytics native-post actions to compact external-link controls.
@@ -61,8 +86,6 @@ All notable changes to this project are documented in this file.
 
 ### Fixed
 
-- Resolved stale LinkedIn rendition profiles from the current media shape so image posts no longer inherit a text-only zero-media limit or reject supported settings, and let Studio object selection begin on the pasteboard.
-- Tightened the desktop schedule dialog around its two-month calendar and made the time picker fill the calendar height with the shared styled scroll area.
 - Kept context-menu layer renaming open long enough to edit and submit the new name.
 - Restored YouTube category and playlist choices in destination settings, populated native-post links from stored provider IDs and canonical permalinks, loaded persisted TTF brand fonts under their friendly names, and removed the stray Activity tab scrollbar.
 - Kept the Studio canvas point beneath the mouse or pinch midpoint fixed while zooming, let pixel selections start or end beyond the image edge, shortened the rounded-shape label, and tightened desktop tool menus.

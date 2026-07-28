@@ -4,6 +4,7 @@
 	import * as Dialog from '$lib/components/ui/dialog';
 	import { Button } from '$lib/components/ui/button';
 	import { Checkbox } from '$lib/components/ui/checkbox';
+	import { Textarea } from '$lib/components/ui/textarea';
 	import * as RadioGroup from '$lib/components/ui/radio-group';
 	import InlineNotice from '$lib/components/inline-notice.svelte';
 	import { client } from '$lib/api/client';
@@ -317,13 +318,13 @@
 
 				<label class="block space-y-2">
 					<span class="text-sm font-medium">{m.feedback_message()}</span>
-					<textarea
-						class="min-h-28 w-full resize-y rounded-md border bg-background px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+					<Textarea
+						class="min-h-28"
 						bind:value={message}
 						maxlength={config.max_message_characters}
 						placeholder={m.feedback_message_placeholder()}
 						required
-					></textarea>
+					/>
 				</label>
 
 				<div class="space-y-3 rounded-md border p-3">

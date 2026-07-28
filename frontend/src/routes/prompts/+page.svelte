@@ -4,6 +4,7 @@
 	import { workspaceCtx } from '$lib/stores/workspace.svelte';
 	import { ui } from '$lib/stores/ui.svelte';
 	import { Button } from '$lib/components/ui/button';
+	import { Textarea } from '$lib/components/ui/textarea';
 	import * as Select from '$lib/components/ui/select';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import PageContainer from '$lib/components/page-container.svelte';
@@ -351,13 +352,12 @@
 					<div class="space-y-4 py-4">
 						<div class="space-y-2">
 							<label class="text-sm font-medium" for="prompt-text">{m.prompts_text()}</label>
-							<textarea
+							<Textarea
 								id="prompt-text"
 								bind:value={newPromptText}
 								placeholder={m.prompts_text_placeholder()}
 								rows={3}
-								class="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm"
-							></textarea>
+							/>
 						</div>
 						<div class="space-y-2">
 							<label class="text-sm font-medium" for="prompt-category">{m.prompts_category()}</label

@@ -171,9 +171,9 @@ test("free marketing tools produce useful output", async ({ page }) => {
 
   await page.goto("/tools/post-preview-generator");
   await page.waitForLoadState("networkidle");
-  await page
-    .getByRole("combobox", { name: "Platform", exact: true })
-    .selectOption({ value: "mastodon" });
+  await page.getByRole("button", { name: "Platform", exact: true }).click();
+  await page.getByRole("option", { name: "Mastodon", exact: true }).click();
+  await expect(page.locator("select")).toHaveCount(0);
   await page
     .locator("summary")
     .filter({ hasText: "Add identity, poll, link, or media" })
@@ -188,6 +188,8 @@ test("free marketing tools produce useful output", async ({ page }) => {
   await page
     .getByRole("textbox", { name: "Text to split into a thread" })
     .fill("x".repeat(300));
+  await page.getByRole("button", { name: "Destination" }).click();
+  await page.getByRole("option", { name: /Bluesky/ }).click();
   await expect(page.getByRole("button", { name: "Copy part 2" })).toBeVisible();
 
   await page.goto("/tools/fediverse-handle-checker");
@@ -205,6 +207,9 @@ test("free marketing tools produce useful output", async ({ page }) => {
   await page
     .getByRole("textbox", { name: "LinkedIn post draft" })
     .fill("First sentence. Second sentence.");
+  await page.getByRole("button", { name: "Paragraph length" }).click();
+  await page.getByRole("option", { name: "One sentence" }).click();
+  await page.getByRole("checkbox", { name: "Normalize list bullets" }).click();
   await expect(
     page.getByRole("textbox", { name: "Formatted LinkedIn post" }),
   ).toHaveValue(/First sentence/);
@@ -217,4 +222,25 @@ test("free marketing tools produce useful output", async ({ page }) => {
       .getByRole("region", { name: "Your local schedule" })
       .getByRole("listitem"),
   ).toHaveCount(2);
+});
+
+test("public changelog is generated from the canonical release record", async ({
+  page,
+}) => {
+  await page.goto("/changelog");
+
+  await expect(
+    page.getByRole("heading", { name: "Unreleased", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText(
+      /Made `CHANGELOG\.md` the single source for the public changelog/,
+    ),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Full changelog" }),
+  ).toHaveAttribute(
+    "href",
+    "https://github.com/rodrgds/openpost/blob/main/CHANGELOG.md",
+  );
 });

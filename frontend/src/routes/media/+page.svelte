@@ -21,6 +21,8 @@
 	import { clampMediaPage } from '$lib/media-pagination';
 	import { workspaceCtx } from '$lib/stores/workspace.svelte';
 	import { Button } from '$lib/components/ui/button';
+	import { Input } from '$lib/components/ui/input';
+	import { Textarea } from '$lib/components/ui/textarea';
 	import * as Select from '$lib/components/ui/select';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
@@ -1197,8 +1199,8 @@
 			<SearchIcon
 				class="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
 			/>
-			<input
-				class="h-11 w-full rounded-lg border border-input bg-background pr-3 pl-9 text-sm"
+			<Input
+				class="h-11 pr-3 pl-9"
 				bind:value={search}
 				placeholder={m.media_search_filename_alt()}
 			/>
@@ -1791,59 +1793,31 @@
 				<div class="grid grid-cols-2 gap-2">
 					<label class="grid gap-1 text-xs font-medium">
 						<span>{m.media_min_width()}</span>
-						<input
-							class="h-11 min-w-0 rounded-lg border border-input bg-background px-2 text-sm"
-							type="number"
-							min="0"
-							bind:value={minWidth}
-						/>
+						<Input class="h-11 min-w-0 px-2" type="number" min="0" bind:value={minWidth} />
 					</label>
 					<label class="grid gap-1 text-xs font-medium">
 						<span>{m.media_min_height()}</span>
-						<input
-							class="h-11 min-w-0 rounded-lg border border-input bg-background px-2 text-sm"
-							type="number"
-							min="0"
-							bind:value={minHeight}
-						/>
+						<Input class="h-11 min-w-0 px-2" type="number" min="0" bind:value={minHeight} />
 					</label>
 				</div>
 				<div class="grid grid-cols-2 gap-2">
 					<label class="grid gap-1 text-xs font-medium">
 						<span>{m.media_max_width()}</span>
-						<input
-							class="h-11 min-w-0 rounded-lg border border-input bg-background px-2 text-sm"
-							type="number"
-							min="0"
-							bind:value={maxWidth}
-						/>
+						<Input class="h-11 min-w-0 px-2" type="number" min="0" bind:value={maxWidth} />
 					</label>
 					<label class="grid gap-1 text-xs font-medium">
 						<span>{m.media_max_height()}</span>
-						<input
-							class="h-11 min-w-0 rounded-lg border border-input bg-background px-2 text-sm"
-							type="number"
-							min="0"
-							bind:value={maxHeight}
-						/>
+						<Input class="h-11 min-w-0 px-2" type="number" min="0" bind:value={maxHeight} />
 					</label>
 				</div>
 				<div class="grid grid-cols-2 gap-2 sm:col-span-2">
 					<label class="grid gap-1 text-xs font-medium">
 						<span>{m.media_from()}</span>
-						<input
-							class="h-11 min-w-0 rounded-lg border border-input bg-background px-2 text-sm"
-							type="date"
-							bind:value={dateFrom}
-						/>
+						<Input class="h-11 min-w-0 px-2" type="date" bind:value={dateFrom} />
 					</label>
 					<label class="grid gap-1 text-xs font-medium">
 						<span>{m.media_to()}</span>
-						<input
-							class="h-11 min-w-0 rounded-lg border border-input bg-background px-2 text-sm"
-							type="date"
-							bind:value={dateTo}
-						/>
+						<Input class="h-11 min-w-0 px-2" type="date" bind:value={dateTo} />
 					</label>
 				</div>
 			</div>
@@ -1963,7 +1937,7 @@
 		</Dialog.Header>
 
 		<div class="space-y-4 py-4">
-			<input
+			<Input
 				id="file-upload"
 				type="file"
 				accept="image/*,video/*"
@@ -2196,13 +2170,13 @@
 						<label for="media-detail-alt-text" class="block text-sm font-medium">
 							{m.media_alt_text()}
 						</label>
-						<textarea
+						<Textarea
 							id="media-detail-alt-text"
-							class="min-h-24 w-full resize-y rounded-lg border border-input bg-background p-3 text-sm font-normal"
+							class="min-h-24 p-3 font-normal"
 							bind:value={detailAltText}
 							placeholder={m.media_alt_placeholder()}
 							disabled={!mediaCanEdit || detailSaving}
-						></textarea>
+						/>
 						{#if mediaCanEdit && detailAltText.trim() !== selectedMedia.alt_text}
 							<Button
 								size="sm"

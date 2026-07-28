@@ -2,6 +2,7 @@
 	import * as Dialog from '$lib/components/ui/dialog';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
+	import { Slider } from '$lib/components/ui/slider';
 	import { m } from '$lib/paraglide/messages';
 	import { formatBytes } from '$lib/video/constraints';
 	import { renderVideoEdit } from '$lib/video/editor';
@@ -341,25 +342,21 @@
 							</label>
 						</div>
 						<div class="space-y-2">
-							<input
-								type="range"
-								min="0"
+							<Slider
+								min={0}
 								max={duration}
-								step="0.1"
+								step={0.1}
 								value={trimStart}
-								class="w-full accent-primary"
-								aria-label={m.video_editor_start()}
-								oninput={(event) => updateStart(event.currentTarget.valueAsNumber)}
+								ariaLabel={m.video_editor_start()}
+								onValueChange={updateStart}
 							/>
-							<input
-								type="range"
-								min="0"
+							<Slider
+								min={0}
 								max={duration}
-								step="0.1"
+								step={0.1}
 								value={trimEnd}
-								class="w-full accent-primary"
-								aria-label={m.video_editor_end()}
-								oninput={(event) => updateEnd(event.currentTarget.valueAsNumber)}
+								ariaLabel={m.video_editor_end()}
+								onValueChange={updateEnd}
 							/>
 						</div>
 						<p class="text-xs text-muted-foreground">
@@ -396,14 +393,13 @@
 									{m.video_editor_crop_zoom()}
 									<span>{cropZoom}%</span>
 								</span>
-								<input
-									type="range"
-									min="25"
-									max="100"
-									step="1"
+								<Slider
+									min={25}
+									max={100}
+									step={1}
 									value={cropZoom}
-									class="w-full accent-primary"
-									oninput={(event) => updateCropZoom(event.currentTarget.valueAsNumber)}
+									ariaLabel={m.video_editor_crop_zoom()}
+									onValueChange={updateCropZoom}
 								/>
 							</label>
 						{/if}

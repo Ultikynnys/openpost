@@ -306,7 +306,7 @@
 						class="size-4"
 					/>{/if}
 				{m.media_picker_upload()}
-				<input
+				<Input
 					{@attach attachUploadInput}
 					type="file"
 					{multiple}

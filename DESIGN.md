@@ -201,6 +201,7 @@ The base corner is gently rounded at 12px. Controls usually resolve to the 10px 
 - **Style:** 36px standard height, medium corners, full input border, and a faint tonal fill.
 - **Focus:** Semantic border plus a visible 2px ring.
 - **Error / Disabled:** Error uses Failure Red border and ring; disabled controls retain legible text while clearly reducing emphasis.
+- **Implementation:** Use the shared Shadcn-svelte `Input`, `Textarea`, `Select`/`AppSelect`, `Checkbox`, `RadioGroup`, `Slider`, and related primitives in the app, public Studio, and marketing tools. Native controls belong only inside those shared implementations.
 
 ### Navigation
 

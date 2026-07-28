@@ -458,7 +458,7 @@
 						<UploadIcon />
 					{/if}
 					{m.brand_upload_asset()}
-					<input
+					<Input
 						type="file"
 						class="sr-only"
 						accept="image/png,image/jpeg,image/webp,image/avif"
@@ -552,7 +552,7 @@
 						<UploadIcon class="mr-2" />
 					{/if}
 					{m.brand_upload_font()}
-					<input
+					<Input
 						type="file"
 						class="sr-only"
 						accept=".woff2,.ttf,.otf,font/woff2,font/ttf,font/otf"
