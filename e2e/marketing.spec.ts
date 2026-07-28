@@ -4,56 +4,69 @@ test("marketing index links to the app and documentation", async ({ page }) => {
   await page.goto("/");
 
   await expect(page).toHaveTitle(
-    /OpenPost - Publishing for humans and AI agents/,
+    "OpenPost - Create, preview, and publish for every social destination",
   );
   await expect(
     page.getByRole("heading", {
-      name: "The publishing workspace between your AI agent and your social accounts.",
+      name: "Create once. Preview every destination.",
     }),
   ).toBeVisible();
   await expect(page.getByText("Testimonials", { exact: true })).toHaveCount(0);
   await expect(
-    page.getByRole("heading", {
-      name: "Run the same publishing boundary on your own server.",
-    }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("link", { name: "Try the managed app" }).first(),
+    page.getByRole("link", { name: "Try OpenPost", exact: true }).first(),
   ).toHaveAttribute(
     "href",
     "https://app.openpost.social/register?plan=starter",
   );
   await expect(
-    page.getByRole("link", { name: "Self-host OpenPost" }).first(),
+    page.getByRole("link", { name: "Self-host", exact: true }).first(),
   ).toHaveAttribute("href", "https://docs.openpost.social/self-hosting/");
   await expect(
-    page.getByText(
-      "Create an account and one workspace before checkout. Connecting social accounts and publishing on the managed app require an active plan, starting at €6/month. There is no hosted free plan.",
-      { exact: true },
-    ).first(),
+    page
+      .getByText(
+        "Create an account and one workspace before checkout. Connecting social accounts and publishing on the managed app require an active plan, starting at €6/month. There is no hosted free plan.",
+        { exact: true },
+      )
+      .first(),
   ).toBeVisible();
   await expect(
     page.getByRole("heading", {
-      name: "One brief in. Five reviewable destinations out.",
+      name: "One source. Deliberate destinations.",
     }),
   ).toBeVisible();
   await expect(
-    page.getByText(/AI can draft the campaign. It still should not publish blind/),
+    page.getByRole("heading", {
+      name: "The work around the post stays connected.",
+    }),
+  ).toBeVisible();
+
+  const productAreas = page.getByRole("group", {
+    name: "OpenPost product areas",
+  });
+  await productAreas.getByRole("button", { name: "Accounts" }).click();
+  await expect(
+    page.getByRole("heading", {
+      name: "See each connected identity and any setup that needs action.",
+    }),
   ).toBeVisible();
   await expect(
-    page.getByText(/The useful boundary is not AI versus no AI/),
+    page.getByAltText("OpenPost social accounts page"),
+  ).toHaveAttribute("src", "/assets/screenshots/accounts-dark.png");
+  await expect(
+    page.getByRole("heading", {
+      name: "The same product, managed or self-hosted.",
+    }),
   ).toBeVisible();
-  const readiness = page.getByRole("table", {
-    name: "Launch provider readiness",
-  }).first();
-  await expect(readiness.getByRole("row")).toHaveCount(6);
-  await expect(readiness).toContainText("Available");
-  await expect(readiness).toContainText("Verify before a launch demo");
+  await expect(
+    page.getByRole("heading", {
+      name: "Review the destination before you publish it.",
+    }),
+  ).toBeVisible();
   await expect(
     page.getByRole("link", { name: "User docs" }).first(),
   ).toHaveAttribute("href", "https://docs.openpost.social/usage/");
   await expect(
-    page.getByRole("link", { name: "Self-hosting docs" }).first(),
+    page.getByRole("link", { name: "Self-hosting" }).first(),
   ).toHaveAttribute("href", "https://docs.openpost.social/self-hosting/");
   await expect(
     page.getByRole("link", { name: "Developer docs" }).first(),
@@ -61,39 +74,6 @@ test("marketing index links to the app and documentation", async ({ page }) => {
   await expect(
     page.getByRole("link", { name: "GitHub source" }),
   ).toHaveAttribute("href", "https://github.com/rodrgds/openpost");
-
-  const demoButton = page.getByRole("button", {
-    name: "Play OpenPost product video",
-  });
-  await expect(demoButton.locator("img")).toHaveAttribute(
-    "src",
-    "/assets/screenshots/main-dark.png",
-  );
-  const demoElement = page.locator(
-    'dialog[aria-label="OpenPost product video"]',
-  );
-  await expect(demoElement.locator("iframe")).toHaveCount(0);
-  await demoButton.click();
-  const demoDialog = page.getByRole("dialog", {
-    name: "OpenPost product video",
-  });
-  const closeDemo = demoDialog.getByRole("button", { name: "Close video" });
-  await expect(demoDialog.locator("iframe")).toHaveAttribute(
-    "src",
-    "https://www.youtube-nocookie.com/embed/_mZf3HzQaN8?autoplay=1&rel=0",
-  );
-  await expect(closeDemo).toBeFocused();
-  await closeDemo.press("Shift+Tab");
-  expect(
-    await page.evaluate(() =>
-      document.querySelector("dialog")?.contains(document.activeElement),
-    ),
-  ).toBe(true);
-  await closeDemo.focus();
-  await page.keyboard.press("Escape");
-  await expect(demoDialog).not.toBeVisible();
-  await expect(demoElement.locator("iframe")).toHaveCount(0);
-  await expect(demoButton).toBeFocused();
 });
 
 test("security page states the agent permission boundary accurately", async ({
@@ -103,7 +83,7 @@ test("security page states the agent permission boundary accurately", async ({
 
   await expect(
     page.getByRole("heading", {
-      name: "Let agents use the publishing system without handing over provider credentials.",
+      name: "Keep social credentials inside the publishing system.",
     }),
   ).toBeVisible();
   await expect(
@@ -191,7 +171,13 @@ test("free marketing tools produce useful output", async ({ page }) => {
 
   await page.goto("/tools/post-preview-generator");
   await page.waitForLoadState("networkidle");
-  await page.getByLabel("Platform").selectOption({ value: "mastodon" });
+  await page
+    .getByRole("combobox", { name: "Platform", exact: true })
+    .selectOption({ value: "mastodon" });
+  await page
+    .locator("summary")
+    .filter({ hasText: "Add identity, poll, link, or media" })
+    .click();
   await page.getByLabel("Handle").fill("@alice@hachyderm.io");
   await expect(
     page.getByRole("article", { name: "Mastodon post preview" }),
