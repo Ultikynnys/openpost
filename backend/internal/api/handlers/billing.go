@@ -16,6 +16,7 @@ import (
 	"github.com/openpost/backend/internal/models"
 	"github.com/openpost/backend/internal/services/billing"
 	"github.com/openpost/backend/internal/services/entitlements"
+	"github.com/openpost/backend/internal/services/identity"
 	"github.com/openpost/backend/internal/services/usage"
 	"github.com/uptrace/bun"
 )
@@ -466,6 +467,20 @@ func (h *BillingHandler) resolveBillingScope(ctx context.Context, organizationID
 }
 
 func (h *BillingHandler) checkOrganizationAccess(ctx context.Context, organizationID, userID string, requireAdmin bool) error {
+	decision, err := identity.EvaluateOrganizationAccess(
+		ctx,
+		h.db,
+		organizationID,
+		userID,
+		middleware.GetSessionID(ctx),
+		middleware.GetTokenID(ctx),
+	)
+	if err != nil {
+		return huma.Error500InternalServerError("failed to check organization SSO access")
+	}
+	if !decision.Allowed {
+		return huma.Error403Forbidden("organization SSO authentication is required")
+	}
 	countQuery := h.db.NewSelect().
 		Model((*models.OrganizationMember)(nil)).
 		Where("organization_id = ? AND user_id = ?", organizationID, userID)

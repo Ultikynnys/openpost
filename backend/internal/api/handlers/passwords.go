@@ -85,6 +85,7 @@ type ResetPasswordOutput struct {
 type ChangePasswordInput struct {
 	Body struct {
 		CurrentPassword string `json:"current_password" doc:"Current password"`
+		ReauthGrant     string `json:"reauth_grant,omitempty" doc:"One-time action-bound reauthentication grant"`
 		NewPassword     string `json:"new_password" minLength:"12" maxLength:"1024" doc:"New password"`
 	}
 }
@@ -153,7 +154,7 @@ func (h *AuthHandler) AcceptAccountPolicy(api huma.API) {
 		if err != nil {
 			return nil, huma.Error500InternalServerError("failed to load account")
 		}
-		return &MeOutput{Body: h.toUserProfile(user)}, nil
+		return &MeOutput{Body: h.profileForUser(ctx, user)}, nil
 	})
 }
 
@@ -184,6 +185,15 @@ func (h *AuthHandler) RequestPasswordReset(api huma.API) {
 				return out, nil
 			}
 			return nil, huma.Error500InternalServerError("failed to request password reset")
+		}
+		if h.identity != nil {
+			allowed, policyErr := h.identity.PasswordCredentialAllowed(ctx, user.ID)
+			if policyErr != nil {
+				return nil, huma.Error500InternalServerError("failed to request password reset")
+			}
+			if !allowed {
+				return out, nil
+			}
 		}
 
 		rawToken, tokenHash, err := generatePasswordResetToken()
@@ -247,32 +257,10 @@ func (h *AuthHandler) ResetPassword(api huma.API) {
 		}
 		tokenHash := hashPasswordResetToken(input.Body.Token)
 		now := time.Now().UTC()
-		if err := h.db.RunInTx(ctx, &sql.TxOptions{}, func(txCtx context.Context, tx bun.Tx) error {
-			var reset models.PasswordResetToken
-			if err := tx.NewSelect().Model(&reset).
-				Where("token_hash = ? AND used_at IS NULL AND expires_at > ?", tokenHash, now).
-				Scan(txCtx); err != nil {
-				return err
-			}
-			result, err := tx.NewUpdate().Model((*models.PasswordResetToken)(nil)).
-				Set("used_at = ?", now).
-				Where("id = ? AND used_at IS NULL", reset.ID).Exec(txCtx)
-			if err != nil {
-				return err
-			}
-			rows, err := result.RowsAffected()
-			if err != nil || rows != 1 {
-				return sql.ErrNoRows
-			}
-			if _, err := tx.NewUpdate().Model((*models.User)(nil)).
-				Set("password_hash = ?", newHash).Where("id = ?", reset.UserID).Exec(txCtx); err != nil {
-				return err
-			}
-			_, err = tx.NewUpdate().Model((*models.UserSession)(nil)).
-				Set("revoked_at = ?", now).
-				Where("user_id = ? AND revoked_at IS NULL", reset.UserID).Exec(txCtx)
-			return err
-		}); err != nil {
+		if err := h.validatePasswordResetPolicy(ctx, tokenHash, now); err != nil {
+			return nil, err
+		}
+		if err := h.applyPasswordReset(ctx, tokenHash, newHash, now); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				return nil, huma.Error400BadRequest("password reset link is invalid or expired")
 			}
@@ -283,6 +271,63 @@ func (h *AuthHandler) ResetPassword(api huma.API) {
 		out.SetCookie = expiredSessionCookie(middleware.IsSecureRequest(ctx)).String()
 		out.Body.Message = "Password reset. Sign in with your new password."
 		return out, nil
+	})
+}
+
+func (h *AuthHandler) validatePasswordResetPolicy(ctx context.Context, tokenHash string, now time.Time) error {
+	if h.identity == nil {
+		return nil
+	}
+	var pending models.PasswordResetToken
+	if err := h.db.NewSelect().Model(&pending).
+		Where("token_hash = ? AND used_at IS NULL AND expires_at > ?", tokenHash, now).
+		Scan(ctx); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return huma.Error400BadRequest("password reset link is invalid or expired")
+		}
+		return huma.Error500InternalServerError("failed to reset password")
+	}
+	allowed, err := h.identity.PasswordCredentialAllowed(ctx, pending.UserID)
+	if err != nil {
+		return huma.Error500InternalServerError("failed to reset password")
+	}
+	if !allowed {
+		return huma.Error400BadRequest("password reset is disabled by organization policy")
+	}
+	return nil
+}
+
+func (h *AuthHandler) applyPasswordReset(
+	ctx context.Context,
+	tokenHash,
+	newHash string,
+	now time.Time,
+) error {
+	return h.db.RunInTx(ctx, &sql.TxOptions{}, func(txCtx context.Context, tx bun.Tx) error {
+		var reset models.PasswordResetToken
+		if err := tx.NewSelect().Model(&reset).
+			Where("token_hash = ? AND used_at IS NULL AND expires_at > ?", tokenHash, now).
+			Scan(txCtx); err != nil {
+			return err
+		}
+		result, err := tx.NewUpdate().Model((*models.PasswordResetToken)(nil)).
+			Set("used_at = ?", now).
+			Where("id = ? AND used_at IS NULL", reset.ID).Exec(txCtx)
+		if err != nil {
+			return err
+		}
+		rows, err := result.RowsAffected()
+		if err != nil || rows != 1 {
+			return sql.ErrNoRows
+		}
+		if _, err := tx.NewUpdate().Model((*models.User)(nil)).
+			Set("password_hash = ?", newHash).Where("id = ?", reset.UserID).Exec(txCtx); err != nil {
+			return err
+		}
+		_, err = tx.NewUpdate().Model((*models.UserSession)(nil)).
+			Set("revoked_at = ?", now).
+			Where("user_id = ? AND revoked_at IS NULL", reset.UserID).Exec(txCtx)
+		return err
 	})
 }
 
@@ -304,10 +349,28 @@ func (h *AuthHandler) ChangePassword(api huma.API) {
 			return nil, huma.Error400BadRequest(err.Error())
 		}
 		user, err := h.getUserByID(ctx, userID)
-		if err != nil || !h.auth.CheckPassword(input.Body.CurrentPassword, user.PasswordHash) {
-			return nil, huma.Error401Unauthorized("current password is incorrect")
+		if err != nil {
+			return nil, huma.Error401Unauthorized("account not found")
 		}
-		if h.auth.CheckPassword(input.Body.NewPassword, user.PasswordHash) {
+		if h.identity != nil {
+			allowed, policyErr := h.identity.PasswordCredentialAllowed(ctx, user.ID)
+			if policyErr != nil {
+				return nil, huma.Error500InternalServerError("failed to evaluate password policy")
+			}
+			if !allowed {
+				return nil, huma.Error403Forbidden("local passwords are disabled by organization policy")
+			}
+		}
+		if err := h.authorizeSensitiveAction(
+			ctx,
+			user,
+			reauthActionPassword,
+			input.Body.CurrentPassword,
+			input.Body.ReauthGrant,
+		); err != nil {
+			return nil, err
+		}
+		if user.PasswordHash != "" && h.auth.CheckPassword(input.Body.NewPassword, user.PasswordHash) {
 			return nil, huma.Error400BadRequest("new password must be different from the current password")
 		}
 		newHash, err := h.auth.HashPassword(input.Body.NewPassword)

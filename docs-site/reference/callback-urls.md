@@ -10,5 +10,10 @@
 | Instagram | `http://localhost:8080/api/v1/accounts/instagram/callback` | `https://your-domain.com/api/v1/accounts/instagram/callback` |
 | TikTok | `http://localhost:8080/api/v1/accounts/tiktok/callback` | `https://your-domain.com/api/v1/accounts/tiktok/callback` |
 | YouTube | `http://localhost:8080/api/v1/accounts/youtube/callback` | `https://your-domain.com/api/v1/accounts/youtube/callback` |
+| Instance OIDC | `http://localhost:8080/api/v1/auth/oidc/instance/callback` | `https://your-domain.com/api/v1/auth/oidc/instance/callback` |
 
 Mastodon uses the OOB flow by default and exchanges the pasted authorization code through `/api/v1/accounts/mastodon/exchange`. Only configure a normal Mastodon callback URL if you also override `MASTODON_REDIRECT_URI`.
+
+Organization OIDC providers use a provider-specific callback and back-channel
+logout URL. Open **Settings → Single sign-on** and copy both URLs from the saved
+provider. Register only those exact URLs with the identity provider.

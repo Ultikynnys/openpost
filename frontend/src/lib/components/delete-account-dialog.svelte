@@ -6,16 +6,28 @@
 	import InlineNotice from '$lib/components/inline-notice.svelte';
 	import LoaderIcon from 'lucide-svelte/icons/loader-2';
 	import { client, type AccountDeletionImpact } from '$lib/api/client';
+	import { acquireReauthGrant } from '$lib/auth/reauth';
 	import { m } from '$lib/paraglide/messages';
 
 	interface Props {
 		open?: boolean;
 		email: string;
 		impact: AccountDeletionImpact;
+		hasPassword: boolean;
+		reauthProviderID?: string;
+		hasPasskey?: boolean;
 		onDeleted: () => void | Promise<void>;
 	}
 
-	let { open = $bindable(false), email, impact, onDeleted }: Props = $props();
+	let {
+		open = $bindable(false),
+		email,
+		impact,
+		hasPassword,
+		reauthProviderID = '',
+		hasPasskey = false,
+		onDeleted
+	}: Props = $props();
 	let confirmEmail = $state('');
 	let currentPassword = $state('');
 	let error = $state('');
@@ -28,7 +40,7 @@
 		!pending &&
 			blockers.length === 0 &&
 			confirmEmail.trim().toLowerCase() === email.trim().toLowerCase() &&
-			currentPassword.length > 0
+			(hasPassword ? currentPassword.length > 0 : Boolean(reauthProviderID || hasPasskey))
 	);
 
 	function close() {
@@ -43,10 +55,24 @@
 		if (!canDelete) return;
 		pending = true;
 		error = '';
+		const grant = hasPassword
+			? ''
+			: await acquireReauthGrant('account.delete', {
+					providerID: reauthProviderID,
+					hasPasskey
+				}).catch((cause: Error) => {
+					error = cause.message;
+					return undefined;
+				});
+		if (grant === null || grant === undefined) {
+			pending = false;
+			return;
+		}
 		const { data, error: responseError } = await client.DELETE('/auth/account', {
 			body: {
 				confirm_email: confirmEmail.trim(),
-				current_password: currentPassword
+				current_password: currentPassword,
+				reauth_grant: grant || undefined
 			}
 		});
 		if (responseError || !data?.deleted) {
@@ -128,16 +154,20 @@
 				/>
 			</div>
 
-			<div class="space-y-2">
-				<Label for="delete-current-password">{m.settings_delete_password()}</Label>
-				<Input
-					id="delete-current-password"
-					type="password"
-					bind:value={currentPassword}
-					autocomplete="current-password"
-					disabled={pending || blockers.length > 0}
-				/>
-			</div>
+			{#if hasPassword}
+				<div class="space-y-2">
+					<Label for="delete-current-password">{m.settings_delete_password()}</Label>
+					<Input
+						id="delete-current-password"
+						type="password"
+						bind:value={currentPassword}
+						autocomplete="current-password"
+						disabled={pending || blockers.length > 0}
+					/>
+				</div>
+			{:else}
+				<InlineNotice tone="info" message={m.settings_step_up_body()} />
+			{/if}
 		</div>
 
 		<Dialog.Footer>

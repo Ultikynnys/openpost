@@ -31,6 +31,7 @@
 	]);
 	const teamDestinations = $derived<SettingsDestination[]>([
 		{ id: 'members', label: m.settings_members() },
+		{ id: 'sso', label: m.settings_sso() },
 		{ id: 'plan', label: m.settings_plan() }
 	]);
 	const instanceDestinations = $derived<SettingsDestination[]>(

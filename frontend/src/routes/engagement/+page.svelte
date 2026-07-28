@@ -25,6 +25,7 @@
 	import DestructiveConfirmDialog from '$lib/components/destructive-confirm-dialog.svelte';
 	import { Button } from '$lib/components/ui/button';
 	import { Checkbox } from '$lib/components/ui/checkbox';
+	import * as Popover from '$lib/components/ui/popover';
 	import * as Select from '$lib/components/ui/select';
 	import { Textarea } from '$lib/components/ui/textarea';
 	import MessagesSquareIcon from 'lucide-svelte/icons/messages-square';
@@ -36,6 +37,7 @@
 	import EyeOffIcon from 'lucide-svelte/icons/eye-off';
 	import TrashIcon from 'lucide-svelte/icons/trash-2';
 	import HeartIcon from 'lucide-svelte/icons/heart';
+	import CircleAlertIcon from 'lucide-svelte/icons/circle-alert';
 
 	type EngagementItem = components['schemas']['EngagementItem'];
 	type EngagementSyncState = components['schemas']['EngagementSyncState'];
@@ -79,7 +81,7 @@
 	const filteredSyncStates = $derived(
 		syncStates.filter(
 			(state) =>
-				state.status !== 'ok' &&
+				!['ok', 'pending', 'unsupported'].includes(state.status) &&
 				(!platformFilter || state.platform === platformFilter) &&
 				(!accountFilter || state.social_account_id === accountFilter)
 		)
@@ -296,6 +298,24 @@
 		);
 	}
 
+	function syncStateAccount(state: EngagementSyncState) {
+		return accounts.find((account) => account.id === state.social_account_id);
+	}
+
+	function syncStatePublication(state: EngagementSyncState) {
+		return publications.find((publication) =>
+			(publication.renditions ?? []).some((rendition) => rendition.id === state.rendition_id)
+		);
+	}
+
+	function syncStateMessage(state: EngagementSyncState) {
+		if (state.status === 'rate_limited') {
+			return m.engagement_rate_limited({ date: dateLabel(state.next_sync_at) });
+		}
+		if (state.status === 'failed') return m.engagement_collection_failed();
+		return state.error_message || m.engagement_sync_delayed();
+	}
+
 	function orderThread(source: EngagementItem[]) {
 		const byParent = new SvelteMap<string, EngagementItem[]>();
 		const ids = new SvelteSet(source.map((item) => item.remote_id));
@@ -347,6 +367,52 @@
 	loadingItems={6}
 >
 	{#snippet actions()}
+		{#if filteredSyncStates.length > 0}
+			<Popover.Root>
+				<Popover.Trigger>
+					{#snippet child({ props })}
+						<Button {...props} variant="outline">
+							<CircleAlertIcon class="size-4 text-amber-600 dark:text-amber-400" />
+							{m.engagement_collection_issues({ count: filteredSyncStates.length })}
+						</Button>
+					{/snippet}
+				</Popover.Trigger>
+				<Popover.Content align="end" class="w-96 max-w-[calc(100vw-1rem)] overflow-hidden p-0">
+					<div class="border-b px-4 py-3">
+						<p class="text-sm font-semibold">{m.engagement_collection_issues_title()}</p>
+						<p class="mt-1 text-xs leading-5 text-muted-foreground">
+							{m.engagement_collection_issues_description()}
+						</p>
+					</div>
+					<div class="max-h-80 divide-y overflow-y-auto">
+						{#each filteredSyncStates as state (state.id)}
+							{@const account = syncStateAccount(state)}
+							{@const publication = syncStatePublication(state)}
+							<div class="flex gap-3 px-4 py-3">
+								<span
+									class="flex size-8 shrink-0 items-center justify-center rounded-full border bg-background"
+								>
+									<PlatformIcon platform={state.platform} class="size-4" />
+								</span>
+								<div class="min-w-0">
+									<p class="truncate text-sm font-medium">
+										{account?.account_username || getPlatformName(state.platform)}
+									</p>
+									<p class="truncate text-xs text-muted-foreground">
+										{publication
+											? publicationLabel(publication)
+											: m.engagement_collection_published_post()}
+									</p>
+									<p class="mt-1 text-xs leading-5 text-muted-foreground">
+										{syncStateMessage(state)}
+									</p>
+								</div>
+							</div>
+						{/each}
+					</div>
+				</Popover.Content>
+			</Popover.Root>
+		{/if}
 		<Button variant="outline" onclick={refresh} disabled={refreshing || !workspaceId}>
 			<RefreshIcon class={refreshing ? 'size-4 animate-spin' : 'size-4'} />
 			{m.communications_refresh()}
@@ -436,16 +502,6 @@
 		<p class="-mt-2 max-w-3xl text-xs leading-5 text-muted-foreground">
 			{m.engagement_archive_help()}
 		</p>
-
-		{#each filteredSyncStates.slice(0, 3) as state (state.id)}
-			<InlineNotice
-				tone={state.status === 'permission_required' ? 'warning' : 'info'}
-				message={state.error_message ||
-					(state.status === 'rate_limited'
-						? m.engagement_rate_limited({ date: dateLabel(state.next_sync_at) })
-						: m.engagement_sync_delayed())}
-			/>
-		{/each}
 
 		{#if initialLoading}
 			<PageLoading layout="list" label={m.common_loading()} items={5} />

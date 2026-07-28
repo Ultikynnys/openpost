@@ -44,6 +44,15 @@ var configTestEnvKeys = []string{
 	"OPENPOST_FEEDBACK_RECIPIENT",
 	"OPENPOST_FEEDBACK_SUPPORT_URL",
 	"OPENPOST_UPDATE_CHECK_ENABLED",
+	"OPENPOST_OIDC_ISSUER",
+	"OPENPOST_OIDC_CLIENT_ID",
+	"OPENPOST_OIDC_CLIENT_SECRET",
+	"OPENPOST_OIDC_NAME",
+	"OPENPOST_OIDC_SCOPES",
+	"OPENPOST_OIDC_JIT_ENABLED",
+	"OPENPOST_OIDC_BOOTSTRAP_ALLOWLIST",
+	"OPENPOST_SSO_BREAK_GLASS_EMAILS",
+	"OPENPOST_OIDC_NATIVE_CALLBACK_URL",
 	"OPENPOST_SMTP_HOST",
 	"OPENPOST_SMTP_PORT",
 	"OPENPOST_SMTP_USERNAME",
@@ -168,6 +177,40 @@ func TestLoadFeedbackConfigurationSupportsFileBackedWebhook(t *testing.T) {
 	)
 	require.Equal(t, "OpenPost team", cfg.FeedbackRecipient)
 	require.Equal(t, "https://github.com/example/openpost/issues/new", cfg.FeedbackSupportURL)
+}
+
+func TestLoadOIDCConfigurationSupportsFileBackedSecret(t *testing.T) {
+	t.Setenv("OPENPOST_OIDC_ISSUER", "https://idp.example.com/tenant")
+	t.Setenv("OPENPOST_OIDC_CLIENT_ID", "openpost-client")
+	t.Setenv(
+		"OPENPOST_OIDC_CLIENT_SECRET_FILE",
+		writeEnvFile(t, "oidc-client-secret", "oidc-secret\n"),
+	)
+	t.Setenv("OPENPOST_OIDC_NAME", "Company login")
+	t.Setenv("OPENPOST_OIDC_SCOPES", "openid,profile,email,groups")
+	t.Setenv("OPENPOST_OIDC_JIT_ENABLED", "true")
+	t.Setenv(
+		"OPENPOST_OIDC_BOOTSTRAP_ALLOWLIST",
+		"https://idp.example.com/tenant|admin-subject,admin@example.com",
+	)
+	t.Setenv("OPENPOST_SSO_BREAK_GLASS_EMAILS", "operator@example.com")
+	t.Setenv("OPENPOST_OIDC_NATIVE_CALLBACK_URL", "https://app.example.com/native/oidc")
+
+	cfg := Load()
+
+	require.Equal(t, "https://idp.example.com/tenant", cfg.OIDCIssuer)
+	require.Equal(t, "openpost-client", cfg.OIDCClientID)
+	require.Equal(t, "oidc-secret", cfg.OIDCClientSecret)
+	require.Equal(t, "Company login", cfg.OIDCName)
+	require.Equal(t, []string{"openid", "profile", "email", "groups"}, cfg.OIDCScopes)
+	require.True(t, cfg.OIDCJITEnabled)
+	require.Equal(
+		t,
+		[]string{"https://idp.example.com/tenant|admin-subject", "admin@example.com"},
+		cfg.OIDCBootstrapAllowlist,
+	)
+	require.Equal(t, []string{"operator@example.com"}, cfg.OIDCBreakGlassEmails)
+	require.Equal(t, "https://app.example.com/native/oidc", cfg.OIDCNativeCallbackURL)
 }
 
 func TestLoadCloudPostgresAndS3Primitives(t *testing.T) {

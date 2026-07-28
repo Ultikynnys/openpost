@@ -199,6 +199,7 @@ test("analytics keeps provider metrics distinct across desktop and phone layouts
                 platform: "youtube",
                 account_id: "account-x",
                 username: "OpenPost",
+                external_url: "https://www.youtube.com/watch?v=video-1",
                 published_at: "2026-07-24T09:00:00Z",
                 status: "ok",
                 metrics: { views: 5100 },
@@ -247,6 +248,19 @@ test("analytics keeps provider metrics distinct across desktop and phone layouts
   await expect(
     walkthrough.getByRole("button", { name: "Hide platform details" }),
   ).toBeVisible();
+  const youtubeNativePost = walkthrough.getByRole("link", {
+    name: "Open native post",
+  });
+  await expect(youtubeNativePost).toHaveAttribute(
+    "href",
+    "https://www.youtube.com/watch?v=video-1",
+  );
+  await expect(youtubeNativePost).toHaveAttribute("target", "_blank");
+  await expect(youtubeNativePost).toHaveCSS("width", "28px");
+  await launch.getByRole("button", { name: "Show platform details" }).click();
+  await expect(
+    launch.getByRole("link", { name: "Open native post" }),
+  ).toHaveAttribute("href", "https://x.com/openpost/status/1");
   await expect(
     page.getByText("Two measurements are needed to show a trend."),
   ).toHaveCount(0);

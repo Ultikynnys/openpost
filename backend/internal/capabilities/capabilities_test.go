@@ -150,8 +150,10 @@ func TestYouTubeCapabilitiesExposeStructuredPublishingSettings(t *testing.T) {
 	}
 	require.Equal(t, "tags", settings["tags"].Type)
 	require.Equal(t, "youtube_categories", settings["category_id"].OptionsSource)
+	require.Equal(t, "remote_picker", settings["category_id"].Control)
 	require.True(t, settings["category_id"].Required)
 	require.Equal(t, "youtube_playlists", settings["playlist_id"].OptionsSource)
+	require.Equal(t, "remote_picker", settings["playlist_id"].Control)
 }
 
 func TestXCapabilitiesExposePostSettings(t *testing.T) {

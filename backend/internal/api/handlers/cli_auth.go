@@ -9,7 +9,9 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/openpost/backend/internal/api/middleware"
+	"github.com/openpost/backend/internal/services/apitokens"
 	cliauth "github.com/openpost/backend/internal/services/cli_auth"
+	"github.com/openpost/backend/internal/services/identity"
 	"github.com/openpost/backend/internal/services/ratelimit"
 )
 
@@ -18,6 +20,11 @@ type CLIAuthHandler struct {
 	authenticator middleware.Authenticator
 	limiter       *ratelimit.Limiter
 	publicURL     string
+	identity      *identity.Service
+}
+
+func (h *CLIAuthHandler) SetIdentityService(service *identity.Service) {
+	h.identity = service
 }
 
 func NewCLIAuthHandler(auth *cliauth.Service, authenticator middleware.Authenticator, publicURL string) *CLIAuthHandler {
@@ -67,10 +74,11 @@ type PollCLIAuthOutput struct {
 
 type ApproveCLIAuthInput struct {
 	Body struct {
-		DeviceCode string `json:"device_code,omitempty"`
-		UserCode   string `json:"user_code,omitempty"`
-		Scopes     string `json:"scopes,omitempty"`
-		Name       string `json:"name,omitempty"`
+		DeviceCode  string `json:"device_code,omitempty"`
+		UserCode    string `json:"user_code,omitempty"`
+		Scopes      string `json:"scopes,omitempty"`
+		Name        string `json:"name,omitempty"`
+		WorkspaceID string `json:"workspace_id,omitempty" doc:"Workspace the resulting token is limited to"`
 	}
 }
 
@@ -179,7 +187,32 @@ func (h *CLIAuthHandler) RegisterRoutes(api huma.API) {
 		Middlewares: huma.Middlewares{middleware.AuthMiddleware(api, h.authenticator)},
 		Errors:      []int{400, 404, 409},
 	}, func(ctx context.Context, input *ApproveCLIAuthInput) (*CLIAuthDecisionOutput, error) {
-		if err := h.auth.ApproveSession(ctx, middleware.GetUserID(ctx), decisionCode(input.Body.DeviceCode, input.Body.UserCode), input.Body.Scopes, input.Body.Name); err != nil {
+		options := cliauth.ApprovalOptions{WorkspaceID: strings.TrimSpace(input.Body.WorkspaceID)}
+		if h.identity != nil && options.WorkspaceID != "" {
+			requestedExpiry := time.Now().UTC().Add(apitokens.DefaultExpiration)
+			decision, err := h.identity.AuthorizeTokenCreation(
+				ctx,
+				middleware.GetUserID(ctx),
+				middleware.GetSessionID(ctx),
+				options.WorkspaceID,
+				requestedExpiry,
+			)
+			if err != nil {
+				return nil, cliTokenPolicyError(err)
+			}
+			options.OrganizationID = decision.OrganizationID
+			options.IdentityProviderID = decision.ProviderID
+			options.AssuredAt = decision.AssuredAt
+			options.TokenExpiresAt = decision.ExpiresAt
+		}
+		if err := h.auth.ApproveSessionWithOptions(
+			ctx,
+			middleware.GetUserID(ctx),
+			decisionCode(input.Body.DeviceCode, input.Body.UserCode),
+			input.Body.Scopes,
+			input.Body.Name,
+			options,
+		); err != nil {
 			return nil, cliAuthError(err)
 		}
 		return decisionOutput(true), nil
@@ -199,6 +232,17 @@ func (h *CLIAuthHandler) RegisterRoutes(api huma.API) {
 		}
 		return decisionOutput(true), nil
 	})
+}
+
+func cliTokenPolicyError(err error) error {
+	switch {
+	case errors.Is(err, identity.ErrTokenPolicyDenied):
+		return huma.Error403Forbidden("organization policy does not allow CLI tokens")
+	case errors.Is(err, identity.ErrReauthRequired), errors.Is(err, identity.ErrSSOAssuranceRequired):
+		return huma.Error403Forbidden("sign in with the organization identity provider before approving this CLI")
+	default:
+		return huma.Error500InternalServerError("failed to evaluate CLI token policy")
+	}
 }
 
 func (h *CLIAuthHandler) allow(ctx context.Context, action string, limit int, window time.Duration) bool {

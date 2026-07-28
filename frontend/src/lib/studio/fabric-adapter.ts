@@ -1,6 +1,6 @@
 import { getAuthenticatedMediaURL } from '$lib/media-url';
 import type { StudioDocument, StudioLayer, StudioPage, StudioTool } from './types';
-import { studioPageBackground } from './document';
+import { isEmptyStudioPaintLayer, studioPageBackground } from './document';
 import { createTextCurvePath, shadowColor, shadowOffset, textCurveStartOffset } from './effects';
 import { createStudioCanvasGradient, gradientColorAt } from './gradient';
 import {
@@ -507,7 +507,11 @@ export class OpenPostFabricAdapter {
 			}
 			const layer = this.page.layers.find((candidate) => candidate.id === object.__studioLayerID);
 			const interactive =
-				Boolean(layer) && !this.readOnly && !areaSelection && !this.layerIsLocked(layer!);
+				Boolean(layer) &&
+				!this.readOnly &&
+				!areaSelection &&
+				!this.layerIsLocked(layer!) &&
+				!isEmptyStudioPaintLayer(layer!);
 			object.selectable = interactive;
 			object.evented = interactive;
 		}
@@ -1045,11 +1049,15 @@ export class OpenPostFabricAdapter {
 		object.__studioLayerID = layer.id;
 		this.applyLayerEffects(object, layer);
 		const effectivelyLocked = this.layerIsLocked(layer);
-		const interactive = !this.readOnly && !this.usesAreaSelection() && !effectivelyLocked;
+		const emptyPaintLayer = isEmptyStudioPaintLayer(layer);
+		const interactive =
+			!this.readOnly && !this.usesAreaSelection() && !effectivelyLocked && !emptyPaintLayer;
 		object.set({
 			visible: this.layerIsVisible(layer),
 			selectable: interactive,
 			evented: interactive,
+			hasControls: !emptyPaintLayer,
+			hasBorders: !emptyPaintLayer,
 			lockMovementX: effectivelyLocked,
 			lockMovementY: effectivelyLocked,
 			lockRotation: effectivelyLocked,
@@ -1077,7 +1085,9 @@ export class OpenPostFabricAdapter {
 	private updateObject(object: FabricObject, _previous: StudioLayer, layer: StudioLayer): void {
 		if (!this.fabric) return;
 		const effectivelyLocked = this.layerIsLocked(layer);
-		const interactive = !this.readOnly && !this.usesAreaSelection() && !effectivelyLocked;
+		const emptyPaintLayer = isEmptyStudioPaintLayer(layer);
+		const interactive =
+			!this.readOnly && !this.usesAreaSelection() && !effectivelyLocked && !emptyPaintLayer;
 		const common = {
 			angle: layer.transform.rotation,
 			flipX: layer.transform.flip_x,
@@ -1086,6 +1096,8 @@ export class OpenPostFabricAdapter {
 			visible: this.layerIsVisible(layer),
 			selectable: interactive,
 			evented: interactive,
+			hasControls: !emptyPaintLayer,
+			hasBorders: !emptyPaintLayer,
 			lockMovementX: effectivelyLocked,
 			lockMovementY: effectivelyLocked,
 			lockRotation: effectivelyLocked,

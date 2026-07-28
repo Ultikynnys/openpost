@@ -68,6 +68,14 @@ type PollResult struct {
 	TokenPrefix string
 }
 
+type ApprovalOptions struct {
+	WorkspaceID        string
+	OrganizationID     string
+	IdentityProviderID string
+	AssuredAt          time.Time
+	TokenExpiresAt     time.Time
+}
+
 func NewService(db *bun.DB, tokens *apitokens.Service) *Service {
 	return &Service{
 		db:     db,
@@ -170,6 +178,17 @@ func (s *Service) PollSession(ctx context.Context, deviceCode string) (*PollResu
 }
 
 func (s *Service) ApproveSession(ctx context.Context, userID, code, scopes, tokenName string) error {
+	return s.ApproveSessionWithOptions(ctx, userID, code, scopes, tokenName, ApprovalOptions{})
+}
+
+func (s *Service) ApproveSessionWithOptions(
+	ctx context.Context,
+	userID,
+	code,
+	scopes,
+	tokenName string,
+	options ApprovalOptions,
+) error {
 	session, err := s.sessionByCode(ctx, code)
 	if err != nil {
 		return err
@@ -196,6 +215,11 @@ func (s *Service) ApproveSession(ctx context.Context, userID, code, scopes, toke
 		Set("user_id = ?", userID).
 		Set("requested_scopes = ?", scopes).
 		Set("client_name = ?", tokenName).
+		Set("workspace_id = ?", strings.TrimSpace(options.WorkspaceID)).
+		Set("organization_id = ?", strings.TrimSpace(options.OrganizationID)).
+		Set("identity_provider_id = ?", strings.TrimSpace(options.IdentityProviderID)).
+		Set("assured_at = ?", nullTime(options.AssuredAt)).
+		Set("token_expires_at = ?", nullTime(options.TokenExpiresAt)).
 		Set("status = ?", statusApproved).
 		Set("approved_at = ?", now).
 		Where("id = ? AND status = ?", session.ID, statusPending).
@@ -252,8 +276,23 @@ func (s *Service) consumeApprovedSession(ctx context.Context, session *models.CL
 	if session.UserID == "" {
 		return nil, ErrNotFound
 	}
-	expiresAt := now.Add(apitokens.DefaultExpiration)
-	generated, err := s.tokens.GenerateToken(ctx, session.UserID, session.ClientName, session.RequestedScopes, &expiresAt)
+	expiresAt := session.TokenExpiresAt
+	if expiresAt.IsZero() {
+		expiresAt = now.Add(apitokens.DefaultExpiration)
+	}
+	generated, err := s.tokens.GenerateTokenWithOptions(
+		ctx,
+		session.UserID,
+		session.ClientName,
+		session.RequestedScopes,
+		apitokens.GenerateOptions{
+			ExpiresAt:          &expiresAt,
+			WorkspaceID:        session.WorkspaceID,
+			OrganizationID:     session.OrganizationID,
+			IdentityProviderID: session.IdentityProviderID,
+			AssuredAt:          session.AssuredAt,
+		},
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -270,6 +309,13 @@ func (s *Service) consumeApprovedSession(ctx context.Context, session *models.CL
 	result.Token = generated.Token
 	result.TokenPrefix = generated.Model.TokenPrefix
 	return result, nil
+}
+
+func nullTime(value time.Time) any {
+	if value.IsZero() {
+		return nil
+	}
+	return value.UTC()
 }
 
 func (s *Service) expireIfNeeded(ctx context.Context, session *models.CLIAuthSession, now time.Time) error {

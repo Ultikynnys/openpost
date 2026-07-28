@@ -693,11 +693,11 @@ FORM: Publications are the primary rows; provider renditions disclose in place w
 															target="_blank"
 															rel="noreferrer"
 															variant="ghost"
-															size="sm"
-															class="h-7 px-2"
+															size="icon-xs"
+															aria-label={m.analytics_open_native()}
+															title={m.analytics_open_native()}
 														>
 															<ExternalLinkIcon class="size-3.5" />
-															{m.analytics_open_native()}
 														</Button>
 													{/if}
 												</div>

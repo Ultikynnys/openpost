@@ -18,6 +18,7 @@ import (
 	"github.com/openpost/backend/internal/models"
 	"github.com/openpost/backend/internal/services/auth"
 	"github.com/openpost/backend/internal/services/crypto"
+	"github.com/openpost/backend/internal/services/identity"
 	"github.com/openpost/backend/internal/services/mfa"
 	"github.com/openpost/backend/internal/services/passwordmail"
 	"github.com/openpost/backend/internal/services/ratelimit"
@@ -27,14 +28,19 @@ import (
 )
 
 const (
-	authChallengeLoginMFA     = "login_mfa"
-	authChallengeTOTPSetup    = "totp_setup"
-	authChallengePasskeySetup = "passkey_setup"
-	authChallengePasskeyLogin = "passkey_login"
-	mfaMethodTOTP             = "totp"
-	mfaMethodPasskey          = "passkey"
-	passwordReauthError       = "current password is required"
-	defaultPasskeyDisplayName = "Unnamed passkey"
+	authChallengeLoginMFA      = "login_mfa"
+	authChallengeTOTPSetup     = "totp_setup"
+	authChallengePasskeySetup  = "passkey_setup"
+	authChallengePasskeyLogin  = "passkey_login"
+	authChallengePasskeyReauth = "passkey_reauth"
+	mfaMethodTOTP              = "totp"
+	mfaMethodPasskey           = "passkey"
+	defaultPasskeyDisplayName  = "Unnamed passkey"
+	reauthActionTOTPSetup      = "security.totp.setup"
+	reauthActionTOTPDisable    = "security.totp.disable"
+	reauthActionPasskeyAdd     = "security.passkey.add"
+	reauthActionPasskeyRemove  = "security.passkey.remove"
+	reauthActionPassword       = "security.password.change"
 )
 
 type AuthHandler struct {
@@ -49,6 +55,7 @@ type AuthHandler struct {
 	passwordResetSender   passwordmail.Sender
 	publicURL             string
 	accountPolicy         AccountPolicy
+	identity              *identity.Service
 }
 
 func NewAuthHandler(
@@ -84,6 +91,10 @@ func (h *AuthHandler) SetPasswordResetSender(sender passwordmail.Sender, publicU
 
 func (h *AuthHandler) SetAccountPolicy(policy AccountPolicy) {
 	h.accountPolicy = policy.normalized()
+}
+
+func (h *AuthHandler) SetIdentityService(service *identity.Service) {
+	h.identity = service
 }
 
 var (
@@ -126,9 +137,23 @@ type FinishPasskeyLoginInput struct {
 	}
 }
 
+type BeginPasskeyReauthInput struct {
+	Body struct {
+		Action string `json:"action" minLength:"1" doc:"Sensitive action the one-time grant authorizes"`
+	}
+}
+
+type FinishPasskeyReauthInput struct {
+	Body struct {
+		ChallengeID string          `json:"challenge_id" doc:"Passkey challenge ID"`
+		Credential  json.RawMessage `json:"credential" doc:"WebAuthn assertion response"`
+	}
+}
+
 type SetupTOTPInput struct {
 	Body struct {
 		CurrentPassword string `json:"current_password" doc:"Current password for re-authentication"`
+		ReauthGrant     string `json:"reauth_grant,omitempty" doc:"One-time action-bound reauthentication grant"`
 	}
 }
 
@@ -142,12 +167,14 @@ type ConfirmTOTPSetupInput struct {
 type DisableTOTPInput struct {
 	Body struct {
 		CurrentPassword string `json:"current_password" doc:"Current password for re-authentication"`
+		ReauthGrant     string `json:"reauth_grant,omitempty" doc:"One-time action-bound reauthentication grant"`
 	}
 }
 
 type BeginPasskeyRegistrationInput struct {
 	Body struct {
 		CurrentPassword string `json:"current_password" doc:"Current password for re-authentication"`
+		ReauthGrant     string `json:"reauth_grant,omitempty" doc:"One-time action-bound reauthentication grant"`
 		Name            string `json:"name" doc:"Optional passkey label"`
 	}
 }
@@ -164,6 +191,7 @@ type RemovePasskeyInput struct {
 	PasskeyID string `path:"passkey_id" doc:"Passkey ID"`
 	Body      struct {
 		CurrentPassword string `json:"current_password" doc:"Current password for re-authentication"`
+		ReauthGrant     string `json:"reauth_grant,omitempty" doc:"One-time action-bound reauthentication grant"`
 	}
 }
 
@@ -178,6 +206,9 @@ type UserProfile struct {
 	LegalAcceptedAt         time.Time `json:"legal_accepted_at,omitempty" doc:"When the current account policy was accepted"`
 	LegalAcceptanceRequired bool      `json:"legal_acceptance_required" doc:"Whether the current hosted policy still needs acceptance"`
 	CreatedAt               time.Time `json:"created_at" doc:"Account creation time"`
+	HasPassword             bool      `json:"has_password" doc:"Whether this account has a local password credential"`
+	IsManaged               bool      `json:"is_managed" doc:"Whether this account was provisioned by an organization identity provider"`
+	ManagedOrganizationName string    `json:"managed_organization_name,omitempty" doc:"Organization managing this account"`
 }
 
 type UpdateProfileInput struct {
@@ -285,6 +316,8 @@ type totpSetupPayload struct {
 
 type passkeyChallengePayload struct {
 	SessionData string `json:"session_data"`
+	SessionID   string `json:"session_id,omitempty"`
+	Action      string `json:"action,omitempty"`
 }
 
 func (h *AuthHandler) Register(api huma.API) {
@@ -406,6 +439,15 @@ func (h *AuthHandler) Login(api huma.API) {
 			Scan(ctx)
 		if err != nil {
 			return nil, huma.Error401Unauthorized("invalid credentials")
+		}
+		if h.identity != nil {
+			allowed, policyErr := h.identity.PasswordCredentialAllowed(ctx, user.ID)
+			if policyErr != nil {
+				return nil, huma.Error500InternalServerError("failed to evaluate sign-in policy")
+			}
+			if !allowed {
+				return nil, huma.Error401Unauthorized("invalid credentials")
+			}
 		}
 
 		if !h.auth.CheckPassword(input.Body.Password, user.PasswordHash) {
@@ -632,6 +674,132 @@ func (h *AuthHandler) FinishPasskeyLogin(api huma.API) {
 	})
 }
 
+func (h *AuthHandler) BeginPasskeyReauthentication(api huma.API) {
+	huma.Register(api, huma.Operation{
+		OperationID: "begin-passkey-reauthentication",
+		Method:      http.MethodPost,
+		Path:        "/auth/reauth/passkey/options",
+		Summary:     "Begin action-bound reauthentication with a passkey",
+		Tags:        []string{tagAuth},
+		Middlewares: huma.Middlewares{middleware.AuthMiddleware(api, h.authenticator)},
+		Errors:      []int{400, 401},
+	}, func(ctx context.Context, input *BeginPasskeyReauthInput) (*PasskeyCeremonyOutput, error) {
+		if h.identity == nil || middleware.GetSessionID(ctx) == "" {
+			return nil, huma.Error401Unauthorized("a web session is required")
+		}
+		user, err := h.getUserByID(ctx, middleware.GetUserID(ctx))
+		if err != nil {
+			return nil, huma.Error401Unauthorized("user not found")
+		}
+		passkeys, err := h.listPasskeys(ctx, user.ID)
+		if err != nil {
+			return nil, huma.Error500InternalServerError("failed to load passkeys")
+		}
+		if len(passkeys) == 0 {
+			return nil, huma.Error400BadRequest("no passkeys registered for this account")
+		}
+		webAuthnUser, err := mfa.NewWebAuthnUser(user, passkeys)
+		if err != nil {
+			return nil, huma.Error500InternalServerError("failed to prepare passkey reauthentication")
+		}
+		options, session, err := h.mfa.BeginPasskeyLogin(webAuthnUser)
+		if err != nil {
+			return nil, huma.Error500InternalServerError("failed to begin passkey reauthentication")
+		}
+		sessionData, err := mfa.MarshalSessionData(session)
+		if err != nil {
+			return nil, huma.Error500InternalServerError("failed to persist passkey challenge")
+		}
+		challengeID, err := h.createChallenge(ctx, user.ID, authChallengePasskeyReauth, passkeyChallengePayload{
+			SessionData: sessionData,
+			SessionID:   middleware.GetSessionID(ctx),
+			Action:      strings.TrimSpace(input.Body.Action),
+		})
+		if err != nil {
+			return nil, huma.Error500InternalServerError("failed to create passkey challenge")
+		}
+		out := &PasskeyCeremonyOutput{}
+		out.Body.ChallengeID = challengeID
+		out.Body.Options = options
+		return out, nil
+	})
+}
+
+func (h *AuthHandler) FinishPasskeyReauthentication(api huma.API) {
+	huma.Register(api, huma.Operation{
+		OperationID: "finish-passkey-reauthentication",
+		Method:      http.MethodPost,
+		Path:        "/auth/reauth/passkey/verify",
+		Summary:     "Complete action-bound reauthentication with a passkey",
+		Tags:        []string{tagAuth},
+		Middlewares: huma.Middlewares{middleware.AuthMiddleware(api, h.authenticator)},
+		Errors:      []int{400, 401},
+	}, h.finishPasskeyReauthentication)
+}
+
+func (h *AuthHandler) finishPasskeyReauthentication(
+	ctx context.Context,
+	input *FinishPasskeyReauthInput,
+) (*ReauthGrantOutput, error) {
+	if h.identity == nil || middleware.GetSessionID(ctx) == "" {
+		return nil, huma.Error401Unauthorized("a web session is required")
+	}
+	userID, sessionID, action, err := h.consumePasskeyReauthChallenge(ctx, input)
+	if err != nil {
+		return nil, err
+	}
+	grant, err := h.identity.CreateReauthGrant(ctx, userID, sessionID, action, "passkey", "")
+	if err != nil {
+		return nil, huma.Error500InternalServerError("failed to create reauthentication grant")
+	}
+	out := &ReauthGrantOutput{}
+	out.Body.Grant = grant
+	out.Body.ExpiresIn = int(identity.ReauthGrantTTL.Seconds())
+	return out, nil
+}
+
+func (h *AuthHandler) consumePasskeyReauthChallenge(
+	ctx context.Context,
+	input *FinishPasskeyReauthInput,
+) (string, string, string, error) {
+	challenge, err := h.getChallenge(ctx, input.Body.ChallengeID, authChallengePasskeyReauth)
+	if err != nil || challenge.UserID != middleware.GetUserID(ctx) {
+		return "", "", "", huma.Error401Unauthorized("invalid or expired passkey challenge")
+	}
+	var payload passkeyChallengePayload
+	if err := json.Unmarshal([]byte(challenge.Payload), &payload); err != nil ||
+		payload.SessionID != middleware.GetSessionID(ctx) || strings.TrimSpace(payload.Action) == "" {
+		return "", "", "", huma.Error401Unauthorized("invalid passkey challenge")
+	}
+	user, err := h.getUserByID(ctx, challenge.UserID)
+	if err != nil {
+		return "", "", "", huma.Error401Unauthorized("user not found")
+	}
+	sessionData, err := mfa.UnmarshalSessionData(payload.SessionData)
+	if err != nil {
+		return "", "", "", huma.Error500InternalServerError("failed to restore passkey challenge")
+	}
+	passkeys, err := h.listPasskeys(ctx, user.ID)
+	if err != nil {
+		return "", "", "", huma.Error500InternalServerError("failed to load passkeys")
+	}
+	webAuthnUser, err := mfa.NewWebAuthnUser(user, passkeys)
+	if err != nil {
+		return "", "", "", huma.Error500InternalServerError("failed to prepare passkey validation")
+	}
+	credential, err := h.mfa.FinishPasskeyLogin(webAuthnUser, *sessionData, input.Body.Credential)
+	if err != nil {
+		return "", "", "", huma.Error401Unauthorized("passkey verification failed")
+	}
+	if err := h.markPasskeyUsed(ctx, user.ID, credential.ID); err != nil {
+		return "", "", "", huma.Error500InternalServerError("failed to update passkey state")
+	}
+	if err := h.deleteChallenge(ctx, challenge.ID); err != nil {
+		return "", "", "", huma.Error500InternalServerError("failed to finish passkey reauthentication")
+	}
+	return user.ID, payload.SessionID, payload.Action, nil
+}
+
 func (h *AuthHandler) Me(api huma.API) {
 	huma.Register(api, huma.Operation{
 		OperationID: "get-me",
@@ -648,7 +816,7 @@ func (h *AuthHandler) Me(api huma.API) {
 			return nil, huma.Error404NotFound("user not found")
 		}
 
-		return &MeOutput{Body: h.toUserProfile(user)}, nil
+		return &MeOutput{Body: h.profileForUser(ctx, user)}, nil
 	})
 }
 
@@ -677,7 +845,7 @@ func (h *AuthHandler) SessionState(api huma.API) {
 		}
 
 		out.Body.Authenticated = true
-		out.Body.User = h.toUserProfile(user)
+		out.Body.User = h.profileForUser(ctx, user)
 		return out, nil
 	})
 }
@@ -722,7 +890,7 @@ func (h *AuthHandler) UpdateProfile(api huma.API) {
 		if err != nil {
 			return nil, huma.Error404NotFound("user not found")
 		}
-		return &MeOutput{Body: h.toUserProfile(user)}, nil
+		return &MeOutput{Body: h.profileForUser(ctx, user)}, nil
 	})
 }
 
@@ -752,7 +920,7 @@ func (h *AuthHandler) SecurityStatus(api huma.API) {
 		}
 
 		resp := &SecurityStatusOutput{}
-		resp.Body.User = h.toUserProfile(user)
+		resp.Body.User = h.profileForUser(ctx, user)
 		resp.Body.TOTPEnabled = len(user.TOTPSecretEnc) > 0
 		resp.Body.Passkeys = toPasskeySummaries(passkeys)
 		resp.Body.Methods = methods
@@ -823,10 +991,6 @@ func (h *AuthHandler) BeginTOTPSetup(api huma.API) {
 		Middlewares: huma.Middlewares{middleware.AuthMiddleware(api, h.authenticator)},
 		Errors:      []int{400, 401, 409},
 	}, func(ctx context.Context, input *SetupTOTPInput) (*SetupTOTPOutput, error) {
-		if strings.TrimSpace(input.Body.CurrentPassword) == "" {
-			return nil, huma.Error400BadRequest(passwordReauthError)
-		}
-
 		userID := middleware.GetUserID(ctx)
 		user, err := h.getUserByID(ctx, userID)
 		if err != nil {
@@ -835,8 +999,14 @@ func (h *AuthHandler) BeginTOTPSetup(api huma.API) {
 		if len(user.TOTPSecretEnc) > 0 {
 			return nil, huma.Error409Conflict("authenticator app is already enabled")
 		}
-		if !h.auth.CheckPassword(input.Body.CurrentPassword, user.PasswordHash) {
-			return nil, huma.Error401Unauthorized("invalid current password")
+		if err := h.authorizeSensitiveAction(
+			ctx,
+			user,
+			reauthActionTOTPSetup,
+			input.Body.CurrentPassword,
+			input.Body.ReauthGrant,
+		); err != nil {
+			return nil, err
 		}
 
 		key, qrPNG, err := h.mfa.GenerateTOTP(user.Email)
@@ -926,17 +1096,19 @@ func (h *AuthHandler) DisableTOTP(api huma.API) {
 		Middlewares: huma.Middlewares{middleware.AuthMiddleware(api, h.authenticator)},
 		Errors:      []int{400, 401},
 	}, func(ctx context.Context, input *DisableTOTPInput) (*SecurityStatusOutput, error) {
-		if strings.TrimSpace(input.Body.CurrentPassword) == "" {
-			return nil, huma.Error400BadRequest(passwordReauthError)
-		}
-
 		userID := middleware.GetUserID(ctx)
 		user, err := h.getUserByID(ctx, userID)
 		if err != nil {
 			return nil, huma.Error404NotFound("user not found")
 		}
-		if !h.auth.CheckPassword(input.Body.CurrentPassword, user.PasswordHash) {
-			return nil, huma.Error401Unauthorized("invalid current password")
+		if err := h.authorizeSensitiveAction(
+			ctx,
+			user,
+			reauthActionTOTPDisable,
+			input.Body.CurrentPassword,
+			input.Body.ReauthGrant,
+		); err != nil {
+			return nil, err
 		}
 
 		if _, err := h.db.NewUpdate().Model((*models.User)(nil)).
@@ -961,17 +1133,19 @@ func (h *AuthHandler) BeginPasskeyRegistration(api huma.API) {
 		Middlewares: huma.Middlewares{middleware.AuthMiddleware(api, h.authenticator)},
 		Errors:      []int{400, 401},
 	}, func(ctx context.Context, input *BeginPasskeyRegistrationInput) (*PasskeyCeremonyOutput, error) {
-		if strings.TrimSpace(input.Body.CurrentPassword) == "" {
-			return nil, huma.Error400BadRequest(passwordReauthError)
-		}
-
 		userID := middleware.GetUserID(ctx)
 		user, err := h.getUserByID(ctx, userID)
 		if err != nil {
 			return nil, huma.Error404NotFound("user not found")
 		}
-		if !h.auth.CheckPassword(input.Body.CurrentPassword, user.PasswordHash) {
-			return nil, huma.Error401Unauthorized("invalid current password")
+		if err := h.authorizeSensitiveAction(
+			ctx,
+			user,
+			reauthActionPasskeyAdd,
+			input.Body.CurrentPassword,
+			input.Body.ReauthGrant,
+		); err != nil {
+			return nil, err
 		}
 
 		passkeys, err := h.listPasskeys(ctx, userID)
@@ -1102,17 +1276,19 @@ func (h *AuthHandler) RemovePasskey(api huma.API) {
 		Middlewares: huma.Middlewares{middleware.AuthMiddleware(api, h.authenticator)},
 		Errors:      []int{400, 401, 404},
 	}, func(ctx context.Context, input *RemovePasskeyInput) (*SecurityStatusOutput, error) {
-		if strings.TrimSpace(input.Body.CurrentPassword) == "" {
-			return nil, huma.Error400BadRequest(passwordReauthError)
-		}
-
 		userID := middleware.GetUserID(ctx)
 		user, err := h.getUserByID(ctx, userID)
 		if err != nil {
 			return nil, huma.Error404NotFound("user not found")
 		}
-		if !h.auth.CheckPassword(input.Body.CurrentPassword, user.PasswordHash) {
-			return nil, huma.Error401Unauthorized("invalid current password")
+		if err := h.authorizeSensitiveAction(
+			ctx,
+			user,
+			reauthActionPasskeyRemove,
+			input.Body.CurrentPassword,
+			input.Body.ReauthGrant,
+		); err != nil {
+			return nil, err
 		}
 
 		result, err := h.db.NewDelete().Model((*models.UserPasskey)(nil)).
@@ -1172,7 +1348,7 @@ func (h *AuthHandler) issueAuthResponse(ctx context.Context, user *models.User) 
 
 	resp := &AuthOutput{}
 	resp.Body.Token = token
-	resp.Body.User = h.toUserProfile(user)
+	resp.Body.User = h.profileForUser(ctx, user)
 	resp.SetCookie = sessionCookie(token, expiresAt, middleware.IsSecureRequest(ctx)).String()
 	return resp, nil
 }
@@ -1304,7 +1480,7 @@ func (h *AuthHandler) securityStatusResponse(ctx context.Context, userID string)
 	}
 
 	resp := &SecurityStatusOutput{}
-	resp.Body.User = h.toUserProfile(user)
+	resp.Body.User = h.profileForUser(ctx, user)
 	resp.Body.TOTPEnabled = len(user.TOTPSecretEnc) > 0
 	resp.Body.Passkeys = toPasskeySummaries(passkeys)
 	resp.Body.Methods = methods
@@ -1318,6 +1494,7 @@ func (h *AuthHandler) toUserProfile(user *models.User) *UserProfile {
 		DisplayName:     user.DisplayName,
 		AvatarURL:       user.AvatarURL,
 		IsAdmin:         user.IsAdmin,
+		HasPassword:     strings.TrimSpace(user.PasswordHash) != "",
 		TermsVersion:    user.TermsVersion,
 		PrivacyVersion:  user.PrivacyVersion,
 		LegalAcceptedAt: user.LegalAcceptedAt,
@@ -1327,6 +1504,56 @@ func (h *AuthHandler) toUserProfile(user *models.User) *UserProfile {
 				user.PrivacyVersion != h.accountPolicy.PrivacyVersion),
 		CreatedAt: user.CreatedAt,
 	}
+}
+
+func (h *AuthHandler) profileForUser(ctx context.Context, user *models.User) *UserProfile {
+	profile := h.toUserProfile(user)
+	if h.identity == nil {
+		return profile
+	}
+	managed, organizationName, err := h.identity.ManagedUserState(ctx, user.ID)
+	if err == nil {
+		profile.IsManaged = managed
+		profile.ManagedOrganizationName = organizationName
+	}
+	return profile
+}
+
+func (h *AuthHandler) authorizeSensitiveAction(
+	ctx context.Context,
+	user *models.User,
+	action,
+	currentPassword,
+	grant string,
+) error {
+	if h.identity != nil && strings.TrimSpace(grant) != "" {
+		if err := h.identity.ConsumeReauthGrant(
+			ctx,
+			grant,
+			user.ID,
+			middleware.GetSessionID(ctx),
+			action,
+		); err != nil {
+			return huma.Error401Unauthorized("recent reauthentication is required")
+		}
+		return nil
+	}
+	passwordAllowed := true
+	if h.identity != nil {
+		allowed, err := h.identity.PasswordCredentialAllowed(ctx, user.ID)
+		if err != nil {
+			return huma.Error500InternalServerError("failed to evaluate reauthentication policy")
+		}
+		passwordAllowed = allowed
+	}
+	if passwordAllowed && h.auth != nil &&
+		h.auth.CheckPassword(strings.TrimSpace(currentPassword), user.PasswordHash) {
+		return nil
+	}
+	if strings.TrimSpace(currentPassword) == "" && strings.TrimSpace(grant) == "" {
+		return huma.Error400BadRequest("a current password or one-time reauthentication grant is required")
+	}
+	return huma.Error401Unauthorized("recent reauthentication is required")
 }
 
 func toPasskeySummaries(passkeys []models.UserPasskey) []PasskeySummary {

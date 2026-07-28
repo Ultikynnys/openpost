@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { CalendarDate } from '@internationalized/date';
+	import { MediaQuery } from 'svelte/reactivity';
 	import { Button } from '$lib/components/ui/button';
 	import { Calendar } from '$lib/components/ui/calendar';
 	import * as Dialog from '$lib/components/ui/dialog';
@@ -53,6 +54,7 @@
 
 	let scheduleInput = $state('');
 	let inputError = $state('');
+	const desktopCalendar = new MediaQuery('min-width: 768px');
 	const effectiveRandomDelayMinutes = $derived.by(() => {
 		if (randomDelayOverride === 'default') return defaultRandomDelayMinutes;
 		const value = Number(randomDelayOverride);
@@ -143,7 +145,7 @@
 <Dialog.Root bind:open>
 	<Dialog.Content
 		data-testid="schedule-dialog-shell"
-		class="flex max-h-[calc(100dvh-1rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-3xl"
+		class="flex max-h-[calc(100dvh-1rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-5xl"
 	>
 		<Dialog.Header
 			class="shrink-0 border-b px-5 pt-[max(1.25rem,env(safe-area-inset-top))] pb-4 text-center"
@@ -212,6 +214,8 @@
 						type="single"
 						bind:value={selectedDate}
 						minValue={workspaceClock(timezone).date}
+						numberOfMonths={desktopCalendar.current ? 2 : 1}
+						pagedNavigation={desktopCalendar.current}
 						class="bg-transparent p-0 [--cell-size:--spacing(9)]"
 						weekdayFormat="short"
 						{weekStartsOn}

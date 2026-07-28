@@ -17,6 +17,7 @@
 	import ComposerAccountMenu from './composer-account-menu.svelte';
 	import ComposerMediaDropzone from './composer-media-dropzone.svelte';
 	import ComposerPublishActions from './composer-publish-actions.svelte';
+	import SaveIndicator from './save-indicator.svelte';
 	import ComposerScheduleDialog from './composer-schedule-dialog.svelte';
 	import ComposerValidationMenu from './composer-validation-menu.svelte';
 	import DestinationSettingsDialog from './destination-settings-dialog.svelte';
@@ -210,6 +211,8 @@
 	let allowNavigationOnce = false;
 	let autoSaveReady = false;
 	let autoSaveTimer: ReturnType<typeof setTimeout> | null = null;
+	let savedIndicatorTimer: ReturnType<typeof setTimeout> | null = null;
+	let savedIndicatorVisible = $state(false);
 	let lastSavedSnapshot = $state('');
 	let publicationContextRequestId = '';
 	let resolvedCapabilities = $state<Record<string, ResolvedAccountCapability>>({});
@@ -310,17 +313,6 @@
 		Boolean(selectedWorkspaceId) && schedulingSettingsWorkspaceId === selectedWorkspaceId
 	);
 	const canSchedule = $derived(canQueue && selectedWorkspaceSettingsReady);
-	const focusedSaveLabel = $derived.by(() => {
-		if (draftConflict) return m.compose_conflict_state();
-		if (saving || autoSaving) return m.common_saving();
-		if (hasDraftContent() && saveSnapshot() !== lastSavedSnapshot)
-			return m.compose_unsaved_changes();
-		if (publicationId && lastSavedSnapshot) return m.compose_saved_state();
-		return m.compose_unsaved_changes();
-	});
-	const readyDestinationCount = $derived(
-		selectedAccounts.filter((account) => accountBlockers(account).length === 0).length
-	);
 	const scheduleTimezoneLabel = $derived(schedulingSettings.timezone);
 	const isToday = $derived(
 		selectedDate ? isEqualDay(selectedDate, workspaceClock(scheduleTimezoneLabel).date) : false
@@ -371,7 +363,10 @@
 		return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
 	});
 
-	onDestroy(clearAutoSaveTimer);
+	onDestroy(() => {
+		clearAutoSaveTimer();
+		clearSavedIndicator();
+	});
 
 	beforeNavigate((navigation) => {
 		if (allowNavigationOnce) {
@@ -1931,6 +1926,23 @@
 		autoSaveTimer = null;
 	}
 
+	function clearSavedIndicator() {
+		if (savedIndicatorTimer) {
+			clearTimeout(savedIndicatorTimer);
+			savedIndicatorTimer = null;
+		}
+		savedIndicatorVisible = false;
+	}
+
+	function showSavedIndicator() {
+		clearSavedIndicator();
+		savedIndicatorVisible = true;
+		savedIndicatorTimer = setTimeout(() => {
+			savedIndicatorVisible = false;
+			savedIndicatorTimer = null;
+		}, 1600);
+	}
+
 	function scheduleAutoSave(snapshot: string) {
 		clearAutoSaveTimer();
 		autoSaveTimer = setTimeout(() => {
@@ -1959,6 +1971,7 @@
 		const generation = saveGeneration;
 		const workspaceId = selectedWorkspaceId;
 		const startingPublicationId = publicationId;
+		clearSavedIndicator();
 		autoSaving = true;
 		try {
 			await persistPublication({ generation, workspaceId, startingPublicationId });
@@ -1970,6 +1983,7 @@
 				return;
 			}
 			lastSavedSnapshot = snapshot;
+			showSavedIndicator();
 			ui.triggerRefresh();
 		} catch (saveError) {
 			if (generation === saveGeneration && selectedWorkspaceId === workspaceId) {
@@ -2150,6 +2164,7 @@
 			}
 		}
 		clearAutoSaveTimer();
+		clearSavedIndicator();
 		saving = true;
 		error = '';
 		success = '';
@@ -2204,6 +2219,7 @@
 				success = data?.message ?? m.compose_publication_queued();
 			}
 			lastSavedSnapshot = saveSnapshot();
+			showSavedIndicator();
 			ui.triggerRefresh();
 			if (isEditMode && action !== 'validate') onSuccess?.();
 		} catch (err) {
@@ -2303,6 +2319,15 @@
 							onClearAll={clearAllAccounts}
 							onSettings={openDestinationSettings}
 						/>
+					{/if}
+					<SaveIndicator
+						saving={saving || autoSaving}
+						saved={savedIndicatorVisible}
+						savingLabel={m.common_saving()}
+						savedLabel={m.compose_saved_state()}
+						testId="composer-save-indicator"
+					/>
+					{#if accounts.length > 0}
 						<ComposerValidationMenu issues={globalIssues} class="md:size-8" />
 					{/if}
 				</div>
@@ -2385,20 +2410,6 @@
 						{m.compose_connect_compatible()}
 					</div>
 				{/if}
-
-				<div
-					class="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-md border bg-muted/20 px-3 py-2 text-xs"
-					data-testid="composer-context-status"
-				>
-					<span class="font-medium text-foreground">{m.compose_source_version()}</span>
-					<span class="text-muted-foreground">{focusedSaveLabel}</span>
-					<span class="text-muted-foreground">
-						{m.compose_destination_ready_count({
-							ready: readyDestinationCount,
-							total: selectedAccounts.length
-						})}
-					</span>
-				</div>
 
 				<section class="flex flex-col gap-5">
 					<div class="{modeMeta.mediaFirst ? 'order-1' : 'order-2'} space-y-3">

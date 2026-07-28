@@ -388,6 +388,16 @@ func buildContentOverview(
 	if publishedAt.IsZero() {
 		publishedAt = publication.UpdatedAt
 	}
+	externalURL := rendition.ExternalURL
+	if !platform.IsSafeContentURL(externalURL) {
+		externalURL = platform.DeterministicContentURL(
+			account.Platform,
+			account.AccountID,
+			account.AccountUsername,
+			account.InstanceURL,
+			rendition.ExternalID,
+		)
+	}
 	item := ContentOverview{
 		PublicationID: publication.ID,
 		RenditionID:   rendition.ID,
@@ -396,7 +406,7 @@ func buildContentOverview(
 		Platform:      rendition.Platform,
 		AccountID:     account.ID,
 		Username:      account.AccountUsername,
-		ExternalURL:   rendition.ExternalURL,
+		ExternalURL:   externalURL,
 		PublishedAt:   publishedAt,
 		Status:        string(platform.AnalyticsStatusPending),
 		Metrics:       platform.AnalyticsValues{},

@@ -67,6 +67,10 @@ type AuthorizationRequest struct {
 	CodeChallengeMethod string
 	Resource            string
 	ExpectedResource    string
+	OrganizationID      string
+	IdentityProviderID  string
+	AssuredAt           time.Time
+	TokenExpiresAt      time.Time
 }
 
 type AuthorizationResult struct {
@@ -162,6 +166,10 @@ func (s *Service) CreateAuthorizationCode(ctx context.Context, input Authorizati
 		RedirectURI:         redirectURI.String(),
 		Scope:               scope,
 		WorkspaceID:         workspaceID,
+		OrganizationID:      strings.TrimSpace(input.OrganizationID),
+		IdentityProviderID:  strings.TrimSpace(input.IdentityProviderID),
+		AssuredAt:           input.AssuredAt,
+		TokenExpiresAt:      input.TokenExpiresAt,
 		Resource:            resource,
 		CodeChallenge:       strings.TrimSpace(input.CodeChallenge),
 		CodeChallengeMethod: CodeChallengeMethodS256,
@@ -227,11 +235,17 @@ func (s *Service) ExchangeCode(ctx context.Context, input TokenRequest) (*TokenR
 		return nil, err
 	}
 
-	expiresAt := now.Add(apitokens.DefaultExpiration)
+	expiresAt := code.TokenExpiresAt
+	if expiresAt.IsZero() {
+		expiresAt = now.Add(apitokens.DefaultExpiration)
+	}
 	generated, err := s.tokens.GenerateTokenWithOptions(ctx, code.UserID, tokenName(*code), code.Scope, apitokens.GenerateOptions{
-		ExpiresAt:   &expiresAt,
-		WorkspaceID: code.WorkspaceID,
-		Audience:    code.Resource,
+		ExpiresAt:          &expiresAt,
+		WorkspaceID:        code.WorkspaceID,
+		OrganizationID:     code.OrganizationID,
+		IdentityProviderID: code.IdentityProviderID,
+		AssuredAt:          code.AssuredAt,
+		Audience:           code.Resource,
 	})
 	if err != nil {
 		return nil, err

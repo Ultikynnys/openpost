@@ -576,7 +576,10 @@
 	{/if}
 	{#if currentViewLoaded}
 		<Tabs bind:value={activeTab}>
-			<TabsList variant="line" class="mb-6 w-full justify-start overflow-x-auto">
+			<TabsList
+				variant="line"
+				class="mb-6 no-scrollbar w-full justify-start overflow-x-auto overflow-y-hidden"
+			>
 				<TabsTrigger value="scheduled"
 					>{m.activity_tab_scheduled()}
 					<span class="text-muted-foreground">{scheduledPosts.length}</span></TabsTrigger

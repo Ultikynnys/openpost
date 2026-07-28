@@ -52,6 +52,109 @@ test("public Studio creates and restores a local design without authentication",
   await expect(
     page.getByRole("application", { name: "Design canvas" }),
   ).toBeVisible();
+  const designCanvas = page.getByRole("application", {
+    name: "Design canvas",
+  });
+  const stage = page.getByTestId("studio-stage");
+  const [canvasBox, stageBeforeZoom] = await Promise.all([
+    designCanvas.boundingBox(),
+    stage.boundingBox(),
+  ]);
+  if (!canvasBox || !stageBeforeZoom) {
+    throw new Error("Public Studio canvas did not produce measurable bounds");
+  }
+  const zoomAnchor = {
+    x: stageBeforeZoom.x + stageBeforeZoom.width * 0.3,
+    y: stageBeforeZoom.y + stageBeforeZoom.height * 0.35,
+  };
+  await designCanvas.dispatchEvent("wheel", {
+    bubbles: true,
+    cancelable: true,
+    clientX: zoomAnchor.x,
+    clientY: zoomAnchor.y,
+    ctrlKey: true,
+    deltaY: -100,
+  });
+  await expect
+    .poll(async () => (await stage.boundingBox())?.width ?? 0)
+    .toBeGreaterThan(stageBeforeZoom.width);
+  const stageAfterZoom = await stage.boundingBox();
+  if (!stageAfterZoom) {
+    throw new Error("Public Studio canvas disappeared after zooming");
+  }
+  expect(stageAfterZoom.width).toBeGreaterThan(stageBeforeZoom.width);
+  expect((zoomAnchor.x - stageAfterZoom.x) / stageAfterZoom.width).toBeCloseTo(
+    (zoomAnchor.x - stageBeforeZoom.x) / stageBeforeZoom.width,
+    3,
+  );
+  expect((zoomAnchor.y - stageAfterZoom.y) / stageAfterZoom.height).toBeCloseTo(
+    (zoomAnchor.y - stageBeforeZoom.y) / stageBeforeZoom.height,
+    3,
+  );
+
+  await page.getByRole("button", { name: "Add shape" }).click({
+    button: "right",
+  });
+  const shapeMenu = page.getByRole("menu");
+  await expect(shapeMenu.getByText("Rounded", { exact: true })).toBeVisible();
+  const shapeMenuBox = await shapeMenu.boundingBox();
+  if (!shapeMenuBox) throw new Error("Studio shape menu did not render");
+  expect(shapeMenuBox.width).toBeLessThanOrEqual(192);
+  expect(shapeMenuBox.height).toBeLessThanOrEqual(152);
+  await page.keyboard.press("Escape");
+
+  await page.keyboard.press("m");
+  await expect(
+    page.getByRole("button", { name: "Rectangle select", pressed: true }),
+  ).toBeVisible();
+  const outsideSelectionStart = {
+    x: (canvasBox.x + stageAfterZoom.x) / 2,
+    y: stageAfterZoom.y + stageAfterZoom.height * 0.25,
+  };
+  const outsideSelectionEnd = {
+    x:
+      (stageAfterZoom.x +
+        stageAfterZoom.width +
+        canvasBox.x +
+        canvasBox.width) /
+      2,
+    y: stageAfterZoom.y + stageAfterZoom.height * 0.75,
+  };
+  expect(outsideSelectionStart.x).toBeLessThan(stageAfterZoom.x);
+  expect(outsideSelectionEnd.x).toBeGreaterThan(
+    stageAfterZoom.x + stageAfterZoom.width,
+  );
+  await page.mouse.move(outsideSelectionStart.x, outsideSelectionStart.y);
+  await page.mouse.down();
+  await page.mouse.move(outsideSelectionEnd.x, outsideSelectionEnd.y, {
+    steps: 8,
+  });
+  await page.mouse.up();
+  await expect(page.getByTestId("studio-pixel-selection")).toHaveAttribute(
+    "data-active",
+    "true",
+  );
+  await page
+    .getByTestId("studio-selection-options")
+    .getByRole("button", { name: "Deselect" })
+    .click();
+
+  const layersTree = page.getByRole("tree", { name: "Layers" });
+  await layersTree.getByRole("button", { name: "Add layer" }).click();
+  const emptyLayer = layersTree.getByRole("treeitem", {
+    name: /Layer 1, paint/,
+  });
+  await expect(emptyLayer).toBeVisible();
+  await emptyLayer.click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Rename layer" }).click();
+  const layerName = layersTree.getByRole("textbox", { name: "Layer name" });
+  await expect(layerName).toBeFocused();
+  await layerName.fill("Sketches");
+  await layerName.press("Enter");
+  await expect(
+    layersTree.getByRole("treeitem", { name: /Sketches, paint/ }),
+  ).toBeVisible();
+
   const title = page.getByRole("textbox", { name: "Design title" });
   await title.fill("Local launch design");
   await expect(

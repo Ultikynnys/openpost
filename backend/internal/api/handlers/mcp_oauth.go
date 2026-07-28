@@ -5,10 +5,13 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/labstack/echo/v4"
 	"github.com/openpost/backend/internal/api/middleware"
+	"github.com/openpost/backend/internal/services/apitokens"
+	"github.com/openpost/backend/internal/services/identity"
 	"github.com/openpost/backend/internal/services/mcpoauth"
 )
 
@@ -16,6 +19,11 @@ type MCPOAuthHandler struct {
 	service       *mcpoauth.Service
 	authenticator middleware.Authenticator
 	publicURL     string
+	identity      *identity.Service
+}
+
+func (h *MCPOAuthHandler) SetIdentityService(service *identity.Service) {
+	h.identity = service
 }
 
 func NewMCPOAuthHandler(service *mcpoauth.Service, authenticator middleware.Authenticator, publicURL string) *MCPOAuthHandler {
@@ -85,6 +93,22 @@ func (h *MCPOAuthHandler) RegisterAPIRoutes(api huma.API) {
 			err    error
 		)
 		if input.Body.Approved {
+			if h.identity != nil && strings.TrimSpace(input.Body.WorkspaceID) != "" {
+				decision, policyErr := h.identity.AuthorizeTokenCreation(
+					ctx,
+					middleware.GetUserID(ctx),
+					middleware.GetSessionID(ctx),
+					input.Body.WorkspaceID,
+					time.Now().UTC().Add(apitokens.DefaultExpiration),
+				)
+				if policyErr != nil {
+					return nil, mcpTokenPolicyError(policyErr)
+				}
+				request.OrganizationID = decision.OrganizationID
+				request.IdentityProviderID = decision.ProviderID
+				request.AssuredAt = decision.AssuredAt
+				request.TokenExpiresAt = decision.ExpiresAt
+			}
 			result, err = h.service.CreateAuthorizationCode(ctx, request)
 		} else {
 			result, err = h.service.DenyRedirect(ctx, request)
@@ -97,6 +121,17 @@ func (h *MCPOAuthHandler) RegisterAPIRoutes(api huma.API) {
 		out.Body.RedirectURL = result.RedirectURL
 		return out, nil
 	})
+}
+
+func mcpTokenPolicyError(err error) error {
+	switch {
+	case errors.Is(err, identity.ErrTokenPolicyDenied):
+		return huma.Error403Forbidden("organization policy does not allow MCP tokens")
+	case errors.Is(err, identity.ErrReauthRequired), errors.Is(err, identity.ErrSSOAssuranceRequired):
+		return huma.Error403Forbidden("sign in with the organization identity provider before approving this MCP client")
+	default:
+		return huma.Error500InternalServerError("failed to evaluate MCP token policy")
+	}
 }
 
 func (h *MCPOAuthHandler) authorizationServerMetadata(c echo.Context) error {

@@ -17,6 +17,7 @@ import (
 	servicecrypto "github.com/openpost/backend/internal/services/crypto"
 	"github.com/openpost/backend/internal/services/entitlements"
 	"github.com/openpost/backend/internal/services/feedback"
+	"github.com/openpost/backend/internal/services/identity"
 	"github.com/openpost/backend/internal/services/mastodonapps"
 	"github.com/openpost/backend/internal/services/mcpoauth"
 	"github.com/openpost/backend/internal/services/mediasigner"
@@ -59,6 +60,7 @@ type RouteDeps struct {
 	StudioEnabled                bool
 	StudioModelBaseURL           string
 	FeedbackService              *feedback.Service
+	IdentityService              *identity.Service
 	AnalyticsService             *analyticsservice.Service
 	CommunicationsService        *communicationsservice.Service
 	NotificationService          *notifications.Service
@@ -108,6 +110,7 @@ func RegisterHumaRoutes(api huma.API, deps RouteDeps) {
 	authHandler.SetSessionService(deps.SessionService)
 	authHandler.SetPasswordResetSender(deps.PasswordResetSender, deps.PublicURL)
 	authHandler.SetAccountPolicy(deps.AccountPolicy)
+	authHandler.SetIdentityService(deps.IdentityService)
 	authHandler.Configuration(api)
 	authHandler.AcceptAccountPolicy(api)
 	authHandler.Register(api)
@@ -119,6 +122,8 @@ func RegisterHumaRoutes(api huma.API, deps RouteDeps) {
 	authHandler.VerifyTOTPLogin(api)
 	authHandler.BeginPasskeyLogin(api)
 	authHandler.FinishPasskeyLogin(api)
+	authHandler.BeginPasskeyReauthentication(api)
+	authHandler.FinishPasskeyReauthentication(api)
 	authHandler.SessionState(api)
 	authHandler.Me(api)
 	authHandler.UpdateProfile(api)
@@ -131,16 +136,21 @@ func RegisterHumaRoutes(api huma.API, deps RouteDeps) {
 	authHandler.BeginPasskeyRegistration(api)
 	authHandler.FinishPasskeyRegistration(api)
 	authHandler.RemovePasskey(api)
+	handlers.NewOIDCHandler(deps.IdentityService, authHandler, deps.Authenticator).RegisterRoutes(api)
 
-	handlers.NewAccountLifecycleHandler(
+	accountLifecycleHandler := handlers.NewAccountLifecycleHandler(
 		deps.DB,
 		deps.AuthService,
 		deps.Authenticator,
 		deps.MediaStorage,
-	).RegisterRoutes(api)
+	)
+	accountLifecycleHandler.SetIdentityService(deps.IdentityService)
+	accountLifecycleHandler.RegisterRoutes(api)
 
 	handlers.NewAPITokenHandler(deps.APITokenService, deps.Authenticator, deps.DB).RegisterRoutes(api)
-	handlers.NewCLIAuthHandler(deps.CLIAuthService, deps.Authenticator, deps.PublicURL).RegisterRoutes(api)
+	cliAuthHandler := handlers.NewCLIAuthHandler(deps.CLIAuthService, deps.Authenticator, deps.PublicURL)
+	cliAuthHandler.SetIdentityService(deps.IdentityService)
+	cliAuthHandler.RegisterRoutes(api)
 	handlers.NewMCPActivityHandler(deps.DB, deps.Authenticator).RegisterRoutes(api)
 	handlers.NewProviderAppHandler(providerapps.NewService(deps.DB, deps.TokenEncryptor), deps.DB, deps.Authenticator).RegisterRoutes(api)
 	handlers.NewCapabilityHandler().RegisterRoutes(api)
@@ -163,6 +173,7 @@ func RegisterHumaRoutes(api huma.API, deps RouteDeps) {
 	if mcpOAuthHandler == nil {
 		mcpOAuthHandler = handlers.NewMCPOAuthHandler(deps.MCPOAuthService, deps.Authenticator, deps.PublicURL)
 	}
+	mcpOAuthHandler.SetIdentityService(deps.IdentityService)
 	mcpOAuthHandler.RegisterAPIRoutes(api)
 
 	workspaceHandler := handlers.NewWorkspaceHandler(deps.DB, deps.Authenticator, deps.Entitlement)

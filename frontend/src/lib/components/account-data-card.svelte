@@ -13,15 +13,19 @@
 	import LoaderIcon from 'lucide-svelte/icons/loader-2';
 	import TrashIcon from 'lucide-svelte/icons/trash';
 	import { client, type AccountDeletionImpact } from '$lib/api/client';
+	import { acquireReauthGrant } from '$lib/auth/reauth';
 	import { auth } from '$lib/stores/auth';
 	import { workspaceCtx } from '$lib/stores/workspace.svelte';
 	import { m } from '$lib/paraglide/messages';
 
 	interface Props {
 		email: string;
+		hasPassword: boolean;
+		reauthProviderID?: string;
+		hasPasskey?: boolean;
 	}
 
-	let { email }: Props = $props();
+	let { email, hasPassword, reauthProviderID = '', hasPasskey = false }: Props = $props();
 	let currentPassword = $state('');
 	let newPassword = $state('');
 	let confirmPassword = $state('');
@@ -59,8 +63,25 @@
 		}
 
 		passwordBusy = true;
+		const grant = hasPassword
+			? ''
+			: await acquireReauthGrant('security.password.change', {
+					providerID: reauthProviderID,
+					hasPasskey
+				}).catch((error: Error) => {
+					showError(error.message);
+					return undefined;
+				});
+		if (grant === null || grant === undefined) {
+			passwordBusy = false;
+			return;
+		}
 		const { data, error } = await client.POST('/auth/password', {
-			body: { current_password: currentPassword, new_password: newPassword }
+			body: {
+				current_password: currentPassword,
+				new_password: newPassword,
+				reauth_grant: grant || undefined
+			}
 		});
 		passwordBusy = false;
 		if (error || !data) {
@@ -78,8 +99,24 @@
 		event.preventDefault();
 		notice = '';
 		exportBusy = true;
+		const grant = hasPassword
+			? ''
+			: await acquireReauthGrant('account.export', {
+					providerID: reauthProviderID,
+					hasPasskey
+				}).catch((error: Error) => {
+					showError(error.message);
+					return undefined;
+				});
+		if (grant === null || grant === undefined) {
+			exportBusy = false;
+			return;
+		}
 		const { data, error } = await client.POST('/auth/account/export', {
-			body: { current_password: exportPassword }
+			body: {
+				current_password: exportPassword,
+				reauth_grant: grant || undefined
+			}
 		});
 		exportBusy = false;
 		if (error || !data) {
@@ -141,7 +178,9 @@
 			>
 				<KeyRoundIcon class="size-4 shrink-0 text-muted-foreground" />
 				<span class="min-w-0 flex-1">
-					<span class="block text-sm font-medium">{m.settings_change_password()}</span>
+					<span class="block text-sm font-medium">
+						{hasPassword ? m.settings_change_password() : m.settings_set_password()}
+					</span>
 					<span class="mt-0.5 block text-xs leading-5 text-muted-foreground">
 						{m.settings_change_password_body()}
 					</span>
@@ -155,16 +194,20 @@
 					onsubmit={changePassword}
 					class="grid gap-3 border-t bg-muted/10 p-4 sm:grid-cols-2 xl:grid-cols-3"
 				>
-					<div class="space-y-2">
-						<Label for="account-current-password">{m.settings_current_password()}</Label>
-						<Input
-							id="account-current-password"
-							type="password"
-							bind:value={currentPassword}
-							autocomplete="current-password"
-							required
-						/>
-					</div>
+					{#if hasPassword}
+						<div class="space-y-2">
+							<Label for="account-current-password">{m.settings_current_password()}</Label>
+							<Input
+								id="account-current-password"
+								type="password"
+								bind:value={currentPassword}
+								autocomplete="current-password"
+								required
+							/>
+						</div>
+					{:else}
+						<p class="self-end text-sm text-muted-foreground">{m.settings_step_up_body()}</p>
+					{/if}
 					<div class="space-y-2">
 						<Label for="account-new-password">{m.settings_new_password()}</Label>
 						<Input
@@ -219,16 +262,20 @@
 					onsubmit={exportData}
 					class="grid gap-3 border-t bg-muted/10 p-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end"
 				>
-					<div class="space-y-2">
-						<Label for="export-password">{m.settings_export_password()}</Label>
-						<Input
-							id="export-password"
-							type="password"
-							bind:value={exportPassword}
-							autocomplete="current-password"
-							required
-						/>
-					</div>
+					{#if hasPassword}
+						<div class="space-y-2">
+							<Label for="export-password">{m.settings_export_password()}</Label>
+							<Input
+								id="export-password"
+								type="password"
+								bind:value={exportPassword}
+								autocomplete="current-password"
+								required
+							/>
+						</div>
+					{:else}
+						<p class="self-end text-sm text-muted-foreground">{m.settings_step_up_body()}</p>
+					{/if}
 					<Button type="submit" variant="outline" disabled={exportBusy}>
 						{#if exportBusy}<LoaderIcon class="size-4 animate-spin" />{/if}
 						{exportBusy ? m.settings_export_loading() : m.settings_export_submit()}
@@ -266,6 +313,9 @@
 		bind:open={deletionOpen}
 		{email}
 		impact={deletionImpact}
+		{hasPassword}
+		{reauthProviderID}
+		{hasPasskey}
 		onDeleted={deleted}
 	/>
 {/if}

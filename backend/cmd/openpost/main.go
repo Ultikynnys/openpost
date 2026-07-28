@@ -35,6 +35,7 @@ import (
 	"github.com/openpost/backend/internal/services/crypto"
 	"github.com/openpost/backend/internal/services/entitlements"
 	"github.com/openpost/backend/internal/services/feedback"
+	"github.com/openpost/backend/internal/services/identity"
 	"github.com/openpost/backend/internal/services/mastodonapps"
 	"github.com/openpost/backend/internal/services/mcpoauth"
 	"github.com/openpost/backend/internal/services/mediaanalysis"
@@ -69,7 +70,31 @@ func main() {
 	}
 
 	e := echo.New()
-	e.Use(middleware.RequestLogger())
+	e.Use(middleware.RequestLoggerWithConfig(middleware.RequestLoggerConfig{
+		LogLatency:      true,
+		LogRemoteIP:     true,
+		LogMethod:       true,
+		LogURIPath:      true,
+		LogRequestID:    true,
+		LogStatus:       true,
+		LogError:        true,
+		LogResponseSize: true,
+		HandleError:     true,
+		LogValuesFunc: func(_ echo.Context, values middleware.RequestLoggerValues) error {
+			log.Printf(
+				"request method=%s path=%s status=%d latency=%s bytes_out=%d remote_ip=%s request_id=%s error=%v",
+				values.Method,
+				values.URIPath,
+				values.Status,
+				values.Latency,
+				values.ResponseSize,
+				values.RemoteIP,
+				values.RequestID,
+				values.Error,
+			)
+			return nil
+		},
+	}))
 	e.Use(middleware.Recover())
 	e.Use(middleware.Secure())
 	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
@@ -89,6 +114,25 @@ func main() {
 
 	tokenEncryptor := crypto.NewTokenEncryptor(cfg.EncryptionKey)
 	authService := auth.NewService(cfg.JWTSecret)
+	identityService := identity.NewService(db, tokenEncryptor, identity.Config{
+		PublicURL:         cfg.PublicURL,
+		NativeCallbackURL: cfg.OIDCNativeCallbackURL,
+		Environment: identity.EnvironmentProviderConfig{
+			Issuer:            cfg.OIDCIssuer,
+			ClientID:          cfg.OIDCClientID,
+			ClientSecret:      cfg.OIDCClientSecret,
+			Name:              cfg.OIDCName,
+			Scopes:            cfg.OIDCScopes,
+			JITEnabled:        cfg.OIDCJITEnabled,
+			BootstrapSubjects: cfg.OIDCBootstrapAllowlist,
+		},
+	})
+	if err := identityService.SyncEnvironmentProvider(context.Background()); err != nil {
+		log.Printf("OIDC provider configuration is unavailable: %v", err)
+	}
+	if _, err := identityService.ApplyBreakGlassEmails(context.Background(), cfg.OIDCBreakGlassEmails); err != nil {
+		log.Printf("Failed to apply SSO break-glass account configuration: %v", err)
+	}
 	apiTokenService := apitokens.NewService(db)
 	sessionService := sessions.NewService(db)
 	billingService := billing.NewService(db, cfg.PolarWebhookSecret, billing.PolarConfig{
@@ -312,6 +356,7 @@ func main() {
 	mcpHandler.SetTokenEncryptor(tokenEncryptor)
 	mcpHandler.RegisterRoutes(e)
 	mcpOAuthHandler := handlers.NewMCPOAuthHandler(mcpOAuthService, authenticator, cfg.PublicURL)
+	mcpOAuthHandler.SetIdentityService(identityService)
 	mcpOAuthHandler.RegisterEchoRoutes(e)
 	updateStatusService := updatestatus.NewService(updatestatus.Options{
 		Enabled:        cfg.Edition == config.EditionSelfHost && cfg.UpdateCheckEnabled,
@@ -357,6 +402,7 @@ func main() {
 		StudioEnabled:                cfg.StudioEnabled,
 		StudioModelBaseURL:           cfg.StudioModelBaseURL,
 		FeedbackService:              feedbackService,
+		IdentityService:              identityService,
 		AnalyticsService:             analyticsService,
 		CommunicationsService:        communicationsService,
 		NotificationService:          notificationService,

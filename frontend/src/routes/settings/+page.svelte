@@ -15,6 +15,7 @@
 	import DestructiveConfirmDialog from '$lib/components/destructive-confirm-dialog.svelte';
 	import ProfileAvatarUploader from '$lib/components/profile-avatar-uploader.svelte';
 	import AccountDataCard from '$lib/components/account-data-card.svelte';
+	import OrganizationSSOSettings from '$lib/components/organization-sso-settings.svelte';
 	import SettingsFormFooter from '$lib/components/settings-form-footer.svelte';
 	import MediaPreviewImage from '$lib/components/media-preview-image.svelte';
 	import BrandKitEditor from '$lib/studio/components/brand-kit-editor.svelte';
@@ -26,6 +27,7 @@
 	import { loadStudioBrandKit } from '$lib/studio/api';
 	import type { StudioBrandKit } from '$lib/studio/types';
 	import { createPasskeyCredential } from '$lib/auth/webauthn';
+	import { acquireReauthGrant, startOIDCIdentityLink } from '$lib/auth/reauth';
 	import LoaderIcon from 'lucide-svelte/icons/loader-2';
 	import SettingsIcon from 'lucide-svelte/icons/settings';
 	import ClockIcon from 'lucide-svelte/icons/clock';
@@ -64,6 +66,8 @@
 		type AuthSessionSummary,
 		type BillingStatus,
 		type MCPActivityItem,
+		type OIDCIdentitySummary,
+		type OIDCProviderSummary,
 		type PostingSchedule,
 		type ProviderCostSummary,
 		type ScheduleRow,
@@ -111,6 +115,10 @@
 	let newPasskeyName = $state('');
 
 	let securityStatus = $state<SecurityStatus | null>(null);
+	let linkedIdentities = $state.raw<OIDCIdentitySummary[]>([]);
+	let linkableProviders = $state.raw<OIDCProviderSummary[]>([]);
+	let identityPassword = $state('');
+	let identityBusy = $state('');
 	let apiTokens = $state<APITokenSummary[]>([]);
 	let apiTokensLoading = $state(true);
 	let apiTokensLoadError = $state('');
@@ -417,6 +425,16 @@
 		new Intl.DateTimeFormat(getLocaleTag(), { weekday: 'long', timeZone: 'UTC' })
 	);
 	const passkeyCount = $derived((securityStatus?.passkeys ?? []).length);
+	const hasPasswordCredential = $derived(securityStatus?.user.has_password ?? true);
+	const reauthProviderID = $derived(linkedIdentities[0]?.provider_id ?? '');
+	const unlinkedProviders = $derived(
+		linkableProviders.filter(
+			(provider) => !linkedIdentities.some((identity) => identity.provider_id === provider.id)
+		)
+	);
+	const hasStepUpMethod = $derived(
+		hasPasswordCredential || passkeyCount > 0 || Boolean(reauthProviderID)
+	);
 	const teamMembers = $derived(workspaceTeam?.members ?? []);
 	const pendingInvitations = $derived(workspaceTeam?.invitations ?? []);
 	const currentTeamSeats = $derived(workspaceTeam?.current_seats ?? 0);
@@ -476,6 +494,7 @@
 		{ id: 'schedule', label: m.settings_schedule() },
 		{ id: 'media', label: m.settings_media() },
 		{ id: 'members', label: m.settings_members() },
+		{ id: 'sso', label: m.settings_sso() },
 		{ id: 'plan', label: m.settings_plan() },
 		...(authState.user?.is_admin ? [{ id: 'instance' as const, label: m.settings_instance() }] : [])
 	]);
@@ -487,7 +506,7 @@
 	});
 	const settingsLoadingVariant = $derived.by(() => {
 		if (activeSettingsTab === 'profile') return 'profile' as const;
-		if (['members', 'plan', 'security'].includes(activeSettingsTab)) return 'cards' as const;
+		if (['members', 'sso', 'plan', 'security'].includes(activeSettingsTab)) return 'cards' as const;
 		if (['developer', 'schedule', 'instance'].includes(activeSettingsTab)) return 'list' as const;
 		return 'form' as const;
 	});
@@ -517,6 +536,7 @@
 		if (activeSettingsTab === 'developer') return m.settings_developer();
 		if (activeSettingsTab === 'instance') return m.settings_instance();
 		if (activeSettingsTab === 'members') return m.settings_team_members();
+		if (activeSettingsTab === 'sso') return m.settings_sso();
 		if (activeSettingsTab === 'plan') return m.settings_plan();
 		if (activeSettingsTab === 'schedule') return m.settings_schedule();
 		if (activeSettingsTab === 'brand') return m.media_brand();
@@ -529,6 +549,7 @@
 		if (activeSettingsTab === 'developer') return m.settings_developer_description();
 		if (activeSettingsTab === 'instance') return m.settings_instance_description();
 		if (activeSettingsTab === 'members') return m.settings_members_description();
+		if (activeSettingsTab === 'sso') return m.settings_sso_description();
 		if (activeSettingsTab === 'plan') return m.settings_plan_description();
 		if (activeSettingsTab === 'schedule') return m.settings_schedule_description();
 		if (activeSettingsTab === 'brand') return m.media_brand_description();
@@ -618,13 +639,70 @@
 		loadingSecurity = true;
 		securityError = '';
 		try {
-			const { data, error: err } = await client.GET('/auth/security');
-			if (err || !data) throw new Error(err?.detail || m.settings_action_failed());
-			securityStatus = data;
+			const [securityResult, identityResult, providerResult] = await Promise.all([
+				client.GET('/auth/security'),
+				client.GET('/auth/oidc/identities'),
+				client.GET('/auth/oidc/link-providers')
+			]);
+			if (securityResult.error || !securityResult.data) {
+				throw new Error(securityResult.error?.detail || m.settings_action_failed());
+			}
+			if (identityResult.error) {
+				throw new Error(identityResult.error.detail || m.settings_action_failed());
+			}
+			if (providerResult.error) {
+				throw new Error(providerResult.error.detail || m.settings_action_failed());
+			}
+			securityStatus = securityResult.data;
+			linkedIdentities = (identityResult.data ?? []) as OIDCIdentitySummary[];
+			linkableProviders = (providerResult.data ?? []) as OIDCProviderSummary[];
 		} catch (e) {
 			securityError = (e as Error).message;
 		} finally {
 			loadingSecurity = false;
+		}
+	}
+
+	async function linkIdentity(providerID: string) {
+		identityBusy = `link-${providerID}`;
+		securityError = '';
+		try {
+			const grant = await acquireReauthGrant('identity.link', {
+				password: hasPasswordCredential ? identityPassword : '',
+				providerID: reauthProviderID,
+				hasPasskey: passkeyCount > 0
+			});
+			if (grant === null) return;
+			await startOIDCIdentityLink(providerID, grant);
+		} catch (e) {
+			securityError = (e as Error).message;
+		} finally {
+			identityBusy = '';
+		}
+	}
+
+	async function unlinkIdentity(identityID: string) {
+		identityBusy = `unlink-${identityID}`;
+		securityError = '';
+		try {
+			const grant = await acquireReauthGrant('identity.unlink', {
+				password: hasPasswordCredential ? identityPassword : '',
+				providerID: reauthProviderID,
+				hasPasskey: passkeyCount > 0
+			});
+			if (grant === null) return;
+			const { error } = await client.DELETE('/auth/oidc/identities/{identity_id}', {
+				params: { path: { identity_id: identityID } },
+				body: { reauth_grant: grant }
+			});
+			if (error) throw new Error(error.detail || m.settings_action_failed());
+			identityPassword = '';
+			await loadSecurityStatus();
+			notify(m.settings_identity_unlinked());
+		} catch (e) {
+			securityError = (e as Error).message;
+		} finally {
+			identityBusy = '';
 		}
 	}
 
@@ -950,8 +1028,18 @@
 		securityBusy = true;
 		securityError = '';
 		try {
+			const grant = hasPasswordCredential
+				? ''
+				: await acquireReauthGrant('security.totp.setup', {
+						providerID: reauthProviderID,
+						hasPasskey: passkeyCount > 0
+					});
+			if (grant === null) return;
 			const { data, error: err } = await client.POST('/auth/security/totp/setup', {
-				body: { current_password: totpCurrentPassword }
+				body: {
+					current_password: totpCurrentPassword,
+					reauth_grant: grant || undefined
+				}
 			});
 			if (err || !data) throw new Error(err?.detail || m.settings_action_failed());
 			totpSetupChallengeId = data.challenge_id;
@@ -995,8 +1083,18 @@
 		securityBusy = true;
 		securityError = '';
 		try {
+			const grant = hasPasswordCredential
+				? ''
+				: await acquireReauthGrant('security.totp.disable', {
+						providerID: reauthProviderID,
+						hasPasskey: passkeyCount > 0
+					});
+			if (grant === null) return;
 			const { data, error: err } = await client.POST('/auth/security/totp/disable', {
-				body: { current_password: totpCurrentPassword }
+				body: {
+					current_password: totpCurrentPassword,
+					reauth_grant: grant || undefined
+				}
 			});
 			if (err || !data) throw new Error(err?.detail || m.settings_action_failed());
 			securityStatus = data;
@@ -1013,12 +1111,20 @@
 		securityBusy = true;
 		securityError = '';
 		try {
+			const grant = hasPasswordCredential
+				? ''
+				: await acquireReauthGrant('security.passkey.add', {
+						providerID: reauthProviderID,
+						hasPasskey: passkeyCount > 0
+					});
+			if (grant === null) return;
 			const { data: beginData, error: beginError } = await client.POST(
 				'/auth/security/passkeys/begin',
 				{
 					body: {
 						current_password: passkeyCurrentPassword,
-						name: newPasskeyName
+						name: newPasskeyName,
+						reauth_grant: grant || undefined
 					}
 				}
 			);
@@ -1050,11 +1156,21 @@
 		securityBusy = true;
 		securityError = '';
 		try {
+			const grant = hasPasswordCredential
+				? ''
+				: await acquireReauthGrant('security.passkey.remove', {
+						providerID: reauthProviderID,
+						hasPasskey: passkeyCount > 0
+					});
+			if (grant === null) return;
 			const { data, error: err } = await client.POST(
 				'/auth/security/passkeys/{passkey_id}/remove',
 				{
 					params: { path: { passkey_id: passkeyId } },
-					body: { current_password: passkeyCurrentPassword }
+					body: {
+						current_password: passkeyCurrentPassword,
+						reauth_grant: grant || undefined
+					}
 				}
 			);
 			if (err || !data) throw new Error(err?.detail || m.settings_action_failed());
@@ -2005,6 +2121,13 @@
 					{/if}
 				</section>
 
+				<section id="sso" class:hidden={activeSettingsTab !== 'sso'} class="scroll-mt-24">
+					<OrganizationSSOSettings
+						organizationID={workspaceCtx.currentWorkspace?.organization_id ?? ''}
+						active={activeSettingsTab === 'sso'}
+					/>
+				</section>
+
 				<section id="billing" class:hidden={activeSettingsTab !== 'plan'} class="scroll-mt-24">
 					<SectionHeader
 						title={m.settings_billing()}
@@ -2376,6 +2499,76 @@
 								{/if}
 							</div>
 
+							<div class="rounded-lg border p-4">
+								<div class="mb-4">
+									<h3 class="flex items-center gap-2 font-medium">
+										<KeyRoundIcon class="h-4 w-4 text-muted-foreground" />
+										{m.settings_linked_identities()}
+									</h3>
+									<p class="mt-1 text-sm text-muted-foreground">
+										{m.settings_linked_identities_body()}
+									</p>
+								</div>
+
+								{#if hasPasswordCredential && (linkedIdentities.length || unlinkedProviders.length)}
+									<div class="mb-3 max-w-sm space-y-2">
+										<Label for="identity-link-password">{m.settings_current_password()}</Label>
+										<Input
+											id="identity-link-password"
+											type="password"
+											bind:value={identityPassword}
+											autocomplete="current-password"
+										/>
+									</div>
+								{:else if !hasPasswordCredential && (linkedIdentities.length || unlinkedProviders.length)}
+									<p class="mb-3 text-sm text-muted-foreground">{m.settings_step_up_body()}</p>
+								{/if}
+
+								<div class="space-y-2">
+									{#each linkedIdentities as identity (identity.id)}
+										<div
+											class="flex flex-col gap-3 rounded-md border px-3 py-3 sm:flex-row sm:items-center sm:justify-between"
+										>
+											<div class="min-w-0">
+												<p class="text-sm font-medium">{identity.provider_name}</p>
+												<p class="truncate text-xs text-muted-foreground">
+													{identity.linked_email ?? securityStatus?.user.email}
+												</p>
+											</div>
+											<Button
+												type="button"
+												variant="ghost"
+												size="sm"
+												class="self-start text-destructive hover:text-destructive sm:self-auto"
+												disabled={Boolean(identityBusy) ||
+													(hasPasswordCredential ? !identityPassword.trim() : !hasStepUpMethod)}
+												onclick={() => void unlinkIdentity(identity.id)}
+											>
+												{m.settings_unlink_identity()}
+											</Button>
+										</div>
+									{/each}
+								</div>
+
+								{#if unlinkedProviders.length}
+									<div class="mt-4 flex flex-wrap gap-2">
+										{#each unlinkedProviders as provider (provider.id)}
+											<Button
+												type="button"
+												variant="outline"
+												disabled={Boolean(identityBusy) ||
+													(hasPasswordCredential ? !identityPassword.trim() : !hasStepUpMethod)}
+												onclick={() => void linkIdentity(provider.id)}
+											>
+												{m.settings_link_identity({ provider: provider.name })}
+											</Button>
+										{/each}
+									</div>
+								{:else if linkedIdentities.length === 0}
+									<p class="text-sm text-muted-foreground">{m.settings_no_linkable_identities()}</p>
+								{/if}
+							</div>
+
 							<div class="grid gap-4 lg:grid-cols-2">
 								<div class="rounded-lg border p-4">
 									<div class="mb-3 flex items-center gap-2">
@@ -2391,39 +2584,53 @@
 											<div class="rounded-md bg-emerald-500/10 px-3 py-2 text-sm text-emerald-700">
 												{m.settings_authenticator_enabled()}
 											</div>
-											<div class="space-y-2">
-												<Label for="disable-password">{m.settings_current_password()}</Label>
-												<Input
-													id="disable-password"
-													type="password"
-													bind:value={totpCurrentPassword}
-													autocomplete="current-password"
-													placeholder={m.settings_password_required_disable()}
-												/>
-											</div>
+											{#if hasPasswordCredential}
+												<div class="space-y-2">
+													<Label for="disable-password">{m.settings_current_password()}</Label>
+													<Input
+														id="disable-password"
+														type="password"
+														bind:value={totpCurrentPassword}
+														autocomplete="current-password"
+														placeholder={m.settings_password_required_disable()}
+													/>
+												</div>
+											{:else}
+												<p class="text-sm text-muted-foreground">
+													{m.settings_step_up_body()}
+												</p>
+											{/if}
 											<Button
 												variant="outline"
 												onclick={disableTOTP}
-												disabled={securityBusy || !totpCurrentPassword.trim()}
+												disabled={securityBusy ||
+													(hasPasswordCredential ? !totpCurrentPassword.trim() : !hasStepUpMethod)}
 											>
 												{m.settings_disable_authenticator()}
 											</Button>
 										</div>
 									{:else}
 										<div class="space-y-3">
-											<div class="space-y-2">
-												<Label for="totp-password">{m.settings_current_password()}</Label>
-												<Input
-													id="totp-password"
-													type="password"
-													bind:value={totpCurrentPassword}
-													autocomplete="current-password"
-													placeholder={m.settings_password_required_setup()}
-												/>
-											</div>
+											{#if hasPasswordCredential}
+												<div class="space-y-2">
+													<Label for="totp-password">{m.settings_current_password()}</Label>
+													<Input
+														id="totp-password"
+														type="password"
+														bind:value={totpCurrentPassword}
+														autocomplete="current-password"
+														placeholder={m.settings_password_required_setup()}
+													/>
+												</div>
+											{:else}
+												<p class="text-sm text-muted-foreground">
+													{m.settings_step_up_body()}
+												</p>
+											{/if}
 											<Button
 												onclick={startTOTPSetup}
-												disabled={securityBusy || !totpCurrentPassword.trim()}
+												disabled={securityBusy ||
+													(hasPasswordCredential ? !totpCurrentPassword.trim() : !hasStepUpMethod)}
 											>
 												{m.settings_start_authenticator()}
 											</Button>
@@ -2477,16 +2684,22 @@
 									</p>
 
 									<div class="space-y-3">
-										<div class="space-y-2">
-											<Label for="passkey-password">{m.settings_current_password()}</Label>
-											<Input
-												id="passkey-password"
-												type="password"
-												bind:value={passkeyCurrentPassword}
-												autocomplete="current-password"
-												placeholder={m.settings_password_required_passkeys()}
-											/>
-										</div>
+										{#if hasPasswordCredential}
+											<div class="space-y-2">
+												<Label for="passkey-password">{m.settings_current_password()}</Label>
+												<Input
+													id="passkey-password"
+													type="password"
+													bind:value={passkeyCurrentPassword}
+													autocomplete="current-password"
+													placeholder={m.settings_password_required_passkeys()}
+												/>
+											</div>
+										{:else}
+											<p class="text-sm text-muted-foreground">
+												{m.settings_step_up_body()}
+											</p>
+										{/if}
 										<div class="space-y-2">
 											<Label for="passkey-name">{m.settings_passkey_name()}</Label>
 											<Input
@@ -2497,7 +2710,8 @@
 										</div>
 										<Button
 											onclick={addPasskey}
-											disabled={securityBusy || !passkeyCurrentPassword.trim()}
+											disabled={securityBusy ||
+												(hasPasswordCredential ? !passkeyCurrentPassword.trim() : !hasStepUpMethod)}
 										>
 											{m.settings_add_passkey()}
 										</Button>
@@ -2526,7 +2740,10 @@
 														size="sm"
 														class="text-destructive hover:text-destructive"
 														onclick={() => removePasskey(passkey.id)}
-														disabled={securityBusy || !passkeyCurrentPassword.trim()}
+														disabled={securityBusy ||
+															(hasPasswordCredential
+																? !passkeyCurrentPassword.trim()
+																: !hasStepUpMethod)}
 													>
 														{m.settings_remove()}
 													</Button>
@@ -2539,7 +2756,12 @@
 								</div>
 							</div>
 
-							<AccountDataCard email={securityStatus?.user.email ?? profileEmail} />
+							<AccountDataCard
+								email={securityStatus?.user.email ?? profileEmail}
+								hasPassword={hasPasswordCredential}
+								{reauthProviderID}
+								hasPasskey={passkeyCount > 0}
+							/>
 
 							{#if securityError}
 								<InlineNotice tone="error" message={securityError} />

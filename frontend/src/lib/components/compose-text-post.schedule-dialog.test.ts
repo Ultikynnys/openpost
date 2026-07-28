@@ -27,4 +27,10 @@ describe('schedule dialog mobile layout', () => {
 		expect(timeListClasses).not.toContain('max-h-72');
 		expect(timeListClasses).not.toContain('overflow-y-auto');
 	});
+
+	it('shows two paged months at the desktop breakpoint', () => {
+		expect(source).toContain("new MediaQuery('min-width: 768px')");
+		expect(source).toContain('numberOfMonths={desktopCalendar.current ? 2 : 1}');
+		expect(source).toContain('pagedNavigation={desktopCalendar.current}');
+	});
 });

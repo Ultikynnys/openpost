@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"testing"
+	"time"
 
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/openpost/backend/internal/models"
@@ -178,6 +179,133 @@ CREATE UNIQUE INDEX social_accounts_active_idx ON social_accounts (workspace_id)
 	require.NotContains(t, got, "BOOLEAN DEFAULT 1")
 	require.NotContains(t, got, "is_active = 0")
 	require.NotContains(t, got, "is_active = 1")
+}
+
+func TestOIDCSSOMigrationAllowsPasswordlessUsersAndBackfillsOrganizationMembers(t *testing.T) {
+	t.Parallel()
+
+	sqldb, err := sql.Open("sqlite3", fmt.Sprintf("file:%s?mode=memory&cache=shared", t.Name()))
+	require.NoError(t, err)
+	db := bun.NewDB(sqldb, sqlitedialect.New())
+	t.Cleanup(func() { require.NoError(t, db.Close()) })
+	ctx := context.Background()
+
+	_, err = db.ExecContext(ctx, `
+		CREATE TABLE users (
+			id TEXT PRIMARY KEY,
+			email TEXT NOT NULL UNIQUE,
+			display_name TEXT NOT NULL DEFAULT '',
+			avatar_url TEXT NOT NULL DEFAULT '',
+			avatar_object_key TEXT NOT NULL DEFAULT '',
+			password_hash TEXT NOT NULL,
+			is_admin BOOLEAN NOT NULL DEFAULT false,
+			totp_secret_encrypted BLOB,
+			totp_enabled_at DATETIME,
+			passkey_enabled_at DATETIME,
+			terms_version TEXT NOT NULL DEFAULT '',
+			privacy_version TEXT NOT NULL DEFAULT '',
+			legal_accepted_at DATETIME,
+			created_at DATETIME NOT NULL DEFAULT current_timestamp
+		)
+	`)
+	require.NoError(t, err)
+	_, err = db.ExecContext(ctx, `
+		INSERT INTO users (id, email, password_hash)
+		VALUES
+		  ('owner', 'owner@example.com', 'hash'),
+		  ('member', 'member@example.com', 'hash'),
+		  ('workspace-admin', 'workspace-admin@example.com', 'hash')
+	`)
+	require.NoError(t, err)
+
+	for _, model := range []any{
+		(*models.Organization)(nil),
+		(*models.OrganizationMember)(nil),
+		(*models.Workspace)(nil),
+		(*models.WorkspaceMember)(nil),
+		(*models.UserSession)(nil),
+		(*models.APIToken)(nil),
+		(*models.MCPOAuthCode)(nil),
+		(*models.CLIAuthSession)(nil),
+	} {
+		_, err = db.NewCreateTable().Model(model).IfNotExists().Exec(ctx)
+		require.NoError(t, err)
+	}
+	now := time.Now().UTC()
+	_, err = db.NewInsert().Model(&models.Organization{
+		ID: "org", Name: "Organization", CreatedByID: "owner", CreatedAt: now, UpdatedAt: now,
+	}).Exec(ctx)
+	require.NoError(t, err)
+	_, err = db.NewInsert().Model(&models.OrganizationMember{
+		OrganizationID: "org", UserID: "owner", Role: models.OrganizationRoleOwner, CreatedAt: now,
+	}).Exec(ctx)
+	require.NoError(t, err)
+	_, err = db.NewInsert().Model(&models.Workspace{
+		ID: "workspace", OrganizationID: "org", Name: "Workspace", CreatedAt: now,
+	}).Exec(ctx)
+	require.NoError(t, err)
+	_, err = db.NewInsert().Model(&[]models.WorkspaceMember{
+		{WorkspaceID: "workspace", UserID: "member", Role: models.WorkspaceRoleEditor},
+		{WorkspaceID: "workspace", UserID: "workspace-admin", Role: models.WorkspaceRoleAdmin},
+	}).Exec(ctx)
+	require.NoError(t, err)
+
+	_, err = db.NewCreateTable().Model((*SchemaMigration)(nil)).IfNotExists().Exec(ctx)
+	require.NoError(t, err)
+	applied := make([]SchemaMigration, 0, 50)
+	for version := int64(1); version <= 50; version++ {
+		applied = append(applied, SchemaMigration{Version: version, AppliedAt: now.Unix()})
+	}
+	_, err = db.NewInsert().Model(&applied).Exec(ctx)
+	require.NoError(t, err)
+
+	require.NoError(t, RunMigrations(db))
+
+	_, err = db.ExecContext(ctx, `
+		INSERT INTO users (id, email, password_hash)
+		VALUES ('oidc-user', 'oidc@example.com', NULL)
+	`)
+	require.NoError(t, err)
+
+	var member models.OrganizationMember
+	require.NoError(t, db.NewSelect().Model(&member).
+		Where("organization_id = ? AND user_id = ?", "org", "member").
+		Scan(ctx))
+	require.Equal(t, models.OrganizationRoleMember, member.Role)
+	require.NoError(t, db.NewSelect().Model(&member).
+		Where("organization_id = ? AND user_id = ?", "org", "workspace-admin").
+		Scan(ctx))
+	require.Equal(t, models.OrganizationRoleMember, member.Role)
+
+	for _, table := range []string{
+		"identity_providers",
+		"user_identities",
+		"oidc_auth_requests",
+		"organization_sso_policies",
+		"session_identity_assurances",
+		"reauth_grants",
+		"oidc_native_handoffs",
+		"identity_audit_events",
+	} {
+		exists, err := migrationTableExists(ctx, db, table)
+		require.NoError(t, err)
+		require.True(t, exists, "expected %s table", table)
+	}
+}
+
+func TestOIDCSSOMigrationNormalizesForPostgres(t *testing.T) {
+	t.Parallel()
+
+	raw, err := migrationFiles.ReadFile("051_oidc_sso.sql")
+	require.NoError(t, err)
+	got := normalizeMigrationSQL(dialect.PG, string(raw))
+
+	require.Contains(t, got, "client_secret_encrypted BYTEA")
+	require.Contains(t, got, "pkce_verifier_encrypted BYTEA NOT NULL")
+	require.Contains(t, got, "auth_time TIMESTAMPTZ NOT NULL")
+	require.Contains(t, got, "ADD COLUMN IF NOT EXISTS is_break_glass BOOLEAN NOT NULL DEFAULT false")
+	require.NotContains(t, got, " BLOB")
+	require.NotContains(t, got, " DATETIME")
 }
 
 func TestRemoveGlobalMediaHashConstraintKeepsIndexesAndAllowsWorkspaceScopedHashes(t *testing.T) {

@@ -131,8 +131,98 @@ func prepareMigration(ctx context.Context, db *bun.DB, migration migration) erro
 		if err := backfillPublicationTextEditors(ctx, db); err != nil {
 			return fmt.Errorf("migration %s publication editor backfill failed: %w", migration.name, err)
 		}
+	case 51:
+		if err := makeUserPasswordOptional(ctx, db); err != nil {
+			return fmt.Errorf("migration %s optional password preparation failed: %w", migration.name, err)
+		}
 	}
 	return nil
+}
+
+func makeUserPasswordOptional(ctx context.Context, db *bun.DB) error {
+	exists, err := migrationTableExists(ctx, db, "users")
+	if err != nil || !exists {
+		return err
+	}
+
+	switch db.Dialect().Name() {
+	case dialect.PG:
+		_, err := db.ExecContext(ctx, "ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL")
+		return err
+	case dialect.SQLite:
+		type sqliteColumn struct {
+			Name    string `bun:"name"`
+			NotNull int    `bun:"notnull"`
+		}
+		var columns []sqliteColumn
+		if err := db.NewSelect().
+			TableExpr("pragma_table_info(?)", "users").
+			Column("name", "notnull").
+			Scan(ctx, &columns); err != nil {
+			return err
+		}
+		for _, column := range columns {
+			if column.Name == "password_hash" && column.NotNull == 0 {
+				return nil
+			}
+		}
+		return rebuildSQLiteUsersWithOptionalPassword(ctx, db)
+	default:
+		return nil
+	}
+}
+
+func rebuildSQLiteUsersWithOptionalPassword(ctx context.Context, db *bun.DB) error {
+	if _, err := db.ExecContext(ctx, "PRAGMA foreign_keys=OFF"); err != nil {
+		return err
+	}
+	defer func() {
+		_, _ = db.ExecContext(context.Background(), "PRAGMA foreign_keys=ON")
+	}()
+
+	return db.RunInTx(ctx, &sql.TxOptions{}, func(txCtx context.Context, tx bun.Tx) error {
+		if _, err := tx.ExecContext(txCtx, `
+			CREATE TABLE users_rebuild_051 (
+				id TEXT PRIMARY KEY,
+				email TEXT NOT NULL UNIQUE,
+				display_name TEXT NOT NULL DEFAULT '',
+				avatar_url TEXT NOT NULL DEFAULT '',
+				avatar_object_key TEXT NOT NULL DEFAULT '',
+				password_hash TEXT,
+				is_admin BOOLEAN NOT NULL DEFAULT false,
+				totp_secret_encrypted BLOB,
+				totp_enabled_at DATETIME,
+				passkey_enabled_at DATETIME,
+				terms_version TEXT NOT NULL DEFAULT '',
+				privacy_version TEXT NOT NULL DEFAULT '',
+				legal_accepted_at DATETIME,
+				created_at DATETIME NOT NULL DEFAULT current_timestamp
+			)
+		`); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(txCtx, `
+			INSERT INTO users_rebuild_051 (
+				id, email, display_name, avatar_url, avatar_object_key,
+				password_hash, is_admin, totp_secret_encrypted, totp_enabled_at,
+				passkey_enabled_at, terms_version, privacy_version,
+				legal_accepted_at, created_at
+			)
+			SELECT
+				id, email, display_name, avatar_url, avatar_object_key,
+				password_hash, is_admin, totp_secret_encrypted, totp_enabled_at,
+				passkey_enabled_at, terms_version, privacy_version,
+				legal_accepted_at, created_at
+			FROM users
+		`); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(txCtx, "DROP TABLE users"); err != nil {
+			return err
+		}
+		_, err := tx.ExecContext(txCtx, "ALTER TABLE users_rebuild_051 RENAME TO users")
+		return err
+	})
 }
 
 func addPublishingFailureColumnsToPostDestinations(ctx context.Context, db *bun.DB) error {

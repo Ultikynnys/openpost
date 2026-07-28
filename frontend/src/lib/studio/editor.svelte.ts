@@ -7,6 +7,7 @@ import {
 	cloneStudioPage,
 	defaultImageAdjustments,
 	defaultTransform,
+	isEmptyStudioPaintLayer,
 	studioID
 } from './document';
 import { defaultLayerEffects, defaultTextCurve } from './effects';
@@ -341,6 +342,45 @@ export class StudioEditor {
 		this.addLayer(layer);
 	}
 
+	addEmptyLayer(): void {
+		if (!this.document) return;
+		const baseName = m.studio_layer();
+		const names = new Set(this.activePage?.layers.map((layer) => layer.name) ?? []);
+		let number = 1;
+		while (names.has(`${baseName} ${number}`)) number++;
+		const name = `${baseName} ${number}`;
+		const selectedID = this.selectedLayerIDs.at(-1);
+		const layer: StudioLayer = {
+			id: studioID('layer'),
+			type: 'paint',
+			name,
+			visible: true,
+			locked: false,
+			opacity: 1,
+			transform: defaultTransform(this.document.width_px, this.document.height_px),
+			paint: {
+				kind: 'fill',
+				color: this.paintColor,
+				size: 1,
+				opacity: 1,
+				source_width: this.document.width_px,
+				source_height: this.document.height_px,
+				points: [],
+				spans: []
+			},
+			effects: defaultLayerEffects()
+		};
+		this.mutate(`Add ${name}`, (document) => {
+			const page = document.pages.find((item) => item.id === this.activePageID);
+			if (!page) return;
+			const selectedIndex = selectedID
+				? page.layers.findIndex((candidate) => candidate.id === selectedID)
+				: -1;
+			page.layers.splice(selectedIndex >= 0 ? selectedIndex + 1 : page.layers.length, 0, layer);
+		});
+		this.selectedLayerIDs = [layer.id];
+	}
+
 	addPencilStroke(points: SelectionPoint[]): void {
 		if (!this.document || points.length === 0) return;
 		const stroke = strokePixelMask(
@@ -523,6 +563,21 @@ export class StudioEditor {
 		paint: NonNullable<StudioLayer['paint']>;
 	}): void {
 		const selectedID = this.selectedLayerIDs.at(-1);
+		const selectedLayer = selectedID
+			? this.activePage?.layers.find((layer) => layer.id === selectedID)
+			: undefined;
+		if (selectedLayer && isEmptyStudioPaintLayer(selectedLayer)) {
+			this.mutate(`Paint ${selectedLayer.name}`, (document) => {
+				const target = document.pages
+					.find((page) => page.id === this.activePageID)
+					?.layers.find((layer) => layer.id === selectedLayer.id);
+				if (!target) return;
+				target.transform = structuredClone(transform);
+				target.paint = structuredClone(paint);
+				target.erase_mask = undefined;
+			});
+			return;
+		}
 		const layer: StudioLayer = {
 			id: studioID('layer'),
 			type: 'paint',

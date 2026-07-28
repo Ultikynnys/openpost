@@ -520,6 +520,159 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/oidc/discover": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Discover a verified organization identity provider by email */
+        get: operations["discover-oidc-provider"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/oidc/handoff": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Exchange a one-time native OIDC handoff code */
+        post: operations["exchange-native-oidc-handoff"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/oidc/identities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List OIDC identities linked to the current account */
+        get: operations["list-linked-oidc-identities"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/oidc/identities/{identity_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Unlink an OIDC identity from the current account */
+        delete: operations["unlink-oidc-identity"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/oidc/link-providers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List identity providers the current account may explicitly link */
+        get: operations["list-linkable-oidc-providers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/oidc/providers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List instance identity providers available for login */
+        get: operations["list-login-oidc-providers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/oidc/{provider_id}/link": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Start an explicit OIDC identity link */
+        post: operations["start-oidc-identity-link"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/oidc/{provider_id}/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Revoke the OpenPost session and prepare optional provider logout */
+        post: operations["logout-oidc-session"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/oidc/{provider_id}/reauth": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Start action-bound OIDC reauthentication */
+        post: operations["start-oidc-reauthentication"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/password": {
         parameters: {
             query?: never;
@@ -600,6 +753,57 @@ export interface paths {
         post?: never;
         /** Remove current user profile avatar */
         delete: operations["delete-profile-avatar"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/reauth/passkey/options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Begin action-bound reauthentication with a passkey */
+        post: operations["begin-passkey-reauthentication"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/reauth/passkey/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Complete action-bound reauthentication with a passkey */
+        post: operations["finish-passkey-reauthentication"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/reauth/password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create an action-bound reauthentication grant with a password */
+        post: operations["reauthenticate-with-password"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -1671,6 +1875,111 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/organizations/{organization_id}/identity-audit-events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List organization identity audit events */
+        get: operations["list-organization-identity-audit-events"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/organizations/{organization_id}/identity-providers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List organization identity providers */
+        get: operations["list-organization-oidc-providers"];
+        put?: never;
+        /** Create or update an organization identity provider */
+        post: operations["save-organization-oidc-provider"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/organizations/{organization_id}/identity-providers/{provider_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Enable or disable an organization identity provider */
+        patch: operations["set-organization-oidc-provider-active"];
+        trace?: never;
+    };
+    "/organizations/{organization_id}/sso-domains": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List organization SSO discovery domains */
+        get: operations["list-organization-sso-domains"];
+        put?: never;
+        /** Create an organization SSO discovery domain */
+        post: operations["create-organization-sso-domain"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/organizations/{organization_id}/sso-domains/{domain_id}/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Verify an organization SSO discovery domain */
+        post: operations["verify-organization-sso-domain"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/organizations/{organization_id}/sso-policy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get an organization SSO policy */
+        get: operations["get-organization-sso-policy"];
+        /** Save an organization SSO policy */
+        put: operations["save-organization-sso-policy"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/posting-schedules": {
         parameters: {
             query?: never;
@@ -2581,10 +2890,14 @@ export interface components {
             expires_at?: string;
             /** @description API token ID */
             id: string;
+            /** @description Identity provider assurance bound to this token */
+            identity_provider_id?: string;
             /** @description Last successful use time */
             last_used_at?: string;
             /** @description User-visible token name */
             name: string;
+            /** @description Organization this token is bound to by SSO policy */
+            organization_id?: string;
             /** @description Revocation time */
             revoked_at?: string;
             /** @description Token scope */
@@ -2800,6 +3113,8 @@ export interface components {
             readonly $schema?: string;
             /** @description Current account password */
             current_password: string;
+            /** @description One-time action-bound reauthentication grant */
+            reauth_grant?: string;
         };
         AccountResponse: {
             /**
@@ -2898,6 +3213,8 @@ export interface components {
             name?: string;
             scopes?: string;
             user_code?: string;
+            /** @description Workspace the resulting token is limited to */
+            workspace_id?: string;
         };
         AuthConfigurationOutputBody: {
             /**
@@ -2978,6 +3295,16 @@ export interface components {
             /** @description Pending MFA challenge token */
             mfa_token: string;
         };
+        BeginPasskeyReauthInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/BeginPasskeyReauthInputBody.json
+             */
+            readonly $schema?: string;
+            /** @description Sensitive action the one-time grant authorizes */
+            action: string;
+        };
         BeginPasskeyRegistrationInputBody: {
             /**
              * Format: uri
@@ -2989,6 +3316,8 @@ export interface components {
             current_password: string;
             /** @description Optional passkey label */
             name: string;
+            /** @description One-time action-bound reauthentication grant */
+            reauth_grant?: string;
         };
         BillingStatusResponse: {
             /**
@@ -3120,6 +3449,8 @@ export interface components {
             current_password: string;
             /** @description New password */
             new_password: string;
+            /** @description One-time action-bound reauthentication grant */
+            reauth_grant?: string;
         };
         ChangePasswordOutputBody: {
             /**
@@ -3805,6 +4136,8 @@ export interface components {
             confirm_email: string;
             /** @description Current account password */
             current_password: string;
+            /** @description One-time action-bound reauthentication grant */
+            reauth_grant?: string;
         };
         DeleteAccountOutputBody: {
             /**
@@ -4006,6 +4339,8 @@ export interface components {
             readonly $schema?: string;
             /** @description Current password for re-authentication */
             current_password: string;
+            /** @description One-time action-bound reauthentication grant */
+            reauth_grant?: string;
         };
         DiscordWebhookLoginInputBody: {
             /**
@@ -4193,6 +4528,18 @@ export interface components {
             /** @description WebAuthn assertion response */
             credential: unknown;
         };
+        FinishPasskeyReauthInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/FinishPasskeyReauthInputBody.json
+             */
+            readonly $schema?: string;
+            /** @description Passkey challenge ID */
+            challenge_id: string;
+            /** @description WebAuthn assertion response */
+            credential: unknown;
+        };
         FinishPasskeyRegistrationInputBody: {
             /**
              * Format: uri
@@ -4328,6 +4675,28 @@ export interface components {
             readonly $schema?: string;
             /** @description Health status */
             status: string;
+        };
+        IdentityAuditEvent: {
+            action: string;
+            actor_user_id?: string;
+            /** Format: date-time */
+            created_at: string;
+            detail?: string;
+            id: string;
+            organization_id?: string;
+            provider_id?: string;
+            subject_user_id?: string;
+        };
+        IdentityProviderDomain: {
+            /** Format: date-time */
+            created_at: string;
+            created_by_user_id: string;
+            domain: string;
+            id: string;
+            organization_id: string;
+            provider_id: string;
+            /** Format: date-time */
+            verified_at?: string;
         };
         InstantiateStudioTemplateInputBody: {
             /**
@@ -4819,6 +5188,229 @@ export interface components {
             /** Format: int64 */
             unread_count: number;
         };
+        OIDCAuthenticatedStartInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/OIDCAuthenticatedStartInputBody.json
+             */
+            readonly $schema?: string;
+            action?: string;
+            native?: boolean;
+            reauth_grant?: string;
+            return_path?: string;
+        };
+        OIDCAuthenticatedStartOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/OIDCAuthenticatedStartOutputBody.json
+             */
+            readonly $schema?: string;
+            authorization_url: string;
+        };
+        OIDCBackchannelLogoutOutputBody: {
+            ok: boolean;
+        };
+        OIDCDiscoverOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/OIDCDiscoverOutputBody.json
+             */
+            readonly $schema?: string;
+            found: boolean;
+            provider?: components["schemas"]["OIDCProviderSummary"];
+        };
+        OIDCDomainCreateInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/OIDCDomainCreateInputBody.json
+             */
+            readonly $schema?: string;
+            domain: string;
+            provider_id: string;
+        };
+        OIDCDomainCreateOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/OIDCDomainCreateOutputBody.json
+             */
+            readonly $schema?: string;
+            dns_name: string;
+            dns_value: string;
+            domain: components["schemas"]["IdentityProviderDomain"];
+        };
+        OIDCDomainVerifyOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/OIDCDomainVerifyOutputBody.json
+             */
+            readonly $schema?: string;
+            verified: boolean;
+        };
+        OIDCIdentitySummary: {
+            /** Format: date-time */
+            created_at: string;
+            id: string;
+            /** Format: date-time */
+            last_login_at?: string;
+            linked_email?: string;
+            provider_id: string;
+            provider_name: string;
+        };
+        OIDCLogoutInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/OIDCLogoutInputBody.json
+             */
+            readonly $schema?: string;
+            return_path?: string;
+        };
+        OIDCLogoutOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/OIDCLogoutOutputBody.json
+             */
+            readonly $schema?: string;
+            logout_url?: string;
+        };
+        OIDCNativeHandoffInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/OIDCNativeHandoffInputBody.json
+             */
+            readonly $schema?: string;
+            code: string;
+        };
+        OIDCNativeHandoffOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/OIDCNativeHandoffOutputBody.json
+             */
+            readonly $schema?: string;
+            action?: string;
+            /** @enum {string} */
+            purpose: "login" | "reauth" | "link";
+            reauth_grant?: string;
+            token?: string;
+            user?: components["schemas"]["UserProfile"];
+        };
+        OIDCPolicyInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/OIDCPolicyInputBody.json
+             */
+            readonly $schema?: string;
+            /** @enum {string} */
+            api_token_mode: "allow" | "scoped" | "deny";
+            /** Format: int64 */
+            assurance_max_age_seconds: number;
+            /** Format: int64 */
+            max_token_lifetime_seconds: number;
+            /** @enum {string} */
+            mode: "disabled" | "optional" | "required";
+            password_login_allowed: boolean;
+            provider_ids: string[] | null;
+            require_token_reauth: boolean;
+        };
+        OIDCProviderActiveInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/OIDCProviderActiveInputBody.json
+             */
+            readonly $schema?: string;
+            active: boolean;
+        };
+        OIDCProviderActiveOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/OIDCProviderActiveOutputBody.json
+             */
+            readonly $schema?: string;
+            active: boolean;
+            /** Format: int64 */
+            revoked_sessions: number;
+        };
+        OIDCProviderAdminInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/OIDCProviderAdminInputBody.json
+             */
+            readonly $schema?: string;
+            client_id: string;
+            client_secret?: string;
+            email_claim?: string;
+            id?: string;
+            is_active: boolean;
+            /** Format: uri */
+            issuer: string;
+            jit_enabled?: boolean;
+            name: string;
+            name_claim?: string;
+            picture_claim?: string;
+            require_verified_email: boolean;
+            scopes?: string[] | null;
+            use_userinfo?: boolean;
+        };
+        OIDCProviderAdminResponse: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/OIDCProviderAdminResponse.json
+             */
+            readonly $schema?: string;
+            backchannel_logout_url: string;
+            callback_url: string;
+            client_id: string;
+            /** Format: date-time */
+            created_at: string;
+            email_claim: string;
+            has_client_secret: boolean;
+            health_message?: string;
+            health_status: string;
+            id: string;
+            is_active: boolean;
+            issuer: string;
+            jit_enabled: boolean;
+            /** Format: date-time */
+            last_checked_at?: string;
+            name: string;
+            name_claim: string;
+            organization_id: string;
+            picture_claim: string;
+            require_verified_email: boolean;
+            scopes: string[] | null;
+            /** Format: date-time */
+            updated_at: string;
+            use_userinfo: boolean;
+        };
+        OIDCProviderSummary: {
+            id: string;
+            name: string;
+            organization?: string;
+            start_url: string;
+        };
+        OIDCUnlinkIdentityInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/OIDCUnlinkIdentityInputBody.json
+             */
+            readonly $schema?: string;
+            reauth_grant: string;
+        };
         Option: {
             label: string;
             value: string;
@@ -4896,6 +5488,34 @@ export interface components {
             last_used_at: string;
             /** @description User-visible passkey label */
             name: string;
+        };
+        PasswordReauthInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/PasswordReauthInputBody.json
+             */
+            readonly $schema?: string;
+            action: string;
+            password: string;
+        };
+        Policy: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/Policy.json
+             */
+            readonly $schema?: string;
+            api_token_mode: string;
+            /** Format: int64 */
+            assurance_max_age_seconds: number;
+            /** Format: int64 */
+            max_token_lifetime_seconds: number;
+            mode: string;
+            organization_id: string;
+            password_login_allowed: boolean;
+            provider_ids: string[] | null;
+            require_token_reauth: boolean;
         };
         PollCLIAuthInputBody: {
             /**
@@ -5513,6 +6133,17 @@ export interface components {
             /** @description Readiness status */
             status: string;
         };
+        ReauthGrantOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ReauthGrantOutputBody.json
+             */
+            readonly $schema?: string;
+            /** Format: int64 */
+            expires_in: number;
+            grant: string;
+        };
         RefreshAnalyticsInputBody: {
             /**
              * Format: uri
@@ -5589,6 +6220,8 @@ export interface components {
             readonly $schema?: string;
             /** @description Current password for re-authentication */
             current_password: string;
+            /** @description One-time action-bound reauthentication grant */
+            reauth_grant?: string;
         };
         RenditionInput: {
             /** @description Platform-specific body */
@@ -6193,6 +6826,8 @@ export interface components {
             readonly $schema?: string;
             /** @description Current password for re-authentication */
             current_password: string;
+            /** @description One-time action-bound reauthentication grant */
+            reauth_grant?: string;
         };
         SetupTOTPOutputBody: {
             /**
@@ -7085,10 +7720,14 @@ export interface components {
             display_name: string;
             /** @description User email address */
             email: string;
+            /** @description Whether this account has a local password credential */
+            has_password: boolean;
             /** @description User ID */
             id: string;
             /** @description Whether this user can manage instance-level settings */
             is_admin: boolean;
+            /** @description Whether this account was provisioned by an organization identity provider */
+            is_managed: boolean;
             /** @description Whether the current hosted policy still needs acceptance */
             legal_acceptance_required: boolean;
             /**
@@ -7096,6 +7735,8 @@ export interface components {
              * @description When the current account policy was accepted
              */
             legal_accepted_at?: string;
+            /** @description Organization managing this account */
+            managed_organization_name?: string;
             /** @description Privacy version acknowledged by the user */
             privacy_version?: string;
             /** @description Terms version accepted by the user */
@@ -7255,6 +7896,16 @@ export interface components {
              * @enum {string}
              */
             role: "admin" | "editor" | "viewer";
+            /** @description Whether the current credential satisfies organization SSO */
+            sso_authenticated: boolean;
+            /** @description Whether the required provider is explicitly linked to this user */
+            sso_identity_linked: boolean;
+            /** @description Identity provider required for this workspace */
+            sso_provider_id?: string;
+            /** @description Identity provider name required for this workspace */
+            sso_provider_name?: string;
+            /** @description Whether this workspace requires organization SSO */
+            sso_required: boolean;
         };
         WorkspaceTeamOutputBody: {
             /**
@@ -8991,6 +9642,430 @@ export interface operations {
             };
         };
     };
+    "discover-oidc-provider": {
+        parameters: {
+            query?: {
+                email?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OIDCDiscoverOutputBody"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "exchange-native-oidc-handoff": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OIDCNativeHandoffInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OIDCNativeHandoffOutputBody"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "list-linked-oidc-identities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OIDCIdentitySummary"][] | null;
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "unlink-oidc-identity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                identity_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OIDCUnlinkIdentityInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessageOutputBody"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "list-linkable-oidc-providers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OIDCProviderSummary"][] | null;
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "list-login-oidc-providers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OIDCProviderSummary"][] | null;
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "start-oidc-identity-link": {
+        parameters: {
+            query?: never;
+            header?: {
+                Cookie?: string;
+            };
+            path: {
+                provider_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OIDCAuthenticatedStartInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    "Set-Cookie"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OIDCAuthenticatedStartOutputBody"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "logout-oidc-session": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OIDCLogoutInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    "Set-Cookie"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OIDCLogoutOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "start-oidc-reauthentication": {
+        parameters: {
+            query?: never;
+            header?: {
+                Cookie?: string;
+            };
+            path: {
+                provider_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OIDCAuthenticatedStartInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    "Set-Cookie"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OIDCAuthenticatedStartOutputBody"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     "change-password": {
         parameters: {
             query?: never;
@@ -9270,6 +10345,186 @@ export interface operations {
             };
             /** @description Not Found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "begin-passkey-reauthentication": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BeginPasskeyReauthInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PasskeyCeremonyOutputBody"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "finish-passkey-reauthentication": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FinishPasskeyReauthInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReauthGrantOutputBody"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "reauthenticate-with-password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasswordReauthInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReauthGrantOutputBody"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -12756,6 +14011,440 @@ export interface operations {
             };
             /** @description Not Found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "list-organization-identity-audit-events": {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                organization_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IdentityAuditEvent"][] | null;
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "list-organization-oidc-providers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                organization_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OIDCProviderAdminResponse"][] | null;
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "save-organization-oidc-provider": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                organization_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OIDCProviderAdminInputBody"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OIDCProviderAdminResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "set-organization-oidc-provider-active": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                organization_id: string;
+                provider_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OIDCProviderActiveInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OIDCProviderActiveOutputBody"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "list-organization-sso-domains": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                organization_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IdentityProviderDomain"][] | null;
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "create-organization-sso-domain": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                organization_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OIDCDomainCreateInputBody"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OIDCDomainCreateOutputBody"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "verify-organization-sso-domain": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                organization_id: string;
+                domain_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OIDCDomainVerifyOutputBody"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "get-organization-sso-policy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                organization_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Policy"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "save-organization-sso-policy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                organization_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OIDCPolicyInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Policy"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };

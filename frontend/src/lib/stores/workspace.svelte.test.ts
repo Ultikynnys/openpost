@@ -22,7 +22,10 @@ const workspaceA = {
 	organization_id: '',
 	organization_name: '',
 	role: 'admin',
-	can_edit: true
+	can_edit: true,
+	sso_required: false,
+	sso_authenticated: true,
+	sso_identity_linked: true
 } satisfies Workspace;
 
 const workspaceB = {

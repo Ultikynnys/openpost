@@ -27,6 +27,9 @@ func (s *Service) HashPassword(password string) (string, error) {
 }
 
 func (s *Service) CheckPassword(password, hash string) bool {
+	if hash == "" {
+		return false
+	}
 	err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
 	return err == nil
 }
@@ -64,7 +67,7 @@ func (s *Service) GenerateTokenWithSession(userID, email, sessionID string, expi
 func (s *Service) ValidateToken(tokenString string) (*Claims, error) {
 	token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(_ *jwt.Token) (interface{}, error) {
 		return s.jwtSecret, nil
-	})
+	}, jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}), jwt.WithIssuer("openpost"))
 
 	if err != nil {
 		return nil, err
@@ -77,8 +80,10 @@ func (s *Service) ValidateToken(tokenString string) (*Claims, error) {
 	return nil, jwt.ErrSignatureInvalid
 }
 
-func GenerateState() string {
+func GenerateState() (string, error) {
 	b := make([]byte, 16)
-	rand.Read(b)
-	return hex.EncodeToString(b)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(b), nil
 }

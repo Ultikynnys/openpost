@@ -117,6 +117,36 @@ describe('Studio editor layer interactions', () => {
 		expect(bucket?.paint?.spans).toEqual([{ x: 0, y: 0, width: 20 }]);
 	});
 
+	it('creates generic empty layers and paints into the selected empty layer', () => {
+		const editor = new StudioEditor();
+		editor.load(response());
+		editor.selectLayer('middle');
+
+		editor.addEmptyLayer();
+
+		const empty = editor.selectedLayers[0];
+		expect(empty.name).toBe('Layer 1');
+		expect(empty.type).toBe('paint');
+		expect(empty.paint?.spans).toEqual([]);
+		expect(editor.activePage?.layers.map((candidate) => candidate.name)).toEqual([
+			'back',
+			'middle',
+			'Layer 1',
+			'front'
+		]);
+
+		const mask = new Uint8Array(1080 * 1080);
+		mask.fill(1, 10 * 1080 + 20, 10 * 1080 + 40);
+		editor.addPaintFill(mask);
+
+		expect(editor.activePage?.layers).toHaveLength(4);
+		expect(editor.selectedLayers[0].name).toBe('Layer 1');
+		expect(editor.selectedLayers[0].paint?.spans).toEqual([{ x: 0, y: 0, width: 20 }]);
+
+		editor.addEmptyLayer();
+		expect(editor.selectedLayers[0].name).toBe('Layer 2');
+	});
+
 	it('moves layers precisely above or below a sibling', () => {
 		const editor = new StudioEditor();
 		editor.load(response());

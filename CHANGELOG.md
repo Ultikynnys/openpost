@@ -6,6 +6,8 @@ All notable changes to this project are documented in this file.
 
 ### Added
 
+- Added empty Studio paint layers that can be created above the current selection and used directly by pencil, bucket, or gradient tools.
+- Added native OIDC login and organization SSO with PKCE, nonce and browser binding, explicit identity linking and JIT provisioning, action-bound step-up grants, managed onboarding, verified-domain discovery, provider assurance, token policy, RP/back-channel logout, encrypted provider secrets, audit events, break-glass access, and one-time Capacitor handoffs.
 - Added a no-account OpenPost Studio at `/studio` with on-device design and image storage, watermark-free export, public starter templates, privacy-safe Umami funnel events, and an explicit path that copies local work into a new or existing workspace.
 - Added a client-first video workflow across every video-capable composer and the Media library, with browser-side inspection, MP4 remuxing, H.264/AAC transcoding and compression, precise trimming, draggable aspect-ratio cropping, real upload progress and cancellation, durable server verification, poster generation, and retryable processing.
 - Added a cloud-only X request-cost guardrail with durable pre-request reservations, immutable idempotent events only for confirmed successes, separate unresolved exposure, reconciled monthly counters, workspace-visible estimates, and per-workspace safety limits that never gate self-hosted publishing.
@@ -28,6 +30,8 @@ All notable changes to this project are documented in this file.
 
 ### Changed
 
+- Reused one transient saving and saved indicator across Studio and every composer.
+- Made desktop scheduling show two adjacent months, moved engagement collection issues into a provider- and post-specific status menu, and reduced analytics native-post actions to compact external-link controls.
 - Reduced app startup and publication-list load with precompressed immutable assets, service-worker caching that fills as routes are visited, video-editor code loaded only when needed, and publication data loaded in a fixed number of queries.
 - Added Photoshop-style Studio tool slots, movable pixel-selection borders, textured pencil strokes, and drag-to-place media previews.
 - Replaced the remaining native radio inputs with the shared shadcn-svelte radio group and synchronized Studio color editing across Hex, HSL, and RGB.
@@ -48,12 +52,16 @@ All notable changes to this project are documented in this file.
 - Renamed the sidebar Communications destination to Inbox, clarified archived engagement actions, and kept filter changes in place without replacing the page with a loading placeholder.
 - Standardized application select controls on the shared shadcn-svelte component.
 - Made Engagement post-centered with account/publication filters, reply threading, safe attachment links, edited/deleted state, and durable provider sync health.
-- Made composer source or override state, save state, destination readiness, reset-to-source, and the last conflict editor visible in the main authoring flow.
+- Kept destination customization and reset controls in the account menu, surfaced conflict resolution in the authoring flow, and replaced persistent composer status summaries with transient save feedback beside the destination selector.
 - Made Analytics account filters apply to every total and content row, added per-provider metric detail, sorting, native links, stale timing, and capture-window snapshot deduplication.
 - Made feedback rate limits durable across restarts and multiple app instances.
 
 ### Fixed
 
+- Kept context-menu layer renaming open long enough to edit and submit the new name.
+- Restored YouTube category and playlist choices in destination settings, populated native-post links from stored provider IDs and canonical permalinks, loaded persisted TTF brand fonts under their friendly names, and removed the stray Activity tab scrollbar.
+- Kept the Studio canvas point beneath the mouse or pinch midpoint fixed while zooming, let pixel selections start or end beyond the image edge, shortened the rounded-shape label, and tightened desktop tool menus.
+- Kept organization membership complete when workspace invitations are accepted and backfilled existing workspace members so organization policy, billing, and team views share the same membership boundary.
 - Prevented signed-in startup redirects from briefly mounting the login form inside the authenticated application sidebar.
 - Fixed Studio color picks falling back to black, first-drag layer movement and Alt duplication, unstable paint erasing, and save validation for erase masks and color adjustments.
 - Persisted each Studio design's export format and quality so PNG and WebP selections no longer reset to the preset default after autosave.

@@ -95,6 +95,11 @@ test("first autosave establishes the draft URL and keeps draft actions in one co
   await expect(page).toHaveURL(/\/posts\/[a-zA-Z0-9-]+$/, {
     timeout: 10_000,
   });
+  await expect(page.getByTestId("composer-save-indicator")).toHaveAttribute(
+    "data-state",
+    "saved",
+  );
+  await expect(page.getByTestId("composer-context-status")).toHaveCount(0);
   await expect(page.getByTestId("sidebar-new-post")).toBeVisible();
   await expect(homeBrand).toHaveAttribute("data-swap-position", "before");
   await expect(homeBrand).toHaveAttribute("inert", "");
@@ -110,12 +115,6 @@ test("first autosave establishes the draft URL and keeps draft actions in one co
     page.getByRole("button", { name: "Save changes", exact: true }),
   ).toHaveCount(0);
   await expect(page.getByText("Editing draft post")).toHaveCount(0);
-  await expect(
-    page
-      .getByTestId("composer-context-status")
-      .getByText("Saved", { exact: true }),
-  ).toBeVisible();
-
   await page.reload();
   await expect(page.getByLabel("Post text")).toHaveValue(content);
   await expect(

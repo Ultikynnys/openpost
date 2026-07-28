@@ -49,6 +49,18 @@ test("communications and notifications stay usable across desktop and phone layo
       contentType: "application/json",
       json: {
         total: showingArchived === engagementArchived ? 1 : 0,
+        sync_states: [
+          {
+            id: "engagement-sync-youtube",
+            rendition_id: "rendition-1",
+            social_account_id: "account-youtube",
+            platform: "youtube",
+            status: "failed",
+            error_code: "provider_error",
+            error_message:
+              "OpenPost could not collect engagement from this provider.",
+          },
+        ],
         items:
           showingArchived === engagementArchived
             ? [
@@ -189,6 +201,19 @@ test("communications and notifications stay usable across desktop and phone layo
   await expect(
     page.getByText("Could you share the setup guide?"),
   ).toBeVisible();
+  await page.getByRole("button", { name: "Collection issues (1)" }).click();
+  await expect(
+    page.getByText("Posts with collection issues", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("paragraph").filter({ hasText: /^YouTube$/ }),
+  ).toBeVisible();
+  await expect(
+    page.getByText(
+      "OpenPost could not collect new replies. It will try again automatically.",
+    ),
+  ).toBeVisible();
+  await page.keyboard.press("Escape");
   await expect(page.getByRole("button", { name: "Reply" })).toBeVisible();
   await expect(
     page.getByRole("link", { name: "Open post on YouTube" }),

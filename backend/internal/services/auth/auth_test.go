@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/golang-jwt/jwt/v5"
 )
 
 func TestNewService(t *testing.T) {
@@ -201,6 +203,40 @@ func TestValidateTokenInvalidSignature(t *testing.T) {
 	}
 }
 
+func TestValidateTokenRejectsUnexpectedAlgorithmAndIssuer(t *testing.T) {
+	const secret = "validation-secret"
+	service := NewService(secret)
+	now := time.Now().UTC()
+
+	claims := &Claims{
+		UserID: "user-123",
+		Email:  "user@example.com",
+		RegisteredClaims: jwt.RegisteredClaims{
+			Issuer:    "openpost",
+			IssuedAt:  jwt.NewNumericDate(now),
+			ExpiresAt: jwt.NewNumericDate(now.Add(time.Hour)),
+		},
+	}
+	wrongAlgorithm := jwt.NewWithClaims(jwt.SigningMethodHS384, claims)
+	wrongAlgorithmToken, err := wrongAlgorithm.SignedString([]byte(secret))
+	if err != nil {
+		t.Fatalf("sign HS384 token: %v", err)
+	}
+	if _, err := service.ValidateToken(wrongAlgorithmToken); err == nil {
+		t.Fatal("expected HS384 token to be rejected")
+	}
+
+	claims.Issuer = "another-service"
+	wrongIssuer := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	wrongIssuerToken, err := wrongIssuer.SignedString([]byte(secret))
+	if err != nil {
+		t.Fatalf("sign wrong-issuer token: %v", err)
+	}
+	if _, err := service.ValidateToken(wrongIssuerToken); err == nil {
+		t.Fatal("expected token with a different issuer to be rejected")
+	}
+}
+
 func TestValidateTokenInvalidFormat(t *testing.T) {
 	service := NewService("test-secret")
 
@@ -225,8 +261,14 @@ func TestValidateTokenInvalidFormat(t *testing.T) {
 }
 
 func TestGenerateState(t *testing.T) {
-	state1 := GenerateState()
-	state2 := GenerateState()
+	state1, err := GenerateState()
+	if err != nil {
+		t.Fatalf("GenerateState() error = %v", err)
+	}
+	state2, err := GenerateState()
+	if err != nil {
+		t.Fatalf("GenerateState() error = %v", err)
+	}
 
 	if state1 == state2 {
 		t.Error("expected different states")
@@ -251,7 +293,10 @@ func TestGenerateStateUniqueness(t *testing.T) {
 	states := make(map[string]bool)
 
 	for i := 0; i < 1000; i++ {
-		state := GenerateState()
+		state, err := GenerateState()
+		if err != nil {
+			t.Fatalf("GenerateState() error = %v", err)
+		}
 		if states[state] {
 			t.Fatalf("duplicate state generated: %s", state)
 		}

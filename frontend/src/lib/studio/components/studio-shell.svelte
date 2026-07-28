@@ -8,6 +8,7 @@
 	import * as Sheet from '$lib/components/ui/sheet';
 	import * as Tooltip from '$lib/components/ui/tooltip';
 	import { Button } from '$lib/components/ui/button';
+	import SaveIndicator from '$lib/components/save-indicator.svelte';
 	import { Checkbox } from '$lib/components/ui/checkbox';
 	import { Input } from '$lib/components/ui/input';
 	import * as RadioGroup from '$lib/components/ui/radio-group';
@@ -80,7 +81,6 @@
 	import GroupIcon from 'lucide-svelte/icons/group';
 	import UngroupIcon from 'lucide-svelte/icons/ungroup';
 	import MoreIcon from 'lucide-svelte/icons/ellipsis';
-	import CheckIcon from 'lucide-svelte/icons/check';
 	import SquareIcon from 'lucide-svelte/icons/square';
 	import CircleIcon from 'lucide-svelte/icons/circle';
 	import MinusIcon from 'lucide-svelte/icons/minus';
@@ -111,6 +111,10 @@
 	const backgroundRemoval = new StudioBackgroundRemoval();
 	const DESKTOP_TOOL_RAIL_WIDTH = 44;
 	const MINIMUM_CANVAS_WIDTH = 320;
+	const TOOL_CONTEXT_MENU_CLASS =
+		'z-50 min-w-44 rounded-lg bg-popover/95 p-1 text-sm text-popover-foreground shadow-md ring-1 ring-foreground/10 backdrop-blur outline-none';
+	const TOOL_CONTEXT_MENU_ITEM_CLASS =
+		'flex min-h-8 cursor-default items-center gap-2 rounded-md px-2 outline-none data-highlighted:bg-muted [&>svg]:size-4 [@media(pointer:coarse)]:min-h-11';
 	type SaveRequest = {
 		coverPreviewMediaID?: string;
 		recoveryReason: 'idle' | 'export' | 'close';
@@ -1423,19 +1427,14 @@
 				</Menubar.Portal>
 			</Menubar.Menu>
 		</Menubar.Root>
-		{#if editor.saveState === 'saving'}
-			<div class="hidden min-w-0 items-center gap-1.5 px-2 text-xs text-muted-foreground sm:flex">
-				<LoaderIcon class="size-3.5 animate-spin" />
-				<span>{m.common_saving()}</span>
-			</div>
-		{:else if savedIndicatorVisible && editor.saveState === 'saved'}
-			<div
-				class="hidden min-w-0 animate-in items-center gap-1.5 px-2 text-xs text-muted-foreground zoom-in-95 fade-in motion-reduce:animate-none sm:flex"
-			>
-				<CheckIcon class="size-3.5 text-primary" />
-				<span>{guestMode ? m.studio_public_saved_device() : m.studio_saved()}</span>
-			</div>
-		{:else if ['local', 'offline', 'conflict', 'error'].includes(editor.saveState)}
+		<SaveIndicator
+			saving={editor.saveState === 'saving'}
+			saved={savedIndicatorVisible && editor.saveState === 'saved'}
+			savingLabel={m.common_saving()}
+			savedLabel={guestMode ? m.studio_public_saved_device() : m.studio_saved()}
+			testId="studio-save-indicator"
+		/>
+		{#if ['local', 'offline', 'conflict', 'error'].includes(editor.saveState)}
 			<div
 				class="hidden max-w-52 min-w-0 items-center gap-1.5 truncate px-2 text-xs text-muted-foreground sm:flex"
 				title={editor.saveMessage}
@@ -1625,11 +1624,9 @@
 							</Tooltip.Content>
 						</Tooltip.Root>
 						<ContextMenu.Portal>
-							<ContextMenu.Content
-								class="z-50 min-w-52 rounded-lg bg-popover/95 p-1 text-sm text-popover-foreground shadow-md ring-1 ring-foreground/10 backdrop-blur outline-none"
-							>
+							<ContextMenu.Content class={TOOL_CONTEXT_MENU_CLASS}>
 								<ContextMenu.Item
-									class="flex min-h-9 cursor-default items-center gap-2 rounded-md px-2 outline-none data-highlighted:bg-muted"
+									class={TOOL_CONTEXT_MENU_ITEM_CLASS}
 									onclick={() => setTool('marquee')}
 								>
 									<RectangleSelectIcon />
@@ -1637,7 +1634,7 @@
 									<span class="ml-auto text-xs text-muted-foreground">M</span>
 								</ContextMenu.Item>
 								<ContextMenu.Item
-									class="flex min-h-9 cursor-default items-center gap-2 rounded-md px-2 outline-none data-highlighted:bg-muted"
+									class={TOOL_CONTEXT_MENU_ITEM_CLASS}
 									onclick={() => setTool('ellipse_marquee')}
 								>
 									<CircleDashedIcon />
@@ -1680,11 +1677,9 @@
 							<Tooltip.Content side="right">{m.studio_add_shape()} · U</Tooltip.Content>
 						</Tooltip.Root>
 						<ContextMenu.Portal>
-							<ContextMenu.Content
-								class="z-50 min-w-52 rounded-lg bg-popover/95 p-1 text-sm text-popover-foreground shadow-md ring-1 ring-foreground/10 backdrop-blur outline-none"
-							>
+							<ContextMenu.Content class={TOOL_CONTEXT_MENU_CLASS}>
 								<ContextMenu.Item
-									class="flex min-h-9 cursor-default items-center gap-2 rounded-md px-2 outline-none data-highlighted:bg-muted"
+									class={TOOL_CONTEXT_MENU_ITEM_CLASS}
 									onclick={() => insertShape('rectangle')}
 								>
 									<SquareIcon />
@@ -1692,21 +1687,21 @@
 									<span class="ml-auto text-xs text-muted-foreground">U</span>
 								</ContextMenu.Item>
 								<ContextMenu.Item
-									class="flex min-h-9 cursor-default items-center gap-2 rounded-md px-2 outline-none data-highlighted:bg-muted"
+									class={TOOL_CONTEXT_MENU_ITEM_CLASS}
 									onclick={() => insertShape('rounded_rectangle')}
 								>
 									<SquareIcon />
 									{m.studio_rounded_rectangle()}
 								</ContextMenu.Item>
 								<ContextMenu.Item
-									class="flex min-h-9 cursor-default items-center gap-2 rounded-md px-2 outline-none data-highlighted:bg-muted"
+									class={TOOL_CONTEXT_MENU_ITEM_CLASS}
 									onclick={() => insertShape('ellipse')}
 								>
 									<CircleIcon />
 									{m.studio_ellipse()}
 								</ContextMenu.Item>
 								<ContextMenu.Item
-									class="flex min-h-9 cursor-default items-center gap-2 rounded-md px-2 outline-none data-highlighted:bg-muted"
+									class={TOOL_CONTEXT_MENU_ITEM_CLASS}
 									onclick={() => insertShape('line')}
 								>
 									<MinusIcon />
@@ -1748,11 +1743,9 @@
 							<Tooltip.Content side="right">{m.studio_fill()}</Tooltip.Content>
 						</Tooltip.Root>
 						<ContextMenu.Portal>
-							<ContextMenu.Content
-								class="z-50 min-w-44 rounded-lg bg-popover/95 p-1 text-sm text-popover-foreground shadow-md ring-1 ring-foreground/10 backdrop-blur outline-none"
-							>
+							<ContextMenu.Content class={TOOL_CONTEXT_MENU_CLASS}>
 								<ContextMenu.Item
-									class="flex min-h-9 cursor-default items-center gap-2 rounded-md px-2 outline-none data-highlighted:bg-muted"
+									class={TOOL_CONTEXT_MENU_ITEM_CLASS}
 									onclick={() => setTool('bucket')}
 								>
 									<PaintBucketIcon />
@@ -1760,7 +1753,7 @@
 									<span class="ml-auto text-xs text-muted-foreground">⇧G</span>
 								</ContextMenu.Item>
 								<ContextMenu.Item
-									class="flex min-h-9 cursor-default items-center gap-2 rounded-md px-2 outline-none data-highlighted:bg-muted"
+									class={TOOL_CONTEXT_MENU_ITEM_CLASS}
 									onclick={() => setTool('gradient')}
 								>
 									<BlendIcon />
@@ -1803,11 +1796,9 @@
 							<Tooltip.Content side="right">{m.studio_erase()}</Tooltip.Content>
 						</Tooltip.Root>
 						<ContextMenu.Portal>
-							<ContextMenu.Content
-								class="z-50 min-w-48 rounded-lg bg-popover/95 p-1 text-sm text-popover-foreground shadow-md ring-1 ring-foreground/10 backdrop-blur outline-none"
-							>
+							<ContextMenu.Content class={TOOL_CONTEXT_MENU_CLASS}>
 								<ContextMenu.Item
-									class="flex min-h-9 cursor-default items-center gap-2 rounded-md px-2 outline-none data-highlighted:bg-muted"
+									class={TOOL_CONTEXT_MENU_ITEM_CLASS}
 									onclick={() => setTool('eraser')}
 								>
 									<EraserIcon />
@@ -1815,7 +1806,7 @@
 									<span class="ml-auto text-xs text-muted-foreground">E</span>
 								</ContextMenu.Item>
 								<ContextMenu.Item
-									class="flex min-h-9 cursor-default items-center gap-2 rounded-md px-2 outline-none data-highlighted:bg-muted"
+									class={TOOL_CONTEXT_MENU_ITEM_CLASS}
 									onclick={() => setTool('magic_eraser')}
 								>
 									<WandIcon />

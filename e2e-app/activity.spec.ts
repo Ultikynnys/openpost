@@ -160,6 +160,15 @@ test("failed delivery details stay secondary to post status", async ({
   await page.goto("/activity");
 
   await expect(page.getByRole("heading", { name: "Posts" })).toBeVisible();
+  const activityTabs = page.getByRole("tablist");
+  await expect(activityTabs).toBeVisible();
+  await expect
+    .poll(() =>
+      activityTabs.evaluate(
+        (element) => element.scrollHeight <= element.clientHeight,
+      ),
+    )
+    .toBe(true);
   const scheduledTab = page.getByRole("tab", { name: /Scheduled 1/ });
   await expect(scheduledTab).toBeVisible();
   const scheduledPanel = page.getByRole("tabpanel", { name: /Scheduled 1/ });

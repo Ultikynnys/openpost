@@ -153,6 +153,13 @@ export class WorkspaceContext {
 				const exists = this.workspaces.find((w) => w.id === this.currentWorkspace?.id);
 				if (!exists && this.workspaces.length > 0) {
 					await this.setWorkspace(this.workspaces[0]);
+				} else if (exists?.sso_required && !exists.sso_authenticated) {
+					this.currentWorkspace = exists;
+					localStorage.setItem(STORAGE_KEY, JSON.stringify(exists));
+					this.settings = defaultWorkspaceSettings();
+					this.settingsLoading = false;
+					this.settingsError = '';
+					this.settingsWorkspaceID = '';
 				} else if (exists) {
 					await this.loadSettings();
 				}
@@ -167,6 +174,13 @@ export class WorkspaceContext {
 		this.currentWorkspace = workspace;
 		if (browser) {
 			localStorage.setItem(STORAGE_KEY, JSON.stringify(workspace));
+		}
+		if (workspace.sso_required && !workspace.sso_authenticated) {
+			this.settings = defaultWorkspaceSettings();
+			this.settingsLoading = false;
+			this.settingsError = '';
+			this.settingsWorkspaceID = '';
+			return;
 		}
 		await this.loadSettings(workspace.id);
 	}

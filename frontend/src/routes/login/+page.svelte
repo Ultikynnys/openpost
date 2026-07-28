@@ -15,6 +15,10 @@
 	import { safeSameOriginRedirect } from '$lib/redirects';
 	import { onMount } from 'svelte';
 	import { client, type AuthConfiguration } from '$lib/api/client';
+	import type { OIDCProvider } from '$lib/api/client';
+	import { getApiBase } from '$lib/stores/instance.svelte';
+	import { IS_CAPACITOR } from '$lib/env';
+	import BuildingIcon from 'lucide-svelte/icons/building-2';
 
 	let email = $state('');
 	let password = $state('');
@@ -24,12 +28,21 @@
 	let mfaToken = $state('');
 	let mfaMethods = $state<string[]>([]);
 	let authConfiguration = $state<AuthConfiguration | null>(null);
+	let oidcProviders = $state<OIDCProvider[]>([]);
+	let discoveryEmail = $state('');
+	let ssoLoading = $state('');
 
 	const needsMfa = $derived(mfaToken.length > 0);
 
 	onMount(async () => {
-		const { data } = await client.GET('/auth/config');
-		authConfiguration = data ?? null;
+		const [configurationResult, providerResult] = await Promise.all([
+			client.GET('/auth/config'),
+			client.GET('/auth/oidc/providers')
+		]);
+		authConfiguration = configurationResult.data ?? null;
+		oidcProviders = providerResult.data ?? [];
+		const oidcError = $page.url.searchParams.get('oidc_error');
+		if (oidcError) error = oidcError;
 	});
 
 	function loginTarget() {
@@ -95,6 +108,42 @@
 		mfaMethods = [];
 		totpCode = '';
 		error = '';
+	}
+
+	function oidcStartURL(provider: OIDCProvider) {
+		const base = getApiBase().replace(/\/$/, '');
+		const query = new URLSearchParams({
+			return_path: loginTarget(),
+			...(IS_CAPACITOR ? { native: 'true' } : {})
+		});
+		return `${base}/auth/oidc/${encodeURIComponent(provider.id)}/start?${query}`;
+	}
+
+	async function startOIDC(provider: OIDCProvider) {
+		error = '';
+		ssoLoading = provider.id;
+		const url = oidcStartURL(provider);
+		if (IS_CAPACITOR) {
+			const { Browser } = await import('@capacitor/browser');
+			await Browser.open({ url });
+			return;
+		}
+		window.location.assign(url);
+	}
+
+	async function discoverSSO(event: SubmitEvent) {
+		event.preventDefault();
+		error = '';
+		ssoLoading = 'discover';
+		const { data, error: discoveryError } = await client.GET('/auth/oidc/discover', {
+			params: { query: { email: discoveryEmail.trim() } }
+		});
+		if (discoveryError || !data?.found || !data.provider) {
+			error = discoveryError?.detail ?? m.auth_sso_not_found();
+			ssoLoading = '';
+			return;
+		}
+		await startOIDC(data.provider);
 	}
 </script>
 
@@ -163,6 +212,33 @@
 			</Button>
 		</div>
 	{:else}
+		{#if oidcProviders.length}
+			<div class="space-y-3">
+				{#each oidcProviders as provider (provider.id)}
+					<Button
+						type="button"
+						variant="outline"
+						class="w-full gap-2"
+						disabled={Boolean(ssoLoading)}
+						onclick={() => void startOIDC(provider)}
+					>
+						{#if ssoLoading === provider.id}
+							<LoaderIcon class="size-4 animate-spin" />
+						{:else}
+							<BuildingIcon class="size-4" />
+						{/if}
+						{m.auth_sso_continue_with({ provider: provider.name })}
+					</Button>
+				{/each}
+			</div>
+
+			<div class="my-5 flex items-center gap-3" aria-hidden="true">
+				<div class="h-px flex-1 bg-border"></div>
+				<span class="text-xs font-medium text-muted-foreground">{m.common_or()}</span>
+				<div class="h-px flex-1 bg-border"></div>
+			</div>
+		{/if}
+
 		<form onsubmit={handleSubmit} class="space-y-4">
 			<div class="space-y-2">
 				<Label for="email">{m.common_email()}</Label>
@@ -207,6 +283,31 @@
 				{/if}
 			</Button>
 		</form>
+
+		<details class="mt-5 rounded-lg border border-border/70 px-4 py-3">
+			<summary class="cursor-pointer text-sm font-medium">{m.auth_sso_work_account()}</summary>
+			<form onsubmit={discoverSSO} class="mt-3 space-y-3">
+				<div class="space-y-2">
+					<Label for="sso-email">{m.auth_sso_work_email()}</Label>
+					<Input
+						id="sso-email"
+						type="email"
+						bind:value={discoveryEmail}
+						autocomplete="email"
+						placeholder={m.auth_email_placeholder()}
+						required
+					/>
+				</div>
+				<Button type="submit" variant="outline" class="w-full gap-2" disabled={Boolean(ssoLoading)}>
+					{#if ssoLoading === 'discover'}
+						<LoaderIcon class="size-4 animate-spin" />
+					{:else}
+						<BuildingIcon class="size-4" />
+					{/if}
+					{m.auth_sso_find_provider()}
+				</Button>
+			</form>
+		</details>
 
 		<p class="mt-6 text-center text-sm text-muted-foreground">
 			{m.auth_login_no_account()}

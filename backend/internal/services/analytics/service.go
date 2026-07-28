@@ -360,6 +360,7 @@ func (s *Service) syncRendition(ctx context.Context, renditionID string) error {
 	if err != nil {
 		return s.recordFailure(ctx, subjectRendition, rendition.ID, account, err)
 	}
+	s.resolveAndStoreContentURL(ctx, adapter, token, account, &rendition)
 	values, err := adapter.FetchContentAnalytics(ctx, token, platform.ContentAnalyticsRequest{
 		AccountID:     account.AccountID,
 		ExternalIDs:   externalIDs,
@@ -373,6 +374,51 @@ func (s *Service) syncRendition(ctx context.Context, renditionID string) error {
 		return s.recordFailure(ctx, subjectRendition, rendition.ID, account, err)
 	}
 	return s.recordSuccess(ctx, subjectRendition, rendition.ID, account, rendition.PublicationID, rendition.ID, values, contentCadence(s.now().Sub(publishedAt)))
+}
+
+func (s *Service) resolveAndStoreContentURL(
+	ctx context.Context,
+	adapter platform.AnalyticsAdapter,
+	accessToken string,
+	account models.SocialAccount,
+	rendition *models.Rendition,
+) {
+	if platform.IsSafeContentURL(rendition.ExternalURL) {
+		return
+	}
+	resolved := platform.DeterministicContentURL(
+		account.Platform,
+		account.AccountID,
+		account.AccountUsername,
+		account.InstanceURL,
+		rendition.ExternalID,
+	)
+	if resolved == "" {
+		resolver, ok := adapter.(platform.ContentURLResolver)
+		if !ok {
+			return
+		}
+		var err error
+		resolved, err = resolver.ResolveContentURL(
+			ctx,
+			accessToken,
+			account.AccountID,
+			rendition.ExternalID,
+		)
+		if err != nil {
+			return
+		}
+	}
+	if !platform.IsSafeContentURL(resolved) {
+		return
+	}
+	if _, err := s.db.NewUpdate().
+		Model((*models.Rendition)(nil)).
+		Set("external_url = ?", resolved).
+		Where("id = ?", rendition.ID).
+		Exec(ctx); err == nil {
+		rendition.ExternalURL = resolved
+	}
 }
 
 func (s *Service) recordSuccess(

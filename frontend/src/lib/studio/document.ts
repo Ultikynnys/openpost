@@ -54,6 +54,16 @@ export function defaultImageAdjustments(): StudioImageAdjustments {
 	};
 }
 
+export function isEmptyStudioPaintLayer(layer: StudioLayer): boolean {
+	return Boolean(
+		layer.type === 'paint' &&
+		layer.paint &&
+		layer.paint.points.length === 0 &&
+		layer.paint.spans.length === 0 &&
+		!layer.paint.gradient
+	);
+}
+
 export function blankStudioPage(name = 'Page 1'): StudioPage {
 	return {
 		id: studioID('page'),

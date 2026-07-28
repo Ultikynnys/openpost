@@ -17,6 +17,7 @@ import (
 	"github.com/openpost/backend/internal/models"
 	"github.com/openpost/backend/internal/queue"
 	"github.com/openpost/backend/internal/services/entitlements"
+	"github.com/openpost/backend/internal/services/identity"
 	"github.com/openpost/backend/internal/services/notifications"
 	"github.com/uptrace/bun"
 )
@@ -70,6 +71,11 @@ type WorkspaceResponse struct {
 	WorkspaceCreatedAt string `json:"created_at"`
 	Role               string `json:"role" enum:"admin,editor,viewer" doc:"Current user's workspace role"`
 	CanEdit            bool   `json:"can_edit" doc:"Whether the current user can change workspace content"`
+	SSORequired        bool   `json:"sso_required" doc:"Whether this workspace requires organization SSO"`
+	SSOAuthenticated   bool   `json:"sso_authenticated" doc:"Whether the current credential satisfies organization SSO"`
+	SSOProviderID      string `json:"sso_provider_id,omitempty" doc:"Identity provider required for this workspace"`
+	SSOProviderName    string `json:"sso_provider_name,omitempty" doc:"Identity provider name required for this workspace"`
+	SSOIdentityLinked  bool   `json:"sso_identity_linked" doc:"Whether the required provider is explicitly linked to this user"`
 }
 
 type ListWorkspacesOutput struct {
@@ -566,6 +572,14 @@ func (h *WorkspaceHandler) acceptWorkspaceInvitation(
 	}
 
 	err := h.db.RunInTx(ctx, &sql.TxOptions{}, func(txCtx context.Context, tx bun.Tx) error {
+		var workspace models.Workspace
+		if err := tx.NewSelect().
+			Model(&workspace).
+			Column("id", "organization_id").
+			Where("id = ?", invitation.WorkspaceID).
+			Scan(txCtx); err != nil {
+			return err
+		}
 		member := &models.WorkspaceMember{
 			WorkspaceID: invitation.WorkspaceID,
 			UserID:      userID,
@@ -574,6 +588,18 @@ func (h *WorkspaceHandler) acceptWorkspaceInvitation(
 		if _, err := tx.NewInsert().
 			Model(member).
 			On("CONFLICT (workspace_id, user_id) DO NOTHING").
+			Exec(txCtx); err != nil {
+			return err
+		}
+		organizationMember := &models.OrganizationMember{
+			OrganizationID: workspace.OrganizationID,
+			UserID:         userID,
+			Role:           models.OrganizationRoleMember,
+			CreatedAt:      now,
+		}
+		if _, err := tx.NewInsert().
+			Model(organizationMember).
+			On("CONFLICT (organization_id, user_id) DO NOTHING").
 			Exec(txCtx); err != nil {
 			return err
 		}
@@ -654,21 +680,14 @@ func (h *WorkspaceHandler) checkCreateWorkspaceEntitlement(ctx context.Context, 
 }
 
 func (h *WorkspaceHandler) requireWorkspaceMember(ctx context.Context, workspaceID, userID string) (*models.WorkspaceMember, error) {
-	if !middleware.WorkspaceScopeAllows(ctx, workspaceID) {
-		return nil, huma.Error403Forbidden(errWorkspaceAccessDenied)
-	}
-	var member models.WorkspaceMember
-	err := h.db.NewSelect().
-		Model(&member).
-		Where("workspace_id = ? AND user_id = ?", workspaceID, userID).
-		Scan(ctx)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, huma.Error403Forbidden(errWorkspaceAccessDenied)
-	}
+	role, ok, err := middleware.WorkspaceRole(ctx, h.db, workspaceID, userID)
 	if err != nil {
 		return nil, huma.Error500InternalServerError(errValidateWorkspaceAccess)
 	}
-	return &member, nil
+	if !ok {
+		return nil, huma.Error403Forbidden(errWorkspaceAccessDenied)
+	}
+	return &models.WorkspaceMember{WorkspaceID: workspaceID, UserID: userID, Role: role}, nil
 }
 
 func (h *WorkspaceHandler) requireWorkspaceAdmin(ctx context.Context, workspaceID, userID string) error {
@@ -694,8 +713,22 @@ func (h *WorkspaceHandler) requireOrganizationAdmin(ctx context.Context, organiz
 }
 
 func (h *WorkspaceHandler) requireOrganizationMember(ctx context.Context, organizationID, userID string) (*models.OrganizationMember, error) {
+	decision, err := identity.EvaluateOrganizationAccess(
+		ctx,
+		h.db,
+		organizationID,
+		userID,
+		middleware.GetSessionID(ctx),
+		middleware.GetTokenID(ctx),
+	)
+	if err != nil {
+		return nil, huma.Error500InternalServerError("failed to validate organization SSO access")
+	}
+	if !decision.Allowed {
+		return nil, huma.Error403Forbidden("organization SSO authentication is required")
+	}
 	var member models.OrganizationMember
-	err := h.db.NewSelect().
+	err = h.db.NewSelect().
 		Model(&member).
 		Where("organization_id = ? AND user_id = ?", organizationID, userID).
 		Scan(ctx)
@@ -842,6 +875,26 @@ func (h *WorkspaceHandler) ListWorkspaces(api huma.API) {
 
 		resp := &ListWorkspacesOutput{Body: []WorkspaceResponse{}}
 		for _, ws := range rows {
+			decision, err := identity.EvaluateWorkspaceAccess(
+				ctx,
+				h.db,
+				ws.ID,
+				userID,
+				middleware.GetSessionID(ctx),
+				middleware.GetTokenID(ctx),
+			)
+			if err != nil {
+				return nil, huma.Error500InternalServerError("failed to evaluate workspace SSO policy")
+			}
+			identityLinked := true
+			if decision.SSORequired && decision.ProviderID != "" {
+				identityLinked, err = h.db.NewSelect().Model((*models.UserIdentity)(nil)).
+					Where("user_id = ? AND provider_id = ?", userID, decision.ProviderID).
+					Exists(ctx)
+				if err != nil {
+					return nil, huma.Error500InternalServerError("failed to inspect workspace SSO identity")
+				}
+			}
 			resp.Body = append(resp.Body, WorkspaceResponse{
 				WorkspaceID:        ws.ID,
 				OrganizationID:     ws.OrganizationID,
@@ -850,7 +903,12 @@ func (h *WorkspaceHandler) ListWorkspaces(api huma.API) {
 				AvatarURL:          ws.AvatarURL,
 				WorkspaceCreatedAt: ws.CreatedAt.Format(time.RFC3339),
 				Role:               ws.Role,
-				CanEdit:            ws.Role == models.WorkspaceRoleAdmin || ws.Role == models.WorkspaceRoleEditor,
+				CanEdit:            decision.Allowed && (ws.Role == models.WorkspaceRoleAdmin || ws.Role == models.WorkspaceRoleEditor),
+				SSORequired:        decision.SSORequired,
+				SSOAuthenticated:   decision.Allowed,
+				SSOProviderID:      decision.ProviderID,
+				SSOProviderName:    decision.ProviderName,
+				SSOIdentityLinked:  identityLinked,
 			})
 		}
 		return resp, nil

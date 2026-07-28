@@ -12,6 +12,7 @@ import (
 	"github.com/openpost/backend/internal/api/middleware"
 	"github.com/openpost/backend/internal/models"
 	"github.com/openpost/backend/internal/services/apitokens"
+	"github.com/openpost/backend/internal/services/identity"
 	"github.com/uptrace/bun"
 )
 
@@ -26,15 +27,17 @@ func NewAPITokenHandler(tokens *apitokens.Service, authenticator middleware.Auth
 }
 
 type APITokenResponse struct {
-	ID          string  `json:"id" doc:"API token ID"`
-	Name        string  `json:"name" doc:"User-visible token name"`
-	TokenPrefix string  `json:"token_prefix" doc:"First 8 hex characters of the token secret hash"`
-	Scope       string  `json:"scope" doc:"Token scope"`
-	WorkspaceID string  `json:"workspace_id,omitempty" doc:"Optional workspace ID this token is limited to"`
-	ExpiresAt   *string `json:"expires_at,omitempty" doc:"Token expiry time"`
-	LastUsedAt  *string `json:"last_used_at,omitempty" doc:"Last successful use time"`
-	RevokedAt   *string `json:"revoked_at,omitempty" doc:"Revocation time"`
-	CreatedAt   string  `json:"created_at" doc:"Creation time"`
+	ID                 string  `json:"id" doc:"API token ID"`
+	Name               string  `json:"name" doc:"User-visible token name"`
+	TokenPrefix        string  `json:"token_prefix" doc:"First 8 hex characters of the token secret hash"`
+	Scope              string  `json:"scope" doc:"Token scope"`
+	WorkspaceID        string  `json:"workspace_id,omitempty" doc:"Optional workspace ID this token is limited to"`
+	OrganizationID     string  `json:"organization_id,omitempty" doc:"Organization this token is bound to by SSO policy"`
+	IdentityProviderID string  `json:"identity_provider_id,omitempty" doc:"Identity provider assurance bound to this token"`
+	ExpiresAt          *string `json:"expires_at,omitempty" doc:"Token expiry time"`
+	LastUsedAt         *string `json:"last_used_at,omitempty" doc:"Last successful use time"`
+	RevokedAt          *string `json:"revoked_at,omitempty" doc:"Revocation time"`
+	CreatedAt          string  `json:"created_at" doc:"Creation time"`
 }
 
 type ListAPITokensOutput struct {
@@ -68,6 +71,12 @@ type RevokeAPITokenOutput struct {
 }
 
 func (h *APITokenHandler) RegisterRoutes(api huma.API) {
+	h.registerListRoute(api)
+	h.registerCreateRoute(api)
+	h.registerRevokeRoute(api)
+}
+
+func (h *APITokenHandler) registerListRoute(api huma.API) {
 	huma.Register(api, huma.Operation{
 		OperationID: "list-api-tokens",
 		Method:      http.MethodGet,
@@ -82,7 +91,9 @@ func (h *APITokenHandler) RegisterRoutes(api huma.API) {
 		}
 		return &ListAPITokensOutput{Body: apiTokenResponses(tokens)}, nil
 	})
+}
 
+func (h *APITokenHandler) registerCreateRoute(api huma.API) {
 	huma.Register(api, huma.Operation{
 		OperationID:   "create-api-token",
 		Method:        http.MethodPost,
@@ -110,6 +121,31 @@ func (h *APITokenHandler) RegisterRoutes(api huma.API) {
 				return nil, huma.Error403Forbidden("workspace not accessible")
 			}
 		}
+		var requestedExpiry time.Time
+		if input.Body.ExpiresAt != nil {
+			requestedExpiry = input.Body.ExpiresAt.UTC()
+		}
+		policyDecision, err := identity.AuthorizeTokenCreation(
+			ctx,
+			h.db,
+			userID,
+			middleware.GetSessionID(ctx),
+			workspaceID,
+			requestedExpiry,
+		)
+		if errors.Is(err, identity.ErrTokenPolicyDenied) {
+			return nil, huma.Error403Forbidden("organization policy does not allow API tokens")
+		}
+		if errors.Is(err, identity.ErrReauthRequired) || errors.Is(err, identity.ErrSSOAssuranceRequired) {
+			return nil, huma.Error403Forbidden("sign in with the organization identity provider before creating this token")
+		}
+		if err != nil {
+			return nil, huma.Error500InternalServerError("failed to evaluate API token policy")
+		}
+		expiresAt := input.Body.ExpiresAt
+		if !policyDecision.ExpiresAt.IsZero() {
+			expiresAt = &policyDecision.ExpiresAt
+		}
 
 		generated, err := h.tokens.GenerateTokenWithOptions(
 			ctx,
@@ -117,8 +153,11 @@ func (h *APITokenHandler) RegisterRoutes(api huma.API) {
 			input.Body.Name,
 			input.Body.Scope,
 			apitokens.GenerateOptions{
-				ExpiresAt:   input.Body.ExpiresAt,
-				WorkspaceID: workspaceID,
+				ExpiresAt:          expiresAt,
+				WorkspaceID:        workspaceID,
+				OrganizationID:     policyDecision.OrganizationID,
+				IdentityProviderID: policyDecision.ProviderID,
+				AssuredAt:          policyDecision.AssuredAt,
 			},
 		)
 		if err != nil {
@@ -133,7 +172,9 @@ func (h *APITokenHandler) RegisterRoutes(api huma.API) {
 		output.Body.Item = apiTokenResponse(*generated.Model)
 		return output, nil
 	})
+}
 
+func (h *APITokenHandler) registerRevokeRoute(api huma.API) {
 	huma.Register(api, huma.Operation{
 		OperationID: "revoke-api-token",
 		Method:      http.MethodDelete,
@@ -166,15 +207,17 @@ func apiTokenResponses(tokens []models.APIToken) []APITokenResponse {
 
 func apiTokenResponse(token models.APIToken) APITokenResponse {
 	return APITokenResponse{
-		ID:          token.ID,
-		Name:        token.Name,
-		TokenPrefix: token.TokenPrefix,
-		Scope:       token.Scope,
-		WorkspaceID: token.WorkspaceID,
-		ExpiresAt:   optionalTime(token.ExpiresAt),
-		LastUsedAt:  optionalTime(token.LastUsedAt),
-		RevokedAt:   optionalTime(token.RevokedAt),
-		CreatedAt:   token.CreatedAt.UTC().Format(time.RFC3339),
+		ID:                 token.ID,
+		Name:               token.Name,
+		TokenPrefix:        token.TokenPrefix,
+		Scope:              token.Scope,
+		WorkspaceID:        token.WorkspaceID,
+		OrganizationID:     token.OrganizationID,
+		IdentityProviderID: token.IdentityProviderID,
+		ExpiresAt:          optionalTime(token.ExpiresAt),
+		LastUsedAt:         optionalTime(token.LastUsedAt),
+		RevokedAt:          optionalTime(token.RevokedAt),
+		CreatedAt:          token.CreatedAt.UTC().Format(time.RFC3339),
 	}
 }
 

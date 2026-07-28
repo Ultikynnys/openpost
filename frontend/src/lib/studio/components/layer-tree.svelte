@@ -15,6 +15,8 @@
 	import GroupIcon from 'lucide-svelte/icons/group';
 	import ChevronRightIcon from 'lucide-svelte/icons/chevron-right';
 	import PencilIcon from 'lucide-svelte/icons/pencil';
+	import PlusIcon from 'lucide-svelte/icons/plus';
+	import SquareDashedIcon from 'lucide-svelte/icons/square-dashed';
 	import CopyIcon from 'lucide-svelte/icons/copy';
 	import TrashIcon from 'lucide-svelte/icons/trash-2';
 	import BringToFrontIcon from 'lucide-svelte/icons/bring-to-front';
@@ -23,6 +25,7 @@
 	import ArrowDownIcon from 'lucide-svelte/icons/arrow-down';
 	import UngroupIcon from 'lucide-svelte/icons/ungroup';
 	import type { StudioLayer, StudioPage } from '../types';
+	import { isEmptyStudioPaintLayer } from '../document';
 	import { m } from '$lib/paraglide/messages';
 
 	interface LayerTreeItem {
@@ -45,19 +48,22 @@
 	let pointerDragActive = $state(false);
 	let pointerCaptureElement: HTMLElement | null = null;
 	let touchIdentifier = -1;
+	let contextRenameTimer: ReturnType<typeof setTimeout> | undefined;
 	const collapsedGroups = new SvelteSet<string>();
 	let items = $derived(flattenLayers(editor.activePage, collapsedGroups));
 
-	function layerIcon(type: string) {
-		return type === 'text'
+	function layerIcon(layer: StudioLayer) {
+		return layer.type === 'text'
 			? TypeIcon
-			: type === 'image'
+			: layer.type === 'image'
 				? ImageIcon
-				: type === 'paint'
-					? PencilIcon
-					: type === 'group'
-						? GroupIcon
-						: SquareIcon;
+				: isEmptyStudioPaintLayer(layer)
+					? SquareDashedIcon
+					: layer.type === 'paint'
+						? PencilIcon
+						: layer.type === 'group'
+							? GroupIcon
+							: SquareIcon;
 	}
 
 	function reorder(droppedID: string, targetID: string, position: 'above' | 'below'): void {
@@ -222,7 +228,10 @@
 		if (clientY > bounds.bottom - 48) container.scrollTop += 14;
 	}
 
-	onDestroy(resetTouchReorder);
+	onDestroy(() => {
+		resetTouchReorder();
+		clearTimeout(contextRenameTimer);
+	});
 
 	function startRename(layer: StudioLayer): void {
 		if (!editor.canEdit) return;
@@ -235,6 +244,14 @@
 		const name = renameDraft.trim();
 		if (name && name !== layer.name) editor.updateLayer(layer.id, { name });
 		renamingID = '';
+	}
+
+	function startContextRename(layer: StudioLayer): void {
+		clearTimeout(contextRenameTimer);
+		contextRenameTimer = setTimeout(() => {
+			contextRenameTimer = undefined;
+			startRename(layer);
+		}, 0);
 	}
 
 	function focusInput(node: HTMLInputElement): void {
@@ -284,17 +301,29 @@
 		<h2 class="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
 			{m.studio_layers()}
 		</h2>
-		{#if editor.selectedLayerIDs.length > 1}
-			<span class="ml-auto text-xs text-muted-foreground">
-				{m.studio_selected_count({ count: editor.selectedLayerIDs.length })}
-			</span>
-		{/if}
+		<div class="ml-auto flex items-center gap-1">
+			{#if editor.selectedLayerIDs.length > 1}
+				<span class="mr-1 text-xs text-muted-foreground">
+					{m.studio_selected_count({ count: editor.selectedLayerIDs.length })}
+				</span>
+			{/if}
+			<Button
+				variant="ghost"
+				size="icon-xs"
+				onclick={() => editor.addEmptyLayer()}
+				disabled={!editor.canEdit}
+				aria-label={m.studio_add_layer()}
+				title={m.studio_add_layer()}
+			>
+				<PlusIcon />
+			</Button>
+		</div>
 	</div>
 	<div {@attach attachScrollContainer} class="min-h-0 flex-1 overflow-y-auto p-2">
 		{#if items.length}
 			{#each items as item (item.layer.id)}
 				{@const layer = item.layer}
-				{@const Icon = layerIcon(layer.type)}
+				{@const Icon = layerIcon(layer)}
 				<ContextMenu.Root
 					onOpenChange={(open) => {
 						if (open) ensureContextSelection(layer);
@@ -502,7 +531,10 @@
 						<ContextMenu.Content
 							class="z-50 min-w-48 rounded-lg bg-popover/95 p-1 text-sm text-popover-foreground shadow-md ring-1 ring-foreground/10 backdrop-blur outline-none"
 						>
-							<ContextMenu.Item class="studio-context-item" onclick={() => startRename(layer)}>
+							<ContextMenu.Item
+								class="studio-context-item"
+								onclick={() => startContextRename(layer)}
+							>
 								<PencilIcon class="size-4" />
 								{m.studio_rename_layer()}
 							</ContextMenu.Item>

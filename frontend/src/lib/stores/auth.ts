@@ -16,6 +16,9 @@ interface AuthActionResult {
 	requiresMfa?: boolean;
 	mfaToken?: string;
 	mfaMethods?: string[];
+	purpose?: 'login' | 'reauth' | 'link';
+	action?: string;
+	reauthGrant?: string;
 }
 
 interface RegisterInput {
@@ -130,6 +133,29 @@ function createAuthStore() {
 				setToken(IS_CAPACITOR ? data.token : null);
 				set({ user: data.user ?? null, isLoading: false, isAuthenticated: true });
 				return { success: true };
+			} catch (e) {
+				return { success: false, error: (e as Error).message };
+			}
+		},
+		async consumeOIDCHandoff(code: string): Promise<AuthActionResult> {
+			try {
+				const { data, error } = await client.POST('/auth/oidc/handoff', {
+					body: { code }
+				});
+				if (error || !data?.purpose) {
+					throw new Error(error?.detail ?? 'Single sign-on could not be completed');
+				}
+				if (data.purpose === 'login') {
+					if (!data.token || !data.user) throw new Error('Single sign-on response is incomplete');
+					setToken(data.token);
+					set({ user: data.user, isLoading: false, isAuthenticated: true });
+				}
+				return {
+					success: true,
+					purpose: data.purpose,
+					action: data.action,
+					reauthGrant: data.reauth_grant
+				};
 			} catch (e) {
 				return { success: false, error: (e as Error).message };
 			}

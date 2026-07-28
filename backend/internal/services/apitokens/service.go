@@ -57,9 +57,12 @@ type GeneratedToken struct {
 }
 
 type GenerateOptions struct {
-	ExpiresAt   *time.Time
-	WorkspaceID string
-	Audience    string
+	ExpiresAt          *time.Time
+	WorkspaceID        string
+	OrganizationID     string
+	IdentityProviderID string
+	AssuredAt          time.Time
+	Audience           string
 }
 
 func NewService(db *bun.DB) *Service {
@@ -94,16 +97,19 @@ func (s *Service) GenerateTokenWithOptions(ctx context.Context, userID, name, sc
 	}
 
 	model := &models.APIToken{
-		ID:          uuid.NewString(),
-		UserID:      userID,
-		Name:        name,
-		TokenHash:   tokenHash,
-		TokenPrefix: tokenPrefix,
-		Scope:       scope,
-		WorkspaceID: strings.TrimSpace(options.WorkspaceID),
-		Audience:    strings.TrimSpace(options.Audience),
-		ExpiresAt:   expiry,
-		CreatedAt:   time.Now().UTC(),
+		ID:                 uuid.NewString(),
+		UserID:             userID,
+		Name:               name,
+		TokenHash:          tokenHash,
+		TokenPrefix:        tokenPrefix,
+		Scope:              scope,
+		WorkspaceID:        strings.TrimSpace(options.WorkspaceID),
+		OrganizationID:     strings.TrimSpace(options.OrganizationID),
+		IdentityProviderID: strings.TrimSpace(options.IdentityProviderID),
+		AssuredAt:          options.AssuredAt.UTC(),
+		Audience:           strings.TrimSpace(options.Audience),
+		ExpiresAt:          expiry,
+		CreatedAt:          time.Now().UTC(),
 	}
 
 	if _, err := s.db.NewInsert().Model(model).Exec(ctx); err != nil {

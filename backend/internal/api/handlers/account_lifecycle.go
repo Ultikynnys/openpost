@@ -18,17 +18,28 @@ import (
 	"github.com/openpost/backend/internal/api/middleware"
 	"github.com/openpost/backend/internal/models"
 	"github.com/openpost/backend/internal/services/auth"
+	"github.com/openpost/backend/internal/services/identity"
 	"github.com/openpost/backend/internal/services/mediastore"
 	"github.com/uptrace/bun"
 )
 
 var activeBillingStatuses = []string{"active", "trialing", "past_due"}
 
+const (
+	reauthActionAccountExport = "account.export"
+	reauthActionAccountDelete = "account.delete"
+)
+
 type AccountLifecycleHandler struct {
-	db      *bun.DB
-	auth    *auth.Service
-	authn   middleware.Authenticator
-	storage mediastore.BlobStorage
+	db       *bun.DB
+	auth     *auth.Service
+	authn    middleware.Authenticator
+	storage  mediastore.BlobStorage
+	identity *identity.Service
+}
+
+func (h *AccountLifecycleHandler) SetIdentityService(service *identity.Service) {
+	h.identity = service
 }
 
 func NewAccountLifecycleHandler(db *bun.DB, authService *auth.Service, authenticator middleware.Authenticator, storage mediastore.BlobStorage) *AccountLifecycleHandler {
@@ -38,6 +49,7 @@ func NewAccountLifecycleHandler(db *bun.DB, authService *auth.Service, authentic
 type AccountReauthenticationInput struct {
 	Body struct {
 		CurrentPassword string `json:"current_password" doc:"Current account password"`
+		ReauthGrant     string `json:"reauth_grant,omitempty" doc:"One-time action-bound reauthentication grant"`
 	}
 }
 
@@ -191,6 +203,7 @@ type AccountDeletionImpactOutput struct {
 type DeleteAccountInput struct {
 	Body struct {
 		CurrentPassword string `json:"current_password" doc:"Current account password"`
+		ReauthGrant     string `json:"reauth_grant,omitempty" doc:"One-time action-bound reauthentication grant"`
 		ConfirmEmail    string `json:"confirm_email" format:"email" doc:"Exact account email confirmation"`
 	}
 }
@@ -236,7 +249,7 @@ func (h *AccountLifecycleHandler) RegisterRoutes(api huma.API) {
 }
 
 func (h *AccountLifecycleHandler) exportAccount(ctx context.Context, input *AccountReauthenticationInput) (*AccountExportOutput, error) {
-	user, err := h.reauthenticate(ctx, input.Body.CurrentPassword)
+	user, err := h.reauthenticate(ctx, input.Body.CurrentPassword, input.Body.ReauthGrant, reauthActionAccountExport)
 	if err != nil {
 		return nil, err
 	}
@@ -259,7 +272,7 @@ func (h *AccountLifecycleHandler) deletionImpact(ctx context.Context, _ *struct{
 }
 
 func (h *AccountLifecycleHandler) deleteAccount(ctx context.Context, input *DeleteAccountInput) (*DeleteAccountOutput, error) {
-	user, err := h.reauthenticate(ctx, input.Body.CurrentPassword)
+	user, err := h.reauthenticate(ctx, input.Body.CurrentPassword, input.Body.ReauthGrant, reauthActionAccountDelete)
 	if err != nil {
 		return nil, err
 	}
@@ -308,13 +321,38 @@ func (h *AccountLifecycleHandler) deleteAccount(ctx context.Context, input *Dele
 	return out, nil
 }
 
-func (h *AccountLifecycleHandler) reauthenticate(ctx context.Context, password string) (*models.User, error) {
+func (h *AccountLifecycleHandler) reauthenticate(
+	ctx context.Context,
+	password,
+	grant,
+	action string,
+) (*models.User, error) {
 	var user models.User
 	if err := h.db.NewSelect().Model(&user).Where("id = ?", middleware.GetUserID(ctx)).Scan(ctx); err != nil {
 		return nil, huma.Error401Unauthorized("account not found")
 	}
-	if h.auth == nil || !h.auth.CheckPassword(password, user.PasswordHash) {
-		return nil, huma.Error401Unauthorized("current password is incorrect")
+	if h.identity != nil && strings.TrimSpace(grant) != "" {
+		if err := h.identity.ConsumeReauthGrant(
+			ctx,
+			grant,
+			user.ID,
+			middleware.GetSessionID(ctx),
+			action,
+		); err == nil {
+			return &user, nil
+		}
+		return nil, huma.Error401Unauthorized("recent reauthentication is required")
+	}
+	passwordAllowed := true
+	if h.identity != nil {
+		allowed, err := h.identity.PasswordCredentialAllowed(ctx, user.ID)
+		if err != nil {
+			return nil, huma.Error500InternalServerError("failed to evaluate reauthentication policy")
+		}
+		passwordAllowed = allowed
+	}
+	if !passwordAllowed || h.auth == nil || !h.auth.CheckPassword(password, user.PasswordHash) {
+		return nil, huma.Error401Unauthorized("recent reauthentication is required")
 	}
 	return &user, nil
 }

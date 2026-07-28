@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/url"
 	"os"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -46,6 +47,15 @@ type Config struct {
 	FeedbackRecipient       string
 	FeedbackSupportURL      string
 	UpdateCheckEnabled      bool
+	OIDCIssuer              string
+	OIDCClientID            string
+	OIDCClientSecret        string
+	OIDCName                string
+	OIDCScopes              []string
+	OIDCJITEnabled          bool
+	OIDCBootstrapAllowlist  []string
+	OIDCBreakGlassEmails    []string
+	OIDCNativeCallbackURL   string
 
 	SMTPHost       string
 	SMTPPort       int
@@ -160,6 +170,15 @@ func Load() *Config {
 		FeedbackRecipient:       getEnvDefault("OPENPOST_FEEDBACK_RECIPIENT", ""),
 		FeedbackSupportURL:      getEnvDefault("OPENPOST_FEEDBACK_SUPPORT_URL", "https://github.com/rodrgds/openpost/issues/new"),
 		UpdateCheckEnabled:      getEnvBoolWithAliases(true, "OPENPOST_UPDATE_CHECK_ENABLED"),
+		OIDCIssuer:              strings.TrimSpace(getEnvDefault("OPENPOST_OIDC_ISSUER", "")),
+		OIDCClientID:            strings.TrimSpace(getEnvDefault("OPENPOST_OIDC_CLIENT_ID", "")),
+		OIDCClientSecret:        getEnvDefault("OPENPOST_OIDC_CLIENT_SECRET", ""),
+		OIDCName:                strings.TrimSpace(getEnvDefault("OPENPOST_OIDC_NAME", "Single sign-on")),
+		OIDCScopes:              parseStringList(getEnvDefault("OPENPOST_OIDC_SCOPES", "openid profile email")),
+		OIDCJITEnabled:          getEnvBoolWithAliases(false, "OPENPOST_OIDC_JIT_ENABLED"),
+		OIDCBootstrapAllowlist:  parseStringList(getEnvDefault("OPENPOST_OIDC_BOOTSTRAP_ALLOWLIST", "")),
+		OIDCBreakGlassEmails:    parseStringList(getEnvDefault("OPENPOST_SSO_BREAK_GLASS_EMAILS", "")),
+		OIDCNativeCallbackURL:   strings.TrimSpace(getEnvDefault("OPENPOST_OIDC_NATIVE_CALLBACK_URL", "openpost://oidc/callback")),
 
 		SMTPHost:       getEnvDefault("OPENPOST_SMTP_HOST", ""),
 		SMTPPort:       getEnvInt("OPENPOST_SMTP_PORT", 587),
@@ -348,6 +367,23 @@ func buildCORSOrigins(edition, frontendURL, extraRaw string) []string {
 		addOrigin(origin)
 	}
 	return origins
+}
+
+func parseStringList(raw string) []string {
+	parts := strings.FieldsFunc(raw, func(r rune) bool {
+		return r == ',' || r == ';' || r == '\n' || r == '\t' || r == ' '
+	})
+	values := make([]string, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		if !slices.Contains(values, part) {
+			values = append(values, part)
+		}
+	}
+	return values
 }
 
 func (c *Config) DatabaseDSN() string {

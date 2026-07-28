@@ -38,6 +38,13 @@
 	let filteredSystemFonts = $derived(
 		systemFonts.filter((font) => font.family.toLowerCase().includes(search.trim().toLowerCase()))
 	);
+	const selectedBrandFont = $derived(
+		brandFonts.find((font) => value === font.family || value === (font.css_family || font.family))
+	);
+	const selectedFamily = $derived(
+		selectedBrandFont?.css_family || selectedBrandFont?.family || value
+	);
+	const selectedLabel = $derived(selectedBrandFont?.family || value);
 
 	function choose(font: {
 		family: string;
@@ -60,7 +67,7 @@
 				{disabled}
 				aria-label={m.studio_font_family()}
 			>
-				<span class="truncate" style:font-family={value}>{value}</span>
+				<span class="truncate" style:font-family={selectedFamily}>{selectedLabel}</span>
 			</button>
 		{/snippet}
 	</Popover.Trigger>

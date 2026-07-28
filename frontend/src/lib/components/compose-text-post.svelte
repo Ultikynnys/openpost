@@ -20,6 +20,7 @@
 	import * as Tooltip from '$lib/components/ui/tooltip';
 	import ComposerAccountMenu from './composer-account-menu.svelte';
 	import ComposerPublishActions from './composer-publish-actions.svelte';
+	import SaveIndicator from './save-indicator.svelte';
 	import ComposerScheduleDialog from './composer-schedule-dialog.svelte';
 	import ComposerValidationMenu from './composer-validation-menu.svelte';
 	import DestinationSettingsDialog from './destination-settings-dialog.svelte';
@@ -257,6 +258,8 @@
 	let capabilityResolveRequestSequence = 0;
 
 	let autoSaveTimer: ReturnType<typeof setTimeout> | null = null;
+	let savedIndicatorTimer: ReturnType<typeof setTimeout> | null = null;
+	let savedIndicatorVisible = $state(false);
 	let lastSavedSnapshot = $state('');
 	let appliedInitialContextKey = $state('');
 	const textareaRefs = new SvelteMap<number, HTMLTextAreaElement>();
@@ -401,32 +404,6 @@
 			? (getVariantContent(activeVariantAccountId, activePost.key) ?? activePost.content)
 			: activePost.content
 	);
-	const editorContextLabel = $derived(
-		activeVariantAccount
-			? activeVariantIsUnsynced
-				? m.compose_override_version({
-						account:
-							activeVariantAccount.account_username ||
-							getPlatformName(activeVariantAccount.platform)
-					})
-				: m.compose_source_for_account({
-						account:
-							activeVariantAccount.account_username ||
-							getPlatformName(activeVariantAccount.platform)
-					})
-			: m.compose_source_version()
-	);
-	const composerSaveLabel = $derived.by(() => {
-		if (draftConflict) return m.compose_conflict_state();
-		if (isSaving) return m.common_saving();
-		if (hasContent && getSaveSnapshot() !== lastSavedSnapshot) return m.compose_unsaved_changes();
-		if (draftId && lastSavedSnapshot) return m.compose_saved_state();
-		return m.compose_unsaved_changes();
-	});
-	const readyDestinationCount = $derived(
-		selectedAccounts.filter((account) => accountBlockers(account).length === 0).length
-	);
-
 	const editorTargetAccounts = $derived.by(() => {
 		if (activeVariantAccountId) {
 			const activeAccount = accounts.find((a) => a.id === activeVariantAccountId);
@@ -1298,6 +1275,23 @@
 		}
 	}
 
+	function clearSavedIndicator() {
+		if (savedIndicatorTimer) {
+			clearTimeout(savedIndicatorTimer);
+			savedIndicatorTimer = null;
+		}
+		savedIndicatorVisible = false;
+	}
+
+	function showSavedIndicator() {
+		clearSavedIndicator();
+		savedIndicatorVisible = true;
+		savedIndicatorTimer = setTimeout(() => {
+			savedIndicatorVisible = false;
+			savedIndicatorTimer = null;
+		}, 1600);
+	}
+
 	function isVideoMedia(mediaId: string): boolean {
 		return mediaMimeTypes.get(mediaId)?.startsWith('video/') ?? false;
 	}
@@ -1627,6 +1621,7 @@
 
 	onDestroy(() => {
 		clearAutoSaveTimer();
+		clearSavedIndicator();
 		if (capabilityResolveTimer) clearTimeout(capabilityResolveTimer);
 	});
 
@@ -1969,6 +1964,7 @@
 		const workspaceId = selectedWorkspaceId;
 		const startingDraftId = options.saveAsCopy ? null : draftId;
 		const snapshot = getSaveSnapshot();
+		clearSavedIndicator();
 		isSaving = true;
 		error = '';
 
@@ -2057,6 +2053,7 @@
 			revision = savedRevision;
 			draftConflict = null;
 			lastSavedSnapshot = snapshot;
+			showSavedIndicator();
 			ui.setActiveComposerDraft(savedDraftId);
 			ui.triggerRefresh();
 			if (createdDraftId) onDraftCreated?.(createdDraftId);
@@ -2857,6 +2854,17 @@
 						onReset={(account) => resyncAccount(account.id)}
 						onSettings={openDestinationSettings}
 					/>
+				{/if}
+				{#if autoSavesDraft}
+					<SaveIndicator
+						saving={isSaving}
+						saved={savedIndicatorVisible}
+						savingLabel={m.common_saving()}
+						savedLabel={m.compose_saved_state()}
+						testId="composer-save-indicator"
+					/>
+				{/if}
+				{#if accounts.length > 0}
 					<ComposerValidationMenu issues={visibleGlobalIssues} />
 				{/if}
 				<DropdownMenu.Root>
@@ -2974,6 +2982,17 @@
 						onReset={(account) => resyncAccount(account.id)}
 						onSettings={openDestinationSettings}
 					/>
+				{/if}
+				{#if autoSavesDraft}
+					<SaveIndicator
+						saving={isSaving}
+						saved={savedIndicatorVisible}
+						savingLabel={m.common_saving()}
+						savedLabel={m.compose_saved_state()}
+						testId="composer-save-indicator"
+					/>
+				{/if}
+				{#if accounts.length > 0}
 					<ComposerValidationMenu issues={visibleGlobalIssues} class="size-8" />
 				{/if}
 			</div>
@@ -3230,31 +3249,6 @@
 						{/if}
 					</div>
 				{/if}
-
-				<div
-					class="mb-4 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-md border bg-muted/20 px-3 py-2 text-xs"
-					data-testid="composer-context-status"
-				>
-					<span class="font-medium text-foreground">{editorContextLabel}</span>
-					<span class="text-muted-foreground">{composerSaveLabel}</span>
-					<span class="text-muted-foreground">
-						{m.compose_destination_ready_count({
-							ready: readyDestinationCount,
-							total: selectedAccounts.length
-						})}
-					</span>
-					{#if activeVariantAccountId && activeVariantIsUnsynced}
-						<Button
-							type="button"
-							variant="ghost"
-							size="sm"
-							class="ms-auto h-7 px-2 text-xs"
-							onclick={() => activeVariantAccountId && resyncAccount(activeVariantAccountId)}
-						>
-							{m.compose_sync_back()}
-						</Button>
-					{/if}
-				</div>
 
 				<!-- Posts -->
 				<div class="space-y-0">

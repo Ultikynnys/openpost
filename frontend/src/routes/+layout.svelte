@@ -22,6 +22,8 @@
 	import { soundPreferences } from '$lib/stores/sound-preferences.svelte';
 	import { feedbackDiagnostics } from '$lib/feedback-diagnostics';
 	import FeedbackDialog from '$lib/components/feedback-dialog.svelte';
+	import { captureWebReauthGrant, storeReauthGrant } from '$lib/auth/reauth';
+	import { client } from '$lib/api/client';
 
 	let { children } = $props();
 
@@ -72,6 +74,7 @@
 	let onboardingChecked = $state(false);
 	let onboardingCheckedPath = $state('');
 	let onboardingCheckInFlightForPath = $state('');
+	let ssoChallengeInFlight = $state(false);
 
 	function authenticatedPublicTarget() {
 		if (currentPath !== '/login') return '/';
@@ -139,10 +142,22 @@
 	});
 
 	onMount(() => {
+		captureWebReauthGrant();
 		feedbackDiagnostics.initialize();
 		soundPreferences.initialize();
 		instance.initialize();
 		auth.initialize({ optional: isPublicRoute });
+		if (!IS_CAPACITOR) return;
+		let removeURLListener: (() => Promise<void>) | undefined;
+		void import('@capacitor/app').then(async ({ App }) => {
+			const listener = await App.addListener('appUrlOpen', ({ url }) => {
+				void completeNativeOIDC(url);
+			});
+			removeURLListener = () => listener.remove();
+		});
+		return () => {
+			void removeURLListener?.();
+		};
 	});
 
 	$effect(() => {
@@ -160,6 +175,21 @@
 		try {
 			await workspaceCtx.initialize();
 			nextNeedsOnboarding = workspaceCtx.workspaces.length === 0;
+			const workspace = workspaceCtx.currentWorkspace;
+			if (workspace?.sso_required && !workspace.sso_authenticated) {
+				if (!workspace.sso_identity_linked) {
+					const securitySettings =
+						currentPath === '/settings' && $page.url.searchParams.get('tab') === 'security';
+					if (!securitySettings) {
+						await goto(resolve('/settings?tab=security' as '/'));
+						return;
+					}
+					nextNeedsOnboarding = false;
+				} else {
+					await startWorkspaceSSO(workspace.sso_provider_id);
+					return;
+				}
+			}
 		} catch {
 			// Fail safe: if we cannot verify workspace state, keep user in onboarding flow.
 			nextNeedsOnboarding = true;
@@ -172,6 +202,68 @@
 		needsOnboarding = nextNeedsOnboarding;
 		onboardingChecked = true;
 		onboardingCheckedPath = path;
+	}
+
+	async function startWorkspaceSSO(providerID: string | undefined) {
+		if (!providerID || ssoChallengeInFlight) return;
+		ssoChallengeInFlight = true;
+		const returnPath = `${currentPath}${$page.url.search}`;
+		const workspaceID = workspaceCtx.currentWorkspace?.id ?? '';
+		const { data, error } = await client.POST('/auth/oidc/{provider_id}/reauth', {
+			params: { path: { provider_id: providerID } },
+			body: {
+				action: `organization.access:${workspaceID}`,
+				return_path: returnPath,
+				native: IS_CAPACITOR
+			}
+		});
+		if (error || !data?.authorization_url) {
+			ssoChallengeInFlight = false;
+			return;
+		}
+		if (IS_CAPACITOR) {
+			const { Browser } = await import('@capacitor/browser');
+			await Browser.open({ url: data.authorization_url });
+			return;
+		}
+		window.location.assign(data.authorization_url);
+	}
+
+	async function completeNativeOIDC(url: string) {
+		let callback: URL;
+		try {
+			callback = new URL(url);
+		} catch {
+			return;
+		}
+		const code = callback.searchParams.get('code');
+		if (!code) return;
+		const { Browser } = await import('@capacitor/browser');
+		await Browser.close();
+		const result = await auth.consumeOIDCHandoff(code);
+		if (!result.success) {
+			ssoChallengeInFlight = false;
+			return;
+		}
+		if (result.purpose === 'reauth' && result.action && result.reauthGrant) {
+			storeReauthGrant(result.action, result.reauthGrant);
+			if (result.action.startsWith('organization.access:')) {
+				workspaceCtx.reset();
+				onboardingChecked = false;
+			}
+			ssoChallengeInFlight = false;
+			return;
+		}
+		if (result.purpose === 'link') {
+			ssoChallengeInFlight = false;
+			window.location.reload();
+			return;
+		}
+		workspaceCtx.reset();
+		onboardingChecked = false;
+		if (currentPath === '/login') {
+			await goto(resolve(authenticatedPublicTarget() as '/'));
+		}
 	}
 
 	$effect(() => {
@@ -203,7 +295,7 @@
 </svelte:head>
 
 <ModeWatcher />
-{#if instance.isLoading || authState.isLoading || pendingRedirect || (authState.isAuthenticated && !authState.user?.legal_acceptance_required && !onboardingChecked)}
+{#if instance.isLoading || authState.isLoading || pendingRedirect || ssoChallengeInFlight || (authState.isAuthenticated && !authState.user?.legal_acceptance_required && !onboardingChecked)}
 	<AppLoading label={m.common_loading()} />
 {:else if !authState.isAuthenticated}
 	{#if currentPath !== '/studio' && !currentPath.startsWith('/studio/')}

@@ -72,6 +72,28 @@ const (
 	OrganizationRoleMember = "member"
 )
 
+// Organization SSO modes stored in organization_sso_policies.mode.
+const (
+	OrganizationSSOModeDisabled = "disabled"
+	OrganizationSSOModeOptional = "optional"
+	OrganizationSSOModeRequired = "required"
+)
+
+// Organization API-token policies stored in
+// organization_sso_policies.api_token_mode.
+const (
+	OrganizationSSOTokensAllow  = "allow"
+	OrganizationSSOTokensScoped = "scoped"
+	OrganizationSSOTokensDeny   = "deny"
+)
+
+// OIDC authorization request intents.
+const (
+	OIDCIntentLogin  = "login"
+	OIDCIntentLink   = "link"
+	OIDCIntentReauth = "reauth"
+)
+
 type Organization struct {
 	bun.BaseModel `bun:"table:organizations"`
 
@@ -134,8 +156,9 @@ type User struct {
 	DisplayName      string    `json:"display_name"`
 	AvatarURL        string    `json:"avatar_url"`
 	AvatarObjectKey  string    `json:"-"`
-	PasswordHash     string    `bun:",notnull" json:"-"`
+	PasswordHash     string    `bun:",nullzero" json:"-"`
 	IsAdmin          bool      `bun:",notnull,default:false" json:"is_admin"`
+	IsBreakGlass     bool      `bun:"is_break_glass,notnull,default:false" json:"is_break_glass"`
 	TOTPSecretEnc    []byte    `bun:"totp_secret_encrypted" json:"-"`
 	TOTPEnabledAt    time.Time `bun:",nullzero" json:"totp_enabled_at"`
 	PasskeyEnabledAt time.Time `bun:",nullzero" json:"passkey_enabled_at"`
@@ -181,6 +204,160 @@ type UserSession struct {
 	CreatedAt  time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"created_at"`
 }
 
+type IdentityProvider struct {
+	bun.BaseModel `bun:"table:identity_providers"`
+
+	ID                   string    `bun:",pk" json:"id"`
+	OrganizationID       string    `bun:"organization_id,nullzero" json:"organization_id,omitempty"`
+	Source               string    `bun:",notnull,default:'database'" json:"source"`
+	Issuer               string    `bun:",notnull" json:"issuer"`
+	Name                 string    `bun:",notnull" json:"name"`
+	ClientID             string    `bun:"client_id,notnull" json:"client_id"`
+	ClientSecretEnc      []byte    `bun:"client_secret_encrypted" json:"-"`
+	Scopes               string    `bun:",notnull,default:'openid profile email'" json:"scopes"`
+	EmailClaim           string    `bun:"email_claim,notnull,default:'email'" json:"email_claim"`
+	NameClaim            string    `bun:"name_claim,notnull,default:'name'" json:"name_claim"`
+	PictureClaim         string    `bun:"picture_claim,notnull,default:'picture'" json:"picture_claim"`
+	UseUserInfo          bool      `bun:"use_userinfo,notnull" json:"use_userinfo"`
+	RequireVerifiedEmail bool      `bun:"require_verified_email,notnull" json:"require_verified_email"`
+	JITEnabled           bool      `bun:"jit_enabled,notnull" json:"jit_enabled"`
+	IsActive             bool      `bun:"is_active,notnull" json:"is_active"`
+	HealthStatus         string    `bun:"health_status,notnull,default:'unchecked'" json:"health_status"`
+	HealthMessage        string    `bun:"health_message,notnull,default:''" json:"health_message"`
+	LastCheckedAt        time.Time `bun:"last_checked_at,nullzero" json:"last_checked_at,omitempty"`
+	CreatedByUserID      string    `bun:"created_by_user_id,nullzero" json:"created_by_user_id,omitempty"`
+	CreatedAt            time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"created_at"`
+	UpdatedAt            time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"updated_at"`
+}
+
+type UserIdentity struct {
+	bun.BaseModel `bun:"table:user_identities"`
+
+	ID          string    `bun:",pk" json:"id"`
+	ProviderID  string    `bun:"provider_id,notnull" json:"provider_id"`
+	Subject     string    `bun:",notnull" json:"subject"`
+	UserID      string    `bun:"user_id,notnull" json:"user_id"`
+	LinkedEmail string    `bun:"linked_email,notnull,default:''" json:"linked_email,omitempty"`
+	CreatedAt   time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"created_at"`
+	LastLoginAt time.Time `bun:"last_login_at,nullzero" json:"last_login_at,omitempty"`
+}
+
+type OIDCAuthRequest struct {
+	bun.BaseModel `bun:"table:oidc_auth_requests"`
+
+	ID                 string    `bun:",pk" json:"id"`
+	ProviderID         string    `bun:"provider_id,notnull" json:"provider_id"`
+	UserID             string    `bun:"user_id,nullzero" json:"user_id,omitempty"`
+	SessionID          string    `bun:"session_id,nullzero" json:"session_id,omitempty"`
+	OrganizationID     string    `bun:"organization_id,nullzero" json:"organization_id,omitempty"`
+	StateHash          string    `bun:"state_hash,unique,notnull" json:"-"`
+	NonceHash          string    `bun:"nonce_hash,notnull" json:"-"`
+	BrowserBindingHash string    `bun:"browser_binding_hash,notnull" json:"-"`
+	PKCEVerifierEnc    []byte    `bun:"pkce_verifier_encrypted,notnull" json:"-"`
+	Intent             string    `bun:",notnull" json:"intent"`
+	ReauthAction       string    `bun:"reauth_action,notnull,default:''" json:"reauth_action,omitempty"`
+	ReturnPath         string    `bun:"return_path,notnull,default:'/'" json:"return_path"`
+	Native             bool      `bun:",notnull,default:false" json:"native"`
+	ExpiresAt          time.Time `bun:",notnull" json:"expires_at"`
+	ConsumedAt         time.Time `bun:",nullzero" json:"consumed_at,omitempty"`
+	CreatedAt          time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"created_at"`
+}
+
+type OrganizationSSOPolicy struct {
+	bun.BaseModel `bun:"table:organization_sso_policies"`
+
+	OrganizationID          string    `bun:"organization_id,pk" json:"organization_id"`
+	Mode                    string    `bun:",notnull,default:'disabled'" json:"mode"`
+	ProviderIDs             string    `bun:"provider_ids,notnull,default:'[]'" json:"-"`
+	AssuranceMaxAgeSeconds  int       `bun:"assurance_max_age_seconds,notnull,default:43200" json:"assurance_max_age_seconds"`
+	PasswordLoginAllowed    bool      `bun:"password_login_allowed,notnull" json:"password_login_allowed"`
+	APITokenMode            string    `bun:"api_token_mode,notnull,default:'scoped'" json:"api_token_mode"`
+	MaxTokenLifetimeSeconds int       `bun:"max_token_lifetime_seconds,notnull,default:2592000" json:"max_token_lifetime_seconds"`
+	RequireTokenReauth      bool      `bun:"require_token_reauth,notnull" json:"require_token_reauth"`
+	UpdatedByUserID         string    `bun:"updated_by_user_id,nullzero" json:"updated_by_user_id,omitempty"`
+	CreatedAt               time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"created_at"`
+	UpdatedAt               time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"updated_at"`
+}
+
+type IdentityProviderDomain struct {
+	bun.BaseModel `bun:"table:identity_provider_domains"`
+
+	ID               string    `bun:",pk" json:"id"`
+	ProviderID       string    `bun:"provider_id,notnull" json:"provider_id"`
+	OrganizationID   string    `bun:"organization_id,notnull" json:"organization_id"`
+	Domain           string    `bun:",notnull" json:"domain"`
+	VerificationHash string    `bun:"verification_hash,notnull" json:"-"`
+	VerifiedAt       time.Time `bun:"verified_at,nullzero" json:"verified_at,omitempty"`
+	CreatedByUserID  string    `bun:"created_by_user_id,notnull" json:"created_by_user_id"`
+	CreatedAt        time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"created_at"`
+}
+
+type SessionIdentityAssurance struct {
+	bun.BaseModel `bun:"table:session_identity_assurances"`
+
+	SessionID   string    `bun:"session_id,pk" json:"session_id"`
+	ProviderID  string    `bun:"provider_id,pk" json:"provider_id"`
+	UserID      string    `bun:"user_id,notnull" json:"user_id"`
+	AuthTime    time.Time `bun:"auth_time,notnull" json:"auth_time"`
+	ExpiresAt   time.Time `bun:"expires_at,notnull" json:"expires_at"`
+	ACR         string    `bun:"acr,notnull,default:''" json:"acr,omitempty"`
+	AMR         string    `bun:"amr,notnull,default:'[]'" json:"-"`
+	UpstreamSID string    `bun:"upstream_sid,notnull,default:''" json:"-"`
+	CreatedAt   time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"created_at"`
+}
+
+type ReauthGrant struct {
+	bun.BaseModel `bun:"table:reauth_grants"`
+
+	ID         string    `bun:",pk" json:"id"`
+	TokenHash  string    `bun:"token_hash,unique,notnull" json:"-"`
+	UserID     string    `bun:"user_id,notnull" json:"user_id"`
+	SessionID  string    `bun:"session_id,notnull" json:"session_id"`
+	Action     string    `bun:",notnull" json:"action"`
+	Method     string    `bun:",notnull" json:"method"`
+	ProviderID string    `bun:"provider_id,nullzero" json:"provider_id,omitempty"`
+	ExpiresAt  time.Time `bun:",notnull" json:"expires_at"`
+	ConsumedAt time.Time `bun:",nullzero" json:"consumed_at,omitempty"`
+	CreatedAt  time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"created_at"`
+}
+
+type OIDCNativeHandoff struct {
+	bun.BaseModel `bun:"table:oidc_native_handoffs"`
+
+	ID             string    `bun:",pk" json:"id"`
+	CodeHash       string    `bun:"code_hash,unique,notnull" json:"-"`
+	UserID         string    `bun:"user_id,notnull" json:"user_id"`
+	SessionID      string    `bun:"session_id,notnull" json:"session_id"`
+	Purpose        string    `bun:",notnull,default:'login'" json:"purpose"`
+	Action         string    `bun:",notnull,default:''" json:"action,omitempty"`
+	TokenEncrypted []byte    `bun:"token_encrypted,notnull" json:"-"`
+	ExpiresAt      time.Time `bun:",notnull" json:"expires_at"`
+	ConsumedAt     time.Time `bun:",nullzero" json:"consumed_at,omitempty"`
+	CreatedAt      time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"created_at"`
+}
+
+type OIDCLogoutEvent struct {
+	bun.BaseModel `bun:"table:oidc_logout_events"`
+
+	ProviderID string    `bun:"provider_id,pk" json:"provider_id"`
+	TokenHash  string    `bun:"token_hash,pk" json:"-"`
+	ExpiresAt  time.Time `bun:",notnull" json:"expires_at"`
+	CreatedAt  time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"created_at"`
+}
+
+type IdentityAuditEvent struct {
+	bun.BaseModel `bun:"table:identity_audit_events"`
+
+	ID             string    `bun:",pk" json:"id"`
+	OrganizationID string    `bun:"organization_id,nullzero" json:"organization_id,omitempty"`
+	ProviderID     string    `bun:"provider_id,nullzero" json:"provider_id,omitempty"`
+	ActorUserID    string    `bun:"actor_user_id,nullzero" json:"actor_user_id,omitempty"`
+	SubjectUserID  string    `bun:"subject_user_id,nullzero" json:"subject_user_id,omitempty"`
+	Action         string    `bun:",notnull" json:"action"`
+	Detail         string    `bun:",notnull,default:''" json:"detail,omitempty"`
+	CreatedAt      time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"created_at"`
+}
+
 type AuthChallenge struct {
 	bun.BaseModel `bun:"table:auth_challenges"`
 
@@ -195,18 +372,21 @@ type AuthChallenge struct {
 type APIToken struct {
 	bun.BaseModel `bun:"table:api_tokens"`
 
-	ID          string    `bun:",pk" json:"id"`
-	UserID      string    `bun:",notnull" json:"user_id"`
-	Name        string    `bun:",notnull" json:"name"`
-	TokenHash   string    `bun:",unique,notnull" json:"-"`
-	TokenPrefix string    `bun:",notnull" json:"token_prefix"`
-	Scope       string    `bun:",notnull,default:'cli:full'" json:"scope"`
-	WorkspaceID string    `json:"workspace_id"`
-	Audience    string    `json:"audience"`
-	ExpiresAt   time.Time `bun:",nullzero" json:"expires_at"`
-	LastUsedAt  time.Time `bun:",nullzero" json:"last_used_at"`
-	RevokedAt   time.Time `bun:",nullzero" json:"revoked_at"`
-	CreatedAt   time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"created_at"`
+	ID                 string    `bun:",pk" json:"id"`
+	UserID             string    `bun:",notnull" json:"user_id"`
+	Name               string    `bun:",notnull" json:"name"`
+	TokenHash          string    `bun:",unique,notnull" json:"-"`
+	TokenPrefix        string    `bun:",notnull" json:"token_prefix"`
+	Scope              string    `bun:",notnull,default:'cli:full'" json:"scope"`
+	WorkspaceID        string    `json:"workspace_id"`
+	OrganizationID     string    `bun:"organization_id,nullzero" json:"organization_id,omitempty"`
+	IdentityProviderID string    `bun:"identity_provider_id,nullzero" json:"identity_provider_id,omitempty"`
+	AssuredAt          time.Time `bun:"assured_at,nullzero" json:"assured_at,omitempty"`
+	Audience           string    `json:"audience"`
+	ExpiresAt          time.Time `bun:",nullzero" json:"expires_at"`
+	LastUsedAt         time.Time `bun:",nullzero" json:"last_used_at"`
+	RevokedAt          time.Time `bun:",nullzero" json:"revoked_at"`
+	CreatedAt          time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"created_at"`
 }
 
 type MCPOAuthCode struct {
@@ -220,6 +400,10 @@ type MCPOAuthCode struct {
 	RedirectURI         string    `bun:",notnull" json:"redirect_uri"`
 	Scope               string    `bun:",notnull,default:'mcp:full'" json:"scope"`
 	WorkspaceID         string    `json:"workspace_id"`
+	OrganizationID      string    `bun:"organization_id,nullzero" json:"organization_id,omitempty"`
+	IdentityProviderID  string    `bun:"identity_provider_id,nullzero" json:"identity_provider_id,omitempty"`
+	AssuredAt           time.Time `bun:"assured_at,nullzero" json:"assured_at,omitempty"`
+	TokenExpiresAt      time.Time `bun:"token_expires_at,nullzero" json:"token_expires_at,omitempty"`
 	Resource            string    `json:"resource"`
 	CodeChallenge       string    `bun:",notnull" json:"code_challenge"`
 	CodeChallengeMethod string    `bun:",notnull" json:"code_challenge_method"`
@@ -231,21 +415,26 @@ type MCPOAuthCode struct {
 type CLIAuthSession struct {
 	bun.BaseModel `bun:"table:cli_auth_sessions"`
 
-	ID              string    `bun:",pk" json:"id"`
-	UserID          string    `json:"user_id"`
-	DeviceCodeHash  string    `bun:",unique,notnull" json:"-"`
-	UserCodeHash    string    `bun:",unique,notnull" json:"-"`
-	ClientName      string    `bun:",notnull" json:"client_name"`
-	ClientVersion   string    `json:"client_version"`
-	ClientOS        string    `json:"client_os"`
-	RequestedScopes string    `bun:",notnull,default:'cli:full'" json:"requested_scopes"`
-	Status          string    `bun:",notnull,default:'pending'" json:"status"`
-	IntervalSeconds int       `bun:",notnull,default:5" json:"interval_seconds"`
-	ExpiresAt       time.Time `bun:",notnull" json:"expires_at"`
-	LastPolledAt    time.Time `bun:",nullzero" json:"last_polled_at"`
-	ApprovedAt      time.Time `bun:",nullzero" json:"approved_at"`
-	DeniedAt        time.Time `bun:",nullzero" json:"denied_at"`
-	CreatedAt       time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"created_at"`
+	ID                 string    `bun:",pk" json:"id"`
+	UserID             string    `json:"user_id"`
+	DeviceCodeHash     string    `bun:",unique,notnull" json:"-"`
+	UserCodeHash       string    `bun:",unique,notnull" json:"-"`
+	ClientName         string    `bun:",notnull" json:"client_name"`
+	ClientVersion      string    `json:"client_version"`
+	ClientOS           string    `json:"client_os"`
+	RequestedScopes    string    `bun:",notnull,default:'cli:full'" json:"requested_scopes"`
+	WorkspaceID        string    `bun:"workspace_id,nullzero" json:"workspace_id,omitempty"`
+	OrganizationID     string    `bun:"organization_id,nullzero" json:"organization_id,omitempty"`
+	IdentityProviderID string    `bun:"identity_provider_id,nullzero" json:"identity_provider_id,omitempty"`
+	AssuredAt          time.Time `bun:"assured_at,nullzero" json:"assured_at,omitempty"`
+	TokenExpiresAt     time.Time `bun:"token_expires_at,nullzero" json:"token_expires_at,omitempty"`
+	Status             string    `bun:",notnull,default:'pending'" json:"status"`
+	IntervalSeconds    int       `bun:",notnull,default:5" json:"interval_seconds"`
+	ExpiresAt          time.Time `bun:",notnull" json:"expires_at"`
+	LastPolledAt       time.Time `bun:",nullzero" json:"last_polled_at"`
+	ApprovedAt         time.Time `bun:",nullzero" json:"approved_at"`
+	DeniedAt           time.Time `bun:",nullzero" json:"denied_at"`
+	CreatedAt          time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"created_at"`
 }
 
 type WorkspaceMember struct {

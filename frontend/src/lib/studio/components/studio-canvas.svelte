@@ -26,6 +26,7 @@
 		readStudioMediaDrag,
 		STUDIO_MEDIA_DRAG_TYPE
 	} from '../media-drag';
+	import { panForZoomAnchor } from '../viewport';
 
 	type AreaSelectionTool = Extract<StudioSelectionTool, 'marquee' | 'ellipse_marquee' | 'lasso'>;
 	type CanvasGestureTool = AreaSelectionTool | 'pencil' | 'eraser' | 'gradient';
@@ -245,6 +246,10 @@
 		);
 	}
 
+	function isDragSelectionTool(tool = editor.activeTool): tool is AreaSelectionTool {
+		return tool === 'marquee' || tool === 'ellipse_marquee' || tool === 'lasso';
+	}
+
 	function usesCanvasSurface(): boolean {
 		return (
 			isAreaSelectionTool() ||
@@ -280,7 +285,7 @@
 
 	function documentPoint(
 		event: Pick<PointerEvent, 'clientX' | 'clientY'>,
-		clampToCanvas = false
+		outside: 'reject' | 'clamp' | 'allow' = 'reject'
 	): SelectionPoint | null {
 		const stage = stageElement;
 		const document = editor.document;
@@ -288,9 +293,13 @@
 		const bounds = stage.getBoundingClientRect();
 		const x = ((event.clientX - bounds.left) / Math.max(1, bounds.width)) * document.width_px;
 		const y = ((event.clientY - bounds.top) / Math.max(1, bounds.height)) * document.height_px;
-		if (!clampToCanvas && (x < 0 || y < 0 || x > document.width_px || y > document.height_px)) {
+		if (
+			outside === 'reject' &&
+			(x < 0 || y < 0 || x > document.width_px || y > document.height_px)
+		) {
 			return null;
 		}
+		if (outside === 'allow') return { x, y };
 		return {
 			x: Math.max(0, Math.min(document.width_px, x)),
 			y: Math.max(0, Math.min(document.height_px, y))
@@ -356,9 +365,23 @@
 		};
 	}
 
+	function targetsPasteboardChrome(target: EventTarget | null): boolean {
+		return (
+			target instanceof Element &&
+			Boolean(
+				target.closest(
+					'[data-testid="studio-selection-options"], button, input, textarea, select, [role="slider"], [contenteditable="true"]'
+				)
+			)
+		);
+	}
+
 	function startAreaSelection(event: PointerEvent): boolean {
 		const tool = editor.activeTool;
-		if (!(event.target instanceof Node) || !stageElement?.contains(event.target)) return false;
+		const startsOnStage = event.target instanceof Node && stageElement?.contains(event.target);
+		const startsOnPasteboard =
+			event.currentTarget === viewport && !targetsPasteboardChrome(event.target);
+		if (!startsOnStage && !(startsOnPasteboard && isDragSelectionTool(tool))) return false;
 		if (
 			(!isAreaSelectionTool(tool) &&
 				tool !== 'pencil' &&
@@ -370,7 +393,7 @@
 			event.button !== 0
 		)
 			return false;
-		const point = documentPoint(event);
+		const point = documentPoint(event, startsOnStage ? 'reject' : 'allow');
 		if (!point) return false;
 		const mode = isAreaSelectionTool(tool)
 			? selectionModeForEvent(event, tool)
@@ -486,7 +509,10 @@
 	function moveAreaSelection(event: PointerEvent): boolean {
 		const gesture = selectionGesture;
 		if (!gesture || gesture.pointerID !== event.pointerId) return false;
-		let point = documentPoint(event, true);
+		let point = documentPoint(
+			event,
+			isDragSelectionTool(gesture.tool) && !gesture.originalSelection ? 'allow' : 'clamp'
+		);
 		if (!point) return false;
 		if (gesture.originalSelection) {
 			point = constrainGradientPoint(gesture.start, point, event);
@@ -517,7 +543,11 @@
 	function finishAreaSelection(event: PointerEvent): boolean {
 		const gesture = selectionGesture;
 		if (!gesture || gesture.pointerID !== event.pointerId) return false;
-		let point = documentPoint(event, true) ?? gesture.current;
+		let point =
+			documentPoint(
+				event,
+				isDragSelectionTool(gesture.tool) && !gesture.originalSelection ? 'allow' : 'clamp'
+			) ?? gesture.current;
 		if (gesture.originalSelection) {
 			point = constrainGradientPoint(gesture.start, point, event);
 			editor.movePixelSelection(
@@ -659,7 +689,24 @@
 	function handleWheel(event: WheelEvent): void {
 		if (event.ctrlKey || event.metaKey) {
 			event.preventDefault();
-			editor.zoom = Math.max(0.1, Math.min(4, editor.zoom * (event.deltaY > 0 ? 0.9 : 1.1)));
+			const currentZoom = editor.zoom;
+			const nextZoom = Math.max(0.1, Math.min(4, currentZoom * (event.deltaY > 0 ? 0.9 : 1.1)));
+			const bounds = viewport?.getBoundingClientRect();
+			if (bounds) {
+				const anchorX = event.clientX - (bounds.left + bounds.width / 2);
+				const anchorY = event.clientY - (bounds.top + bounds.height / 2);
+				const nextPan = panForZoomAnchor({
+					panX: editor.panX,
+					panY: editor.panY,
+					zoom: currentZoom,
+					nextZoom,
+					anchorX,
+					anchorY
+				});
+				editor.panX = nextPan.panX;
+				editor.panY = nextPan.panY;
+			}
+			editor.zoom = nextZoom;
 			return;
 		}
 		if (editor.activeTool === 'hand' || event.shiftKey) {
@@ -772,12 +819,28 @@
 				const distance = Math.max(1, Math.hypot(second.x - first.x, second.y - first.y));
 				const centerX = (first.x + second.x) / 2;
 				const centerY = (first.y + second.y) / 2;
-				editor.zoom = Math.max(
+				const nextZoom = Math.max(
 					0.1,
 					Math.min(4, pinchStart.zoom * (distance / Math.max(1, pinchStart.distance)))
 				);
-				editor.panX = pinchStart.panX + centerX - pinchStart.centerX;
-				editor.panY = pinchStart.panY + centerY - pinchStart.centerY;
+				const bounds = viewport?.getBoundingClientRect();
+				if (bounds) {
+					const viewportCenterX = bounds.left + bounds.width / 2;
+					const viewportCenterY = bounds.top + bounds.height / 2;
+					const nextPan = panForZoomAnchor({
+						panX: pinchStart.panX,
+						panY: pinchStart.panY,
+						zoom: pinchStart.zoom,
+						nextZoom,
+						anchorX: pinchStart.centerX - viewportCenterX,
+						anchorY: pinchStart.centerY - viewportCenterY,
+						nextAnchorX: centerX - viewportCenterX,
+						nextAnchorY: centerY - viewportCenterY
+					});
+					editor.panX = nextPan.panX;
+					editor.panY = nextPan.panY;
+				}
+				editor.zoom = nextZoom;
 				event.preventDefault();
 				return;
 			}

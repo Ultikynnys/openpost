@@ -143,11 +143,30 @@ export interface SecurityStatus {
 		email: string;
 		display_name?: string;
 		avatar_url?: string;
+		has_password: boolean;
+		is_managed: boolean;
+		managed_organization_name?: string;
 		created_at: string;
 	};
 	totp_enabled: boolean;
 	passkeys: PasskeySummary[] | null;
 	methods: string[] | null;
+}
+
+export interface OIDCIdentitySummary {
+	id: string;
+	provider_id: string;
+	provider_name: string;
+	linked_email?: string;
+	created_at: string;
+	last_login_at?: string;
+}
+
+export interface OIDCProviderSummary {
+	id: string;
+	name: string;
+	organization?: string;
+	start_url: string;
 }
 
 export interface AuthSessionSummary {

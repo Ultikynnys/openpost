@@ -111,7 +111,17 @@ func seedWorkspaceUserAndMember(t *testing.T, db *bun.DB, userID, email, role st
 		CreatedAt:    time.Now().UTC(),
 	}).Exec(ctx)
 	require.NoError(t, err)
-	_, err = db.NewInsert().Model(&models.Workspace{ID: workspaceID, Name: "Launch"}).Exec(ctx)
+	_, err = db.NewInsert().Model(&models.Organization{
+		ID: "org-1", Name: "Launch", CreatedByID: userID, CreatedAt: time.Now().UTC(),
+	}).Exec(ctx)
+	require.NoError(t, err)
+	_, err = db.NewInsert().Model(&models.OrganizationMember{
+		OrganizationID: "org-1", UserID: userID, Role: models.OrganizationRoleOwner, CreatedAt: time.Now().UTC(),
+	}).Exec(ctx)
+	require.NoError(t, err)
+	_, err = db.NewInsert().Model(&models.Workspace{
+		ID: workspaceID, OrganizationID: "org-1", Name: "Launch",
+	}).Exec(ctx)
 	require.NoError(t, err)
 	_, err = db.NewInsert().Model(&models.WorkspaceMember{
 		WorkspaceID: workspaceID,
@@ -319,6 +329,11 @@ func TestAcceptWorkspaceInvitationAddsWorkspaceMember(t *testing.T) {
 	var member models.WorkspaceMember
 	require.NoError(t, srv.db.NewSelect().Model(&member).Where("workspace_id = ? AND user_id = ?", "ws-1", "user-1").Scan(ctx))
 	require.Equal(t, models.WorkspaceRoleViewer, member.Role)
+	var organizationMember models.OrganizationMember
+	require.NoError(t, srv.db.NewSelect().Model(&organizationMember).
+		Where("organization_id = ? AND user_id = ?", "org-1", "user-1").
+		Scan(ctx))
+	require.Equal(t, models.OrganizationRoleMember, organizationMember.Role)
 	var invitation models.WorkspaceInvitation
 	require.NoError(t, srv.db.NewSelect().Model(&invitation).Where("id = ?", "invite-1").Scan(ctx))
 	require.Equal(t, "user-1", invitation.AcceptedByUserID)

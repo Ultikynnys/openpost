@@ -28,6 +28,8 @@
 	let createError = $state('');
 	let authReady = $state(false);
 	let pageLoading = $state(true);
+	let managedAccount = $state(false);
+	let managedOrganizationName = $state('');
 	let createdWorkspaceID = '';
 	let onboardingLoadSequence = 0;
 
@@ -52,6 +54,8 @@
 		const unsubscribe = auth.subscribe((state) => {
 			if (!state.isLoading && !authReady) {
 				authReady = true;
+				managedAccount = state.user?.is_managed ?? false;
+				managedOrganizationName = state.user?.managed_organization_name ?? '';
 				if (!state.isAuthenticated) {
 					goto(resolve(loginTarget() as '/'));
 					return;
@@ -136,6 +140,16 @@
 					{/snippet}
 				</InlineNotice>
 			</div>
+		{:else if managedAccount}
+			<InlineNotice
+				tone="info"
+				message={m.onboarding_managed_waiting({
+					organization: managedOrganizationName || m.onboarding_managed_organization()
+				})}
+			/>
+			<p class="text-sm leading-6 text-muted-foreground">
+				{m.onboarding_managed_help()}
+			</p>
 		{:else}
 			{#if createError}
 				<InlineNotice tone="error" message={createError} />

@@ -36,8 +36,16 @@ Organization settings group collaboration and hosted billing.
 - Workspace team members and pending invitations
 - Seat usage
 - OpenPost Cloud plan, usage, checkout, and portal links
+- OIDC identity providers, verified domains, SSO enforcement, provider assurance, and machine-token policy
 
 Invite people from **Settings -> Organization**. Pending invitations reserve seats until they are accepted, revoked, or expired.
+
+The **Single sign-on** tab is available for organization administration. Add an
+exact OIDC issuer, copy the callback and back-channel logout URLs into the
+provider, then test optional login before requiring SSO. Required mode checks
+workspace access, password recovery, and API, CLI, and MCP credentials. Keep an
+MFA-protected local instance administrator in
+`OPENPOST_SSO_BREAK_GLASS_EMAILS` before enforcing SSO.
 
 ## Provider credentials
 

@@ -48,6 +48,15 @@ Most variables loaded through the main backend config loader can also be loaded 
 | `OPENPOST_UPDATE_CHECK_ENABLED`       | Enable read-only stable release checks for self-hosted instance admins                                      |
 | `OPENPOST_JWT_SECRET`                 | JWT signing secret                                                                                          |
 | `OPENPOST_ENCRYPTION_KEY`             | OAuth token encryption secret                                                                               |
+| `OPENPOST_OIDC_ISSUER`                | Exact issuer for the optional instance-wide OIDC provider                                                   |
+| `OPENPOST_OIDC_CLIENT_ID`             | Client ID for the instance-wide OIDC provider                                                               |
+| `OPENPOST_OIDC_CLIENT_SECRET`         | Client secret for the instance-wide OIDC provider; supports `_FILE`                                         |
+| `OPENPOST_OIDC_NAME`                  | Login label for the instance-wide OIDC provider                                                             |
+| `OPENPOST_OIDC_SCOPES`                | Space- or comma-separated OIDC scopes; `openid` is always included                                          |
+| `OPENPOST_OIDC_JIT_ENABLED`           | Create a user on first verified provider login                                                              |
+| `OPENPOST_OIDC_BOOTSTRAP_ALLOWLIST`   | Exact `issuer|subject` pairs or emails allowed to become instance admin through JIT                          |
+| `OPENPOST_SSO_BREAK_GLASS_EMAILS`     | Existing MFA-protected instance admins allowed through required SSO during an IdP outage                    |
+| `OPENPOST_OIDC_NATIVE_CALLBACK_URL`   | Native one-time handoff link; defaults to `openpost://oidc/callback`                                        |
 | `OPENPOST_STORAGE_DRIVER`             | Media storage driver: `local` or `s3`                                                                       |
 | `OPENPOST_MEDIA_PATH`                 | Local media directory                                                                                       |
 | `OPENPOST_MEDIA_URL`                  | Public media base URL                                                                                       |
