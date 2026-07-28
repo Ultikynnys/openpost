@@ -265,9 +265,43 @@ test("desktop planning sidebar resumes drafts and stays out of mobile navigation
 
   const planner = page.getByTestId("desktop-sidebar-planner");
   await expect(planner).toBeVisible();
+  const rollingCalendar = planner.getByTestId("sidebar-rolling-calendar");
+  await expect(rollingCalendar).toBeVisible();
+  const today = rollingCalendar.locator('[aria-current="date"]');
+  await expect(today).toBeVisible();
+  await today.focus();
+  await today.press("ArrowRight");
+  await expect(rollingCalendar.locator("button:focus")).not.toHaveAttribute(
+    "aria-current",
+    "date",
+  );
   await expect(
-    page.getByRole("button", { name: "Calendar", exact: true }),
-  ).toBeVisible();
+    rollingCalendar.getByRole("button", { disabled: true }),
+  ).not.toHaveCount(0);
+  const initialCalendarRows = await rollingCalendar
+    .locator('[role="row"]')
+    .count();
+  const initialCalendarMetrics = await rollingCalendar.evaluate((element) => ({
+    scrollTop: element.scrollTop,
+    clientHeight: element.clientHeight,
+    scrollHeight: element.scrollHeight,
+  }));
+  expect(initialCalendarMetrics.scrollTop).toBe(0);
+  expect(initialCalendarMetrics.scrollHeight).toBeGreaterThan(
+    initialCalendarMetrics.clientHeight,
+  );
+  await rollingCalendar.evaluate((element) => {
+    element.scrollTop = element.scrollHeight;
+  });
+  await expect
+    .poll(() => rollingCalendar.locator('[role="row"]').count())
+    .toBeGreaterThan(initialCalendarRows);
+  await rollingCalendar.evaluate((element) => {
+    element.scrollTop = -100;
+  });
+  await expect
+    .poll(() => rollingCalendar.evaluate((element) => element.scrollTop))
+    .toBe(0);
   await expect(page.getByText("Resume the launch announcement")).toBeVisible();
   await expect(
     page.getByRole("button", { name: "Media", exact: true }),
@@ -302,15 +336,7 @@ test("desktop planning sidebar resumes drafts and stays out of mobile navigation
     name: "Resume draft: Sidebar draft 2",
   });
   await draftToDelete.scrollIntoViewIfNeeded();
-  const calendarButton = planner.getByRole("button", {
-    name: "Calendar",
-    exact: true,
-  });
-  const calendarExpandIcon = calendarButton.locator(".lucide-maximize-2");
   const draftDocumentIcons = draftList.locator(".lucide-file-text");
-  const calendarExpandColor = await calendarExpandIcon.evaluate(
-    (element) => getComputedStyle(element).color,
-  );
   const draftDocumentColors = await draftDocumentIcons.evaluateAll((icons) =>
     icons.map((icon) => getComputedStyle(icon).color),
   );
@@ -318,7 +344,6 @@ test("desktop planning sidebar resumes drafts and stays out of mobile navigation
   await expect(
     draftList.getByRole("button", { name: /^Delete draft:/ }),
   ).toHaveCount(0);
-  await expect(calendarExpandIcon).toHaveCSS("color", calendarExpandColor);
   await expect
     .poll(() =>
       draftDocumentIcons.evaluateAll((icons) =>

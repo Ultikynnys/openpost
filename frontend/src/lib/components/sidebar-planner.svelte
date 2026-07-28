@@ -1,15 +1,19 @@
 <script lang="ts">
 	import { ContextMenu } from 'bits-ui';
 	import { page } from '$app/state';
-	import { getLocalTimeZone, today, type DateValue } from '@internationalized/date';
+	import type { CalendarDate } from '@internationalized/date';
+	import { tick } from 'svelte';
 	import { SvelteMap } from 'svelte/reactivity';
 	import { client } from '$lib/api/client';
 	import type { components } from '$lib/api/types';
-	import { workspaceDateKeyFromISO } from '$lib/components/compose/schedule-timezone';
+	import {
+		workspaceClock,
+		workspaceDateKeyFromISO
+	} from '$lib/components/compose/schedule-timezone';
+	import { buildRollingCalendarWeeks } from '$lib/components/sidebar-rolling-calendar';
 	import { publicationCalendarOccurrence } from '$lib/publication-calendar';
 	import AppToast from '$lib/components/app-toast.svelte';
 	import DestructiveConfirmDialog from '$lib/components/destructive-confirm-dialog.svelte';
-	import * as CalendarUi from '$lib/components/ui/calendar';
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import { ui } from '$lib/stores/ui.svelte';
 	import { workspaceCtx } from '$lib/stores/workspace.svelte';
@@ -34,8 +38,6 @@
 		createdAt: string;
 	};
 
-	let selectedDate = $state<DateValue | undefined>(undefined);
-	let calendarPlaceholder = $state<DateValue>(today(getLocalTimeZone()));
 	let dayCounts = $state.raw(new SvelteMap<string, number>());
 	let drafts = $state.raw<PlannerDraft[]>([]);
 	let loadingDrafts = $state(true);
@@ -45,20 +47,27 @@
 	let draftDeleteError = $state('');
 	let overviewRequest = 0;
 	let draftsRequest = 0;
+	let renderedWeekCount = $state(12);
+	let focusedDayKey = $state('');
+	const weeksPerBatch = 8;
 	const draftContextItemClass =
 		'flex min-h-9 cursor-default items-center gap-2 rounded-md px-2 text-sm outline-none data-highlighted:bg-muted data-disabled:pointer-events-none data-disabled:opacity-45';
 
 	const workspaceId = $derived(workspaceCtx.currentWorkspace?.id ?? '');
-	const monthString = $derived.by(() => {
-		const date = calendarPlaceholder.toDate(getLocalTimeZone());
-		return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+	const viewerTimeZone = $derived(workspaceCtx.settings.timezone || 'UTC');
+	const plannerToday = $derived(workspaceClock(viewerTimeZone).date);
+	const rollingWeeks = $derived(
+		buildRollingCalendarWeeks(plannerToday, workspaceCtx.weekStartsOn, renderedWeekCount)
+	);
+	const keyboardFocusDayKey = $derived.by(() => {
+		const focusedDay = rollingWeeks.flat().find((day) => day.key === focusedDayKey && !day.past);
+		return focusedDay?.key ?? plannerToday.toString();
 	});
 	$effect(() => {
 		const currentWorkspaceId = workspaceId;
-		const currentMonth = monthString;
 		const refresh = ui.refreshCounter;
 		void refresh;
-		void loadOverview(currentWorkspaceId, currentMonth);
+		void loadOverview(currentWorkspaceId);
 	});
 
 	$effect(() => {
@@ -68,7 +77,7 @@
 		void loadDrafts(currentWorkspaceId);
 	});
 
-	async function loadOverview(currentWorkspaceId: string, month: string) {
+	async function loadOverview(currentWorkspaceId: string) {
 		const request = ++overviewRequest;
 		if (!currentWorkspaceId) {
 			dayCounts = new SvelteMap();
@@ -100,7 +109,7 @@
 				const occursAt = publicationCalendarOccurrence(publication);
 				if (!occursAt) continue;
 				const key = workspaceDateKeyFromISO(occursAt, workspaceCtx.settings.timezone || 'UTC');
-				if (!key?.startsWith(month)) continue;
+				if (!key) continue;
 				nextCounts.set(key, (nextCounts.get(key) ?? 0) + 1);
 			}
 			dayCounts = nextCounts;
@@ -199,52 +208,152 @@
 		}
 	}
 
-	function handleDateChange(date: DateValue | undefined) {
-		selectedDate = undefined;
-		if (date) ui.openDayPosts(date);
+	function openPlannerDay(date: CalendarDate) {
+		focusedDayKey = date.toString();
+		ui.openDayPosts(date);
 	}
 
-	type DayMarkerArgs = { day: DateValue; outsideMonth: boolean };
+	async function moveCalendarFocus(event: KeyboardEvent, date: CalendarDate) {
+		const grid = (event.currentTarget as HTMLElement).closest('[role="grid"]');
+		const days = rollingWeeks.flat();
+		const currentIndex = days.findIndex((day) => day.key === date.toString());
+		if (currentIndex < 0) return;
+
+		let nextIndex: number;
+		switch (event.key) {
+			case 'ArrowLeft':
+				nextIndex = currentIndex - 1;
+				break;
+			case 'ArrowRight':
+				nextIndex = currentIndex + 1;
+				break;
+			case 'ArrowUp':
+				nextIndex = currentIndex - 7;
+				break;
+			case 'ArrowDown':
+				nextIndex = currentIndex + 7;
+				break;
+			case 'Home':
+				nextIndex = currentIndex - (currentIndex % 7);
+				break;
+			case 'End':
+				nextIndex = currentIndex + (6 - (currentIndex % 7));
+				break;
+			default:
+				return;
+		}
+
+		event.preventDefault();
+		nextIndex = Math.max(0, nextIndex);
+		const todayIndex = days.findIndex((day) => day.today);
+		if (todayIndex >= 0) nextIndex = Math.max(todayIndex, nextIndex);
+		if (nextIndex >= days.length) {
+			renderedWeekCount += weeksPerBatch;
+			await tick();
+		}
+
+		const target = rollingWeeks.flat()[nextIndex];
+		if (!target || target.past) return;
+		focusedDayKey = target.key;
+		await tick();
+		grid?.querySelector<HTMLButtonElement>(`button[data-calendar-date="${target.key}"]`)?.focus();
+	}
+
+	function loadMoreWeeks(event: Event) {
+		const calendar = event.currentTarget as HTMLElement;
+		const remaining = calendar.scrollHeight - calendar.scrollTop - calendar.clientHeight;
+		if (remaining <= 72) renderedWeekCount += weeksPerBatch;
+	}
+
+	function formatWeekday(date: CalendarDate) {
+		return date
+			.toDate(viewerTimeZone)
+			.toLocaleDateString(getLocaleTag(), { weekday: 'short', timeZone: viewerTimeZone })
+			.slice(0, 2);
+	}
+
+	function formatDayLabel(date: CalendarDate) {
+		return date.toDate(viewerTimeZone).toLocaleDateString(getLocaleTag(), {
+			weekday: 'long',
+			year: 'numeric',
+			month: 'long',
+			day: 'numeric',
+			timeZone: viewerTimeZone
+		});
+	}
 </script>
-
-{#snippet dayMarker({ day, outsideMonth }: DayMarkerArgs)}
-	{@const count = dayCounts.get(day.toString()) ?? 0}
-	<div class="relative flex size-(--cell-size) items-center justify-center">
-		<CalendarUi.Day />
-		{#if !outsideMonth && count > 0}
-			<span
-				class="pointer-events-none absolute bottom-0.5 size-1 rounded-full bg-primary ring-1 ring-sidebar"
-				aria-hidden="true"
-			></span>
-		{/if}
-	</div>
-{/snippet}
-
-{#snippet calendarAction()}
-	<button
-		type="button"
-		class="relative z-10 inline-flex size-7 items-center justify-center rounded-md text-sidebar-foreground/52 hover:bg-sidebar-accent hover:text-sidebar-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-none"
-		onclick={() => onNavigate('/calendar')}
-		aria-label={m.sidebar_calendar()}
-		title={m.sidebar_calendar()}
-	>
-		<MaximizeIcon class="size-3.5" />
-	</button>
-{/snippet}
 
 <div class="flex min-h-0 flex-1 flex-col" data-testid="desktop-sidebar-planner">
 	<section class="shrink-0 border-b border-sidebar-border px-2 pb-3">
-		<CalendarUi.Calendar
-			type="single"
-			bind:value={selectedDate}
-			bind:placeholder={calendarPlaceholder}
-			onValueChange={handleDateChange}
-			day={dayMarker}
-			captionAction={calendarAction}
-			locale={getLocaleTag()}
-			weekStartsOn={workspaceCtx.settings.week_start as 0 | 1 | 2 | 3 | 4 | 5 | 6}
-			class="w-full bg-transparent p-0 select-none [--cell-size:1.75rem] [&_[role=gridcell]_[role=button][data-today]]:bg-sidebar-primary [&_[role=gridcell]_[role=button][data-today]]:text-sidebar-primary-foreground [&_tr]:justify-between"
-		/>
+		<div class="flex h-7 items-center justify-between px-2">
+			<span class="text-xs font-medium text-sidebar-foreground/52">{m.sidebar_calendar()}</span>
+			<button
+				type="button"
+				class="inline-flex size-7 items-center justify-center rounded-md text-sidebar-foreground/52 hover:bg-sidebar-accent hover:text-sidebar-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-none"
+				onclick={() => onNavigate('/calendar')}
+				aria-label={m.sidebar_calendar()}
+				title={m.sidebar_calendar()}
+			>
+				<MaximizeIcon class="size-3.5" />
+			</button>
+		</div>
+		<div
+			class="h-45 overflow-y-auto overscroll-contain pt-1 select-none"
+			data-testid="sidebar-rolling-calendar"
+			onscroll={loadMoreWeeks}
+		>
+			<div role="grid" aria-label={m.calendar_label()} class="relative">
+				<div role="row" class="sticky top-0 z-10 grid h-7 grid-cols-7 items-center bg-sidebar">
+					{#each rollingWeeks[0] ?? [] as day (day.key)}
+						<span
+							role="columnheader"
+							class="text-center text-xs font-normal text-sidebar-foreground/52"
+						>
+							{formatWeekday(day.date)}
+						</span>
+					{/each}
+				</div>
+
+				{#each rollingWeeks as week (week[0]?.key)}
+					<div role="row" class="grid h-9 grid-cols-7 items-center">
+						{#each week as day (day.key)}
+							<div role="gridcell" class="flex items-center justify-center">
+								<button
+									type="button"
+									data-calendar-date={day.key}
+									class={[
+										'relative inline-flex size-7 items-center justify-center rounded-md text-sm tabular-nums outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring',
+										day.today
+											? 'bg-sidebar-primary font-medium text-sidebar-primary-foreground'
+											: day.past
+												? 'cursor-not-allowed text-sidebar-foreground/28'
+												: 'text-sidebar-foreground/88 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
+									]}
+									disabled={day.past}
+									tabindex={day.key === keyboardFocusDayKey ? 0 : -1}
+									aria-label={formatDayLabel(day.date)}
+									aria-current={day.today ? 'date' : undefined}
+									onclick={() => openPlannerDay(day.date)}
+									onfocus={() => (focusedDayKey = day.key)}
+									onkeydown={(event) => void moveCalendarFocus(event, day.date)}
+								>
+									{day.date.day}
+									{#if (dayCounts.get(day.key) ?? 0) > 0}
+										<span
+											class={[
+												'pointer-events-none absolute bottom-0.5 size-1 rounded-full ring-1 ring-sidebar',
+												day.today ? 'bg-sidebar-primary-foreground' : 'bg-primary'
+											]}
+											aria-hidden="true"
+										></span>
+									{/if}
+								</button>
+							</div>
+						{/each}
+					</div>
+				{/each}
+			</div>
+		</div>
 	</section>
 
 	<section class="flex min-h-0 flex-1 flex-col px-2 py-3">

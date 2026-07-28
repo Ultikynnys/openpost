@@ -112,8 +112,8 @@ test("sidebar and full calendar use the same canonical publication inventory", a
   await expect(page.locator("[data-calendar-item]")).toHaveCount(3);
   await expect(
     page
-      .getByTestId("desktop-sidebar-planner")
-      .locator('span[aria-hidden="true"].rounded-full.bg-primary'),
+      .getByTestId("sidebar-rolling-calendar")
+      .locator('span[aria-hidden="true"].rounded-full'),
   ).toHaveCount(3);
 
   await page.setViewportSize({ width: 390, height: 844 });
