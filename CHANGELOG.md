@@ -4,6 +4,10 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- Kept the public changelog browser gate valid after release stamping, when version headings include their visible `v` prefix.
+
 ## [1.42.1] - 2026-07-28
 
 ### Changed

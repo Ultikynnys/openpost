@@ -260,7 +260,7 @@ test("public changelog is generated from the canonical release record", async ({
   await expect(
     page
       .getByRole("heading", {
-        name: /^(?:Unreleased|\d+\.\d+\.\d+)$/,
+        name: /^(?:Unreleased|v\d+\.\d+\.\d+)$/,
       })
       .first(),
   ).toBeVisible();
