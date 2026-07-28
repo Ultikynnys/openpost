@@ -4,6 +4,15 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- Added an instance-admin overview with 30-day registration and publishing trends plus a paginated user directory.
+
+### Changed
+
+- Moved media retention into General settings and removed its single-control navigation page.
+- Replaced the sidebar month calendar with a forward-only rolling planner that starts on the current week, disables earlier days, and loads more future weeks while scrolling.
+
 ## [1.42.3] - 2026-07-28
 
 ### Fixed

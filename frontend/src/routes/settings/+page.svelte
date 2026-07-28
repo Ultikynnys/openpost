@@ -12,6 +12,7 @@
 	import SectionHeader from '$lib/components/section-header.svelte';
 	import AppToast from '$lib/components/app-toast.svelte';
 	import InlineNotice from '$lib/components/inline-notice.svelte';
+	import InstanceAdminOverview from '$lib/components/instance-admin-overview.svelte';
 	import DestructiveConfirmDialog from '$lib/components/destructive-confirm-dialog.svelte';
 	import ProfileAvatarUploader from '$lib/components/profile-avatar-uploader.svelte';
 	import AccountDataCard from '$lib/components/account-data-card.svelte';
@@ -1778,104 +1779,121 @@
 					</form>
 				</section>
 
-				<section id="instance" class:hidden={activeSettingsTab !== 'instance'} class="scroll-mt-24">
-					<SectionHeader
-						title={m.settings_instance_status()}
-						description={m.settings_instance_status_body()}
-						icon={ServerCogIcon}
-						class="mb-4"
-					/>
+				{#if authState.user?.is_admin}
+					<section
+						id="instance"
+						class:hidden={activeSettingsTab !== 'instance'}
+						class="scroll-mt-24 space-y-10"
+					>
+						{#if activeSettingsTab === 'instance'}
+							<InstanceAdminOverview />
+						{/if}
 
-					{#if updateStatusLoading}
-						<PageLoading layout="list" label={m.common_loading()} items={3} />
-					{:else if updateStatusError}
-						<InlineNotice tone="error" message={updateStatusError}>
-							{#snippet actions()}
-								<Button variant="outline" size="sm" onclick={() => void loadUpdateStatus()}>
-									{m.common_retry()}
-								</Button>
-							{/snippet}
-						</InlineNotice>
-					{:else if updateStatus}
-						<div class="space-y-4" data-testid="instance-update-status">
-							{#if updateStatus.state === 'update_available'}
-								<InlineNotice tone="warning">
-									<div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-										<div>
-											<p class="font-medium">
-												{m.settings_instance_update_available({
-													version: updateStatus.latest_version ?? ''
-												})}
-											</p>
-											<p class="mt-0.5 text-current/80">
-												{m.settings_instance_update_available_body()}
-											</p>
-										</div>
-										{#if updateStatus.release_url}
-											<Button
-												href={updateStatus.release_url}
-												target="_blank"
-												rel="noreferrer"
-												variant="outline"
-												size="sm"
-											>
-												{m.settings_instance_view_release()}
-												<ExternalLinkIcon class="ml-1 h-3.5 w-3.5" />
-											</Button>
-										{/if}
-									</div>
+						<div>
+							<SectionHeader
+								title={m.settings_instance_status()}
+								description={m.settings_instance_status_body()}
+								icon={ServerCogIcon}
+								class="mb-4"
+							/>
+
+							{#if updateStatusLoading}
+								<PageLoading layout="list" label={m.common_loading()} items={3} />
+							{:else if updateStatusError}
+								<InlineNotice tone="error" message={updateStatusError}>
+									{#snippet actions()}
+										<Button variant="outline" size="sm" onclick={() => void loadUpdateStatus()}>
+											{m.common_retry()}
+										</Button>
+									{/snippet}
 								</InlineNotice>
-							{:else if updateStatus.state === 'stale'}
-								<InlineNotice tone="info" message={m.settings_instance_stale()} />
-							{:else if updateStatus.state === 'unavailable'}
-								<InlineNotice tone="info" message={m.settings_instance_unavailable()} />
-							{:else if updateStatus.state === 'disabled'}
-								<InlineNotice tone="info" message={m.settings_instance_disabled()} />
-							{:else if updateStatus.state === 'development'}
-								<InlineNotice tone="info" message={m.settings_instance_development()} />
-							{:else}
-								<InlineNotice tone="success" message={m.settings_instance_current()} />
+							{:else if updateStatus}
+								<div class="space-y-4" data-testid="instance-update-status">
+									{#if updateStatus.state === 'update_available'}
+										<InlineNotice tone="warning">
+											<div
+												class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"
+											>
+												<div>
+													<p class="font-medium">
+														{m.settings_instance_update_available({
+															version: updateStatus.latest_version ?? ''
+														})}
+													</p>
+													<p class="mt-0.5 text-current/80">
+														{m.settings_instance_update_available_body()}
+													</p>
+												</div>
+												{#if updateStatus.release_url}
+													<Button
+														href={updateStatus.release_url}
+														target="_blank"
+														rel="noreferrer"
+														variant="outline"
+														size="sm"
+													>
+														{m.settings_instance_view_release()}
+														<ExternalLinkIcon class="ml-1 h-3.5 w-3.5" />
+													</Button>
+												{/if}
+											</div>
+										</InlineNotice>
+									{:else if updateStatus.state === 'stale'}
+										<InlineNotice tone="info" message={m.settings_instance_stale()} />
+									{:else if updateStatus.state === 'unavailable'}
+										<InlineNotice tone="info" message={m.settings_instance_unavailable()} />
+									{:else if updateStatus.state === 'disabled'}
+										<InlineNotice tone="info" message={m.settings_instance_disabled()} />
+									{:else if updateStatus.state === 'development'}
+										<InlineNotice tone="info" message={m.settings_instance_development()} />
+									{:else}
+										<InlineNotice tone="success" message={m.settings_instance_current()} />
+									{/if}
+
+									<dl class="grid gap-4 rounded-lg border bg-muted/20 p-4 sm:grid-cols-2">
+										<div class="min-w-0">
+											<dt class="text-sm text-muted-foreground">
+												{m.settings_instance_running_version()}
+											</dt>
+											<dd class="mt-1 font-medium">{updateStatus.running_version}</dd>
+										</div>
+										<div class="min-w-0">
+											<dt class="text-sm text-muted-foreground">
+												{m.settings_instance_running_build()}
+											</dt>
+											<dd
+												class="mt-1 truncate font-mono text-sm"
+												title={updateStatus.running_build}
+											>
+												{shortBuild(updateStatus.running_build)}
+											</dd>
+										</div>
+										{#if updateStatus.latest_version}
+											<div class="min-w-0">
+												<dt class="text-sm text-muted-foreground">
+													{m.settings_instance_latest_version()}
+												</dt>
+												<dd class="mt-1 font-medium">{updateStatus.latest_version}</dd>
+											</div>
+										{/if}
+										{#if updateStatus.checked_at}
+											<div class="min-w-0">
+												<dt class="text-sm text-muted-foreground">
+													{m.settings_instance_last_checked()}
+												</dt>
+												<dd class="mt-1">{formatDateTime(updateStatus.checked_at)}</dd>
+											</div>
+										{/if}
+									</dl>
+
+									<p class="max-w-2xl text-sm text-muted-foreground">
+										{m.settings_instance_no_auto_update()}
+									</p>
+								</div>
 							{/if}
-
-							<dl class="grid gap-4 rounded-lg border bg-muted/20 p-4 sm:grid-cols-2">
-								<div class="min-w-0">
-									<dt class="text-sm text-muted-foreground">
-										{m.settings_instance_running_version()}
-									</dt>
-									<dd class="mt-1 font-medium">{updateStatus.running_version}</dd>
-								</div>
-								<div class="min-w-0">
-									<dt class="text-sm text-muted-foreground">
-										{m.settings_instance_running_build()}
-									</dt>
-									<dd class="mt-1 truncate font-mono text-sm" title={updateStatus.running_build}>
-										{shortBuild(updateStatus.running_build)}
-									</dd>
-								</div>
-								{#if updateStatus.latest_version}
-									<div class="min-w-0">
-										<dt class="text-sm text-muted-foreground">
-											{m.settings_instance_latest_version()}
-										</dt>
-										<dd class="mt-1 font-medium">{updateStatus.latest_version}</dd>
-									</div>
-								{/if}
-								{#if updateStatus.checked_at}
-									<div class="min-w-0">
-										<dt class="text-sm text-muted-foreground">
-											{m.settings_instance_last_checked()}
-										</dt>
-										<dd class="mt-1">{formatDateTime(updateStatus.checked_at)}</dd>
-									</div>
-								{/if}
-							</dl>
-
-							<p class="max-w-2xl text-sm text-muted-foreground">
-								{m.settings_instance_no_auto_update()}
-							</p>
 						</div>
-					{/if}
-				</section>
+					</section>
+				{/if}
 
 				<section
 					id="workspace"

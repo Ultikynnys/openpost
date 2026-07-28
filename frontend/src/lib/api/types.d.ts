@@ -209,6 +209,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/overview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get instance administration overview
+         * @description Returns instance-wide account, workspace, and publication activity totals for an instance administrator.
+         */
+        get: operations["get-instance-overview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/provider-apps": {
         parameters: {
             query?: never;
@@ -256,6 +276,26 @@ export interface paths {
          * @description Returns a cached, read-only stable release comparison. This endpoint never installs updates.
          */
         get: operations["get-instance-update-status"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/users": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List instance users
+         * @description Returns a newest-first, paginated directory of users visible only to an instance administrator.
+         */
+        get: operations["list-instance-users"];
         put?: never;
         post?: never;
         delete?: never;
@@ -4698,6 +4738,98 @@ export interface components {
             /** Format: date-time */
             verified_at?: string;
         };
+        InstanceDailyMetric: {
+            /**
+             * Format: date
+             * @description UTC calendar date
+             */
+            date: string;
+            /**
+             * Format: int64
+             * @description Count for this date
+             */
+            value: number;
+        };
+        InstanceOverviewResponse: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/InstanceOverviewResponse.json
+             */
+            readonly $schema?: string;
+            /**
+             * Format: int64
+             * @description Users registered during the current 30-day window
+             */
+            new_users_last_30_days: number;
+            /** @description Daily UTC publications with at least one published rendition for the last 30 days */
+            publication_trend: components["schemas"]["InstanceDailyMetric"][] | null;
+            /**
+             * Format: int64
+             * @description Publications with at least one published rendition during the current 30-day window
+             */
+            published_last_30_days: number;
+            /**
+             * Format: int64
+             * @description Total registered users
+             */
+            total_users: number;
+            /**
+             * Format: int64
+             * @description Total workspaces
+             */
+            total_workspaces: number;
+            /** @description Daily UTC user registrations for the last 30 days */
+            user_registration_trend: components["schemas"]["InstanceDailyMetric"][] | null;
+        };
+        InstanceUserPage: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/InstanceUserPage.json
+             */
+            readonly $schema?: string;
+            /**
+             * Format: int64
+             * @description Current one-based page
+             */
+            page: number;
+            /**
+             * Format: int64
+             * @description Users per page
+             */
+            per_page: number;
+            /**
+             * Format: int64
+             * @description Total registered users
+             */
+            total: number;
+            /**
+             * Format: int64
+             * @description Total number of pages
+             */
+            total_pages: number;
+            users: components["schemas"]["InstanceUserResponse"][] | null;
+        };
+        InstanceUserResponse: {
+            /** @description Profile avatar URL */
+            avatar_url: string;
+            /** @description Account creation time */
+            created_at: string;
+            /** @description User display name */
+            display_name: string;
+            /** @description User email address */
+            email: string;
+            /** @description User ID */
+            id: string;
+            /** @description Whether the user is an instance administrator */
+            is_admin: boolean;
+            /**
+             * Format: int64
+             * @description Number of workspaces the user can access
+             */
+            workspace_count: number;
+        };
         InstantiateStudioTemplateInputBody: {
             /**
              * Format: uri
@@ -8681,6 +8813,53 @@ export interface operations {
             };
         };
     };
+    "get-instance-overview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InstanceOverviewResponse"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     "list-provider-apps": {
         parameters: {
             query?: never;
@@ -8822,6 +9001,67 @@ export interface operations {
             };
             /** @description Service Unavailable */
             503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "list-instance-users": {
+        parameters: {
+            query?: {
+                /** @description One-based page number */
+                page?: number;
+                /** @description Users per page */
+                per_page?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InstanceUserPage"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };

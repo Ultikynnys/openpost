@@ -4060,6 +4060,162 @@
 				],
 				"type": "object"
 			},
+			"InstanceDailyMetric": {
+				"additionalProperties": false,
+				"properties": {
+					"date": {
+						"description": "UTC calendar date",
+						"format": "date",
+						"type": "string"
+					},
+					"value": {
+						"description": "Count for this date",
+						"format": "int64",
+						"type": "integer"
+					}
+				},
+				"required": ["date", "value"],
+				"type": "object"
+			},
+			"InstanceOverviewResponse": {
+				"additionalProperties": false,
+				"properties": {
+					"$schema": {
+						"description": "A URL to the JSON Schema for this object.",
+						"examples": ["https://example.com/schemas/InstanceOverviewResponse.json"],
+						"format": "uri",
+						"readOnly": true,
+						"type": "string"
+					},
+					"new_users_last_30_days": {
+						"description": "Users registered during the current 30-day window",
+						"format": "int64",
+						"type": "integer"
+					},
+					"publication_trend": {
+						"description": "Daily UTC publications with at least one published rendition for the last 30 days",
+						"items": {
+							"$ref": "#/components/schemas/InstanceDailyMetric"
+						},
+						"type": ["array", "null"]
+					},
+					"published_last_30_days": {
+						"description": "Publications with at least one published rendition during the current 30-day window",
+						"format": "int64",
+						"type": "integer"
+					},
+					"total_users": {
+						"description": "Total registered users",
+						"format": "int64",
+						"type": "integer"
+					},
+					"total_workspaces": {
+						"description": "Total workspaces",
+						"format": "int64",
+						"type": "integer"
+					},
+					"user_registration_trend": {
+						"description": "Daily UTC user registrations for the last 30 days",
+						"items": {
+							"$ref": "#/components/schemas/InstanceDailyMetric"
+						},
+						"type": ["array", "null"]
+					}
+				},
+				"required": [
+					"total_users",
+					"new_users_last_30_days",
+					"total_workspaces",
+					"published_last_30_days",
+					"user_registration_trend",
+					"publication_trend"
+				],
+				"type": "object"
+			},
+			"InstanceUserPage": {
+				"additionalProperties": false,
+				"properties": {
+					"$schema": {
+						"description": "A URL to the JSON Schema for this object.",
+						"examples": ["https://example.com/schemas/InstanceUserPage.json"],
+						"format": "uri",
+						"readOnly": true,
+						"type": "string"
+					},
+					"page": {
+						"description": "Current one-based page",
+						"format": "int64",
+						"type": "integer"
+					},
+					"per_page": {
+						"description": "Users per page",
+						"format": "int64",
+						"type": "integer"
+					},
+					"total": {
+						"description": "Total registered users",
+						"format": "int64",
+						"type": "integer"
+					},
+					"total_pages": {
+						"description": "Total number of pages",
+						"format": "int64",
+						"type": "integer"
+					},
+					"users": {
+						"items": {
+							"$ref": "#/components/schemas/InstanceUserResponse"
+						},
+						"type": ["array", "null"]
+					}
+				},
+				"required": ["users", "total", "page", "per_page", "total_pages"],
+				"type": "object"
+			},
+			"InstanceUserResponse": {
+				"additionalProperties": false,
+				"properties": {
+					"avatar_url": {
+						"description": "Profile avatar URL",
+						"type": "string"
+					},
+					"created_at": {
+						"description": "Account creation time",
+						"type": "string"
+					},
+					"display_name": {
+						"description": "User display name",
+						"type": "string"
+					},
+					"email": {
+						"description": "User email address",
+						"type": "string"
+					},
+					"id": {
+						"description": "User ID",
+						"type": "string"
+					},
+					"is_admin": {
+						"description": "Whether the user is an instance administrator",
+						"type": "boolean"
+					},
+					"workspace_count": {
+						"description": "Number of workspaces the user can access",
+						"format": "int64",
+						"type": "integer"
+					}
+				},
+				"required": [
+					"id",
+					"email",
+					"display_name",
+					"avatar_url",
+					"is_admin",
+					"workspace_count",
+					"created_at"
+				],
+				"type": "object"
+			},
 			"InstantiateStudioTemplateInputBody": {
 				"additionalProperties": false,
 				"properties": {
@@ -12484,6 +12640,56 @@
 				"tags": ["Accounts"]
 			}
 		},
+		"/admin/overview": {
+			"get": {
+				"description": "Returns instance-wide account, workspace, and publication activity totals for an instance administrator.",
+				"operationId": "get-instance-overview",
+				"responses": {
+					"200": {
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/InstanceOverviewResponse"
+								}
+							}
+						},
+						"description": "OK"
+					},
+					"401": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Unauthorized"
+					},
+					"403": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Forbidden"
+					},
+					"500": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Internal Server Error"
+					}
+				},
+				"summary": "Get instance administration overview",
+				"tags": ["Admin"]
+			}
+		},
 		"/admin/provider-apps": {
 			"get": {
 				"operationId": "list-provider-apps",
@@ -12651,6 +12857,95 @@
 					}
 				},
 				"summary": "Get instance update status",
+				"tags": ["Admin"]
+			}
+		},
+		"/admin/users": {
+			"get": {
+				"description": "Returns a newest-first, paginated directory of users visible only to an instance administrator.",
+				"operationId": "list-instance-users",
+				"parameters": [
+					{
+						"description": "One-based page number",
+						"explode": false,
+						"in": "query",
+						"name": "page",
+						"schema": {
+							"default": 1,
+							"description": "One-based page number",
+							"format": "int64",
+							"minimum": 1,
+							"type": "integer"
+						}
+					},
+					{
+						"description": "Users per page",
+						"explode": false,
+						"in": "query",
+						"name": "per_page",
+						"schema": {
+							"default": 20,
+							"description": "Users per page",
+							"format": "int64",
+							"maximum": 100,
+							"minimum": 1,
+							"type": "integer"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/InstanceUserPage"
+								}
+							}
+						},
+						"description": "OK"
+					},
+					"401": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Unauthorized"
+					},
+					"403": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Forbidden"
+					},
+					"422": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Unprocessable Entity"
+					},
+					"500": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Internal Server Error"
+					}
+				},
+				"summary": "List instance users",
 				"tags": ["Admin"]
 			}
 		},

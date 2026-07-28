@@ -136,7 +136,7 @@ test("settings keeps hosted X costs separate from product usage", async ({
   ).toHaveAttribute("href", "https://docs.x.com/x-api/getting-started/pricing");
 });
 
-test("instance admins can review update status without an update action", async ({
+test("instance admins can review usage, users, and update status", async ({
   page,
   request,
 }) => {
@@ -151,6 +151,8 @@ test("instance admins can review update status without an update action", async 
   expect(meResponse.ok()).toBeTruthy();
   const me = await meResponse.json();
   let profileRequests = 0;
+  let overviewRequests = 0;
+  const requestedUserPages: number[] = [];
   let updateStatusRequests = 0;
 
   await page.route("**/api/v1/auth/me", async (route) => {
@@ -158,6 +160,62 @@ test("instance admins can review update status without an update action", async 
     await route.fulfill({
       contentType: "application/json",
       json: { ...me, is_admin: true },
+    });
+  });
+  await page.route("**/api/v1/admin/overview", async (route) => {
+    overviewRequests += 1;
+    const trend = Array.from({ length: 30 }, (_, index) => ({
+      date: `2026-07-${String(index + 1).padStart(2, "0")}`,
+      value: index % 6 === 0 ? 1 : 0,
+    }));
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        total_users: 42,
+        new_users_last_30_days: 5,
+        total_workspaces: 12,
+        published_last_30_days: 86,
+        user_registration_trend: trend,
+        publication_trend: trend.map((point, index) => ({
+          ...point,
+          value: index % 3,
+        })),
+      },
+    });
+  });
+  await page.route("**/api/v1/admin/users?**", async (route) => {
+    const requestedPage = Number(
+      new URL(route.request().url()).searchParams.get("page") ?? "1",
+    );
+    requestedUserPages.push(requestedPage);
+    const pageStart = (requestedPage - 1) * 20;
+    const userCount = requestedPage === 3 ? 2 : 20;
+    const users = Array.from({ length: userCount }, (_, index) => {
+      const userNumber = pageStart + index + 1;
+      return {
+        id: `user-${userNumber}`,
+        email: `user-${userNumber}@example.com`,
+        display_name:
+          userNumber === 1
+            ? "Ada Admin"
+            : userNumber === 21
+              ? "Page Two User"
+              : `User ${userNumber}`,
+        avatar_url: "",
+        is_admin: userNumber === 1,
+        workspace_count: userNumber % 4,
+        created_at: `2026-07-${String(29 - (index % 20)).padStart(2, "0")}T12:00:00Z`,
+      };
+    });
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        users,
+        total: 42,
+        page: requestedPage,
+        per_page: 20,
+        total_pages: 3,
+      },
     });
   });
   await page.route("**/api/v1/admin/update-status", async (route) => {
@@ -180,10 +238,28 @@ test("instance admins can review update status without an update action", async 
   await page.goto("/settings?tab=instance");
 
   await expect.poll(() => profileRequests).toBeGreaterThan(0);
+  await expect.poll(() => overviewRequests).toBeGreaterThan(0);
+  await expect.poll(() => requestedUserPages).toContain(1);
   await expect.poll(() => updateStatusRequests).toBeGreaterThan(0);
   await expect(
     page.getByRole("heading", { name: "Instance", level: 1 }),
   ).toBeVisible();
+
+  const overview = page.getByTestId("instance-admin-overview");
+  await expect(overview).toContainText("Total users");
+  await expect(overview).toContainText("42");
+  await expect(overview).toContainText("Published posts");
+  await expect(overview.locator('[data-slot="chart"]')).toHaveCount(2);
+
+  const directory = page.getByTestId("instance-user-directory");
+  await expect(directory).toContainText("Ada Admin");
+  await expect(directory).toContainText("Instance admin");
+  await expect(overview).toContainText("Showing 1–20 of 42");
+  await overview.getByRole("button", { name: "Go to user page 2" }).click();
+  await expect.poll(() => requestedUserPages).toContain(2);
+  await expect(directory).toContainText("Page Two User");
+  await expect(overview).toContainText("Showing 21–40 of 42");
+
   const status = page.getByTestId("instance-update-status");
   await expect(status).toContainText("OpenPost v1.28.0 is available.");
   await expect(status).toContainText("v1.27.9");
@@ -195,6 +271,13 @@ test("instance admins can review update status without an update action", async 
     "https://github.com/rodrgds/openpost/releases/tag/v1.28.0",
   );
   await expect(status.getByRole("button", { name: /update/i })).toHaveCount(0);
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(directory).toBeVisible();
+  const overflow = await page.evaluate(
+    () => document.documentElement.scrollWidth - window.innerWidth,
+  );
+  expect(overflow).toBeLessThanOrEqual(1);
 });
 
 test("settings shows recent MCP activity for an authenticated user", async ({
