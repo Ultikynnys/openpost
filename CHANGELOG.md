@@ -11,6 +11,7 @@ All notable changes to this project are documented in this file.
 ### Fixed
 
 - Kept the public Studio start page mountable by initializing its shared file-input reference with the component's nullable binding contract.
+- Prevented visually hidden shared file inputs from expanding page width in public Studio, Media, brand, and preview-tool upload flows.
 - Made the public changelog browser check accept both active Unreleased entries and versioned sections after release stamping.
 
 ## [1.42.0] - 2026-07-28

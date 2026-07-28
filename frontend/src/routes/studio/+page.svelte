@@ -280,7 +280,7 @@ FORM: Operate surface extending the established Studio start screen; no marketin
 					bind:ref={fileInput}
 					type="file"
 					accept="image/png,image/jpeg,image/webp"
-					class="sr-only"
+					class="sr-only !size-px !p-0"
 					onchange={openImage}
 				/>
 			</div>

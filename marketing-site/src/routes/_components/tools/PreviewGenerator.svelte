@@ -453,7 +453,7 @@
               accept={mediaAccept}
               multiple
               onchange={chooseFiles}
-              class="sr-only"
+              class="sr-only !size-px !p-0"
             />
             <Button
               type="button"

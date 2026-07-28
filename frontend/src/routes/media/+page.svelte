@@ -1942,7 +1942,7 @@
 				type="file"
 				accept="image/*,video/*"
 				multiple
-				class="peer sr-only"
+				class="peer sr-only !size-px !p-0"
 				onchange={handleUploadSelection}
 				{@attach attachUploadInput}
 			/>

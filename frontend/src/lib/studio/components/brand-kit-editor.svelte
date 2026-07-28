@@ -460,7 +460,7 @@
 					{m.brand_upload_asset()}
 					<Input
 						type="file"
-						class="sr-only"
+						class="sr-only !size-px !p-0"
 						accept="image/png,image/jpeg,image/webp,image/avif"
 						disabled={uploadingAsset}
 						onchange={(event) => uploadBrandAsset(event.currentTarget.files?.[0])}
@@ -554,7 +554,7 @@
 					{m.brand_upload_font()}
 					<Input
 						type="file"
-						class="sr-only"
+						class="sr-only !size-px !p-0"
 						accept=".woff2,.ttf,.otf,font/woff2,font/ttf,font/otf"
 						disabled={uploadingFont}
 						onchange={(event) => uploadBrandFont(event.currentTarget.files?.[0])}

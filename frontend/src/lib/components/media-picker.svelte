@@ -311,7 +311,7 @@
 					type="file"
 					{multiple}
 					accept={accept.join(',')}
-					class="sr-only"
+					class="sr-only !size-px !p-0"
 					disabled={actionLoading}
 					onchange={(event) => uploadFiles(event.currentTarget.files)}
 				/>

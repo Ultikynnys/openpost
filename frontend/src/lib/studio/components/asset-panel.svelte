@@ -265,7 +265,7 @@
 			type="file"
 			accept="image/png,image/jpeg,image/webp"
 			multiple
-			class="sr-only"
+			class="sr-only !size-px !p-0"
 			onchange={uploadGuestMedia}
 		/>
 		<Button
