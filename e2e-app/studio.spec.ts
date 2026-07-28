@@ -92,6 +92,14 @@ test("public Studio creates and restores a local design without authentication",
     3,
   );
 
+  const studioMenus = page.getByRole("menubar", { name: "Studio menus" });
+  await expect(studioMenus).toBeVisible();
+  await studioMenus.getByText("File", { exact: true }).click();
+  await expect(
+    page.getByRole("menuitem", { name: /Save.*Ctrl S/ }),
+  ).toBeVisible();
+  await page.keyboard.press("Escape");
+
   await page.getByRole("button", { name: "Add shape" }).click({
     button: "right",
   });
@@ -102,6 +110,38 @@ test("public Studio creates and restores a local design without authentication",
   expect(shapeMenuBox.width).toBeLessThanOrEqual(192);
   expect(shapeMenuBox.height).toBeLessThanOrEqual(152);
   await page.keyboard.press("Escape");
+
+  await page.getByRole("button", { name: "Add shape" }).click();
+  const rectangleLayer = page.getByRole("treeitem", {
+    name: /Rectangle, shape/,
+  });
+  await expect(rectangleLayer).toBeVisible();
+  await page.keyboard.press("v");
+  await page.mouse.click(canvasBox.x + 8, canvasBox.y + canvasBox.height / 2);
+  await expect(page.getByRole("treeitem", { selected: true })).toHaveCount(0);
+  const objectSelectionStart = {
+    x: (canvasBox.x + stageAfterZoom.x) / 2,
+    y: stageAfterZoom.y + stageAfterZoom.height * 0.1,
+  };
+  const objectSelectionEnd = {
+    x:
+      (stageAfterZoom.x +
+        stageAfterZoom.width +
+        canvasBox.x +
+        canvasBox.width) /
+      2,
+    y: stageAfterZoom.y + stageAfterZoom.height * 0.9,
+  };
+  await page.mouse.move(objectSelectionStart.x, objectSelectionStart.y);
+  await page.mouse.down();
+  await page.mouse.move(objectSelectionEnd.x, objectSelectionEnd.y, {
+    steps: 8,
+  });
+  await expect(
+    page.getByTestId("studio-object-selection-outline"),
+  ).toBeVisible();
+  await page.mouse.up();
+  await expect(rectangleLayer).toHaveAttribute("aria-selected", "true");
 
   await page.keyboard.press("m");
   await expect(

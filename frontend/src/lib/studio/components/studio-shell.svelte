@@ -2,9 +2,10 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import { ContextMenu, Menubar } from 'bits-ui';
+	import { ContextMenu } from 'bits-ui';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
+	import * as Menubar from '$lib/components/ui/menubar';
 	import * as Sheet from '$lib/components/ui/sheet';
 	import * as Tooltip from '$lib/components/ui/tooltip';
 	import { Button } from '$lib/components/ui/button';
@@ -125,7 +126,6 @@
 	let saveTimer: ReturnType<typeof setTimeout> | undefined;
 	let savedIndicatorTimer: ReturnType<typeof setTimeout> | undefined;
 	let savedIndicatorVisible = $state(false);
-	let studioMenuValue = $state('');
 	let pendingSave: SaveRequest | null = null;
 	let saveDrain: Promise<boolean> | null = null;
 	let saveRetryDelay = INITIAL_SAVE_RETRY_DELAY;
@@ -300,13 +300,6 @@
 		savedIndicatorTimer = setTimeout(() => {
 			savedIndicatorVisible = false;
 		}, 1_600);
-	}
-
-	function openStudioMenu(event: PointerEvent, value: string): void {
-		if (event.button !== 0 || event.ctrlKey) return;
-		event.preventDefault();
-		studioMenuValue = value;
-		(event.currentTarget as HTMLElement).focus();
 	}
 
 	function clampPanelSize(
@@ -1285,146 +1278,128 @@
 			<ArrowLeftIcon />
 		</Button>
 		<Menubar.Root
-			bind:value={studioMenuValue}
-			class="ml-1 hidden items-center gap-0.5 lg:flex"
+			class="ml-1 hidden h-8 gap-0 border-0 bg-transparent p-0 lg:flex"
 			aria-label={m.studio_menus()}
 		>
 			<Menubar.Menu value="file">
-				<Menubar.Trigger
-					class="studio-menubar-trigger"
-					onpointerdown={(event) => openStudioMenu(event, 'file')}
-					>{m.studio_file()}</Menubar.Trigger
-				>
-				<Menubar.Portal>
-					<Menubar.Content class="studio-menubar-content" onclick={() => (studioMenuValue = '')}>
-						<Menubar.Item
-							class="studio-menubar-item"
-							onclick={() => saveNow()}
-							disabled={!editor.canEdit}><SaveIcon class="size-4" /> {m.common_save()}</Menubar.Item
-						>
-						{#if guestMode}
-							<Menubar.Item class="studio-menubar-item" onclick={saveToOpenPost}
-								>{m.studio_public_save_openpost()}</Menubar.Item
-							>
-						{:else}
-							<Menubar.Item class="studio-menubar-item" onclick={openHistory}
-								>{m.studio_version_history()}</Menubar.Item
-							>
-							<Menubar.Item
-								class="studio-menubar-item"
-								onclick={() => (checkpointDialogOpen = true)}
-								disabled={!editor.canEdit}>{m.studio_create_checkpoint()}</Menubar.Item
-							>
-							<Menubar.Item
-								class="studio-menubar-item"
-								onclick={openTemplateDialog}
-								disabled={!editor.canEdit}>{m.studio_save_template()}</Menubar.Item
-							>
-						{/if}
-						<Menubar.Item
-							class="studio-menubar-item"
-							onclick={openResizeDialog}
-							disabled={!editor.canEdit}>{m.studio_resize_design()}</Menubar.Item
-						>
-						<Menubar.Separator class="my-1 h-px bg-border" />
-						<Menubar.Item class="studio-menubar-item" onclick={() => openExport('download')}
-							><DownloadIcon class="size-4" /> {m.studio_export()}</Menubar.Item
-						>
-					</Menubar.Content>
-				</Menubar.Portal>
+				<Menubar.Trigger>{m.studio_file()}</Menubar.Trigger>
+				<Menubar.Content class="min-w-48">
+					<Menubar.Item onclick={() => saveNow()} disabled={!editor.canEdit}>
+						<SaveIcon />
+						{m.common_save()}
+						<Menubar.Shortcut>Ctrl S</Menubar.Shortcut>
+					</Menubar.Item>
+					{#if guestMode}
+						<Menubar.Item onclick={saveToOpenPost}>
+							{m.studio_public_save_openpost()}
+						</Menubar.Item>
+					{:else}
+						<Menubar.Item onclick={openHistory}>{m.studio_version_history()}</Menubar.Item>
+						<Menubar.Item onclick={() => (checkpointDialogOpen = true)} disabled={!editor.canEdit}>
+							{m.studio_create_checkpoint()}
+						</Menubar.Item>
+						<Menubar.Item onclick={openTemplateDialog} disabled={!editor.canEdit}>
+							{m.studio_save_template()}
+						</Menubar.Item>
+					{/if}
+					<Menubar.Item onclick={openResizeDialog} disabled={!editor.canEdit}>
+						{m.studio_resize_design()}
+					</Menubar.Item>
+					<Menubar.Separator />
+					<Menubar.Item onclick={() => openExport('download')}>
+						<DownloadIcon />
+						{m.studio_export()}
+					</Menubar.Item>
+				</Menubar.Content>
 			</Menubar.Menu>
 			<Menubar.Menu value="edit">
-				<Menubar.Trigger
-					class="studio-menubar-trigger"
-					onpointerdown={(event) => openStudioMenu(event, 'edit')}
-					>{m.studio_edit()}</Menubar.Trigger
-				>
-				<Menubar.Portal>
-					<Menubar.Content class="studio-menubar-content" onclick={() => (studioMenuValue = '')}>
-						<Menubar.Item
-							class="studio-menubar-item"
-							onclick={() => editor.undo()}
-							disabled={!editor.canUndo}>{m.studio_undo()}</Menubar.Item
-						>
-						<Menubar.Item
-							class="studio-menubar-item"
-							onclick={() => editor.redo()}
-							disabled={!editor.canRedo}>{m.studio_redo()}</Menubar.Item
-						>
-						<Menubar.Separator class="my-1 h-px bg-border" />
-						<Menubar.Item
-							class="studio-menubar-item"
-							onclick={() => editor.duplicateSelected()}
-							disabled={editor.selectedLayerIDs.length === 0}>{m.studio_duplicate()}</Menubar.Item
-						>
-						<Menubar.Item
-							class="studio-menubar-item"
-							onclick={() => editor.deleteSelected()}
-							disabled={editor.selectedLayerIDs.length === 0}>{m.common_delete()}</Menubar.Item
-						>
-					</Menubar.Content>
-				</Menubar.Portal>
+				<Menubar.Trigger>{m.studio_edit()}</Menubar.Trigger>
+				<Menubar.Content class="min-w-44">
+					<Menubar.Item onclick={() => editor.undo()} disabled={!editor.canUndo}>
+						{m.studio_undo()}
+						<Menubar.Shortcut>Ctrl Z</Menubar.Shortcut>
+					</Menubar.Item>
+					<Menubar.Item onclick={() => editor.redo()} disabled={!editor.canRedo}>
+						{m.studio_redo()}
+						<Menubar.Shortcut>Ctrl ⇧ Z</Menubar.Shortcut>
+					</Menubar.Item>
+					<Menubar.Separator />
+					<Menubar.Item
+						onclick={() => editor.duplicateSelected()}
+						disabled={editor.selectedLayerIDs.length === 0}
+					>
+						{m.studio_duplicate()}
+						<Menubar.Shortcut>Ctrl J</Menubar.Shortcut>
+					</Menubar.Item>
+					<Menubar.Item
+						onclick={() => editor.deleteSelected()}
+						disabled={editor.selectedLayerIDs.length === 0}
+					>
+						{m.common_delete()}
+						<Menubar.Shortcut>⌫</Menubar.Shortcut>
+					</Menubar.Item>
+				</Menubar.Content>
 			</Menubar.Menu>
 			<Menubar.Menu value="layer">
-				<Menubar.Trigger
-					class="studio-menubar-trigger"
-					onpointerdown={(event) => openStudioMenu(event, 'layer')}
-					>{m.studio_layer()}</Menubar.Trigger
-				>
-				<Menubar.Portal>
-					<Menubar.Content class="studio-menubar-content" onclick={() => (studioMenuValue = '')}>
-						<Menubar.Item
-							class="studio-menubar-item"
-							onclick={() => editor.groupSelected()}
-							disabled={editor.selectedLayers.length < 2}
-							><GroupIcon class="size-4" /> {m.studio_group()}</Menubar.Item
-						>
-						<Menubar.Item
-							class="studio-menubar-item"
-							onclick={() => editor.ungroupSelected()}
-							disabled={!editor.selectedLayers.some((layer) => layer.type === 'group')}
-							><UngroupIcon class="size-4" /> {m.studio_ungroup()}</Menubar.Item
-						>
-						<Menubar.Item
-							class="studio-menubar-item"
-							onclick={() => removeBackground()}
-							disabled={!editor.selectedLayers[0]?.image}
-							><WandIcon class="size-4" /> {m.studio_remove_background()}</Menubar.Item
-						>
-					</Menubar.Content>
-				</Menubar.Portal>
+				<Menubar.Trigger>{m.studio_layer()}</Menubar.Trigger>
+				<Menubar.Content class="min-w-48">
+					<Menubar.Item
+						onclick={() => editor.groupSelected()}
+						disabled={editor.selectedLayers.length < 2}
+					>
+						<GroupIcon />
+						{m.studio_group()}
+						<Menubar.Shortcut>Ctrl G</Menubar.Shortcut>
+					</Menubar.Item>
+					<Menubar.Item
+						onclick={() => editor.ungroupSelected()}
+						disabled={!editor.selectedLayers.some((layer) => layer.type === 'group')}
+					>
+						<UngroupIcon />
+						{m.studio_ungroup()}
+						<Menubar.Shortcut>Ctrl ⇧ G</Menubar.Shortcut>
+					</Menubar.Item>
+					<Menubar.Item
+						onclick={() => removeBackground()}
+						disabled={!editor.selectedLayers[0]?.image}
+					>
+						<WandIcon />
+						{m.studio_remove_background()}
+					</Menubar.Item>
+				</Menubar.Content>
 			</Menubar.Menu>
 			<Menubar.Menu value="view">
-				<Menubar.Trigger
-					class="studio-menubar-trigger"
-					onpointerdown={(event) => openStudioMenu(event, 'view')}
-					>{m.studio_view()}</Menubar.Trigger
-				>
-				<Menubar.Portal>
-					<Menubar.Content class="studio-menubar-content" onclick={() => (studioMenuValue = '')}>
-						<Menubar.Item
-							class="studio-menubar-item"
-							onclick={() => (editor.rightPanelVisible = !editor.rightPanelVisible)}
-							>{m.studio_toggle_inspector()}</Menubar.Item
-						>
-						<Menubar.Item
-							class="studio-menubar-item"
-							onclick={() => {
-								editor.zoom = 0.75;
-								editor.panX = 0;
-								editor.panY = 0;
-							}}>{m.studio_fit_canvas()}</Menubar.Item
-						>
-						<Menubar.Item class="studio-menubar-item" onclick={() => (editor.zoom = 1)}
-							>{m.studio_zoom_100()}</Menubar.Item
-						>
-						<Menubar.Item
-							class="studio-menubar-item"
-							onclick={() => (focusedCanvas = !focusedCanvas)}
-							>{m.studio_focused_canvas()}</Menubar.Item
-						>
-					</Menubar.Content>
-				</Menubar.Portal>
+				<Menubar.Trigger>{m.studio_view()}</Menubar.Trigger>
+				<Menubar.Content class="min-w-48">
+					<Menubar.CheckboxItem
+						checked={editor.rightPanelVisible}
+						onCheckedChange={(checked) => (editor.rightPanelVisible = checked)}
+					>
+						{m.studio_toggle_inspector()}
+					</Menubar.CheckboxItem>
+					<Menubar.Separator />
+					<Menubar.Item
+						onclick={() => {
+							editor.zoom = 0.75;
+							editor.panX = 0;
+							editor.panY = 0;
+						}}
+					>
+						{m.studio_fit_canvas()}
+						<Menubar.Shortcut>Ctrl 0</Menubar.Shortcut>
+					</Menubar.Item>
+					<Menubar.Item onclick={() => (editor.zoom = 1)}>
+						{m.studio_zoom_100()}
+						<Menubar.Shortcut>Ctrl 1</Menubar.Shortcut>
+					</Menubar.Item>
+					<Menubar.CheckboxItem
+						checked={focusedCanvas}
+						onCheckedChange={(checked) => (focusedCanvas = checked)}
+					>
+						{m.studio_focused_canvas()}
+						<Menubar.Shortcut>F</Menubar.Shortcut>
+					</Menubar.CheckboxItem>
+				</Menubar.Content>
 			</Menubar.Menu>
 		</Menubar.Root>
 		<SaveIndicator
@@ -2558,57 +2533,6 @@
 		--studio-accent: oklch(0.65 0.18 48);
 		--studio-panel: var(--background);
 		--studio-panel-border: var(--border);
-	}
-
-	:global(.studio-menubar-trigger) {
-		min-height: 1.75rem;
-		border-radius: 0.375rem;
-		padding-inline: 0.5rem;
-		font-size: 0.75rem;
-		font-weight: 500;
-		outline: none;
-	}
-
-	:global(.studio-menubar-trigger:hover),
-	:global(.studio-menubar-trigger[data-highlighted]),
-	:global(.studio-menubar-trigger[data-state='open']) {
-		background: var(--muted);
-	}
-
-	:global(.studio-menubar-trigger:focus-visible) {
-		box-shadow: 0 0 0 2px var(--ring);
-	}
-
-	:global(.studio-menubar-content) {
-		z-index: 50;
-		min-width: 12rem;
-		border-radius: 0.5rem;
-		background: color-mix(in oklch, var(--popover) 96%, transparent);
-		padding: 0.25rem;
-		color: var(--popover-foreground);
-		box-shadow: 0 8px 24px rgb(0 0 0 / 0.14);
-		outline: 1px solid color-mix(in oklch, var(--foreground) 10%, transparent);
-		backdrop-filter: blur(16px);
-	}
-
-	:global(.studio-menubar-item) {
-		display: flex;
-		min-height: 2.25rem;
-		cursor: default;
-		align-items: center;
-		gap: 0.5rem;
-		border-radius: 0.375rem;
-		padding-inline: 0.5rem;
-		font-size: 0.875rem;
-		outline: none;
-	}
-
-	:global(.studio-menubar-item[data-highlighted]) {
-		background: var(--muted);
-	}
-
-	:global(.studio-menubar-item[data-disabled]) {
-		opacity: 0.45;
 	}
 
 	.studio-resize-handle::after {

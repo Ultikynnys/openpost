@@ -447,6 +447,26 @@ func TestValidateFlagsUnsupportedProviderSettings(t *testing.T) {
 	requireIssueCode(t, issues, "unsupported_setting")
 }
 
+func TestValidateOutputUsesMediaShapeForLegacyLinkedInPostProfile(t *testing.T) {
+	issues := ValidateOutput(
+		ProviderLinkedIn,
+		"linkedin.post",
+		models.ContentProfileShortText,
+		"Image caption",
+		"",
+		"",
+		[]MediaItem{{
+			ID:       "image-1",
+			MimeType: "image/jpeg",
+			Size:     1024,
+		}},
+		map[string]any{"reshare_disabled": true},
+	)
+
+	requireNoIssueCode(t, issues, "media_count")
+	requireNoIssueCode(t, issues, "unsupported_setting")
+}
+
 func TestValidateRequiresExplicitConsentWithoutGenericQuotaWarnings(t *testing.T) {
 	tiktokIssues := Validate(ProviderTikTok, models.ContentProfileShortVideo, "caption", "", "", []MediaItem{{
 		ID:              "video-1",

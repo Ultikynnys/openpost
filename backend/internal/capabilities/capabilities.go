@@ -974,8 +974,8 @@ func Validate(provider, profile, body, title, description string, media []MediaI
 }
 
 func ValidateOutput(provider, outputProfile, fallbackProfile, body, title, description string, media []MediaItem, settings map[string]any) []ValidationIssue {
-	if capability, ok := FindOutput(provider, outputProfile); ok {
-		shape := resolveMediaShape([]ResolveSegment{{Media: media}}, "")
+	shape := resolveMediaShape([]ResolveSegment{{Media: media}}, "")
+	if capability, ok := findOutputForValidation(provider, outputProfile, fallbackProfile, shape); ok {
 		intent := ""
 		if len(capability.Intents) > 0 {
 			intent = capability.Intents[0]
@@ -994,14 +994,14 @@ func ValidateOutput(provider, outputProfile, fallbackProfile, body, title, descr
 
 //nolint:gocyclo
 func ValidateMediaSettings(provider, outputProfile, fallbackProfile string, media MediaItem, settings map[string]any) []ValidationIssue {
-	capability, ok := FindOutput(provider, outputProfile)
+	shape := resolveMediaShape([]ResolveSegment{{Media: []MediaItem{media}}}, "")
+	capability, ok := findOutputForValidation(provider, outputProfile, fallbackProfile, shape)
 	if !ok {
 		capability, ok = Find(provider, fallbackProfile)
 	}
 	if !ok {
 		return []ValidationIssue{validationIssue("unsupported_profile", fmt.Sprintf("%s does not support %s", provider, fallbackProfile), provider, fallbackProfile, "profile")}
 	}
-	shape := resolveMediaShape([]ResolveSegment{{Media: []MediaItem{media}}}, "")
 	intent := ""
 	if len(capability.Intents) > 0 {
 		intent = capability.Intents[0]
@@ -1034,6 +1034,37 @@ func ValidateMediaSettings(provider, outputProfile, fallbackProfile string, medi
 		}
 	}
 	return issues
+}
+
+// findOutputForValidation resolves historical output-profile collisions using
+// the content that is being validated. LinkedIn text and single-image
+// renditions both used linkedin.post, so selecting the first catalog match
+// incorrectly applied the text-only media limit to image posts.
+func findOutputForValidation(provider, outputProfile, fallbackProfile, shape string) (Capability, bool) {
+	provider = strings.ToLower(strings.TrimSpace(provider))
+	outputProfile = strings.TrimSpace(outputProfile)
+	fallbackProfile = strings.TrimSpace(fallbackProfile)
+
+	var shapeMatch *Capability
+	for _, candidate := range All() {
+		if candidate.Provider != provider || candidate.OutputProfile != outputProfile {
+			continue
+		}
+		if !slices.Contains(candidate.MediaShapes, shape) {
+			continue
+		}
+		candidateCopy := candidate
+		if candidate.Profile == fallbackProfile {
+			return candidateCopy, true
+		}
+		if shapeMatch == nil {
+			shapeMatch = &candidateCopy
+		}
+	}
+	if shapeMatch != nil {
+		return *shapeMatch, true
+	}
+	return Capability{}, false
 }
 
 //nolint:gocyclo

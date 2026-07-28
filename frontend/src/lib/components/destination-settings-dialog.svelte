@@ -7,9 +7,9 @@
 	import { Input } from '$lib/components/ui/input';
 	import { Textarea } from '$lib/components/ui/textarea';
 	import AppSelect from './app-select.svelte';
+	import DestinationOptionCombobox from './destination-option-combobox.svelte';
 	import { getPlatformName } from '$lib/utils';
 	import { m } from '$lib/paraglide/messages';
-	import LoaderIcon from 'lucide-svelte/icons/loader-2';
 	import RotateCcwIcon from 'lucide-svelte/icons/rotate-ccw';
 	import { onDestroy } from 'svelte';
 	import InlineNotice from './inline-notice.svelte';
@@ -274,20 +274,22 @@
 											/>
 										</div>
 									{:else if control === 'remote_picker'}
-										<div class="mt-1 space-y-2">
-											<Input
-												aria-label={m.compose_search_options()}
-												placeholder={m.compose_search_options()}
-												value={searchBySetting[setting.key] ?? ''}
-												oninput={(event) => updateOptionSearch(setting, event.currentTarget.value)}
-											/>
-											<AppSelect
+										<div class="mt-1">
+											<DestinationOptionCombobox
 												id="destination-setting-{setting.key}"
 												value={valueAsString(setting.key) || (setting.required ? '' : '__none__')}
+												label={settingLabel(setting)}
 												placeholder={m.compose_choose_setting({ setting: settingLabel(setting) })}
-												disabled={optionsLoading || Boolean(setting.unavailable_reason)}
+												searchPlaceholder={m.compose_search_options()}
+												emptyLabel={m.compose_no_provider_options({
+													setting: settingLabel(setting)
+												})}
+												loadingLabel={m.compose_loading_provider_options()}
+												disabled={Boolean(setting.unavailable_reason)}
+												loading={optionsLoading}
 												onValueChange={(value) =>
 													onChange(setting.key, value === '__none__' ? '' : value)}
+												onSearch={(search) => updateOptionSearch(setting, search)}
 												options={[
 													...(setting.required
 														? []
@@ -297,18 +299,8 @@
 														label: option.label
 													}))
 												]}
-												class="h-11 w-full"
+												class="w-full"
 											/>
-											{#if optionsLoading}
-												<p class="flex items-center gap-1.5 text-xs text-muted-foreground">
-													<LoaderIcon class="size-3 animate-spin" />
-													{m.compose_loading_provider_options()}
-												</p>
-											{:else if !optionsError && remoteOptions.length === 0}
-												<p class="text-xs text-muted-foreground">
-													{m.compose_no_provider_options({ setting: settingLabel(setting) })}
-												</p>
-											{/if}
 										</div>
 									{:else if setting.type === 'select'}
 										<AppSelect
@@ -437,20 +429,28 @@
 													</label>
 
 													{#if control === 'remote_picker'}
-														<AppSelect
+														<DestinationOptionCombobox
 															id="destination-media-{item.id}-{setting.key}"
 															value={valueAsString(setting.key, scopedValues) ||
 																(setting.required ? '' : '__none__')}
+															label={settingLabel(setting)}
 															placeholder={m.compose_choose_setting({
 																setting: settingLabel(setting)
 															})}
-															disabled={optionsLoading || Boolean(setting.unavailable_reason)}
+															searchPlaceholder={m.compose_search_options()}
+															emptyLabel={m.compose_no_provider_options({
+																setting: settingLabel(setting)
+															})}
+															loadingLabel={m.compose_loading_provider_options()}
+															disabled={Boolean(setting.unavailable_reason)}
+															loading={optionsLoading}
 															onValueChange={(value) =>
 																onMediaChange?.(
 																	item.id,
 																	setting.key,
 																	value === '__none__' ? '' : value
 																)}
+															onSearch={(search) => updateOptionSearch(setting, search)}
 															options={[
 																...(setting.required
 																	? []
@@ -460,7 +460,7 @@
 																	label: option.label
 																}))
 															]}
-															class="mt-1 h-11 w-full"
+															class="mt-1 w-full"
 														/>
 													{:else if setting.type === 'select'}
 														<AppSelect

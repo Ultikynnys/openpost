@@ -334,6 +334,103 @@ func TestUpsertPublicationRenditionsPreservesOmittedRenditionsUntilExplicitDelet
 	require.Equal(t, "old tiktok", persisted[0].Body)
 }
 
+func TestInsertRenditionsResolvesStaleLinkedInTextProfileAfterMediaIsAdded(t *testing.T) {
+	db := createHandlerTestDB(t,
+		(*models.SocialAccount)(nil),
+		(*models.Publication)(nil),
+		(*models.PublicationSegment)(nil),
+		(*models.Rendition)(nil),
+		(*models.RenditionMedia)(nil),
+		(*models.RenditionSegment)(nil),
+		(*models.RenditionSegmentMedia)(nil),
+		(*models.MediaAttachment)(nil),
+	)
+	ctx := context.Background()
+	now := time.Date(2026, time.July, 28, 10, 0, 0, 0, time.UTC)
+	publication := &models.Publication{
+		ID:              "publication-linkedin",
+		WorkspaceID:     "workspace-1",
+		CreatedByID:     "user-1",
+		Title:           "Image update",
+		Intent:          "post",
+		ContentProfile:  models.ContentProfileShortText,
+		SourceText:      "Image update",
+		SourceContent:   "Image update",
+		Status:          models.PublicationStatusDraft,
+		MetadataJSON:    "{}",
+		ReleasePlanJSON: "{}",
+		CreatedAt:       now,
+		UpdatedAt:       now,
+	}
+	account := models.SocialAccount{
+		ID:              "linkedin-account",
+		WorkspaceID:     "workspace-1",
+		Slug:            "linkedin-main",
+		Platform:        "linkedin",
+		AccountID:       "person-1",
+		AccountUsername: "Rodrigo",
+		AccessTokenEnc:  []byte("token"),
+		IsActive:        true,
+	}
+	_, err := db.NewInsert().Model(publication).Exec(ctx)
+	require.NoError(t, err)
+	_, err = db.NewInsert().Model(&models.PublicationSegment{
+		ID:            "segment-1",
+		PublicationID: publication.ID,
+		Position:      0,
+		Body:          publication.SourceText,
+		SettingsJSON:  "{}",
+		CreatedAt:     now,
+		UpdatedAt:     now,
+	}).Exec(ctx)
+	require.NoError(t, err)
+	_, err = db.NewInsert().Model(&models.MediaAttachment{
+		ID:               "image-1",
+		WorkspaceID:      "workspace-1",
+		OriginalFilename: "launch.jpg",
+		MimeType:         "image/jpeg",
+		Size:             1024,
+		CreatedAt:        now,
+	}).Exec(ctx)
+	require.NoError(t, err)
+
+	handler := NewPublicationHandler(db, testAuthenticator{}, nil)
+	err = db.RunInTx(ctx, &sql.TxOptions{}, func(txCtx context.Context, tx bun.Tx) error {
+		return handler.insertRenditions(
+			txCtx,
+			tx,
+			publication,
+			[]models.PublicationSegment{{
+				ID:            "segment-1",
+				PublicationID: publication.ID,
+				Position:      0,
+				Body:          publication.SourceText,
+			}},
+			[]PublicationSegmentInput{{
+				ID:    "segment-1",
+				Body:  publication.SourceText,
+				Media: []PublicationMediaInput{{MediaID: "image-1"}},
+			}},
+			[]RenditionInput{{
+				SocialAccountID: account.ID,
+				Profile:         models.ContentProfileShortText,
+				OutputProfile:   "linkedin.post",
+				Body:            publication.SourceText,
+				Settings:        map[string]interface{}{"reshare_disabled": true},
+				Media:           []PublicationMediaInput{{MediaID: "image-1"}},
+			}},
+			nil,
+			map[string]models.SocialAccount{account.ID: account},
+		)
+	})
+	require.NoError(t, err)
+
+	var rendition models.Rendition
+	require.NoError(t, db.NewSelect().Model(&rendition).Where("publication_id = ?", publication.ID).Scan(ctx))
+	require.Equal(t, models.ContentProfileImagePost, rendition.Profile)
+	require.Equal(t, "linkedin.post", rendition.OutputProfile)
+}
+
 func TestReplacePublicationSegmentsKeepsDestinationOverridesForStableSegmentIDs(t *testing.T) {
 	db := createHandlerTestDB(t,
 		(*models.Publication)(nil),

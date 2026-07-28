@@ -21,6 +21,15 @@ const xAccount: SocialAccount = {
 	thread_replies_supported: true
 };
 
+const youtubeAccount: SocialAccount = {
+	...xAccount,
+	id: 'youtube-main',
+	slug: 'youtube-main',
+	platform: 'youtube',
+	account_id: 'channel-1',
+	account_username: 'OpenPost channel'
+};
+
 function setting(
 	key: string,
 	label: string,
@@ -93,5 +102,55 @@ describe('DestinationSettingsDialog', () => {
 		const dialog = screen.getByRole('dialog').element();
 		expect(dialog.getBoundingClientRect().width).toBeLessThanOrEqual(390);
 		expect(dialog.scrollWidth).toBeLessThanOrEqual(dialog.clientWidth);
+	});
+
+	it('searches YouTube categories and playlists inside their comboboxes', async () => {
+		const onChange = vi.fn();
+		const screen = await render(DestinationSettingsDialog, {
+			props: {
+				open: true,
+				account: youtubeAccount,
+				settings: [
+					setting('category_id', 'Category', {
+						group: 'distribution',
+						control: 'remote_picker',
+						type: 'select',
+						options_source: 'youtube_categories',
+						required: true
+					}),
+					setting('playlist_id', 'Playlist', {
+						group: 'distribution',
+						control: 'remote_picker',
+						type: 'select',
+						options_source: 'youtube_playlists'
+					})
+				],
+				values: {},
+				optionGroups: {
+					youtube_categories: [
+						{ value: '1', label: 'Film & Animation' },
+						{ value: '10', label: 'Music' }
+					],
+					youtube_playlists: [
+						{ value: 'uploads', label: 'Uploads' },
+						{ value: 'launches', label: 'Launches' }
+					]
+				},
+				onChange
+			}
+		});
+
+		expect(document.querySelectorAll('input[placeholder="Search options"]')).toHaveLength(0);
+		await screen.getByRole('combobox', { name: 'Category' }).click();
+		await screen.getByPlaceholder('Search options').fill('Music');
+		await screen.getByText('Music', { exact: true }).click();
+
+		expect(onChange).toHaveBeenCalledWith('category_id', '10');
+
+		await screen.getByRole('combobox', { name: 'Playlist' }).click();
+		await screen.getByPlaceholder('Search options').fill('Launch');
+		await screen.getByText('Launches', { exact: true }).click();
+
+		expect(onChange).toHaveBeenCalledWith('playlist_id', 'launches');
 	});
 });

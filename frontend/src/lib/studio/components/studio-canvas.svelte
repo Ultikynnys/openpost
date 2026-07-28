@@ -29,7 +29,7 @@
 	import { panForZoomAnchor } from '../viewport';
 
 	type AreaSelectionTool = Extract<StudioSelectionTool, 'marquee' | 'ellipse_marquee' | 'lasso'>;
-	type CanvasGestureTool = AreaSelectionTool | 'pencil' | 'eraser' | 'gradient';
+	type CanvasGestureTool = AreaSelectionTool | 'select' | 'pencil' | 'eraser' | 'gradient';
 	interface SelectionGesture {
 		tool: CanvasGestureTool;
 		pointerID: number;
@@ -506,12 +506,44 @@
 		return true;
 	}
 
+	function startObjectSelection(event: PointerEvent): boolean {
+		if (
+			editor.activeTool !== 'select' ||
+			spacePressed ||
+			!adapter ||
+			event.button !== 0 ||
+			targetsPasteboardChrome(event.target)
+		) {
+			return false;
+		}
+		const point = documentPoint(event, 'allow');
+		if (!point) return false;
+		const mode = selectionModeForEvent(event, 'select');
+		if (mode === 'replace') editor.applyLayerSelection([], 'replace');
+		editor.clearPixelSelection();
+		selectionGesture = {
+			tool: 'select',
+			pointerID: event.pointerId,
+			start: point,
+			current: point,
+			points: [point],
+			mode
+		};
+		if (event.currentTarget instanceof HTMLDivElement) {
+			event.currentTarget.setPointerCapture(event.pointerId);
+		}
+		event.preventDefault();
+		return true;
+	}
+
 	function moveAreaSelection(event: PointerEvent): boolean {
 		const gesture = selectionGesture;
 		if (!gesture || gesture.pointerID !== event.pointerId) return false;
 		let point = documentPoint(
 			event,
-			isDragSelectionTool(gesture.tool) && !gesture.originalSelection ? 'allow' : 'clamp'
+			(gesture.tool === 'select' || isDragSelectionTool(gesture.tool)) && !gesture.originalSelection
+				? 'allow'
+				: 'clamp'
 		);
 		if (!point) return false;
 		if (gesture.originalSelection) {
@@ -546,7 +578,10 @@
 		let point =
 			documentPoint(
 				event,
-				isDragSelectionTool(gesture.tool) && !gesture.originalSelection ? 'allow' : 'clamp'
+				(gesture.tool === 'select' || isDragSelectionTool(gesture.tool)) &&
+					!gesture.originalSelection
+					? 'allow'
+					: 'clamp'
 			) ?? gesture.current;
 		if (gesture.originalSelection) {
 			point = constrainGradientPoint(gesture.start, point, event);
@@ -578,6 +613,22 @@
 						Math.hypot(point.x - gesture.start.x, point.y - gesture.start.y)
 					)
 				: Math.hypot(point.x - gesture.start.x, point.y - gesture.start.y);
+		if (gesture.tool === 'select') {
+			const candidates =
+				distance < 5 / Math.max(editor.zoom, 0.1)
+					? []
+					: (adapter?.layerIDsInRectangle(normalizeSelectionBounds(gesture.start, point)) ?? []);
+			editor.applyLayerSelection(candidates, gesture.mode);
+			selectionGesture = null;
+			if (
+				event.currentTarget instanceof HTMLDivElement &&
+				event.currentTarget.hasPointerCapture(event.pointerId)
+			) {
+				event.currentTarget.releasePointerCapture(event.pointerId);
+			}
+			event.preventDefault();
+			return true;
+		}
 		if (gesture.tool === 'pencil') {
 			editor.addPencilStroke([...gesture.points, point]);
 			selectionGesture = null;
@@ -793,8 +844,7 @@
 		if (targetsToolSurface(event)) return;
 		const outsideStage = !(event.target instanceof Node) || !stageElement?.contains(event.target);
 		if (outsideStage && event.button === 0 && editor.activeTool === 'select' && !spacePressed) {
-			editor.selectLayer('');
-			editor.clearPixelSelection();
+			if (startObjectSelection(event)) return;
 		}
 		startPan(event);
 	}
@@ -909,7 +959,7 @@
 	class="studio-pasteboard relative size-full min-h-0 touch-none overflow-hidden bg-neutral-800 dark:bg-neutral-950"
 	class:cursor-grab={(editor.activeTool === 'hand' || spacePressed) && !panning}
 	class:cursor-grabbing={panning}
-	class:cursor-crosshair={usesCanvasSurface() && !panning}
+	class:cursor-crosshair={(usesCanvasSurface() || selectionGesture?.tool === 'select') && !panning}
 	onwheel={handleWheel}
 	onpointerdowncapture={startPasteboardPointer}
 	onpointermovecapture={movePasteboardPointer}
@@ -1210,10 +1260,13 @@
 						viewBox={`0 0 ${editor.document.width_px} ${editor.document.height_px}`}
 						aria-hidden="true"
 					>
-						{#if selectionGesture.tool === 'marquee'}
+						{#if selectionGesture.tool === 'select' || selectionGesture.tool === 'marquee'}
 							{@const bounds = marqueeBounds(selectionGesture)}
 							<rect
 								class="studio-selection-outline"
+								data-testid={selectionGesture.tool === 'select'
+									? 'studio-object-selection-outline'
+									: undefined}
 								x={bounds.x}
 								y={bounds.y}
 								width={bounds.width}

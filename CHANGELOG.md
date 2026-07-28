@@ -31,6 +31,7 @@ All notable changes to this project are documented in this file.
 
 ### Changed
 
+- Replaced separate YouTube category and playlist search fields with searchable comboboxes, and moved the Studio desktop menus onto the shared shadcn-svelte Menubar.
 - Rebuilt the marketing site around a shorter product-led homepage, task-first free tools, role-based pricing, clearer platform and comparison guides, and responsive tables that become readable phone layouts.
 - Reused one transient saving and saved indicator across Studio and every composer.
 - Made desktop scheduling show two adjacent months, moved engagement collection issues into a provider- and post-specific status menu, and reduced analytics native-post actions to compact external-link controls.
@@ -60,6 +61,8 @@ All notable changes to this project are documented in this file.
 
 ### Fixed
 
+- Resolved stale LinkedIn rendition profiles from the current media shape so image posts no longer inherit a text-only zero-media limit or reject supported settings, and let Studio object selection begin on the pasteboard.
+- Tightened the desktop schedule dialog around its two-month calendar and made the time picker fill the calendar height with the shared styled scroll area.
 - Kept context-menu layer renaming open long enough to edit and submit the new name.
 - Restored YouTube category and playlist choices in destination settings, populated native-post links from stored provider IDs and canonical permalinks, loaded persisted TTF brand fonts under their friendly names, and removed the stray Activity tab scrollbar.
 - Kept the Studio canvas point beneath the mouse or pinch midpoint fixed while zooming, let pixel selections start or end beyond the image edge, shortened the rounded-shape label, and tightened desktop tool menus.

@@ -5,6 +5,7 @@
 	import { Calendar } from '$lib/components/ui/calendar';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import { Input } from '$lib/components/ui/input';
+	import { ScrollArea } from '$lib/components/ui/scroll-area';
 	import * as Select from '$lib/components/ui/select';
 	import { m } from '$lib/paraglide/messages';
 	import ArrowRightIcon from 'lucide-svelte/icons/arrow-right';
@@ -145,7 +146,7 @@
 <Dialog.Root bind:open>
 	<Dialog.Content
 		data-testid="schedule-dialog-shell"
-		class="flex max-h-[calc(100dvh-1rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-5xl"
+		class="flex max-h-[calc(100dvh-1rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-4xl"
 	>
 		<Dialog.Header
 			class="shrink-0 border-b px-5 pt-[max(1.25rem,env(safe-area-inset-top))] pb-4 text-center"
@@ -208,7 +209,9 @@
 				</Button>
 			</div>
 
-			<div class="overflow-hidden rounded-lg border bg-muted/15 md:grid md:grid-cols-[1fr_10rem]">
+			<div
+				class="overflow-hidden rounded-lg border bg-muted/15 md:grid md:grid-cols-[minmax(0,1fr)_9rem]"
+			>
 				<div class="flex justify-center p-3 md:p-4">
 					<Calendar
 						type="single"
@@ -221,17 +224,44 @@
 						{weekStartsOn}
 					/>
 				</div>
-				<div class="border-t md:border-t-0 md:border-l">
-					<div class="border-b px-3 py-2 text-center text-sm font-medium">
+				<div class="border-t md:flex md:min-h-0 md:flex-col md:border-t-0 md:border-l">
+					<div class="shrink-0 border-b px-3 py-2 text-center text-sm font-medium">
 						{m.compose_time()}
 					</div>
-					<div data-testid="schedule-dialog-time-list" class="p-2 md:max-h-72 md:overflow-y-auto">
-						{#if timeSlots.length === 0}
+					<div
+						data-testid="schedule-dialog-time-list"
+						class="p-2 md:min-h-0 md:flex-1 md:overflow-hidden"
+					>
+						{#if desktopCalendar.current}
+							<ScrollArea type="auto" class="h-full" scrollbarYClasses="py-1">
+								<div class="pr-2">
+									{#if timeSlots.length === 0}
+										<p class="px-2 py-6 text-center text-xs text-muted-foreground">
+											{m.compose_no_remaining_slots_today()}
+										</p>
+									{:else}
+										<div class="grid grid-cols-1 gap-1.5">
+											{#each timeSlots as time (time)}
+												<Button
+													type="button"
+													variant={selectedTime === time ? 'default' : 'ghost'}
+													size="sm"
+													onclick={() => selectTime(time)}
+													class="h-9 justify-center text-sm tabular-nums"
+												>
+													{time}
+												</Button>
+											{/each}
+										</div>
+									{/if}
+								</div>
+							</ScrollArea>
+						{:else if timeSlots.length === 0}
 							<p class="px-2 py-6 text-center text-xs text-muted-foreground">
 								{m.compose_no_remaining_slots_today()}
 							</p>
 						{:else}
-							<div class="grid grid-cols-2 gap-1.5 md:grid-cols-1">
+							<div class="grid grid-cols-2 gap-1.5">
 								{#each timeSlots as time (time)}
 									<Button
 										type="button"

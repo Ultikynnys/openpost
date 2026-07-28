@@ -1816,8 +1816,12 @@ func (h *PublicationHandler) insertRenditions(
 			return huma.Error400BadRequest("one or more social accounts are invalid, disconnected, or outside this workspace")
 		}
 		resolved := h.resolveRenditionCapability(ctx, tx, publication, account, input, canonicalInputs)
-		profile := publicationFirstNonEmpty(input.Profile, resolved.Profile, publication.ContentProfile)
-		outputProfile := publicationFirstNonEmpty(input.OutputProfile, resolved.OutputProfile, account.Platform+".post")
+		// The rendition capability must follow the current content shape. Inputs
+		// often contain the previous profile while autosave is propagating newly
+		// attached media, so preferring them leaves the destination permanently
+		// out of sync with the canonical post.
+		profile := publicationFirstNonEmpty(resolved.Profile, input.Profile, publication.ContentProfile)
+		outputProfile := publicationFirstNonEmpty(resolved.OutputProfile, input.OutputProfile, account.Platform+".post")
 		status := models.RenditionStatusDraft
 		if publication.Status == models.PublicationStatusScheduled {
 			status = models.RenditionStatusScheduled

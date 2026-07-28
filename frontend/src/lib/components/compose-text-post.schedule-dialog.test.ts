@@ -23,14 +23,18 @@ describe('schedule dialog mobile layout', () => {
 		);
 		expect(shellClasses).not.toContain('overflow-y-auto');
 		expect(bodyClasses).toEqual(expect.arrayContaining(['min-h-0', 'flex-1', 'overflow-y-auto']));
-		expect(timeListClasses).toEqual(expect.arrayContaining(['md:max-h-72', 'md:overflow-y-auto']));
+		expect(timeListClasses).toEqual(
+			expect.arrayContaining(['md:min-h-0', 'md:flex-1', 'md:overflow-hidden'])
+		);
 		expect(timeListClasses).not.toContain('max-h-72');
 		expect(timeListClasses).not.toContain('overflow-y-auto');
 	});
 
 	it('shows two paged months at the desktop breakpoint', () => {
 		expect(source).toContain("new MediaQuery('min-width: 768px')");
+		expect(source).toContain('sm:max-w-4xl');
 		expect(source).toContain('numberOfMonths={desktopCalendar.current ? 2 : 1}');
 		expect(source).toContain('pagedNavigation={desktopCalendar.current}');
+		expect(source).toContain('<ScrollArea type="auto" class="h-full"');
 	});
 });
