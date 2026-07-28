@@ -4,6 +4,8 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [1.42.1] - 2026-07-28
+
 ### Changed
 
 - Rebuilt the marketing desktop navigation with the shared Shadcn-svelte Navigation Menu while keeping the compact mobile navigation.
