@@ -160,7 +160,7 @@ export const platformNames: Record<PreviewPlatformKey, string> = {
 	youtube: 'YouTube',
 	tiktok: 'TikTok',
 	discord: 'Discord',
-	unsupported: 'Unsupported destination'
+	unsupported: 'Unsupported account'
 };
 
 export function normalizePreviewPlatform(value: string): PreviewPlatformKey {

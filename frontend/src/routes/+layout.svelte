@@ -31,6 +31,7 @@
 
 	let authState = $derived($auth);
 	let currentPath = $derived($page.url.pathname);
+	let isPreviewRoute = $derived(currentPath === '/preview');
 	const publicRoutes = [
 		'/login',
 		'/register',
@@ -40,7 +41,9 @@
 		'/connect',
 		'/demo',
 		'/demo/paraglide',
+		'/preview',
 		'/invite',
+		'/impersonate',
 		'/cli/authorize',
 		'/oauth/authorize',
 		'/accounts/mastodon/callback',
@@ -54,6 +57,7 @@
 		'/account-deleted',
 		'/connect',
 		'/invite',
+		'/impersonate',
 		'/cli/authorize',
 		'/oauth/authorize',
 		'/accounts/mastodon/callback',
@@ -143,6 +147,7 @@
 	});
 
 	onMount(() => {
+		if (isPreviewRoute) return;
 		captureWebReauthGrant();
 		feedbackDiagnostics.initialize();
 		soundPreferences.initialize();
@@ -295,8 +300,10 @@
 	<title>OpenPost</title>
 </svelte:head>
 
-<ModeWatcher />
-{#if instance.isLoading || authState.isLoading || pendingRedirect || ssoChallengeInFlight || (authState.isAuthenticated && !authState.user?.legal_acceptance_required && !onboardingChecked)}
+{#if !isPreviewRoute}<ModeWatcher />{/if}
+{#if isPreviewRoute}
+	{@render children()}
+{:else if instance.isLoading || authState.isLoading || pendingRedirect || ssoChallengeInFlight || (authState.isAuthenticated && !authState.user?.legal_acceptance_required && !onboardingChecked)}
 	<AppLoading label={m.common_loading()} />
 {:else if !authState.isAuthenticated}
 	{#if currentPath !== '/studio' && !currentPath.startsWith('/studio/')}
