@@ -4,6 +4,10 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- Kept the public changelog browser gate aligned with the latest non-empty canonical changelog section instead of one past release note.
+
 ## [1.43.0] - 2026-07-28
 
 ### Added

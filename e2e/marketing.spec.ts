@@ -1,4 +1,6 @@
+import { readFileSync } from "node:fs";
 import { expect, test } from "@playwright/test";
+import { parseChangelog } from "../packages/changelog/src/index.js";
 
 test("marketing index links to the app and documentation", async ({ page }) => {
   await page.goto("/");
@@ -255,6 +257,16 @@ test("free marketing tools produce useful output", async ({ page }) => {
 test("public changelog is generated from the canonical release record", async ({
   page,
 }) => {
+  const canonicalSection = parseChangelog(
+    readFileSync(new URL("../CHANGELOG.md", import.meta.url), "utf8"),
+  ).find((section) => section.groups.some((group) => group.items.length > 0));
+  const canonicalItem = canonicalSection?.groups.find(
+    (group) => group.items.length > 0,
+  )?.items[0];
+  if (!canonicalItem) {
+    throw new Error("The canonical changelog has no visible entries");
+  }
+
   await page.goto("/changelog");
 
   await expect(
@@ -264,11 +276,7 @@ test("public changelog is generated from the canonical release record", async ({
       })
       .first(),
   ).toBeVisible();
-  await expect(
-    page.getByText(
-      /Made `CHANGELOG\.md` the single source for the public changelog/,
-    ),
-  ).toBeVisible();
+  await expect(page.getByText(canonicalItem, { exact: true })).toBeVisible();
   await expect(
     page.getByRole("link", { name: "Full changelog" }),
   ).toHaveAttribute(
