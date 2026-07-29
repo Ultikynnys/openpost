@@ -18,4 +18,4 @@ docker logs -f openpost
 journalctl -u openpost -f
 ```
 
-Start with auth callback errors, media fetch failures, and provider API responses when debugging publishing.
+When a post fails, start with sign-in callback errors, media link failures, and social network errors.

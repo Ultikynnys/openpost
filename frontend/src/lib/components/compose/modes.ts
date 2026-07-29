@@ -155,7 +155,7 @@ export const COMPOSER_MODES: ComposerMode[] = [
 	{
 		key: 'thread',
 		label: 'Thread',
-		description: 'Ordered posts published as a reply chain.',
+		description: 'Posts sent in order as a reply chain.',
 		group: 'write',
 		mediaFirst: false
 	},
@@ -169,14 +169,14 @@ export const COMPOSER_MODES: ComposerMode[] = [
 	{
 		key: 'short_video',
 		label: 'Short video',
-		description: 'A Reel, Short, TikTok, or other short-form video.',
+		description: 'A Reel, Short, TikTok, or other short video.',
 		group: 'media',
 		mediaFirst: true
 	},
 	{
 		key: 'video',
 		label: 'Video',
-		description: 'A full video with destination metadata.',
+		description: 'A full video with a title and account details.',
 		group: 'media',
 		mediaFirst: false
 	}

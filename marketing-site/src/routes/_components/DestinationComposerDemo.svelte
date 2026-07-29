@@ -15,24 +15,24 @@
   let includeMedia = $state(true);
   let mobilePane = $state<"edit" | "preview">("preview");
   let destinationCopy = $state<Record<PreviewPlatform, string>>({
-    x: "A calmer way to publish across every destination. Customize the details, check the preview, then schedule.",
+    x: "Write one post, change the details for X, check the preview, then schedule it.",
     mastodon:
-      "A calmer way to publish across every destination.\n\nCustomize the details, check the preview, then schedule.",
+      "Write one post, change the details for Mastodon, check the preview, then schedule it.",
     bluesky:
-      "A calmer way to publish across every destination. Check the details before it leaves the queue.",
+      "Write one post, change the details for Bluesky, and check it before it goes live.",
     linkedin:
-      "Publishing across several networks should not flatten every post into the same copy.\n\nOpenPost keeps one source and lets you review the destination version before scheduling.",
+      "Each social network has different rules and readers.\n\nOpenPost keeps one shared draft and lets you review the LinkedIn version before scheduling.",
     threads:
-      "One source. A version for every destination. A preview before anything publishes.",
+      "One shared draft. A version for Threads. A preview before it goes live.",
     instagram:
-      "One source, adapted for the destination.\n\nReview the crop, caption, and format before you schedule.",
+      "One shared draft, changed for Instagram.\n\nReview the crop, caption, and format before you schedule.",
     facebook:
-      "Prepare one publication, adapt it for Facebook, and see the result before it enters the queue.",
-    youtube: "OpenPost destination previews",
+      "Write one post, change it for Facebook, and preview it before you schedule.",
+    youtube: "OpenPost account previews",
     tiktok:
       "Review the caption, cover, and vertical crop before this video is scheduled.",
     discord:
-      "OpenPost keeps destination copy, media, and delivery state together.",
+      "OpenPost keeps the Discord text, media, and posting status together.",
   });
 
   const format = $derived(
@@ -66,13 +66,13 @@
                 id: "product",
                 kind: "image",
                 src: "/assets/screenshots/main-dark.png",
-                alt: "OpenPost composer showing destination controls",
+                alt: "OpenPost composer showing account settings",
               },
             ]
           : [],
       title:
         selectedPlatform === "youtube"
-          ? "Create once, preview every destination"
+          ? "Write once, preview every account"
           : undefined,
       subtitle:
         selectedPlatform === "youtube" ? "OpenPost product tour" : undefined,
@@ -95,7 +95,7 @@
   <div class="flex min-h-12 items-center justify-between gap-3 border-b px-4">
     <div class="flex items-center gap-2 text-sm font-medium">
       <span class="size-2 rounded-full bg-primary" aria-hidden="true"></span>
-      Destination editor
+      Account editor
     </div>
     <span
       class="inline-flex items-center gap-1.5 text-xs text-muted-foreground"
@@ -108,7 +108,7 @@
   <div class="border-b">
     <div
       class="flex snap-x gap-1 overflow-x-auto p-2"
-      aria-label="Choose a destination"
+      aria-label="Choose an account type"
     >
       {#each previewPlatforms as platform (platform)}
         <button
@@ -131,7 +131,7 @@
 
   <div
     class="grid grid-cols-2 gap-1 border-b p-2 lg:hidden"
-    aria-label="Destination demo view"
+    aria-label="Account demo view"
   >
     <button
       type="button"
@@ -144,7 +144,7 @@
       aria-pressed={mobilePane === "edit"}
       onclick={() => (mobilePane = "edit")}
     >
-      Edit destination
+      Edit account version
     </button>
     <button
       type="button"
@@ -171,7 +171,7 @@
     >
       <div class="flex items-start justify-between gap-4">
         <div>
-          <p class="text-xs font-medium text-primary">Customized version</p>
+          <p class="text-xs font-medium text-primary">Account version</p>
           <h2 id="destination-copy-title" class="mt-1 font-semibold">
             {platformNames[selectedPlatform]} copy
           </h2>
@@ -216,7 +216,7 @@
         <span
           class="inline-flex min-h-11 items-center px-2 text-xs text-muted-foreground"
         >
-          Platform settings stay with this destination.
+          Social network settings stay with this account version.
         </span>
       </div>
     </section>
@@ -234,7 +234,7 @@
             What people will see
           </h2>
           <span class="text-xs text-muted-foreground"
-            >Approximate provider layout</span
+            >Preview based on the social network layout</span
           >
         </div>
         <SocialPreview model={previewModel} compact />

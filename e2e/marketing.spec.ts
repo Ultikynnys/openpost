@@ -6,11 +6,11 @@ test("marketing index links to the app and documentation", async ({ page }) => {
   await page.goto("/");
 
   await expect(page).toHaveTitle(
-    "OpenPost - Create, preview, and publish for every social destination",
+    "OpenPost - Create, preview, and publish for every social account",
   );
   await expect(
     page.getByRole("heading", {
-      name: "Create once. Preview every destination.",
+      name: "Write once. Preview every account.",
     }),
   ).toBeVisible();
   await expect(page.getByText("Testimonials", { exact: true })).toHaveCount(0);
@@ -33,12 +33,12 @@ test("marketing index links to the app and documentation", async ({ page }) => {
   ).toBeVisible();
   await expect(
     page.getByRole("heading", {
-      name: "One source. Deliberate destinations.",
+      name: "One post. The right version for each account.",
     }),
   ).toBeVisible();
   await expect(
     page.getByRole("heading", {
-      name: "The work around the post stays connected.",
+      name: "Keep each part of the post together.",
     }),
   ).toBeVisible();
 
@@ -48,7 +48,7 @@ test("marketing index links to the app and documentation", async ({ page }) => {
   await productAreas.getByRole("button", { name: "Accounts" }).click();
   await expect(
     page.getByRole("heading", {
-      name: "See each connected identity and any setup that needs action.",
+      name: "See each account and any setup it needs.",
     }),
   ).toBeVisible();
   await expect(
@@ -61,7 +61,7 @@ test("marketing index links to the app and documentation", async ({ page }) => {
   ).toBeVisible();
   await expect(
     page.getByRole("heading", {
-      name: "Review the destination before you publish it.",
+      name: "Check each account before you publish.",
     }),
   ).toBeVisible();
   await expect(
@@ -78,9 +78,7 @@ test("marketing index links to the app and documentation", async ({ page }) => {
   ).toHaveAttribute("href", "https://github.com/rodrgds/openpost");
 });
 
-test("security page states the agent permission boundary accurately", async ({
-  page,
-}) => {
+test("security page states AI tool access accurately", async ({ page }) => {
   await page.goto("/security");
 
   await expect(
@@ -90,14 +88,14 @@ test("security page states the agent permission boundary accurately", async ({
   ).toBeVisible();
   await expect(
     page.getByRole("heading", {
-      name: "mcp:full remains real mutation permission",
+      name: "mcp:full can make changes",
     }),
   ).toBeVisible();
-  const humanReviewBoundary = page
-    .getByRole("heading", { name: "Human review is a workflow choice" })
+  const humanReview = page
+    .getByRole("heading", { name: "You choose when to review" })
     .locator("..");
-  await expect(humanReviewBoundary).toContainText(
-    "OpenPost does not currently claim a universal approval gate",
+  await expect(humanReview).toContainText(
+    "OpenPost does not add a separate approval step",
   );
 });
 
@@ -154,6 +152,7 @@ test("marketing SEO routes expose the current public index", async ({
   expect(xml).toContain("<loc>https://openpost.social/</loc>");
   expect(xml).toContain("<loc>https://openpost.social/platforms</loc>");
   expect(xml).toContain("<loc>https://openpost.social/platforms/x</loc>");
+  expect(xml).toContain("<loc>https://openpost.social/platforms/discord</loc>");
   expect(xml).toContain("<loc>https://openpost.social/compare</loc>");
   expect(xml).toContain("<loc>https://openpost.social/compare/buffer</loc>");
   expect(xml).toContain("<loc>https://openpost.social/tools</loc>");
@@ -198,6 +197,9 @@ test("free marketing tools produce useful output", async ({ page }) => {
   await expect(
     page.getByRole("progressbar", { name: "X character use" }),
   ).toHaveAttribute("aria-valuenow", "5");
+  await expect(
+    page.getByRole("progressbar", { name: "Discord character use" }),
+  ).toHaveAttribute("aria-valuenow", "5");
 
   await page.goto("/tools/post-preview-generator");
   await page.waitForLoadState("networkidle");
@@ -206,11 +208,11 @@ test("free marketing tools produce useful output", async ({ page }) => {
   await expect(page.locator("select")).toHaveCount(0);
   await page
     .locator("summary")
-    .filter({ hasText: "Add identity, poll, link, or media" })
+    .filter({ hasText: "Add account details, a poll, a link, or media" })
     .click();
   await page.getByLabel("Handle").fill("@alice@hachyderm.io");
   await expect(
-    page.getByRole("article", { name: "Mastodon post preview" }),
+    page.locator('[aria-label="Mastodon post preview"]'),
   ).toContainText("@alice@hachyderm.io");
 
   await page.goto("/tools/thread-splitter");
@@ -218,7 +220,7 @@ test("free marketing tools produce useful output", async ({ page }) => {
   await page
     .getByRole("textbox", { name: "Text to split into a thread" })
     .fill("x".repeat(300));
-  await page.getByRole("button", { name: "Destination" }).click();
+  await page.getByRole("button", { name: "Social network" }).click();
   await page.getByRole("option", { name: /Bluesky/ }).click();
   await expect(page.getByRole("button", { name: "Copy part 2" })).toBeVisible();
 
@@ -239,7 +241,9 @@ test("free marketing tools produce useful output", async ({ page }) => {
     .fill("First sentence. Second sentence.");
   await page.getByRole("button", { name: "Paragraph length" }).click();
   await page.getByRole("option", { name: "One sentence" }).click();
-  await page.getByRole("checkbox", { name: "Normalize list bullets" }).click();
+  await page
+    .getByRole("checkbox", { name: "Use the same bullet style" })
+    .click();
   await expect(
     page.getByRole("textbox", { name: "Formatted LinkedIn post" }),
   ).toHaveValue(/First sentence/);

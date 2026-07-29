@@ -22,7 +22,11 @@ OPENPOST_MEDIA_URL=https://your-domain.com/media
 
 OpenPost passes stored media MIME types to the Threads publisher and serves public media URLs with file extensions where possible. Threads still fetches media from your URL server-side, so the URL must be reachable by Meta and return the correct media bytes.
 
-Carousel publishing creates and waits for each child media container, then creates and publishes the parent carousel. A single-media rendition remains a normal image or video post.
+For a carousel, OpenPost prepares each media item before it publishes the full carousel. An account version with one media item stays a normal image or video post.
+
+## Comments
+
+OpenPost can list replies, send replies, and hide replies. The Threads API path in OpenPost does not delete replies. Threads messages are not part of the OpenPost inbox.
 
 ## Analytics
 

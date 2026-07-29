@@ -11,7 +11,7 @@
   } from "../../tools/_lib/tool-utils";
 
   const example =
-    "New in OpenPost: draft once, tailor each destination, and check every post before it enters the queue. https://openpost.social";
+    "New in OpenPost: write once, tailor each account version, and check every post before you schedule it. https://openpost.social";
   let draft = $state(example);
 
   const visibleCharacters = $derived(graphemeCount(draft));
@@ -103,7 +103,7 @@
   >
     <div>
       <h2 id="platform-counts-title" class="text-lg font-semibold">
-        Platform limits
+        Social network limits
       </h2>
       <p class="mt-1 text-sm text-muted-foreground">
         Compare one draft before adapting it per platform.

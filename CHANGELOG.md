@@ -4,6 +4,19 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- Added a dedicated instance-admin Users table with plan, access, activity, and content details, plus audited five-minute, one-use links for opening a non-admin user's session in a private browser window.
+
+### Changed
+
+- Rebuilt application and free-tool previews with destination-specific feeds, controls, and full-page shells for posts, threads, images, videos, Stories, Reels, Shorts, photo posts, polls, cards, and documents across all ten supported platforms.
+- Rewrote marketing, comparisons, free tools, user docs, platform guides, and app messages in plain language, and aligned them with the current posting, analytics, comments, inbox, Studio, and automation features.
+
+### Fixed
+
+- Let token-only standalone preview windows load without an authentication redirect while keeping preview content off the URL and inside the random same-origin channel.
+
 ## [1.43.2] - 2026-07-29
 
 ### Fixed

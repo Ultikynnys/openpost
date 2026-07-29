@@ -14,7 +14,9 @@ https://your-domain.com/api/v1/accounts/facebook/callback
 - App permissions:
   - `pages_show_list`
   - `pages_read_engagement`
+  - `pages_manage_engagement`
   - `pages_manage_posts`
+  - `pages_messaging`
 - Public `OPENPOST_MEDIA_URL` or S3/R2 public media URL for image and video posts
 
 ## Configuration
@@ -41,13 +43,14 @@ If `redirect_uri` is omitted, OpenPost derives it from `OPENPOST_APP_URL`.
 - Publishes 2-10 images as an unpublished-photo set attached to one Page feed post.
 - Publishes one video URL through the Page videos endpoint.
 - Publishes one image or video as a Page Story when the Story profile is selected.
-- Lists, replies to, and hides eligible Page comments.
+- Lists, replies to, hides, and deletes eligible Page comments.
+- Supports opt-in Page inbox collection and replies within Meta's reply window.
 - Supports scheduling and platform variants through the normal OpenPost post flow.
 
 ## Current Limits
 
 - Multi-photo publishing creates a feed post, not a persistent Page album.
-- Comment deletion is not exposed; supported moderation actions depend on Meta's per-comment permissions.
+- Comment actions depend on Meta's permission for that Page and comment.
 - Media URLs must be public HTTPS URLs.
 - Live-account verification is still recommended before relying on production Page publishing.
 

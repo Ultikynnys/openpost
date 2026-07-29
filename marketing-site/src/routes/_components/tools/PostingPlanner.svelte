@@ -97,7 +97,7 @@
     </h2>
     <p class="mt-1 text-sm leading-6 text-muted-foreground">
       Choose the hours your audience is usually available. We evenly distribute
-      a repeatable cadence and convert every slot to your timezone.
+      a weekly schedule and convert each time to your timezone.
     </p>
 
     <div class="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-1">
@@ -230,8 +230,8 @@
     >
       <Info class="mt-0.5 size-4 shrink-0 text-primary" />
       <p>
-        Use this evenly spaced baseline, then compare it with your own reach,
-        replies, and conversions.
+        Start with these even posting times, then compare them with your own
+        reach, replies, and results.
       </p>
     </div>
     {#if adjustedSlotCount > 0}

@@ -249,7 +249,7 @@ test("analytics keeps provider metrics distinct across desktop and phone layouts
     walkthrough.getByRole("button", { name: "Hide platform details" }),
   ).toBeVisible();
   const youtubeNativePost = walkthrough.getByRole("link", {
-    name: "Open native post",
+    name: "Open post on platform",
   });
   await expect(youtubeNativePost).toHaveAttribute(
     "href",
@@ -259,7 +259,7 @@ test("analytics keeps provider metrics distinct across desktop and phone layouts
   await expect(youtubeNativePost).toHaveCSS("width", "28px");
   await launch.getByRole("button", { name: "Show platform details" }).click();
   await expect(
-    launch.getByRole("link", { name: "Open native post" }),
+    launch.getByRole("link", { name: "Open post on platform" }),
   ).toHaveAttribute("href", "https://x.com/openpost/status/1");
   await expect(
     page.getByText("Two measurements are needed to show a trend."),
@@ -271,7 +271,7 @@ test("analytics keeps provider metrics distinct across desktop and phone layouts
   );
   await expect(
     page.getByText(
-      "Views are provider-counted plays or opens. Impressions are times content was shown.",
+      "Views are plays or opens reported by the platform. Impressions count how often it showed the post.",
       { exact: false },
     ),
   ).toBeVisible();
@@ -296,7 +296,7 @@ test("analytics keeps provider metrics distinct across desktop and phone layouts
   await expect.poll(() => requestedRanges.at(-1)).toBe("7");
 
   await page.getByRole("button", { name: "Refresh data" }).click();
-  await expect(page.getByText("4 analytics checks queued.")).toBeVisible();
+  await expect(page.getByText("Updating analytics for 4 items.")).toBeVisible();
   expect(refreshRequests).toBe(1);
 
   await page.setViewportSize({ width: 390, height: 844 });

@@ -30,13 +30,20 @@ OpenPost defaults `LINKEDIN_API_VERSION` to the previous calendar month to avoid
 
 LinkedIn thread child posts are implemented as comments on the first post rather than native threaded posts.
 
+OpenPost can list comments, send replies, and delete comments where LinkedIn grants access. LinkedIn messages are not part of the OpenPost inbox.
+
 ## Media caveat
 
 OpenPost uses LinkedIn's Images API for images and Videos API for videos. Video upload initializes with `fileSizeBytes`, uploads all returned byte ranges, and finalizes the upload before creating the post.
 
-## Analytics caveat
+## Analytics
 
-OpenPost marks analytics unavailable for personal LinkedIn connections. Member-post reads require restricted access that OpenPost cannot request by default. Organization publishing and engagement use the selected organization author URN; organization analytics still depend on the LinkedIn products approved for the operator app.
+LinkedIn analytics require Community Management API access, so the operator must turn on Organization support and use an approved app. With that access:
+
+- personal profiles can return followers plus post impressions, reach, reactions, comments, reposts, saves, and link clicks;
+- Organization Pages can return followers plus the post numbers that LinkedIn provides.
+
+The connected account also needs `r_member_profileAnalytics` and `r_member_postAnalytics` for profile analytics or `rw_organization_admin` for Organization Page analytics.
 
 ## Common issues
 

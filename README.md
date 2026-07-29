@@ -7,7 +7,7 @@
 <p align="center">
   <strong>A lightweight, self-hosted social media scheduler.</strong>
   <br>
-  Draft once, tailor each destination, and publish from one clear calendar.
+  Write once, tailor each account, and publish from one clear calendar.
 </p>
 
 <p align="center">
@@ -36,22 +36,23 @@
 </p>
 
 <p align="center">
-  <img alt="OpenPost composer with account destinations and scheduling controls" src="./assets/screenshots/main-dark.png" width="100%">
+  <img alt="OpenPost composer with account versions and scheduling controls" src="./assets/screenshots/main-dark.png" width="100%">
 </p>
 
-## A focused scheduler, not another marketing suite
+## A focused social scheduler
 
-OpenPost handles the part that should be simple: preparing, adapting, scheduling, and publishing social posts.
+OpenPost helps you write, tailor, schedule, and publish social posts.
 
-- **Write once, publish properly everywhere.** Keep one source post and adjust the text, media, format, and settings for each destination.
-- **See the whole schedule.** Plan posts in a calendar, reuse posting slots, and inspect queued, published, and failed work.
-- **Measure what each provider reports.** Keep account growth and publication engagement history without treating views, impressions, and reach as the same metric.
-- **Create the media you need.** Use OpenPost Studio without an account for local, watermark-free exports, or save designs with reusable workspace media and brand assets.
+- **Write one shared post.** Change the text, media, format, and settings for each account.
+- **See the full schedule.** Plan posts in a calendar, reuse posting times, and check scheduled, published, and failed posts.
+- **Track real platform numbers.** Keep account growth and post results while treating views, impressions, and reach as different metrics.
+- **Make still images.** Use OpenPost Studio without an account for local exports with no watermark, or save designs with workspace media and brand items.
 - **Keep brands separate.** Workspaces isolate accounts, media, schedules, members, and automation access.
-- **Automate without sharing social credentials.** Use the API, CLI, or MCP with revocable, workspace-scoped OpenPost tokens.
-- **Run it without an infrastructure project.** One container or binary, SQLite and local media by default, and a built-in durable job queue. Redis is not required.
+- **Manage replies and messages.** Read and reply to comments, get personal alerts, and turn on inbox collection for supported accounts.
+- **Automate without sharing social account keys.** Use the API, CLI, or MCP with OpenPost tokens that you can limit to one workspace and remove.
+- **Run a small server.** Use one container or binary, SQLite, local media, and saved background jobs. Redis is not required.
 
-OpenPost stays deliberately narrower than an all-in-one social marketing platform. It does not try to bundle a CRM, ad manager, social listening suite, or enterprise benchmarking product into the scheduler.
+OpenPost does not include a CRM, ad manager, social listening, or large-company benchmarks.
 
 <table>
   <tr>
@@ -63,16 +64,16 @@ OpenPost stays deliberately narrower than an all-in-one social marketing platfor
     </td>
   </tr>
   <tr>
-    <td align="center"><strong>Connect each workspace to the channels it owns</strong></td>
-    <td align="center"><strong>Reuse assets and see where each file is used</strong></td>
+    <td align="center"><strong>Connect social accounts to each workspace</strong></td>
+    <td align="center"><strong>Reuse files and see where each one is used</strong></td>
   </tr>
 </table>
 
 ## Supported platforms
 
-X, Mastodon, Bluesky, LinkedIn profiles and Organization Pages, Threads, Facebook Pages, Instagram Business and Creator accounts, TikTok, YouTube, and Discord webhooks are supported.
+OpenPost supports X, Mastodon, Bluesky, LinkedIn profiles and Organization Pages, Threads, Facebook Pages, Instagram Business and Creator accounts, TikTok, YouTube, and Discord webhooks.
 
-Provider review, app configuration, account eligibility, quotas, public-media access, or live-account verification may still limit a specific account or format. Check the [provider matrix](https://docs.openpost.social/providers/platform-limits) for current formats, media limits, and setup notes.
+App review, setup, account access, API limits, public media links, or a failed live test can still block an account or format. Check the [platform table](https://docs.openpost.social/providers/platform-limits) for current formats, media limits, and setup notes.
 
 ## Self-host in a few minutes
 
@@ -84,17 +85,17 @@ cp .env.example .env
 docker compose up -d
 ```
 
-Open `http://localhost:8080`, create the first account, and connect a provider. Bluesky is the fastest first test because it only needs a handle and app password.
+Open `http://localhost:8080`, create the first account, and connect a social account. Bluesky is the fastest first test because it only needs a handle and app password.
 
-The default Compose setup stores the SQLite database and uploaded media in one Docker volume. For a public instance, put OpenPost behind HTTPS and set the public URL before configuring OAuth providers.
+The default Compose setup stores the SQLite database and uploaded media in one Docker volume. For a public server, put OpenPost behind HTTPS and set the public URL before you set up OAuth.
 
 [Read the self-hosting quickstart →](https://docs.openpost.social/guide/quickstart)
 
 Prefer not to operate it yourself? [Use the managed app](https://app.openpost.social).
 
-## Built for reliable publishing
+## Scheduled posts survive restarts
 
-A scheduled post should not disappear because a process restarted. OpenPost stores publishing work in its database-backed queue and keeps the outcome visible in the app.
+OpenPost saves scheduled work in its database. A server restart does not remove it, and the app shows the result.
 
 The self-hosted defaults stay small:
 
@@ -103,20 +104,20 @@ The self-hosted defaults stay small:
 | Application       | One Go binary with the SvelteKit app embedded |
 | Database          | SQLite                                        |
 | Media             | Local storage                                 |
-| Queue             | Built into the database                       |
+| Scheduled jobs    | Built into the database                       |
 | Optional scale-up | PostgreSQL and S3-compatible storage          |
 
-Provider credentials are encrypted at rest with AES-256-GCM. API and MCP tokens can be scoped to one workspace and revoked without reconnecting its social accounts.
+OpenPost encrypts social account keys with AES-256-GCM. You can limit API and MCP tokens to one workspace and remove them without reconnecting social accounts.
 
 ## Automation when you need it
 
-The web app is the main place to review and control publishing. The same authorization, validation, quotas, and queue rules also cover:
+The web app is the main place to review and control posts. The same access rules, checks, plan limits, and saved jobs also cover:
 
 - the typed HTTP API;
 - the `openpost` CLI for scripts, cron, and CI;
 - the local and remote MCP interfaces for assistants and coding agents.
 
-This lets an agent inspect workspace context, prepare destination-specific drafts, and hand the result back for review without receiving the underlying provider tokens.
+This lets an AI tool read workspace data, prepare account versions, and return them for review without seeing social account tokens.
 
 [CLI guide](https://docs.openpost.social/cli/) · [MCP guide](https://docs.openpost.social/mcp/) · [API reference](https://docs.openpost.social/reference/api)
 

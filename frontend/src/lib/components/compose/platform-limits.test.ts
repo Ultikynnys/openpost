@@ -14,6 +14,7 @@ describe('platform-limits', () => {
 		expect(accountCharacterLimit({ platform: 'x' })).toBe(280);
 		expect(accountCharacterLimit({ platform: 'mastodon:https://masto.pt' })).toBe(500);
 		expect(accountCharacterLimit({ platform: 'linkedin' })).toBe(3000);
+		expect(accountCharacterLimit({ platform: 'discord' })).toBe(2000);
 	});
 
 	it('uses X weighted text counting', () => {

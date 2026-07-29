@@ -2,9 +2,9 @@
 
 Use `openpost post` for the text-and-thread composer, `openpost thread` for markdown threads, `openpost publication` for format-first content, and `openpost media` for attachments.
 
-## Check Provider Support
+## Check Account Support
 
-Inspect setup blockers and the provider/profile capability matrix before a new publishing workflow:
+Check account setup and supported post types before you publish:
 
 ```sh
 openpost provider readiness --json
@@ -13,14 +13,14 @@ openpost provider capabilities --provider youtube --content-profile long_video -
 
 ## Choose Accounts
 
-Use `--accounts` to select destinations by account ID, slug, or platform:
+Use `--accounts` to select accounts by ID, short name, or social network:
 
 ```sh
 openpost post create --accounts x,linkedin --content 'Shipping today.'
 ```
 
-If `--accounts` is omitted, `post create` and `thread create` create drafts with
-no destinations. Add destinations later from the web composer or update command.
+If `--accounts` is omitted, `post create` and `thread create` make drafts with
+no accounts. Add accounts later from the web editor or update command.
 
 ## Schedule Posts
 
@@ -81,10 +81,9 @@ Then create the thread:
 openpost thread create launch.md
 ```
 
-## Rich Publications
+## Other Post Types
 
-Use `openpost publication create` for post types that need explicit provider
-fields, video details, link metadata, or capability validation.
+Use `openpost publication create` for Stories, short videos, long videos, link posts, and other posts that need extra settings.
 
 ```sh
 openpost publication create --content-profile link_share --accounts linkedin --url https://openpost.social --content 'Launch notes'
@@ -93,7 +92,7 @@ openpost publication create --content-profile long_video --accounts youtube --vi
 openpost publication schedule pub_123 --at 'tomorrow 9am'
 ```
 
-Validate a format-first publication before scheduling or immediate publishing:
+Check the post before you schedule or publish it:
 
 ```sh
 openpost publication validate pub_123 --json
@@ -116,7 +115,7 @@ openpost schedule next
 
 | Input                              | Resolution                                                                |
 | ---------------------------------- | ------------------------------------------------------------------------- |
-| `now`                              | The next one-minute boundary, so the publish worker can pick it up.       |
+| `now`                              | The start of the next minute.                                             |
 | `draft`                            | No scheduled time; the post remains a draft.                              |
 | `next-slot` / `next slot` / `slot` | The next available posting schedule slot from the server.                 |
 | `2pm`                              | Today at 14:00 if still in the future, otherwise tomorrow at 14:00.       |

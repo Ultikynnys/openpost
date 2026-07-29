@@ -92,7 +92,7 @@ export const plans = [
     id: "pro",
     name: "Pro",
     price: "€24",
-    description: "More accounts, media, and monthly posts for one operator.",
+    description: "More accounts, media, and monthly posts for one person.",
     workspaces: "10",
     accounts: "15",
     posts: "2,500",
@@ -154,9 +154,9 @@ export const platforms = [
     short: "x",
     tag: "Posts, threads, media",
     status: "Available",
-    statusDetail: "Publishing path implemented",
+    statusDetail: "Publishing is built in",
     description:
-      "Draft, preview, and schedule X posts, media posts, links, and reply threads with limits resolved for each connected account.",
+      "Draft, preview, and schedule X posts, links, media, and reply threads. OpenPost checks the limit for each connected account.",
     heroTitle: "Build an X reply chain with the right limit for each account.",
     preview: {
       label: "Reply chain",
@@ -195,7 +195,7 @@ export const platforms = [
       "Up to 25,000 weighted characters for verified Basic, Premium, or Premium+ accounts",
       "Video: 140 seconds and 512 MiB standard; up to 4 hours and 16 GiB subscribed",
       PLATFORM_LIMITS.x.media,
-      "Your X API tier and quota still apply",
+      "Your X API plan and limits still apply",
     ],
     limitations: [
       "OpenPost uses standard limits when X cannot verify a connected account subscription tier.",
@@ -203,7 +203,7 @@ export const platforms = [
       "Polls, quote posts, and other format settings remain subject to the account API tier.",
     ],
     verification:
-      "Verify OAuth, account quota, and the formats you plan to use with the connected account.",
+      "Check OAuth, account limits, and each post type you plan to use.",
     docsUrl: `${siteUrl.replace("openpost.social", "docs.openpost.social")}/providers/x/`,
   },
   {
@@ -212,14 +212,14 @@ export const platforms = [
     short: "mastodon",
     tag: "Custom servers, posts, threads",
     status: "Available",
-    statusDetail: "Publishing path implemented",
+    statusDetail: "Publishing is built in",
     description:
       "Connect a public Mastodon server, then schedule posts, media, links, and reply threads.",
     heroTitle: "Publish to the Mastodon server your community already uses.",
     preview: {
       label: "mastodon.social",
       headline: "Public post with a content warning option",
-      body: "Visibility, language, sensitive media, and instance rules stay attached to the destination.",
+      body: "Each account keeps its visibility, language, sensitive media, and server rules.",
       detail: "500 characters by default",
       chips: ["Public", "English", "Instance-aware"],
     },
@@ -246,7 +246,7 @@ export const platforms = [
     limits: [
       `${PLATFORM_LIMITS.mastodon.charLimit} characters by default`,
       PLATFORM_LIMITS.mastodon.media,
-      "Reply threads and native scheduling metadata",
+      "Reply threads and OpenPost scheduling",
       "Instance rules can override the defaults",
     ],
     limitations: [
@@ -255,7 +255,7 @@ export const platforms = [
       "One adapter registration is maintained per Mastodon instance.",
     ],
     verification:
-      "Check the destination instance rules and publish one media test before relying on a new server.",
+      "Check the server rules and publish one media test before you rely on a new server.",
     docsUrl: `${siteUrl.replace("openpost.social", "docs.openpost.social")}/providers/mastodon/`,
   },
   {
@@ -264,7 +264,7 @@ export const platforms = [
     short: "bluesky",
     tag: "Posts, threads, images, video",
     status: "Available",
-    statusDetail: "Publishing path implemented",
+    statusDetail: "Publishing is built in",
     description:
       "Connect with a handle and app password, then schedule posts, links, media, and reply threads.",
     heroTitle:
@@ -272,7 +272,7 @@ export const platforms = [
     preview: {
       label: "@openpost.social",
       headline: "A short post with a rich link card",
-      body: "Facets, link metadata, replies, labels, and media are built for AT Protocol records.",
+      body: "Rich text, link cards, replies, labels, and media use Bluesky's AT Protocol format.",
       detail: "300 characters",
       chips: ["Rich text", "Link card", "AT Protocol"],
     },
@@ -307,12 +307,12 @@ export const platforms = [
       "Video cannot be mixed with images",
     ],
     limitations: [
-      "Video is MP4-only in the current capability profile and cannot be combined with images.",
+      "Video must be MP4 and cannot be combined with images.",
       "App passwords can be revoked independently from the main account password.",
-      "Provider-side processing can delay video availability after upload.",
+      "Bluesky may need time to process a video after upload.",
     ],
     verification:
-      "The text and image paths are implemented; test video with the account before a scheduled campaign.",
+      "Text and image posts work in OpenPost. Test video with the account before a scheduled campaign.",
     docsUrl: `${siteUrl.replace("openpost.social", "docs.openpost.social")}/providers/bluesky/`,
   },
   {
@@ -321,14 +321,14 @@ export const platforms = [
     short: "linkedin",
     tag: "Posts, documents, video",
     status: "Available",
-    statusDetail: "Publishing path implemented",
+    statusDetail: "Publishing is built in",
     description:
       "Schedule LinkedIn posts, links, images, documents, videos, and comment-style thread continuations.",
     heroTitle: "Turn a LinkedIn update into a document post or comment thread.",
     preview: {
       label: "Professional update",
       headline: "Quarterly field guide.pdf",
-      body: "The document title, post text, and follow-up comments use separate provider limits.",
+      body: "The document title, post text, and follow-up comments each have their own limit.",
       detail: "3,000 post · 1,250 comment",
       chips: ["PDF document", "Comment child", "Organization-ready"],
     },
@@ -344,7 +344,7 @@ export const platforms = [
       {
         name: "Post or link",
         text: "3,000 characters",
-        media: "Text or link metadata",
+        media: "Text or a link card",
       },
       {
         name: "Comment thread",
@@ -354,7 +354,7 @@ export const platforms = [
       {
         name: "Image, document, or video",
         text: "3,000 characters",
-        media: "One image, PDF document, or video per rendition",
+        media: "One image, PDF document, or video per account version",
       },
     ],
     limits: [
@@ -378,9 +378,9 @@ export const platforms = [
     short: "threads",
     tag: "Posts, replies, carousels",
     status: "Available",
-    statusDetail: "Publishing path implemented",
+    statusDetail: "Publishing is built in",
     description:
-      "Schedule text, image, video, carousel, and reply-thread publications for connected Threads accounts.",
+      "Schedule text, image, video, carousel, and reply-thread posts for connected Threads accounts.",
     heroTitle: "Arrange a Threads carousel and the replies that follow it.",
     preview: {
       label: "Carousel",
@@ -437,12 +437,12 @@ export const platforms = [
     status: "Supported",
     statusDetail: "Meta review and Page permissions still apply",
     description:
-      "OpenPost has publishing paths for selected Facebook Pages, including text, photos, video, and Stories.",
-    heroTitle: "Prepare a Facebook Page post and its media placement together.",
+      "OpenPost publishes text, photos, video, and Stories to selected Facebook Pages.",
+    heroTitle: "Prepare a Facebook Page post and its media together.",
     preview: {
       label: "Selected Page",
       headline: "Feed post or Story",
-      body: "Page selection, placement, and public media access are verified as separate requirements.",
+      body: "OpenPost checks the selected Page, post type, and public media link separately.",
       detail: "Pages only",
       chips: ["Feed", "Multi-photo", "Story"],
     },
@@ -450,15 +450,15 @@ export const platforms = [
       "A Facebook Page, eligible Meta user, configured Meta app, and the required reviewed permissions.",
     auth: "Meta OAuth 2.0 with Page selection",
     setup: [
-      "Configure the Facebook provider app, scopes, and callback URI.",
+      "Set up the Facebook app, permissions, and callback address.",
       "Connect through Meta and choose the Page OpenPost should publish to.",
-      "Complete provider review and run a live Page audit before production scheduling.",
+      "Complete Meta review and test a live Page before you schedule real posts.",
     ],
     formats: [
       {
         name: "Page post or link",
         text: "63,206 characters",
-        media: "Text or link metadata",
+        media: "Text or a link card",
       },
       {
         name: "Photo or multi-photo",
@@ -475,15 +475,15 @@ export const platforms = [
       `${PLATFORM_LIMITS.facebook.charLimit.toLocaleString()} characters`,
       PLATFORM_LIMITS.facebook.media,
       "Multi-photo, Story, and video profiles",
-      "Provider permissions and live-account verification required",
+      "App permissions and a live account test are required",
     ],
     limitations: [
-      "Provider review and Page permissions determine whether a specific Page and format are usable.",
+      "App review and Page permissions determine whether a Page and format work.",
       "Media must be available at a public HTTPS URL that Meta can fetch.",
       "This integration publishes to Pages, not personal Facebook profiles.",
     ],
     verification:
-      "Do not plan a launch around this integration until Page selection and every required format pass a live audit.",
+      "Do not plan a launch around this integration until Page selection and every required format pass a live test.",
     docsUrl: `${siteUrl.replace("openpost.social", "docs.openpost.social")}/providers/facebook/`,
   },
   {
@@ -494,12 +494,12 @@ export const platforms = [
     status: "Supported",
     statusDetail: "Business or Creator account and Meta review required",
     description:
-      "OpenPost has media-first publishing paths for Instagram feed posts, carousels, Stories, and Reels.",
-    heroTitle: "Choose the Instagram placement before you shape the caption.",
+      "OpenPost publishes Instagram feed images, carousels, Stories, and Reels.",
+    heroTitle: "Choose the Instagram post type before you write the caption.",
     preview: {
       label: "Media-first",
       headline: "Feed, carousel, Story, or Reel",
-      body: "The selected placement determines its media count, caption, and provider checks.",
+      body: "The format you choose sets the media count, caption, and checks.",
       detail: "No text-only posts",
       chips: ["1:1 Feed", "9:16 Story", "9:16 Reel"],
     },
@@ -508,8 +508,8 @@ export const platforms = [
     auth: "Meta OAuth 2.0 with account selection",
     setup: [
       "Connect an eligible Instagram Business or Creator account to a Facebook Page.",
-      "Configure the Instagram provider app, scopes, callback URI, and public media host.",
-      "Choose the Instagram account during OAuth and complete a live format audit.",
+      "Set up the Instagram app, permissions, callback address, and public media address.",
+      "Choose the Instagram account during sign-in and test each format with it.",
     ],
     formats: [
       {
@@ -536,12 +536,12 @@ export const platforms = [
       "No text-only posts",
     ],
     limitations: [
-      "Instagram has no text-only publication profile in OpenPost.",
+      "OpenPost does not support text-only Instagram posts.",
       "Media must be public HTTPS and meet Meta format rules.",
-      "Provider access and each planned placement still need a live-account audit.",
+      "App access and each planned format still need a live account test.",
     ],
     verification:
-      "Test each planned placement—feed, carousel, Story, and Reel—because one successful format does not prove the others.",
+      "Test each planned format—feed, carousel, Story, and Reel—because one successful format does not prove the others.",
     docsUrl: `${siteUrl.replace("openpost.social", "docs.openpost.social")}/providers/instagram/`,
   },
   {
@@ -550,25 +550,25 @@ export const platforms = [
     short: "tiktok",
     tag: "Video and photo posts",
     status: "Supported",
-    statusDetail: "App review and provider audit required",
+    statusDetail: "App review and live test required",
     description:
-      "OpenPost implements TikTok video and photo-post flows, with profile-specific caption limits.",
+      "OpenPost supports TikTok video and photo posts, each with its own caption limit.",
     heroTitle:
       "Build a TikTok video or photo post with the correct caption limit.",
     preview: {
-      label: "Two publishing profiles",
+      label: "Two post types",
       headline: "Video or 1-35 photos",
       body: "Video and photo posts keep different captions, media rules, and app-review checks.",
       detail: "2,200 video · 4,000 photo",
-      chips: ["9:16 video", "Photo post", "Provider audit"],
+      chips: ["9:16 video", "Photo post", "App review"],
     },
     accountRequirement:
       "A TikTok developer app with Content Posting API access and approved Direct Post permissions.",
     auth: "OAuth 2.0",
     setup: [
-      "Configure the TikTok provider app, redirect URI, scopes, and content-posting access.",
+      "Set up the TikTok app, callback address, permissions, and posting access.",
       "Verify the public media URL prefix or domain in the TikTok developer console.",
-      "Complete app review and audit both video and photo publishing with the real account.",
+      "Complete app review and test both video and photo posts with the real account.",
     ],
     formats: [
       {
@@ -587,15 +587,15 @@ export const platforms = [
       "4,000 characters for photo-post captions",
       PLATFORM_LIMITS.tiktok.media,
       "Photo posts support 1-35 JPEG or WebP images",
-      "Provider review and live audit required",
+      "App review and a live test are required",
     ],
     limitations: [
-      "TikTok publishing is blocked until app-review and provider-audit requirements are satisfied.",
+      "TikTok blocks publishing until the app passes review and a live post test.",
       "Pull-from-URL media must use a verified public HTTPS prefix or domain.",
-      "Video and photo posts use different caption and media constraints.",
+      "Video and photo posts use different caption and media rules.",
     ],
     verification:
-      "Treat the integration as unavailable for production until both provider review and the intended publishing flow pass.",
+      "Do not use it for real posts until TikTok approves the app and your posting test works.",
     docsUrl: `${siteUrl.replace("openpost.social", "docs.openpost.social")}/providers/tiktok/`,
   },
   {
@@ -604,16 +604,16 @@ export const platforms = [
     short: "youtube",
     tag: "Shorts and long video",
     status: "Supported",
-    statusDetail: "Provider audit required",
+    statusDetail: "App review required",
     description:
-      "OpenPost implements resumable Shorts and video uploads to a selected YouTube channel.",
+      "OpenPost uploads Shorts and videos to a selected YouTube channel.",
     heroTitle:
-      "Schedule the YouTube video with its title, privacy, and channel metadata.",
+      "Schedule the YouTube video with its title, privacy, and channel details.",
     preview: {
-      label: "Resumable upload",
+      label: "Video upload",
       headline: "Release walkthrough · 08:42",
       body: "Title, description, privacy, thumbnail, playlist, and processing state stay with the upload.",
-      detail: "One video per rendition",
+      detail: "One video per account version",
       chips: ["Private by default", "Thumbnail", "Playlist"],
     },
     accountRequirement:
@@ -622,7 +622,7 @@ export const platforms = [
     setup: [
       "Enable YouTube Data API v3 and configure the Google OAuth app and callback URI.",
       "Request the required profile, channel-read, and upload scopes.",
-      "Choose a channel during connection and complete a resumable upload audit.",
+      "Choose a channel during connection and test a real video upload.",
     ],
     formats: [
       {
@@ -643,13 +643,65 @@ export const platforms = [
       "Unaudited Google projects can force uploads private",
     ],
     limitations: [
-      "The Google project and live channel must pass a provider audit before production use.",
+      "Test the Google project with a live channel before you use it for real posts.",
       "Unaudited Google projects can force uploads to private visibility.",
-      "Exactly one video is accepted per rendition; text-only YouTube posts are not supported.",
+      "Each account version accepts one video. OpenPost does not support text-only YouTube posts.",
     ],
     verification:
       "Confirm upload, processing completion, thumbnail, playlist, and final privacy on the production channel.",
     docsUrl: `${siteUrl.replace("openpost.social", "docs.openpost.social")}/providers/youtube/`,
+  },
+  {
+    slug: "discord",
+    name: "Discord",
+    short: "discord",
+    tag: "Messages and files",
+    status: "Available",
+    statusDetail: "Built-in webhook connection",
+    description:
+      "Connect a Discord channel webhook, then schedule text and up to 10 file attachments.",
+    heroTitle: "Schedule a message and its files for a Discord channel.",
+    preview: {
+      label: "Discord channel",
+      headline: "A scheduled channel update",
+      body: "Text, files, alt text, and reply links are sent through the channel webhook.",
+      detail: "2,000 characters",
+      chips: ["Webhook", "Up to 10 files", "Reply links"],
+    },
+    accountRequirement:
+      "An incoming webhook URL for a Discord channel where you can manage integrations.",
+    auth: "Incoming webhook URL",
+    setup: [
+      "Create an incoming webhook in the Discord channel settings.",
+      "Copy the webhook URL and connect it from Social accounts in OpenPost.",
+      "Publish a small test message and file, then keep the webhook URL private.",
+    ],
+    formats: [
+      {
+        name: "Message",
+        text: "2,000 characters",
+        media: "Text only",
+      },
+      {
+        name: "Message with files",
+        text: "2,000 characters",
+        media: "Up to 10 images or one video in the current post formats",
+      },
+    ],
+    limits: [
+      `${PLATFORM_LIMITS.discord.charLimit.toLocaleString()} characters`,
+      PLATFORM_LIMITS.discord.media,
+      "OpenPost uses a safe 10 MiB limit for each file",
+      "Scheduled messages do not notify users or roles by default",
+    ],
+    limitations: [
+      "A webhook can publish and delete its own messages, but it cannot read the channel inbox.",
+      "The webhook URL acts like a password. Anyone who has it can post to the channel.",
+      "The Discord server or account may enforce a different upload limit.",
+    ],
+    verification:
+      "Test the exact webhook and file type before you rely on it for scheduled messages.",
+    docsUrl: `${siteUrl.replace("openpost.social", "docs.openpost.social")}/providers/discord/`,
   },
 ] as const;
 
@@ -665,7 +717,7 @@ export const launchProviderMatrix = [
     media: "1-4 images or 1 account-tier-aware video",
     threads: "Reply chains",
     schedule: "Supported",
-    verify: "OAuth 1.0a, API tier, quota, and each planned format",
+    verify: "OAuth 1.0a, API plan, account limits, and each planned post type",
   },
   {
     slug: "linkedin",
@@ -698,7 +750,7 @@ export const launchProviderMatrix = [
     media: "Up to 4 attachments by default",
     threads: "Reply chains",
     schedule: "Supported",
-    verify: "Destination instance rules and a media test on that server",
+    verify: "Server rules and a media test on that server",
   },
   {
     slug: "threads",
@@ -720,7 +772,7 @@ export const illustrativeLaunchRenditions = [
     short: "x",
     purpose: "Compact technical hook",
     content:
-      "AI can draft the campaign. It still should not publish blind. OpenPost keeps provider credentials inside the workspace, shows every destination, and schedules through one visible queue.",
+      "AI can draft a campaign, but you should still check it. OpenPost keeps social account keys private, shows each account version, and tracks every scheduled post.",
   },
   {
     slug: "linkedin",
@@ -728,7 +780,7 @@ export const illustrativeLaunchRenditions = [
     short: "linkedin",
     purpose: "Context for a professional audience",
     content:
-      "The useful boundary is not AI versus no AI. It is whether an agent receives a social account credential or works through a revocable, workspace-bound publishing system. We built OpenPost for the second model.",
+      "An AI tool does not need your social account keys. Give it OpenPost access that you can limit to one workspace and remove at any time.",
   },
   {
     slug: "bluesky",
@@ -736,7 +788,7 @@ export const illustrativeLaunchRenditions = [
     short: "bluesky",
     purpose: "Short open-source update",
     content:
-      "An agent prepared this campaign without seeing a provider token. I reviewed each destination in OpenPost, then chose what entered the queue. Open source, hosted or self-hosted.",
+      "An AI tool prepared this campaign without seeing a social account key. I checked each account version in OpenPost, then chose what to schedule. Open source, hosted, or self-hosted.",
   },
   {
     slug: "mastodon",
@@ -752,14 +804,14 @@ export const illustrativeLaunchRenditions = [
     short: "threads",
     purpose: "Conversational summary",
     content:
-      "The agent prepared the draft. I checked the copy, media, and timing for every destination. OpenPost kept the credentials and the publishing queue in one place.",
+      "The AI tool prepared the draft. I checked the copy, media, and time for each account. OpenPost kept the account keys private and showed the posting status.",
   },
 ] as const;
 
 export const productFeatures = [
   {
     eyebrow: "Composer",
-    title: "Review the shared draft and every destination rendition together.",
+    title: "Review the shared draft and each account version together.",
     description:
       "An agent or a person can prepare the campaign. The web composer keeps the base content, account-specific copy, media, formats, and schedule available for human review.",
     icon: MessageSquareText,
@@ -768,18 +820,18 @@ export const productFeatures = [
   },
   {
     eyebrow: "Social accounts",
-    title: "Keep provider credentials behind the OpenPost boundary.",
+    title: "Keep social account keys inside OpenPost.",
     description:
-      "Agents and scripts authenticate to OpenPost with revocable tokens. Connected provider credentials stay encrypted in OpenPost and are not handed to the client.",
+      "AI tools and scripts use OpenPost tokens that you can remove. OpenPost encrypts your social account keys and never sends them to those tools.",
     icon: PanelTop,
     image: "/assets/screenshots/accounts-dark.png",
-    alt: "OpenPost Social accounts page with connected account and provider readiness cards",
+    alt: "OpenPost Social accounts page with connected accounts and setup notices",
   },
   {
     eyebrow: "Media",
-    title: "Give the campaign one governed media library.",
+    title: "Keep campaign media in one library.",
     description:
-      "People and automation can work from the same workspace assets while OpenPost preserves usage, alt text, destination links, and deletion guards.",
+      "People and tools can use the same files. OpenPost keeps alt text, post links, use history, and delete checks with each file.",
     icon: Library,
     image: "/assets/screenshots/media-dark.png",
     alt: "OpenPost media library",
@@ -797,34 +849,34 @@ export const productFeatures = [
 
 export const workflowBlocks = [
   {
-    title: "Workspace-bound access",
+    title: "Access for one workspace",
     description:
-      "Use workspace-scoped mcp:read for inspection or mcp:full for mutations, then revoke access without rotating provider credentials.",
+      "Give an MCP tool read-only or full access to one workspace. Remove access without changing your social account keys.",
     icon: UsersRound,
   },
   {
-    title: "Read and mutation split",
+    title: "Read and write access",
     description:
-      "MCP exposes guaranteed read-only queries separately from operations that change state or act externally.",
+      "MCP keeps read-only work separate from actions that change data or call a social network.",
     icon: GitBranch,
   },
   {
-    title: "Destination review",
+    title: "Review each account",
     description:
       "Compare account-specific copy, media, formats, limits, and timing in the web app before scheduling.",
     icon: Workflow,
   },
   {
-    title: "Visible queue and failures",
+    title: "Clear status and errors",
     description:
-      "Scheduled work uses a durable database queue, with publishing outcomes and provider failures kept visible.",
+      "Scheduled posts survive restarts. You can see which posts worked, failed, or need another try.",
     icon: CalendarClock,
   },
 ] as const;
 
 export const securityItems = [
   {
-    title: "Encrypted provider tokens",
+    title: "Encrypted social account keys",
     description:
       "Social access and refresh tokens use AES-256-GCM authenticated encryption at rest.",
     icon: LockKeyhole,
@@ -836,15 +888,15 @@ export const securityItems = [
     icon: ShieldCheck,
   },
   {
-    title: "Revocable automation tokens",
+    title: "Access keys you can remove",
     description:
-      "CLI, CI, cron, and MCP clients use dedicated tokens that can be limited to one workspace; MCP offers enforced read-only and full scopes.",
+      "CLI, scheduled scripts, and MCP tools use their own tokens. You can limit a token to one workspace and remove it at any time.",
     icon: KeyRound,
   },
   {
-    title: "Source you can inspect",
+    title: "Public source code",
     description:
-      "The API, queue, credential storage, and provider adapter implementations are public.",
+      "You can review the API, scheduled jobs, key storage, and social network code.",
     icon: Code2,
   },
 ] as const;
@@ -861,21 +913,21 @@ export const tools = [
     slug: "multi-platform-character-counter",
     name: "Multi-platform character counter",
     description:
-      "Paste once and compare one draft against the limits and counting rules for nine platforms.",
+      "Paste once and compare one draft against the limits and counting rules for ten social networks.",
     icon: FileText,
   },
   {
     slug: "post-preview-generator",
     name: "Post preview generator",
     description:
-      "Preview how a post and media could render across selected destinations before you schedule.",
+      "Preview a post and its media on each selected social network before you schedule it.",
     icon: PanelTop,
   },
   {
     slug: "thread-splitter",
     name: "Thread splitter",
     description:
-      "Turn long copy into platform-aware thread slices that are easier to review and schedule.",
+      "Split long copy into a thread that fits the platform and is easy to review.",
     icon: GitBranch,
   },
   {
@@ -896,7 +948,7 @@ export const tools = [
     slug: "best-time-to-post-calculator",
     name: "Timezone posting planner",
     description:
-      "Translate timezone and cadence preferences into reusable posting slots.",
+      "Turn your timezone and weekly plan into posting times you can reuse.",
     icon: Clock3,
   },
 ] as const;
@@ -907,44 +959,44 @@ export const comparisons = [
     name: "Buffer",
     category: "Established hosted scheduler",
     bestFor:
-      "Creators and teams that want a polished hosted scheduler with analytics and community workflows.",
+      "Creators and teams that want a polished hosted scheduler with analytics and tools for comments and replies.",
     openPostAngle:
-      "Buffer is an established hosted scheduler. OpenPost is the publishing layer for human and agent workflows, with workspace-bound automation, provider credentials kept inside the service, and a compact self-hosted option.",
+      "Buffer is a well-known hosted scheduler. OpenPost adds self-hosting, access that you can limit to one workspace, and clear status for each account.",
     verdict:
-      "Choose Buffer for its established hosted workflow and analytics. Choose OpenPost when source access, self-hosting, explicit publishing state, or a smaller operational model matters more.",
+      "Choose Buffer for its long-running hosted service, analytics, and community tools. Choose OpenPost for source access, self-hosting, or simpler control over each post.",
     pricing:
       "Buffer offers Free, Essentials, and Team plans and prices paid use by channel. OpenPost prices managed plans by workspace, account, post, media, and seat limits.",
     chooseOpenPost: [
-      "You want agents to work through revocable workspace access instead of receiving provider credentials.",
-      "You want an AGPL-licensed implementation and a supported self-host path.",
-      "You want drafts, renditions, jobs, and failures visible as publishing state.",
+      "You want AI tools to use access that you can limit and remove instead of social account keys.",
+      "You want AGPL source code and a supported self-host option.",
+      "You want drafts, account versions, post status, and errors in one place.",
       "You prefer workspace-based managed plans to per-channel pricing.",
     ],
     chooseThem: [
       "You need mature analytics, ideas, and community engagement today.",
-      "You want a long-established hosted product with a larger support ecosystem.",
+      "You want a long-running hosted product with more support options.",
     ],
     rows: [
       {
         area: "Publishing",
         openpost:
-          "Base posts, account renditions, reusable media, queues, and visible job outcomes.",
+          "Shared drafts, account versions, reusable media, schedules, and clear results.",
         competitor:
-          "Multi-channel planning, queueing, ideas, and publishing in a mature hosted workflow.",
+          "Planning, ideas, scheduling, and publishing in a mature hosted service.",
       },
       {
         area: "Analytics and engagement",
         openpost:
-          "Provider-reported analytics, stored engagement, and supported-account inboxes; no listening or enterprise benchmarks.",
+          "Platform analytics, comments, replies, and inboxes for supported accounts. No social listening or large-company benchmarks.",
         competitor:
-          "Analytics and community workflows are part of Buffer’s product.",
+          "Buffer includes analytics and tools for comments and replies.",
       },
       {
         area: "Automation",
         openpost:
-          "HTTP API, CLI, MCP, scoped tokens, and assistant-facing operations.",
+          "HTTP API, CLI, MCP, and tokens that can be limited to one workspace.",
         competitor:
-          "Public GraphQL API, CLI, and MCP are available, including on the Free plan with plan-specific limits.",
+          "A public GraphQL API and MCP are available, including on the Free plan with plan limits.",
       },
       {
         area: "Hosting and source",
@@ -961,7 +1013,7 @@ export const comparisons = [
         href: "https://developers.buffer.com/guides/integrations/mcp.html",
       },
     ],
-    reviewedAt: "2026-07-22",
+    reviewedAt: "2026-07-29",
   },
   {
     slug: "hootsuite",
@@ -970,16 +1022,16 @@ export const comparisons = [
     bestFor:
       "Organizations that need publishing, inbox, analytics, listening, governance, and enterprise services together.",
     openPostAngle:
-      "OpenPost is a focused publishing layer for people and automation. Hootsuite is a much broader social management system with inbox, listening, analytics, ads, and enterprise controls.",
+      "OpenPost focuses on creating, scheduling, and checking posts. Hootsuite also covers social listening, ads, reports, and large-company controls.",
     verdict:
-      "Hootsuite is the stronger fit for social teams that need to monitor, engage, report, and govern at enterprise scale. OpenPost fits teams that mainly need publishing and automation without that suite footprint.",
+      "Choose Hootsuite if a large team needs social listening, reports, and strict company controls. Choose OpenPost if you mainly need publishing, comments, inboxes, and automation.",
     pricing:
       "Hootsuite sells Standard, Professional, and Advanced plans per user, plus custom Enterprise plans. OpenPost publishes fixed monthly managed-app prices and explicit usage limits.",
     chooseOpenPost: [
-      "You want destination drafts and queue outcomes to remain reviewable around agent-assisted work.",
-      "Your core job is drafting, adapting, scheduling, and monitoring outbound posts.",
+      "You want to review account versions and results when an AI tool helps with a post.",
+      "Your main work is writing, adapting, scheduling, and checking posts.",
       "You want open source, self-hosting, and a small service without Redis.",
-      "Your scope is outbound publishing rather than social listening, an engagement inbox, or enterprise governance.",
+      "You do not need social listening, ad tools, or large-company controls.",
     ],
     chooseThem: [
       "You need a unified inbox, listening, competitive intelligence, and advanced reporting.",
@@ -989,28 +1041,28 @@ export const comparisons = [
       {
         area: "Publishing",
         openpost:
-          "Focused composer, account renditions, posting slots, queues, media, and job visibility.",
+          "A focused editor, account versions, posting times, media, and clear results.",
         competitor:
           "Unlimited scheduling on current plans, calendar, content library, bulk tools, and recommended times.",
       },
       {
         area: "Beyond publishing",
         openpost:
-          "Stored engagement, personal alerts, and supported-account inboxes; no advanced listening or advertising.",
+          "Saved comments, replies, alerts, and inboxes for supported accounts. No social listening or ad tools.",
         competitor:
           "Inbox, analytics, listening, ads, benchmarking, and AI insights are core parts of the suite.",
       },
       {
         area: "Automation",
-        openpost: "HTTP API, CLI, MCP, and workspace-bound tokens.",
+        openpost: "HTTP API, CLI, MCP, and tokens limited to one workspace.",
         competitor:
-          "Hootsuite now publishes MCP connectors for publishing, inbox, and listening workflows.",
+          "Hootsuite now offers MCP connectors for publishing, inbox, and social listening.",
       },
       {
-        area: "Operations",
-        openpost: "Managed app or compact self-hosted deployment.",
+        area: "Hosting",
+        openpost: "Managed app or a small self-hosted service.",
         competitor:
-          "Hosted service with enterprise plans, procurement, support, and compliance options.",
+          "Hosted service with large-company plans, support, and compliance options.",
       },
     ],
     sources: [
@@ -1020,51 +1072,50 @@ export const comparisons = [
         href: "https://www.hootsuite.com/integrations/mcp",
       },
     ],
-    reviewedAt: "2026-07-22",
+    reviewedAt: "2026-07-29",
   },
   {
     slug: "typefully",
     name: "Typefully",
     category: "Writing-first social workspace",
     bestFor:
-      "Creators and teams that want a highly polished writing, review, queue, and cross-platform publishing workflow.",
+      "Creators and teams that want polished writing, review, scheduling, and cross-platform publishing.",
     openPostAngle:
-      "Typefully is a mature writing-led workspace with agent integrations. OpenPost emphasizes the boundary between agents and connected accounts: scoped access, destination renditions, human review, and visible queue state.",
+      "Typefully puts writing and review first. OpenPost adds self-hosting, account versions, and access that keeps social account keys away from AI tools.",
     verdict:
-      "Typefully is the stronger writing-first product. OpenPost is the better fit when self-hosting, inspectable provider adapters, reusable operational primitives, or a Go single-service deployment are requirements.",
+      "Choose Typefully for its polished writing and review tools. Choose OpenPost for self-hosting, public source code, or a small Go service.",
     pricing:
       "Typefully sells hosted creator and team plans. OpenPost sells managed plans and also provides the complete server under AGPL-3.0-only.",
     chooseOpenPost: [
-      "You want provider credentials kept behind a revocable workspace-bound automation layer.",
+      "You want AI tools to use OpenPost access instead of your social account keys.",
       "You require source access or want to run the publishing service yourself.",
-      "You want provider capability, queue-job, failure, and storage behavior to be inspectable.",
-      "You prefer an operations-focused publishing workspace over a writing-led product.",
+      "You want to see platform support, post status, errors, and file storage in the source.",
+      "You care more about posting control than a writing-first product.",
     ],
     chooseThem: [
-      "Writing, editing, collaboration, and content refinement are the center of your workflow.",
-      "You want Typefully’s mature queue, API v2, MCP, webhooks, and agent-skill ecosystem.",
+      "Writing, editing, review, and teamwork matter most to you.",
+      "You want Typefully’s mature schedule, API v2, MCP, webhooks, and agent tools.",
     ],
     rows: [
       {
-        area: "Platforms and variants",
+        area: "Platforms and account versions",
         openpost:
-          "Account-specific renditions across supported adapters with explicit provider gates.",
+          "Different text and settings for each account, with clear platform setup needs.",
         competitor:
-          "API v2 supports X, LinkedIn, Mastodon, Threads, and Bluesky with different content per platform.",
+          "Cross-platform writing for its current networks, including newer formats such as Substack Notes and X Articles.",
       },
       {
-        area: "Writing workflow",
+        area: "Writing and review",
         openpost:
           "Focused composer with prompts, previews, formats, and media reuse.",
         competitor:
-          "Writing, thread editing, review, sharing, queueing, and collaboration are core strengths.",
+          "Writing, thread editing, review, sharing, scheduling, and teamwork are core strengths.",
       },
       {
         area: "Automation",
         openpost:
-          "HTTP API, CLI, compact MCP catalog, and scoped automation tokens.",
-        competitor:
-          "Public API v2, MCP, webhooks, Zapier, and an agent skill; next-free-slot scheduling is supported.",
+          "HTTP API, CLI, MCP, and tokens that can be limited to one workspace.",
+        competitor: "Public API v2, MCP, webhooks, Zapier, and an agent skill.",
       },
       {
         area: "Hosting and source",
@@ -1084,25 +1135,25 @@ export const comparisons = [
         href: "https://support.typefully.com/",
       },
     ],
-    reviewedAt: "2026-07-22",
+    reviewedAt: "2026-07-29",
   },
   {
     slug: "postiz",
     name: "Postiz",
     category: "Broad open-source automation suite",
     bestFor:
-      "Builders and teams that want many networks, AI generation, analytics, and agent-first automation.",
+      "Builders and teams that want many networks, AI generation, analytics, and deep automation.",
     openPostAngle:
-      "Postiz is a broad open-source automation suite. OpenPost takes the narrower position: a human-reviewable publishing layer between agents and social accounts, packaged as one Go service with no Redis queue.",
+      "Postiz covers more networks and AI tools. OpenPost is a smaller product for reviewing and publishing posts, built as one Go service with no required Redis server.",
     verdict:
-      "Choose Postiz for network breadth and AI-heavy automation. Choose OpenPost for a quieter publishing product, explicit provider caveats, and a more compact runtime.",
+      "Choose Postiz for more networks and built-in AI creation. Choose OpenPost for a simpler posting product, clear platform limits, and a smaller server.",
     pricing:
-      "Both offer cloud and self-hosted paths. Compare current hosted limits, subscription prices, and the operational cost of each self-hosted stack.",
+      "Both offer hosted and self-hosted options. Compare the current plan limits, prices, and server work for each one.",
     chooseOpenPost: [
-      "You want the agent handoff, destination review, queue state, and provider failures to stay central.",
-      "You want a focused composer, queue, reusable media, and transparent publishing failures.",
-      "You prefer Go/SvelteKit, one service, and a database-backed queue without Redis.",
-      "You want provider requirements and live-audit status documented per network.",
+      "You want to review what an AI tool made, check each account version, and see the result.",
+      "You want a focused editor, reusable media, and clear posting errors.",
+      "You prefer Go and SvelteKit, one service, and scheduled jobs without Redis.",
+      "You want setup and live-test needs listed for each network.",
     ],
     chooseThem: [
       "You need 30-plus integrations or channels beyond OpenPost’s current catalog.",
@@ -1112,19 +1163,18 @@ export const comparisons = [
       {
         area: "Network breadth",
         openpost:
-          "Ten implemented provider adapters are documented, with runtime readiness and live verification reported separately.",
+          "Ten social networks, with setup and live-test needs listed for each one.",
         competitor: "Postiz advertises 30-plus platforms and integrations.",
       },
       {
         area: "Automation",
-        openpost: "HTTP API, CLI, MCP, and workspace-bound tokens.",
-        competitor:
-          "REST API, CLI, MCP, and agent skills are first-class product paths.",
+        openpost: "HTTP API, CLI, MCP, and tokens limited to one workspace.",
+        competitor: "REST API, CLI, MCP, and agent tools are built in.",
       },
       {
         area: "Product scope",
         openpost:
-          "Publishing, workspaces, media, schedules, and visible job outcomes.",
+          "Publishing, workspaces, media, schedules, analytics, comments, and inboxes.",
         competitor: "Broader AI generation, analytics, and distribution suite.",
       },
       {
@@ -1132,7 +1182,7 @@ export const comparisons = [
         openpost:
           "Single Go binary or container; SQLite by default; no Redis required.",
         competitor:
-          "Open-source self-hosting and a managed cloud option with a larger service stack.",
+          "Open-source self-hosting and a managed service with more required parts.",
       },
     ],
     sources: [
@@ -1147,7 +1197,7 @@ export const comparisons = [
         href: "https://github.com/gitroomhq/postiz-app",
       },
     ],
-    reviewedAt: "2026-07-22",
+    reviewedAt: "2026-07-29",
   },
   {
     slug: "post-bridge",
@@ -1156,15 +1206,15 @@ export const comparisons = [
     bestFor:
       "Creators and small teams that want simple hosted cross-platform scheduling and account-specific content overrides.",
     openPostAngle:
-      "Post Bridge is a straightforward hosted cross-poster. OpenPost adds a workspace-bound agent layer, destination review, visible publishing state, open source, and self-hosting.",
+      "Post Bridge is a simple hosted cross-poster. OpenPost adds self-hosting, account-by-account review, and clear posting status.",
     verdict:
-      "Choose Post Bridge for a simple hosted path across its supported network list. Choose OpenPost when you need source access, self-hosting, threads, or deeper queue and failure visibility.",
+      "Choose Post Bridge for simple hosted scheduling. Choose OpenPost for source access, self-hosting, reply threads, or clearer post results.",
     pricing:
-      "Post Bridge requires a paid subscription and currently prices API access as a separate monthly add-on. OpenPost includes API, CLI, and MCP access across its managed plans.",
+      "Post Bridge requires a paid plan and lists API access as a $5 monthly add-on. OpenPost includes API, CLI, and MCP access on every managed plan.",
     chooseOpenPost: [
-      "You want agent and script access to remain revocable and separate from provider credentials.",
-      "You want an inspectable AGPL implementation and a self-host option.",
-      "You need X or Threads reply-thread scheduling on implemented providers.",
+      "You want AI and script access that you can remove without sharing social account keys.",
+      "You want public AGPL source code and a self-host option.",
+      "You need X or Threads reply-thread scheduling.",
       "You want CLI and MCP paths in addition to HTTP API access.",
     ],
     chooseThem: [
@@ -1175,26 +1225,26 @@ export const comparisons = [
       {
         area: "Publishing",
         openpost:
-          "Base content, account renditions, formats, posting slots, and reply threads on core providers.",
+          "Shared content, account versions, formats, posting times, and reply threads.",
         competitor:
           "Cross-platform scheduling with platform- and account-specific content overrides.",
       },
       {
         area: "Scheduling horizon",
-        openpost: "Future scheduling and recurring workspace posting slots.",
+        openpost: "Schedule at any future time or use saved weekly posting times.",
         competitor:
           "Official help documents scheduling up to two months ahead.",
       },
       {
         area: "Automation",
-        openpost: "HTTP API, CLI, and MCP included in the product surface.",
+        openpost: "HTTP API, CLI, and MCP are included.",
         competitor:
           "Public HTTP API is available as a paid add-on; current docs show posting, media, accounts, results, and some analytics.",
       },
       {
         area: "Threads and hosting",
         openpost:
-          "Reply threads on implemented providers; managed or self-hosted.",
+          "Reply threads on supported networks; managed or self-hosted.",
         competitor:
           "Official help says X and Threads thread scheduling is not currently supported; hosted service only.",
       },
@@ -1213,7 +1263,7 @@ export const comparisons = [
         href: "https://support.post-bridge.com/social-media-scheduling/thread-scheduling-on-x-twitter-and-instagram-threads-current-limitations",
       },
     ],
-    reviewedAt: "2026-07-22",
+    reviewedAt: "2026-07-29",
   },
   {
     slug: "mixpost",
@@ -1222,14 +1272,14 @@ export const comparisons = [
     bestFor:
       "Laravel teams that want a larger self-hosted product, one-time paid editions, analytics, and unlimited team access.",
     openPostAngle:
-      "Mixpost is the stronger self-host-first suite. OpenPost is a smaller publishing layer for humans and agents, available as a managed app or one Go binary or container with no Redis requirement.",
+      "Mixpost puts self-hosting first and offers a larger paid feature set. OpenPost is smaller and also offers a managed app, one Go binary, and no required Redis server.",
     verdict:
-      "Choose Mixpost when Laravel, self-hosting, analytics, and its wider Pro feature set fit your team. Choose OpenPost when you want a managed default, a smaller runtime, and one open-source edition.",
+      "Choose Mixpost when Laravel, self-hosting, analytics, and its wider Pro feature set fit your team. Choose OpenPost when you want a managed app, a smaller server, and one open-source edition.",
     pricing:
       "Mixpost offers a free Lite edition and one-time Pro and Enterprise licences. OpenPost offers the full AGPL server at no software charge plus monthly managed-app plans.",
     chooseOpenPost: [
-      "You want agent access, destination review, and queue outcomes in the same focused workflow.",
-      "You want the hosted app to be the default path with self-hosting still available.",
+      "You want AI access, account review, and post results in one focused product.",
+      "You want to start with the hosted app while keeping a self-host option.",
       "You prefer Go/SvelteKit and one binary or container without Redis.",
       "You want one AGPL-licensed codebase rather than separate product editions.",
     ],
@@ -1248,13 +1298,13 @@ export const comparisons = [
       {
         area: "Publishing suite",
         openpost:
-          "Focused composer, renditions, media, schedules, and job outcomes.",
+          "Focused editor, account versions, media, schedules, and post results.",
         competitor:
           "Broader self-hosted suite with analytics, approval, AI features, and unlimited team members in paid editions.",
       },
       {
         area: "Automation",
-        openpost: "HTTP API, CLI, MCP, and workspace-bound tokens.",
+        openpost: "HTTP API, CLI, MCP, and tokens limited to one workspace.",
         competitor:
           "Mixpost’s current pricing page lists API, MCP, and webhooks for its paid product.",
       },
@@ -1263,7 +1313,7 @@ export const comparisons = [
         openpost:
           "Go/SvelteKit, SQLite by default, one binary or container, no Redis required.",
         competitor:
-          "Laravel/PHP deployment intended for operators already comfortable with that stack.",
+          "A Laravel and PHP server for teams that already use those tools.",
       },
     ],
     sources: [
@@ -1273,7 +1323,7 @@ export const comparisons = [
       },
       { label: "Mixpost source", href: "https://github.com/inovector/mixpost" },
     ],
-    reviewedAt: "2026-07-22",
+    reviewedAt: "2026-07-29",
   },
 ] as const;
 
@@ -1281,37 +1331,37 @@ export const faqs = [
   {
     question: "Can an AI agent see my social account credentials?",
     answer:
-      "No. The agent authenticates to OpenPost with a dedicated API or MCP token. Provider credentials stay encrypted inside OpenPost. Use workspace-scoped mcp:read for inspection and grant mcp:full only when the client must create, change, schedule, or publish.",
+      "No. The AI tool uses its own OpenPost token. Your social account keys stay encrypted inside OpenPost. Use mcp:read for read-only access. Use mcp:full only when the tool must create, change, schedule, or publish.",
   },
   {
     question: "Is there a hosted free plan or automatic trial?",
     answer:
-      "No hosted free plan is implemented. You can create an account and one workspace before checkout, but connecting social accounts and publishing require an active paid plan, starting at €6 per month. A checkout may grant trialing status only when the billing offer explicitly provides it.",
+      "No. You can create an account and one workspace before checkout, but you need an active plan to connect social accounts or publish. Plans start at €6 per month. You only get a trial when the checkout offer states one.",
   },
   {
     question: "Is using OpenPost different from self-hosting?",
     answer:
-      "The app at app.openpost.social is the managed version. The project is open source and self-hostable, while the landing page focuses on the ready-to-use workflow.",
+      "The app at app.openpost.social is the managed version. You can also run the same open-source product on your own server.",
   },
   {
     question: "Does OpenPost include analytics?",
     answer:
-      "Yes. OpenPost stores supported account growth and publication engagement counters for 7, 30, or 90 days. Metric coverage depends on provider permissions. It does not include a social inbox, listening, or enterprise benchmarking.",
+      "Yes. OpenPost shows account growth and post results for 7, 30, or 90 days when the platform gives access. It also has comments, replies, and inboxes for supported accounts. It does not include social listening or large-company benchmarks.",
   },
   {
     question: "Does video publishing work everywhere?",
     answer:
-      "Video support depends on the provider. Some adapters support it, but each provider has different rules, review requirements, media limits, and public URL needs.",
+      "No. Video support and limits differ by platform. Some platforms also require app review or a public media link.",
   },
   {
-    question: "Can I bring my own provider app credentials?",
+    question: "Can I use my own social app keys?",
     answer:
-      "Yes. Operators can configure provider apps, and self-hosted users can use environment configuration or the provider app registry depending on the provider.",
+      "Yes. A self-hosted operator can set social app keys in the server settings. The exact settings depend on the platform.",
   },
   {
     question: "What happens if a post fails?",
     answer:
-      "The post and its publishing job keep a failed state and provider reason so you can review the destination outcome before retrying.",
+      "OpenPost keeps the error for each failed account. You can review it and retry only the accounts that can be retried.",
   },
 ] as const;
 

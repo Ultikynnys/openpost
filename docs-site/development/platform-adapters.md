@@ -13,6 +13,16 @@ Provider integrations live under `backend/internal/platform/`.
 - `instagram.go`
 - `tiktok.go`
 - `youtube.go`
+- `discord.go`
+
+Publishing uses the base `platform.Adapter`. Other features use optional interfaces:
+
+- `AnalyticsAdapter` reads account and post results.
+- `CommentAdapter` and `EngagementAdapter` read and manage comments.
+- `MessagingAdapter` reads account inboxes after a workspace editor turns sync on.
+- `AccountSelectionAdapter` lets a user choose a Page, Instagram account, or YouTube channel after OAuth.
+
+Keep these interfaces separate. A network can support publishing without supporting every read or moderation action.
 
 ## Provider app configuration
 
@@ -44,7 +54,8 @@ Do not store page/channel access tokens in selection options. Keep secrets in th
 ## Adding a new platform
 
 - [ ] Create `internal/platform/newplatform.go`
-- [ ] Implement the platform adapter interface
+- [ ] Implement the publishing adapter
+- [ ] Add only the optional analytics, comment, inbox, or account-selection interfaces the platform supports
 - [ ] Implement `AccountSelectionAdapter` if OAuth needs page, account, or channel selection
 - [ ] Register the provider in backend startup
 - [ ] Add env vars to `.env.example`

@@ -61,6 +61,10 @@ MASTODON_SERVERS='[
 
 OpenPost collects follower, following, and post totals from the connected instance. It also collects favourites, replies, and reblogs for published posts and thread segments. Instance software and policy determine which counters are returned.
 
+## Comments and inbox
+
+OpenPost can list replies, send replies, favourite or unfavourite replies, and delete replies posted by the connected account. You can turn on inbox collection for direct-visibility posts. Mastodon direct posts are not end-to-end encrypted; mentioned accounts and involved servers can read them.
+
 ## Notes
 
 - The current backend config default for `MASTODON_REDIRECT_URI` is `urn:ietf:wg:oauth:2.0:oob`.

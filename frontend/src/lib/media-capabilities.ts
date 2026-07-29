@@ -76,22 +76,22 @@ export function validateProviderMedia(
 }
 
 export function videoProviderSupportLabel(mimeType: string): string | null {
-	return isVideoMime(mimeType) ? 'Provider-limited' : null;
+	return isVideoMime(mimeType) ? 'Rules vary by network' : null;
 }
 
 export function videoProviderSupportDetail(mimeType: string): string | null {
 	if (!isVideoMime(mimeType)) return null;
 	const normalized = normalizeMime(mimeType);
 	if (normalized === videoTypeMP4) {
-		return 'MP4 is the safest video format. YouTube and TikTok require one video; X and Bluesky cannot mix video with images.';
+		return 'MP4 works on the most networks. YouTube and TikTok require one video. X and Bluesky cannot mix video with images.';
 	}
 	if (normalized === 'video/quicktime') {
-		return 'MOV is accepted by several video profiles, but MP4 has the widest provider support.';
+		return 'Several video posts accept MOV, but MP4 works on more social networks.';
 	}
 	if (normalized === 'video/webm') {
-		return 'WebM is mainly Mastodon-friendly; use MP4 for wider provider support.';
+		return 'WebM works best on Mastodon. Use MP4 for more social networks.';
 	}
-	return 'Video publishing depends on the selected provider. MP4 is the safest format.';
+	return 'Each selected social network has its own video rules. MP4 works best.';
 }
 
 function validateXMedia(media: MediaCapabilityItem[]): MediaCapabilityIssue[] {

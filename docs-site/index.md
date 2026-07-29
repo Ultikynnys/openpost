@@ -3,8 +3,8 @@ layout: home
 
 hero:
   name: OpenPost
-  text: The publishing layer between AI agents and your social accounts.
-  tagline: Let an agent prepare a base post and destination-specific renditions. Review the result in OpenPost, then schedule it through one visible queue.
+  text: Plan and publish social posts from one place.
+  tagline: Write one post, tailor it for each account, preview it, and choose when it goes live.
   image:
     src: /assets/brand/logo-docs.svg
     alt: OpenPost logo
@@ -16,26 +16,26 @@ hero:
       text: Self-host OpenPost
       link: /guide/quickstart
     - theme: alt
-      text: Agent workflow
-      link: /usage/agent-assisted-publishing
+      text: Read the user guide
+      link: /usage/
 
 features:
-  - title: Provider-aware renditions
-    details: Keep one campaign source while adapting copy, media, format, and settings for each account.
-  - title: Review in the web app
-    details: Inspect every destination and edit the result before you approve scheduling or publication.
-  - title: Read and mutation boundary
-    details: Use mcp:read for server-enforced inspection, then grant mcp:full only when the agent must change or publish work.
-  - title: Visible publishing queue
-    details: Follow scheduled, published, failed, and retry state instead of handing work to an opaque automation.
-  - title: Revocable access
-    details: Limit MCP tokens to one workspace, inspect recent activity, and revoke a client from Settings.
-  - title: Compact self-hosting
-    details: Run the same AGPL product as one binary or container with SQLite and no required Redis service.
+  - title: One post for each platform
+    details: Keep one shared draft, then change the text, media, format, and settings for each account.
+  - title: Calendar and clear status
+    details: See scheduled, published, failed, and retryable posts in the app.
+  - title: Analytics and replies
+    details: Track available account and post results, reply to comments, and use the inbox for supported accounts.
+  - title: Media and Studio
+    details: Reuse saved media or make still images and carousel pages in OpenPost Studio.
+  - title: API, CLI, and MCP
+    details: Use OpenPost from scripts and AI tools without sharing your social account keys.
+  - title: Managed or self-hosted
+    details: Use the managed app or run the same AGPL server as one binary or container.
 ---
 
 ::: info Managed or self-hosted
-Managed publishing starts at €6/month. Registration can create one bootstrap workspace before checkout, but connecting accounts, uploading media, scheduling, publishing, and other provider writes require an active or Polar-trialing subscription. There is no automatic hosted free tier or trial. Self-hosted OpenPost has no software subscription.
+Managed plans start at €6 per month. You can create an account and one workspace before checkout, but you need an active plan to connect social accounts, upload media, schedule, or publish. There is no hosted free plan or automatic trial. Self-hosted OpenPost has no software fee.
 :::
 
 <p>
@@ -46,7 +46,7 @@ Managed publishing starts at €6/month. Registration can create one bootstrap w
   >
 </p>
 
-## Install in a minute
+## Docker Compose example
 
 ```yaml
 services:
@@ -70,18 +70,18 @@ volumes:
 ```
 
 ::: tip
-New to OpenPost? Read the [agent-assisted publishing workflow](/usage/agent-assisted-publishing), [watch the product demo](https://youtu.be/_mZf3HzQaN8), or start with the [self-hosting quickstart](/guide/quickstart).
+New to OpenPost? Read the [user guide](/usage/), [watch the product demo](https://youtu.be/_mZf3HzQaN8), or follow the [self-hosting quickstart](/guide/quickstart).
 :::
 
 ## Choose the right docs
 
-- **[User-facing docs](/usage/)** cover the web app, CLI, and MCP workflows for drafting posts, adapting platform renditions, scheduling posts, and automating OpenPost as a product user.
-- **[Self-hosting docs](/self-hosting/)** cover installation, configuration, provider app setup, media/database storage, backups, upgrades, and troubleshooting for operators.
-- **[Developer docs](/development/)** cover architecture, API reference, backend/frontend internals, platform adapters, MCP implementation, billing infrastructure, testing, and the production-readiness plan.
+- **[User docs](/usage/)** cover the web app, CLI, and MCP. Learn how to connect accounts, write account versions, schedule posts, track results, use Studio, and manage replies.
+- **[Self-hosting docs](/self-hosting/)** cover setup, social app keys, storage, backups, upgrades, and fixes.
+- **[Developer docs](/development/)** cover the code, API, tests, platform links, billing, MCP, and releases.
 
 ## More ways to use OpenPost
 
-- Use the [CLI](/cli/) for terminal workflows, cron jobs, and CI automation.
-- Connect an assistant through [MCP](/mcp/) for agentic drafting, rendition, and scheduling workflows.
-- Rehearse a campaign with the public [OpenPost Launch Kit](https://github.com/rodrgds/openpost/tree/main/launch-kit).
+- Use the [CLI](/cli/) from a terminal, scheduled script, or CI job.
+- Connect an AI tool through [MCP](/mcp/) to read, draft, or schedule with the access you grant.
+- Test an AI-assisted campaign with the public [OpenPost Launch Kit](https://github.com/rodrgds/openpost/tree/main/launch-kit).
 - Install the [Android app](/installation/android) from the APK shipped with each GitHub release.

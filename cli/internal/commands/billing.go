@@ -12,7 +12,7 @@ import (
 func newBillingCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "billing",
-		Short: "Manage OpenPost Cloud billing",
+		Short: "Manage billing for the managed app",
 		Long:  "Inspect billing status and create hosted checkout or customer portal URLs for the active workspace.",
 	}
 	cmd.AddCommand(newBillingStatusCmd())

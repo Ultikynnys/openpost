@@ -6,7 +6,7 @@
 - TailwindCSS
 - Paraglide
 - Vitest
-- Bun
+- pnpm
 
 ## Backend
 

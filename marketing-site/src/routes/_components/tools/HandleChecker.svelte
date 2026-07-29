@@ -161,7 +161,7 @@
       if (requestVersion !== liveRequestVersion) return;
       live = {
         status: "found",
-        message: "The server resolved this account with WebFinger.",
+        message: "The server found this account.",
         identity: actorUrl,
         profileUrl,
       };
@@ -313,7 +313,7 @@
       {#if live.status === "found" && live.identity}
         <div class="mt-5 rounded-lg border bg-background p-4">
           <p class="text-xs font-medium text-muted-foreground">
-            Resolved identity
+            Account address
           </p>
           <p class="mt-1 break-all font-mono text-sm">{live.identity}</p>
         </div>

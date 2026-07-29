@@ -1,6 +1,6 @@
 # Workspaces
 
-Workspaces are the main organizational boundary in OpenPost.
+Use a workspace to keep one brand, client, or project separate.
 
 ## What belongs to a workspace
 
@@ -12,7 +12,7 @@ Workspaces are the main organizational boundary in OpenPost.
 
 ## Why they matter
 
-They let you separate brands, teams, or personal and work publishing without mixing credentials and media libraries.
+They keep brands, teams, and personal work from sharing social account keys or media by mistake.
 
 ## Invite team members
 

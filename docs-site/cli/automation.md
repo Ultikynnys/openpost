@@ -1,16 +1,16 @@
-# CLI Automation
+# Automate the CLI
 
-The CLI is designed for headless use in CI, cron, and deployment jobs. Use an API token created in OpenPost and pass it through environment variables or stdin.
+You can use the CLI in CI, cron, and deploy jobs without a browser. Create an API token in OpenPost, then pass it through an environment variable or standard input.
 
 ## Environment
 
-| Variable               | Purpose                                      |
-| ---------------------- | -------------------------------------------- |
-| `OPENPOST_TOKEN`       | Bearer token for non-interactive API access. |
-| `OPENPOST_INSTANCE`    | Default OpenPost instance URL.               |
-| `OPENPOST_WORKSPACE`   | Default workspace ID or name.                |
+| Variable                    | Purpose                                                                                          |
+| --------------------------- | ------------------------------------------------------------------------------------------------ |
+| `OPENPOST_TOKEN`            | API token for use without a browser.                                                             |
+| `OPENPOST_INSTANCE`         | Default OpenPost instance URL.                                                                   |
+| `OPENPOST_WORKSPACE`        | Default workspace ID or name.                                                                    |
 | `OPENPOST_OUTPUT_JSON=true` | Default JSON output for scripts. You can also set `output = "json"` in the selected CLI profile. |
-| `OPENPOST_PROFILE`     | Selects a named CLI profile.                 |
+| `OPENPOST_PROFILE`          | Selects a named CLI profile.                                                                     |
 
 Useful flags:
 
@@ -18,12 +18,12 @@ Useful flags:
 | ------------------------ | ----------------------------------------------------------------------------------------------------- |
 | `--yes`                  | Skip confirmation prompts.                                                                            |
 | `--json`                 | Print machine-readable JSON for one command.                                                          |
-| `--accounts <selectors>` | Select destination accounts by ID, slug, or platform. Omit for a destinationless draft.               |
+| `--accounts <selectors>` | Select accounts by ID, short name, or social network. Omit it for a draft with no accounts.           |
 | `--schedule next-slot`   | Use the next available posting schedule slot instead of posting immediately or choosing a fixed time. |
 
-For recurring jobs, pass explicit `--accounts` selectors and `--schedule next-slot`. `next-slot` is workspace-scoped and uses the selected workspace posting schedule.
+For repeat jobs, always set `--accounts` and `--schedule next-slot`. `next-slot` uses the posting schedule for the selected workspace.
 
-`--json` changes output only. Destructive or bulk-creation commands still require `--yes` in non-interactive runs.
+`--json` only changes the output. Commands that delete data or create many items still need `--yes` when no person can answer the prompt.
 
 ## GitHub Actions Example
 
@@ -56,4 +56,4 @@ jobs:
             --json
 ```
 
-The complete command and flag reference is generated from the Cobra command tree at [CLI Reference](/reference/cli).
+See every command and flag in the [CLI Reference](/reference/cli).

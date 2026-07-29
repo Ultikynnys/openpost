@@ -156,9 +156,9 @@ describe('media-capabilities', () => {
 		).toContain('YouTube publishing supports video attachments only.');
 	});
 
-	it('labels videos as provider-limited for the media library', () => {
-		expect(videoProviderSupportLabel('video/mp4')).toBe('Provider-limited');
+	it('explains that video rules vary by social network', () => {
+		expect(videoProviderSupportLabel('video/mp4')).toBe('Rules vary by network');
 		expect(videoProviderSupportLabel('image/png')).toBeNull();
-		expect(videoProviderSupportDetail('video/webm')).toContain('Mastodon-friendly');
+		expect(videoProviderSupportDetail('video/webm')).toContain('works best on Mastodon');
 	});
 });

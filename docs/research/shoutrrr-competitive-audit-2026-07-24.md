@@ -1,5 +1,7 @@
 # Shoutrrr vs OpenPost — deep product and code audit
 
+> **Historical note:** This file records the product state on 24 July 2026. It is not a current feature comparison. OpenPost added analytics, comments and replies, opt-in inboxes, feedback, Discord webhooks, and other features after this review. See the [current user docs](https://docs.openpost.social/usage/), [platform table](https://docs.openpost.social/providers/platform-limits), and [comparisons](https://openpost.social/compare) for current facts.
+
 **Audit date:** 24 July 2026
 **Shoutrrr:** `coollabsio/shoutrrr` at `b3c4789` (`v1.3.1`)
 **OpenPost release baseline:** `rodrgds/openpost` at `9515440` (`v1.1.8`)
@@ -37,22 +39,22 @@ Evidence combines the live Shoutrrr site/product tour; current source, routes, m
 
 ## Product scorecard
 
-| Area | Leader | Why |
-|---|---|---|
-| Publishing breadth | OpenPost | More platforms, formats and per-destination controls |
-| Composer speed/polish | Shoutrrr | Clear base flow, compact overrides, direct media editing |
-| Scheduling | Rough parity | Timezones, slots, next-slot and durable jobs in both |
-| Calendar UX | Shoutrrr | Month, week grid, mobile agenda and timed drag |
-| Analytics | Shoutrrr | Account/post metrics; absent in OpenPost |
-| Engagement | Shoutrrr | Persistent replies inbox; OpenPost has backend primitives only |
-| Notifications | Shoutrrr | Personal unread centre and preferences |
-| Teams | Split | Shoutrrr ownership transfer; OpenPost finer roles/orgs |
-| API/CLI/MCP | OpenPost | Broader API, released CLI, safer scalable MCP catalog |
-| Security controls | OpenPost | Revocable sessions, scoped tokens, export/deletion |
-| Self-hosting | OpenPost slightly | One embedded Go binary/container |
-| Operational audit | OpenPost | Rich lifecycle events and Activity UI |
-| User feedback | Shoutrrr | Screenshot and diagnostics widget |
-| Positioning | Shoutrrr | Clear self-hosted Buffer/Hootsuite alternative |
+| Area                  | Leader            | Why                                                            |
+| --------------------- | ----------------- | -------------------------------------------------------------- |
+| Publishing breadth    | OpenPost          | More platforms, formats and per-destination controls           |
+| Composer speed/polish | Shoutrrr          | Clear base flow, compact overrides, direct media editing       |
+| Scheduling            | Rough parity      | Timezones, slots, next-slot and durable jobs in both           |
+| Calendar UX           | Shoutrrr          | Month, week grid, mobile agenda and timed drag                 |
+| Analytics             | Shoutrrr          | Account/post metrics; absent in OpenPost                       |
+| Engagement            | Shoutrrr          | Persistent replies inbox; OpenPost has backend primitives only |
+| Notifications         | Shoutrrr          | Personal unread centre and preferences                         |
+| Teams                 | Split             | Shoutrrr ownership transfer; OpenPost finer roles/orgs         |
+| API/CLI/MCP           | OpenPost          | Broader API, released CLI, safer scalable MCP catalog          |
+| Security controls     | OpenPost          | Revocable sessions, scoped tokens, export/deletion             |
+| Self-hosting          | OpenPost slightly | One embedded Go binary/container                               |
+| Operational audit     | OpenPost          | Rich lifecycle events and Activity UI                          |
+| User feedback         | Shoutrrr          | Screenshot and diagnostics widget                              |
+| Positioning           | Shoutrrr          | Clear self-hosted Buffer/Hootsuite alternative                 |
 
 ## What Shoutrrr has that OpenPost does not
 
@@ -268,10 +270,10 @@ OpenPost's reliability debt is broader than draft conflicts: lifecycle-event ide
 
 Tracked test-file counts:
 
-| Repository | Backend | Frontend |
-|---|---:|---:|
-| Shoutrrr | 332 PHP | 110 TS/TSX |
-| OpenPost | 118 Go | 26 TS/Svelte |
+| Repository | Backend |     Frontend |
+| ---------- | ------: | -----------: |
+| Shoutrrr   | 332 PHP |   110 TS/TSX |
+| OpenPost   |  118 Go | 26 TS/Svelte |
 
 Counts are not quality scores, but Shoutrrr has much more focused frontend test-file coverage around its state-heavy composer/editors. Its manifests show no durable browser E2E suite, so OAuth/media/provider claims still need live verification.
 

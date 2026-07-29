@@ -5,11 +5,11 @@ The OpenPost CLI controls a running OpenPost instance from a terminal or automat
 Use it when you want to:
 
 - Create drafts, scheduled posts, and threads from scripts
-- Inspect provider readiness and publishing capabilities
+- Check account setup and supported post types
 - Upload, inspect, update, and clean up media from a terminal
-- Manage reusable weekly posting slots
-- Manage workspaces, account slugs, jobs, and API tokens
-- Run OpenPost from CI, cron, deploy hooks, or a personal shell workflow
+- Set a weekly posting schedule
+- Manage workspaces, account names, jobs, and API tokens
+- Use OpenPost from CI, cron, deploy scripts, or your terminal
 
 ## Typical setup
 
@@ -37,4 +37,4 @@ openpost post create --accounts main-x,linkedin --content "Hello from OpenPost" 
 - [Automation](/cli/automation)
 - [Generated command reference](/reference/cli)
 
-The command reference is generated from the Cobra command tree during docs builds, so flags and usage stay aligned with the implementation.
+OpenPost builds the command reference from the CLI code, so its commands and flags stay up to date.

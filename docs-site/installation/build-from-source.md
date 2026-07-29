@@ -1,27 +1,22 @@
 # Build From Source
 
-This path is useful for contributors and advanced operators.
+Use this path when you want to build OpenPost yourself.
 
-## Build the frontend
+## Set up the project
 
 ```bash
 git clone https://github.com/rodrgds/openpost.git
 cd openpost
-pnpm install
-pnpm --filter @openpost/web build
+direnv allow
+devenv shell -- setup
 ```
 
-## Build the backend
+## Build OpenPost
 
 ```bash
-cd backend
-cp .env.example .env
-go build -o ../openpost ./cmd/openpost
-cd ..
-./openpost
+devenv shell -- build
 ```
 
-## Notes
+The build creates the frontend and embeds it in the Go server file.
 
-- The frontend build output is embedded into the Go binary.
-- For local split frontend/backend development, use the dev workflow in [development/setup](/development/setup).
+For local development, use the steps in [Development Setup](/development/setup).

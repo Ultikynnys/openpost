@@ -1,60 +1,65 @@
 # What Is OpenPost?
 
-OpenPost is the publishing layer between AI agents and your social accounts. An authenticated assistant can inspect workspace context, prepare a base post, and adapt destination-specific renditions without receiving provider credentials. You can review those outputs in the web app, then schedule them through a visible queue.
+OpenPost helps people and teams create, tailor, preview, schedule, and publish social posts. Start with one shared draft, then change the text, media, format, and settings for each connected account.
 
-You can use the managed app or run the same AGPL product on your own server. The self-hosted stack stays small: Go, SvelteKit, SQLite, local media storage, and one deployable binary or container. Redis is not required.
+Use the managed app or run the same AGPL product on your own server. The default self-hosted setup uses one Go binary or container, SQLite, and local media storage. You do not need Redis.
 
 ## Who is this for?
 
-OpenPost is for people who need controlled publishing without adopting a large social-management suite.
+OpenPost is for people who want social publishing without a large marketing suite.
 
-- **Technical founders and developer advocates** preparing releases across several accounts
-- **Open-source maintainers** adapting project updates for different communities
-- **Small teams and agencies** that need separate workspaces, renditions, and visible delivery state
-- **Developers using MCP clients or coding agents** who want a bounded publishing service
-- **Self-hosters** who want a compact runtime and control over their deployment
+- **Creators and small brands** that publish to several accounts
+- **Teams and agencies** that need separate workspaces for brands or clients
+- **Open-source teams** that share updates with different communities
+- **Developers** that use the API, CLI, or MCP
+- **Self-hosters** that want control over the server and stored data
 
-## The controlled workflow
+## How it works
 
-1. Give the agent a workspace-scoped, revocable `mcp:read` token.
-2. Let it inspect accounts, media, drafts, schedules, and provider readiness while the server blocks mutations.
-3. Grant workspace-scoped `mcp:full` access only when it needs to prepare or change drafts and destination-specific renditions.
-4. Review and edit every destination in the web app.
-5. Approve scheduling only after the content, accounts, media, and time are correct.
-6. Inspect the queue, published URLs, failures, and lifecycle events.
+1. Choose Post, Thread, Story, Short video, or Video.
+2. Write the shared text and add media.
+3. Select the social accounts.
+4. Tailor and preview the version for each account.
+5. Publish now or choose a time.
+6. Check the result, errors, and retry options in the app.
 
-OpenPost exposes only read-safe discovery and query tools to `mcp:read` tokens and rejects mutation attempts server-side. Human review is still the recommended process rather than a mandatory approval stage. An `mcp:full` token can execute mutations when the client allows them.
+OpenPost also has a media library, a still-image editor called Studio, posting schedules, analytics, comments and replies, personal alerts, and inboxes for supported accounts.
 
-See [Agent-Assisted Publishing](/usage/agent-assisted-publishing) for the complete workflow.
+If an AI tool helps, give it an OpenPost token instead of your social account keys. `mcp:read` is read-only. `mcp:full` can create, change, schedule, publish, reply, or moderate. Review the result before you allow a change. See [Agent-Assisted Publishing](/usage/agent-assisted-publishing).
 
 ## Managed or self-hosted
 
-Managed publishing starts at €6/month. Registration can create one bootstrap workspace before checkout, but connecting accounts, uploading media, scheduling, publishing, and other provider writes require an active or Polar-trialing subscription. OpenPost does not provide an automatic hosted free tier or trial.
+Managed plans start at €6 per month. You can create an account and one workspace before checkout, but you need an active plan to connect social accounts, upload media, schedule, or publish. There is no hosted free plan or automatic trial.
 
-Self-hosted OpenPost has no software subscription. You operate its server, TLS, backups, upgrades, provider applications, and secrets.
+Self-hosted OpenPost has no software fee. You manage the server, TLS, backups, updates, social apps, and secrets.
 
 ## What OpenPost supports
 
-- **Publishing integrations:** X, Mastodon, Bluesky, LinkedIn profiles and Organization Pages, Threads, Facebook Pages, Instagram Business and Creator accounts, TikTok, YouTube, and Discord webhooks
-- **Communications:** cross-provider engagement, personal notifications, and a unified inbox for supported message APIs
+- **Publishing:** X, Mastodon, Bluesky, LinkedIn profiles and Organization Pages, Threads, Facebook Pages, Instagram Business and Creator accounts, TikTok, YouTube, and Discord webhooks
+- **Content types:** posts, threads, Stories, short videos, and videos, based on each platform
+- **Results:** account and post analytics when the platform grants access
+- **Replies:** comments, replies, and moderation for supported platforms
+- **Inbox:** opt-in message collection for X, Bluesky, Facebook Pages, Instagram, and Mastodon
+- **Workspaces:** separate accounts, media, schedules, members, and tool access
+- **Tools:** web app, HTTP API, CLI, and MCP
 
-Provider approval, app configuration, quotas, public-media access, or live-account verification can still block a specific account or format. See [Supported Platforms & Limitations](/providers/platform-limits) for the current profile-level matrix.
+App review, account access, API limits, public media links, or a failed live test can still block an account or format. See [Supported Platforms & Limitations](/providers/platform-limits).
 
 ## What OpenPost is not
 
-OpenPost focuses on drafting, adapting, scheduling, publishing, provider-reported analytics, engagement, notifications, and supported social conversations. It does not include enterprise social listening, ad management, or benchmarking. Media, metric, engagement, and messaging support vary by provider.
+OpenPost does not include social listening, ad management, a CRM, or large-company benchmarks. Each social network gives different access to media, analytics, comments, and messages.
 
 **Current limitations:**
 
-- **Video support is provider-dependent** — some provider video paths exist in the codebase, but support is not consistent across every platform and not every path is verified end to end
-- **No full feature parity guarantee** — each social network has different capabilities, and some provider-specific features may be unavailable in OpenPost
-- **Analytics follow provider truth** — OpenPost stores supported counters and trends, but does not invent cross-provider equivalents or offer enterprise benchmarking
-- **Enterprise approval workflows are not the current focus** — OpenPost is not positioning itself as an enterprise review-and-approval suite
-- **Provider APIs can be restrictive** — each platform has its own API limits, rate limits, and approval requirements that may affect publishing
+- **Video differs by platform.** Formats, lengths, file sizes, and app review rules vary.
+- **Features differ by platform.** OpenPost only shows actions that the connected account can use.
+- **Analytics keep each metric distinct.** Views, impressions, and reach do not mean the same thing.
+- **There is no separate server approval step for every tool action.** A person should review AI-made work before allowing it.
+- **Social networks can change their APIs.** Their limits and review rules can affect publishing.
 
-## What it deliberately avoids
+## What it does not require
 
-- Redis or external queue requirements for simple deployments
-- Postgres as a mandatory dependency
-- Hosted-account lock-in
-- Splitting the app into multiple services before it is necessary
+- Redis for scheduled jobs
+- PostgreSQL for a small self-hosted setup
+- The managed app when you prefer to self-host
+- Several app services for the default install

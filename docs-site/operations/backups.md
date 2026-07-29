@@ -124,9 +124,9 @@ Set `OPENPOST_MEDIA_SNAPSHOT` to the local media-backup directory to include its
 same evidence. A database-only pass is not proof that uploaded media can be recovered; the output
 states `media_snapshot=not_checked` when no media snapshot is supplied.
 
-### Hosted restore evidence
+### Hosted restore test
 
-On 22 July 2026, the latest hosted Postgres backup was restored into an isolated temporary
+On 22 July 2026, a hosted Postgres backup was restored into an isolated temporary
 database. Compressed-backup integrity, public schema restoration, and core account, workspace, and
 post queries passed. The hosted R2 bucket was copied to a separate local snapshot and `rclone check`
 reported no differences before the same drill verified that snapshot. The temporary database was

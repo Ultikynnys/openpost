@@ -19,12 +19,10 @@ describe('SampleCampaign', () => {
 			.toBeVisible();
 		await expect.element(screen.getByText('Illustrative sample')).toBeVisible();
 		await expect
-			.element(
-				screen.getByRole('heading', { name: 'Launch OpenPost with proof, not a generic claim' })
-			)
+			.element(screen.getByRole('heading', { name: 'Show what OpenPost does' }))
 			.toBeVisible();
 		await expect
-			.element(screen.getByText(/This sample makes no campaign or provider calls/))
+			.element(screen.getByText(/This sample does not call a social network/))
 			.toBeVisible();
 		await expect
 			.element(screen.getByRole('tab', { name: /X/ }))
@@ -35,7 +33,7 @@ describe('SampleCampaign', () => {
 		const screen = await renderCampaign();
 
 		await screen.getByRole('tab', { name: /LinkedIn/ }).click();
-		const editor = screen.getByRole('textbox', { name: 'LinkedIn rendition' });
+		const editor = screen.getByRole('textbox', { name: 'LinkedIn version' });
 		await expect.element(screen.getByText(/AI can write a launch post/).first()).toBeVisible();
 
 		await screen.getByRole('button', { name: 'Mark reviewed' }).click();
@@ -57,7 +55,7 @@ describe('SampleCampaign', () => {
 		}
 
 		await expect.element(screen.getByText('5 of 5 reviewed')).toBeVisible();
-		await expect.element(screen.getByText('All five sample renditions are reviewed')).toBeVisible();
+		await expect.element(screen.getByText('All five sample versions are reviewed')).toBeVisible();
 		expect(screen.getByRole('button', { name: /publish/i })).toHaveLength(0);
 		expect(screen.getByRole('button', { name: /schedule/i })).toHaveLength(0);
 	});

@@ -1,46 +1,46 @@
-# Provider Roadmap
+# Platform Roadmap
 
-OpenPost supports provider-aware publishing through the web app, CLI, HTTP API, MCP, and ChatGPT-style clients. This page records the contract for adding providers without exposing unfinished adapters as connectable.
+OpenPost connects to social networks through the web app, CLI, HTTP API, MCP, and ChatGPT-style clients. This page explains when a new platform may appear as connectable.
 
-The provider discovery API returns current and planned providers so clients can render a consistent account-connection surface.
+The platform list API returns current and planned platforms so each client can show the same connection choices.
 
-| Status                | Meaning                                                                        |
-| --------------------- | ------------------------------------------------------------------------------ |
-| `available`           | Adapter is registered on this server and users can connect accounts.           |
-| `needs_configuration` | Adapter exists, but the operator has not configured the provider app.          |
-| `planned`             | Product roadmap item. The backend will not start a real OAuth flow for it yet. |
+| Status                | Meaning                                                                |
+| --------------------- | ---------------------------------------------------------------------- |
+| `available`           | The platform is set up on this server, so users can connect accounts.  |
+| `needs_configuration` | The code is ready, but the operator has not set the social app keys.   |
+| `planned`             | The platform is planned. The server will not start a real sign-in yet. |
 
-## Planned adapters
+## Planned platforms
 
-No planned adapter is exposed as connectable right now. New provider roadmap items should stay in `planned` status until backend publish behavior, provider discovery, UI states, docs, and tests land together.
+No planned platform appears as connectable now. Keep a new platform in `planned` until its server code, platform list, UI, docs, and tests are ready.
 
-## Supported adapters with provider gates
+## Platforms that need app review or live tests
 
-| Provider | Current product focus                                                                                   |
-| -------- | ------------------------------------------------------------------------------------------------------- |
-| Facebook | Selected Page publishing for text, one public HTTPS image URL, or one public HTTPS video URL. |
-| Instagram | Selected Instagram Business or Creator account publishing for single image/Reel, carousel, Story, and comment-reply paths, with live verification still recommended. |
-| TikTok   | Direct-post video, inbox/upload video, and photo-post paths, with app-review/live-account verification still required. |
-| YouTube  | Selected channel uploads with privacy/metadata/thumbnail/playlist settings and resumable upload handling, with live verification still recommended. |
+| Platform  | Current support                                                                                                                             |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| Facebook  | Selected Page publishing for text, links, one image, 2–10 images, video, Reel, or Story; comments and opt-in inbox.                         |
+| Instagram | Selected Business or Creator account publishing for image, carousel, Reel, or Story; comments and opt-in inbox.                             |
+| TikTok    | Direct Post and inbox upload for video, plus 1–35 image photo posts. App review and a live account test still apply.                        |
+| YouTube   | Selected channel uploads for Shorts and videos with privacy, title, description, thumbnail, and playlist settings; comments and moderation. |
 
 ## Account-selection requirement
 
-Some providers cannot be modeled as a single OAuth user profile:
+Some platforms need the user to choose an account after OAuth:
 
 - Instagram connects the selected Instagram Business or Creator account behind a Facebook Page.
 - YouTube connects the selected channel.
 
 Instagram, Facebook, and YouTube use the backend account-selection flow today. TikTok uses a direct OAuth account flow and is connectable when configured; its current adapter supports video plus photo-post paths, subject to TikTok app access and live verification.
 
-## Implementation contract
+## What a new platform must include
 
-Every provider still needs to implement the shared backend adapter before it becomes connectable:
+Every platform needs the shared server connection before users can connect it:
 
 - OAuth or app-password account connection.
 - Token refresh behavior, when the provider supports refresh.
 - Profile lookup for stable account identity, or account-selection support for page/channel providers.
 - Media upload rules and validation.
 - Publish behavior, including reply/thread semantics where available.
-- Documentation for callbacks, app review requirements, media limits, and known API caveats.
+- Docs for callbacks, app review, media limits, and known API limits.
 
-Until an adapter lands, keep the provider in `status: "planned"` and do not accept it in `OPENPOST_PROVIDER_APPS`.
+Until the code is ready, keep the platform in `status: "planned"` and do not accept it in `OPENPOST_PROVIDER_APPS`.

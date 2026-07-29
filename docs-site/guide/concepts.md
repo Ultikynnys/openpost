@@ -1,54 +1,53 @@
 # Concepts
 
-Understanding OpenPost's model makes the OAuth and scheduling docs easier to follow.
+These terms appear in the app and docs.
 
 ## Workspace
 
-A workspace groups accounts, media, prompts, and scheduling settings. Most content in OpenPost is workspace-scoped.
+A workspace keeps a brand or client's accounts, posts, media, prompts, schedule, and members together.
 
-Workspace members belong to a workspace with a role. Pending invitations reserve
-team seats until they are accepted, revoked, or expire.
+Each member has a role. A pending invite uses a team seat until someone accepts it, you cancel it, or it expires.
 
 ## Social account
 
-A connected provider account, such as one X account or one Mastodon profile.
+A connected social account, such as one X account or one Mastodon profile.
 
-## Post
+## Publication
 
-A scheduled or published artifact that can target one or multiple provider
-accounts. A post starts from base content and can carry destination-specific
-renditions when one copy does not fit every platform.
+A publication is OpenPost's saved record for one post, thread, Story, short video, or video. It keeps the shared content, selected accounts, account versions, media, schedule, and status together.
+
+The app usually calls this a **post**. The API and CLI use **publication**.
 
 ## Draft
 
-An editable post before it is scheduled or published. Drafts can be created
-from the web app, CLI, API, or MCP tools.
+An editable publication that has not gone live. You can create a draft from the web app, CLI, API, or MCP.
 
 ## Thread
 
-A chain of posts published in sequence. OpenPost maps thread replies to each provider's API model.
+A set of posts published in order. OpenPost sends each reply in the form required by the social network.
 
-## Rendition
+## Account version
 
-Account-specific content for a post when one message does not fit every
-connected destination equally well.
+The text, media, format, and settings for one selected account. It can use the shared content or override it.
+
+The API and CLI call this a **rendition**.
 
 ## Media
 
-Files stored locally and attached to posts. Some providers, especially Threads, require the media to be publicly reachable through `OPENPOST_MEDIA_URL`.
+Files saved in the media library and attached to posts. Threads, Facebook, Instagram, and some TikTok publishing flows need a public media link set through `OPENPOST_MEDIA_URL`.
 
 ## Job
 
-Durable background work stored in the configured OpenPost database. Publishing should go through the jobs table rather than transient goroutines.
+Work that OpenPost saves in its database and runs in the background. Saved jobs let scheduled posts survive a server restart.
 
 ## Provider
 
-An adapter implementing one social platform's auth, publish, and media behavior.
+A social network that OpenPost can connect to. Technical docs may also use **provider** for the code that handles a network.
 
 ## Callback URL
 
-The URL a provider redirects back to after auth. These must match what you configure in the provider developer console.
+The address a social network returns to after sign-in. It must match the address set in that network's developer portal.
 
 ## Public media URL
 
-The externally reachable base URL for uploaded media. This matters most for Threads.
+The public base address for uploaded media. Threads, Facebook, Instagram, and some TikTok flows use it to fetch a file.

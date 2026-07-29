@@ -16,7 +16,7 @@ extra origins only, and rejects wildcard `*` origins at startup.
 
 ## `OPENPOST_MEDIA_URL`
 
-The public base URL for uploaded media. This must be correct for Threads and should match your reverse proxy path.
+The public base URL for uploaded media. Threads, Facebook, Instagram, and some TikTok posts need it. It should match your reverse proxy path.
 
 ## Provider callback URLs
 
@@ -27,6 +27,6 @@ These are configured in the provider developer portals and should point back to 
 - `OPENPOST_APP_URL` still points at localhost in production
 - Hosted/cloud mode relies on implicit localhost CORS origins instead of explicit `OPENPOST_EXTRA_CORS_ORIGINS`
 - `OPENPOST_EXTRA_CORS_ORIGINS` contains `*` while credentials are enabled
-- `OPENPOST_MEDIA_URL` points at an internal hostname
+- `OPENPOST_MEDIA_URL` points at an internal hostname that a social network cannot open
 - Provider callback URLs still use the local development domain
 - Reverse proxy serves a different hostname than the one configured in OAuth apps

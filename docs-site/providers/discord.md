@@ -1,6 +1,6 @@
 # Discord Webhooks
 
-Discord uses an incoming webhook URL instead of OAuth. In **Accounts**, choose **Discord**, paste a webhook URL, and connect it. OpenPost verifies the webhook before saving it and stores the complete URL as an encrypted credential.
+Discord uses an incoming webhook link instead of OAuth. In **Accounts**, choose **Discord**, paste the link, and connect it. OpenPost checks the webhook and encrypts the full link before saving it.
 
 Create a webhook in the target Discord channel under **Integrations → Webhooks**. Treat its URL like a password. Anyone who has it can post to that channel.
 
@@ -14,12 +14,12 @@ OpenPost supports:
 - reply references for text-and-thread segments;
 - scheduled publishing and deletion of messages created by the webhook.
 
-Text and files are sent together as a streamed `multipart/form-data` webhook request with `wait=true`, so OpenPost records the provider message ID. User and role mentions are disabled by default to prevent scheduled content from notifying a server unexpectedly.
+OpenPost sends the text and files together and saves the Discord message ID. User and role mentions are off by default, so a scheduled post does not send an unexpected alert.
 
-OpenPost only accepts HTTPS webhook URLs on Discord-owned hosts and the exact webhook path shape. It rejects custom ports, credentials in the URL, fragments, control characters, and lookalike hosts.
+OpenPost only accepts HTTPS webhook links on Discord domains. It rejects unsafe or fake links.
 
 ## Limits
 
-Discord applies the upload size limit of the server or account that owns the webhook. OpenPost validates the attachment count, but Discord remains the source of truth for byte limits and rate limits.
+Discord sets the upload limit for the server or account that owns the webhook. OpenPost checks the file count and uses a safe 10 MiB limit, but Discord can enforce a different limit.
 
-Discord webhooks are outbound-only. They do not provide a channel inbox, personal Discord notifications, or direct messages.
+Discord webhooks can only send. They do not let OpenPost read a channel inbox, personal alerts, or direct messages.

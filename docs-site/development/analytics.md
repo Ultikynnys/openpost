@@ -1,17 +1,17 @@
 # Analytics Architecture
 
-Analytics is an optional platform capability, not part of the core publishing adapter. This keeps publishing stable and leaves room for future inbox, notification, and messaging capabilities without creating one large provider interface.
+Analytics is an optional platform feature, not part of the core publishing adapter. Publishing, analytics, comments, and inboxes use separate interfaces so a network can support only the features its API allows.
 
 ## Boundaries
 
 `platform.AnalyticsAdapter` is optional and declares account and content support plus required scopes. Its methods return normalized counters. Missing keys mean “not reported”; zero means the provider returned a measured zero.
 
-The publishing `platform.Adapter` remains unchanged. Existing `platform.CommentAdapter` also remains separate. Future social hub work should add focused capabilities, such as notification queries or message conversations, with their own authorization, cursors, retention rules, and audit events. It should not add these methods to either the publishing or analytics interface.
+The publishing `platform.Adapter` remains unchanged. `platform.CommentAdapter`, `platform.EngagementAdapter`, and `platform.MessagingAdapter` stay separate from it and from analytics. Each read path has its own access checks, cursors, data limits, and audit records.
 
 ## Persistence
 
 - `analytics_account_snapshots` stores immutable normalized account measurements.
-- `analytics_rendition_snapshots` stores one aggregate measurement per canonical rendition. Thread segment provider IDs are collected together and OpenPost's own replies are removed from reply totals.
+- `analytics_rendition_snapshots` stores one total per published account version. Thread segment IDs are collected together and OpenPost's own replies are removed from reply totals.
 - `analytics_sync_states` stores the latest metrics, collection status, safe error code, last attempt and success, next due time, and unchanged streak.
 
 Snapshots include workspace and provider identity for scoped queries and deletion. Raw provider payloads are intentionally discarded.

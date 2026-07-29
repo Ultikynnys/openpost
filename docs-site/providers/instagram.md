@@ -15,6 +15,8 @@ https://your-domain.com/api/v1/accounts/instagram/callback
 - App permissions:
   - `instagram_basic`
   - `instagram_content_publish`
+  - `instagram_manage_comments`
+  - `instagram_manage_messages`
   - `instagram_manage_insights`
   - `pages_show_list`
   - `pages_read_engagement`
@@ -42,7 +44,8 @@ If `redirect_uri` is omitted, OpenPost derives it from `OPENPOST_APP_URL`.
 - Publishes a single image URL with a caption.
 - Publishes a single video URL as a Reel.
 - Publishes 2-10 media items as a carousel when multiple compatible media items are attached.
-- Supports story publishing and comment replies when the post/rendition settings request those paths.
+- Publishes Stories and lists, replies to, hides, and deletes eligible comments.
+- Supports opt-in inbox collection and replies within Meta's reply window.
 - Supports scheduling and platform variants through the normal OpenPost post flow.
 
 ## Current Limits

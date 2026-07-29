@@ -2,18 +2,21 @@
 
 > Status: July 2026.
 
-OpenPost is a production self-hosted scheduler and managed service. The shared core stays open and portable; hosted-only concerns such as secrets, provider credentials, deployment, and live-account verification stay in operations.
+OpenPost is a self-hosted scheduler and managed service. The shared product stays open and easy to move. The hosted service manages its own secrets, social app keys, deployment, and live account tests.
 
 ## Recently Landed
 
 - Monorepo/Turborepo workspace with `frontend`, `docs-site`, and `marketing-site`.
-- OpenPost Cloud landing page, SEO routes, tools, tips, blog, comparison pages, and pricing handoff.
-- Cloud runtime primitives: edition mode, Postgres driver, S3-compatible media storage, direct S3 uploads, cloud-mode config validation, and portable database query fixes.
+- OpenPost marketing site with product, platform, pricing, security, open-source, tools, and comparison pages.
+- Hosted service support: edition mode, PostgreSQL, S3-compatible media, direct uploads, hosted-mode checks, and database fixes.
 - Polar billing foundation: checkout, portal sessions, signed webhooks, local subscription snapshots, entitlement checks, usage counters, Settings billing UI, and CLI billing commands.
-- MCP and ChatGPT-style app foundation: remote `/mcp`, stdio proxy, OAuth PKCE account linking, Apps SDK widget metadata, scoped MCP tokens, tool-call auditing, prompts, and scheduling/media/provider tools.
-- Provider readiness work: provider app registry, database-backed provider credentials for operator tooling, account-provider discovery, and first slices for Facebook Pages, Instagram Business, TikTok, and YouTube.
+- MCP and ChatGPT-style app base: remote `/mcp`, local proxy, OAuth PKCE account linking, Apps SDK widget details, limited MCP tokens, tool-call history, prompts, and tools for schedules, media, and social networks.
+- Platform setup and publishing for Facebook Pages, Instagram Business and Creator accounts, TikTok, and YouTube, plus operator tools for social app keys and account discovery.
 - Production diagnostics: `/ready`, CLI `instance health`, redacted `instance diagnostics`, provider catalog snapshots, and billing usage snapshots.
-- Provider-reported analytics: durable account and publication measurements, adaptive background collection, 7/30/90-day reporting, and explicit permission and support states.
+- Platform analytics with saved account and post results, background updates, 7/30/90-day views, and clear access errors.
+- Comments, moderation, personal alerts, and opt-in inbox collection for supported accounts.
+- Discord webhook publishing with text, files, reply links, scheduling, and deletion.
+- OpenPost Studio for local or workspace still-image designs, templates, brand items, background removal, and media export.
 - E2E coverage for marketing, docs audience separation, auth/onboarding, settings/billing/MCP activity, provider discovery, workspace switching, composer scheduling, media library, and app smoke flows.
 
 ## Current Priorities
@@ -24,14 +27,14 @@ OpenPost is a production self-hosted scheduler and managed service. The shared c
    - Repeat database, media, and secrets restore drills as the hosted data model changes.
 
 2. **Provider live-account verification**
-   - Re-test OAuth, refresh, media validation, publish, retry, and quota behavior with real accounts for every enabled provider.
-   - Keep factual review, quota, permission, and live-verification notes attached to each provider and format.
+   - Re-test OAuth, token refresh, media checks, publishing, retries, and API limits with real accounts for every enabled social network.
+   - Keep fact checks, API limit notes, access needs, and live-test notes with each social network and post type.
    - Do not use maturity labels as a substitute for current account-specific readiness.
 
 3. **Release reliability**
    - Keep Docker, binary, CLI, Android, frontend, docs, and marketing release paths reproducible.
    - Confirm release artifacts and docs match the current tag before publishing.
-   - Follow SemVer from `v1.27.9` and keep release impact tied to Conventional Commits.
+   - Follow SemVer from the latest release tag and base each version change on Conventional Commits.
    - Continue running `devenv shell -- verify` before release tags.
 
 4. **Operator support polish**
@@ -42,7 +45,7 @@ OpenPost is a production self-hosted scheduler and managed service. The shared c
 
 - Finish live-provider follow-through: better provider-specific error messages, retry notes, and launch-status updates after real verification.
 - Improve thread management for atomic updates to scheduled or failed thread chains.
-- Finish pagination metadata for any remaining large lists that still only return bare arrays.
+- Add page details to any large API lists that still return one plain array.
 - Verify analytics counters and permissions with live accounts, then expand coverage only where providers expose stable, approved reads.
 - Add optional writing assistance without making self-hosted OpenPost depend on one hosted AI provider.
 - Continue Android/mobile polish after the web and hosted flows are stable.

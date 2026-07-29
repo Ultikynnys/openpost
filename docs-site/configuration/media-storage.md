@@ -1,6 +1,6 @@
 # Media Storage
 
-OpenPost stores media through its `BlobStorage` abstraction. Local filesystem storage is the self-hosted default; S3-compatible storage is the cloud-ready driver path.
+OpenPost stores media on the local file system by default. It can also use S3 or R2 storage.
 
 ## Video processing dependency
 
@@ -21,7 +21,7 @@ OPENPOST_MEDIA_URL=https://openpost.example.com/media
 
 ## Why public media URLs matter
 
-Threads requires the backend to hand Meta a publicly reachable media URL. If OpenPost cannot expose the file publicly, Threads media publishing will fail.
+Threads, Facebook, Instagram, and some TikTok posts need a public HTTPS link to the media. Those posts will fail if the social network cannot open the file.
 
 ## Backups
 
@@ -53,9 +53,9 @@ When `OPENPOST_EDITION=cloud`, OpenPost refuses to start unless:
 - `OPENPOST_S3_SECRET_ACCESS_KEY` is set
 - `OPENPOST_S3_PUBLIC_BASE_URL` is set
 
-`OPENPOST_S3_PUBLIC_BASE_URL` is required in cloud mode because provider APIs need stable, publicly reachable media URLs.
+`OPENPOST_S3_PUBLIC_BASE_URL` is required in cloud mode because social networks need stable public media links.
 
-The S3-compatible storage driver supports direct browser-to-S3 upload sessions and bounded-memory multipart storage for large files.
+The browser can upload straight to S3 or R2. OpenPost sends larger files in parts without loading the whole file into memory.
 
 For direct browser uploads, the bucket must allow CORS requests from the OpenPost app origin. For Cloudflare R2, apply a bucket CORS rule like this, replacing the origin with your `OPENPOST_APP_URL`:
 
@@ -75,7 +75,7 @@ For direct browser uploads, the bucket must allow CORS requests from the OpenPos
 }
 ```
 
-Save the policy as `cors.json`, apply it with `wrangler r2 bucket cors set <bucket> --file cors.json`, and verify it with `wrangler r2 bucket cors list <bucket>`. Without this bucket policy, the browser rejects the presigned `PUT` during its preflight request and reports `Failed to fetch`.
+Save the rule as `cors.json`, apply it with `wrangler r2 bucket cors set <bucket> --file cors.json`, and verify it with `wrangler r2 bucket cors list <bucket>`. Without this rule, the browser blocks the upload and reports `Failed to fetch`.
 
 Streaming upload flow:
 
@@ -85,11 +85,10 @@ Streaming upload flow:
 
 S3-compatible storage returns a presigned browser-to-bucket target for files within the provider's single-request limit. Larger files use an authenticated OpenPost target and are written to the bucket as 8 MiB multipart parts. Local storage uses the same authenticated streaming target and writes directly to disk. Configure the reverse proxy in front of OpenPost to accept the largest video size you intend to support; X subscribed accounts can upload videos as large as 16 GiB.
 
-OpenPost reserves a pending media record before issuing the target, then finalizes the upload by streaming the stored object through metadata checks and the SHA-256 dedupe hash, creating thumbnails when possible, recording media-upload usage, and marking the media ready. Large files are not retained in application memory.
+OpenPost makes a pending Media item first. After upload, it checks the saved file, finds matching files with SHA-256, makes a thumbnail when possible, records usage, and marks the file ready. It does not keep a large file in app memory.
 
 The web app uses upload sessions automatically for current local and S3-compatible deployments. It falls back to the legacy multipart endpoint only when the server does not advertise upload-session support.
 
-OpenPost stores destination-scoped provider media state for uploaded media IDs
-so failed destination retries can reuse an existing provider upload. Providers
-that publish by public media URL, such as Threads, Instagram, Facebook, and
-TikTok, are intentionally not cached so signed media URLs stay fresh.
+OpenPost can reuse a file it already sent to a social network when one account
+needs a retry. Networks that fetch a public media link, such as Threads,
+Instagram, Facebook, and TikTok, get a fresh link instead.

@@ -31,7 +31,7 @@ changes live in [Developer Docs](/development/).
 - [ ] Back up database files, media files, and secrets together.
 - [ ] Run at least one test restore before relying on the backup.
 
-## OpenPost Cloud Or Hosted Operators
+## Managed Or Hosted Operators
 
 - [ ] Set `OPENPOST_EDITION=cloud`.
 - [ ] Set `OPENPOST_DATABASE_DRIVER=postgres`.
@@ -57,7 +57,7 @@ changes live in [Developer Docs](/development/).
 - [ ] Add YouTube through `OPENPOST_PROVIDER_APPS` or the instance-admin provider app API if video uploads are enabled, and confirm the Google Cloud project has YouTube Data API v3 enabled.
 - [ ] Configure Mastodon servers in `MASTODON_SERVERS` if you need fixed self-hosted Mastodon apps.
 - [ ] Confirm custom Mastodon instance registration works if you rely on dynamic Mastodon connections.
-- [ ] Keep first-slice providers in limited rollout until their OAuth, media, publish, refresh, retry, and quota behavior is verified with live accounts.
+- [ ] Limit each new social network until OAuth, media, publishing, token refresh, retries, and API limits pass a live account test.
 - [ ] Create one test account connection per enabled provider.
 - [ ] Publish a private or low-risk test post with and without media for every enabled provider.
 

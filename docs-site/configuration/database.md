@@ -1,6 +1,6 @@
 # Database
 
-OpenPost uses SQLite by default for self-hosted installs. The backend also has an explicit database-driver setting so hosted deployments can run on Postgres without changing the local-first default path.
+OpenPost uses SQLite by default when you run it yourself. Hosted installs can use Postgres by changing the database driver.
 
 ## Default path
 
@@ -44,4 +44,4 @@ When `OPENPOST_EDITION=cloud`, OpenPost refuses to start unless:
 - `OPENPOST_DATABASE_DRIVER=postgres`
 - `OPENPOST_DATABASE_URL` is set
 
-This keeps the hosted product from accidentally booting against a local SQLite file. SQLite remains the recommended self-hosted path until the hosted migration and operational runbooks are complete.
+This stops a hosted server from starting with a local SQLite file by mistake. SQLite remains the recommended choice for a small self-hosted server.

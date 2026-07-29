@@ -14,21 +14,21 @@ How to fix: correct the env vars and ensure the process can write to the target 
 
 Symptoms: auth flow starts but does not complete.
 
-Likely cause: callback mismatch, missing credentials, or incorrect provider scopes.
+Likely cause: callback mismatch, missing app keys, or missing social network access.
 
-How to check: compare the configured callback URL with the provider developer console and inspect backend logs.
+How to check: compare the callback URL with the social network's developer page and inspect server logs.
 
-How to fix: align the callback, client credentials, and scopes.
+How to fix: correct the callback, app keys, and requested access.
 
 Provider-specific checks: see [Provider Troubleshooting](/providers/troubleshooting).
 
 ## OAuth callback mismatch
 
-Symptoms: provider rejects the redirect or returns an invalid redirect error.
+Symptoms: the social network rejects the redirect or returns an invalid redirect error.
 
 Likely cause: your public URL or callback path does not match exactly.
 
-How to check: verify `OPENPOST_APP_URL`, provider callback settings, and any explicit redirect URI env vars.
+How to check: verify `OPENPOST_APP_URL`, social network callback settings, and any callback environment variables.
 
 How to fix: set the exact public callback URL and restart OpenPost.
 
@@ -44,7 +44,7 @@ How to fix: update the origin settings and restart the backend.
 
 ## Media uploads fail
 
-Symptoms: uploads error before scheduling or provider publishing rejects media.
+Symptoms: an upload fails before scheduling or a social network rejects the media.
 
 Likely cause: file too large, unsupported type, or unwritable media path.
 
@@ -52,9 +52,9 @@ How to check: inspect upload responses and verify filesystem permissions.
 
 How to fix: correct permissions or reduce media size.
 
-## Threads media publishing fails
+## A social network cannot fetch media
 
-Symptoms: Threads text posts work but media posts fail.
+Symptoms: text posts work, but media posts to Threads, Facebook, Instagram, or TikTok fail.
 
 Likely cause: `OPENPOST_MEDIA_URL` is not public.
 
@@ -66,17 +66,17 @@ How to fix: expose OpenPost through HTTPS and set a public media URL.
 
 Symptoms: post remains queued or failed.
 
-Likely cause: worker error, provider outage, or invalid account token.
+Likely cause: a saved job failed, the social network is down, or the account token is no longer valid.
 
-How to check: inspect logs around the scheduled time and check account connectivity.
+How to check: inspect logs and Activity around the scheduled time, then check the account connection.
 
-How to fix: resolve the provider or credential issue, then retry if your workflow supports it.
+How to fix: fix the social network or account problem, then retry the failed account.
 
 ## Database path is wrong
 
 Symptoms: empty app state after restart or startup errors.
 
-Likely cause: database stored in the wrong path or on ephemeral storage.
+Likely cause: the database is in the wrong path or in storage that is lost with the container.
 
 How to check: confirm the actual file path mounted into the container or host.
 
@@ -96,18 +96,18 @@ How to fix: keep SQLite on local durable storage and avoid multiple writers.
 
 Symptoms: auth callbacks or login flows bounce to the wrong host.
 
-Likely cause: mismatch between proxy hostname and OpenPost URL config.
+Likely cause: the proxy host name and OpenPost URL do not match.
 
 How to check: compare browser URL, proxy config, and `OPENPOST_APP_URL`.
 
-How to fix: normalize the public hostname and restart.
+How to fix: use the same public host name and restart OpenPost.
 
 ## Wrong public URL
 
-Symptoms: pages work locally but provider callbacks or shared media links fail.
+Symptoms: pages work locally, but social network callbacks or shared media links fail.
 
 Likely cause: localhost or internal hostnames leaked into public-facing settings.
 
-How to check: inspect `OPENPOST_APP_URL`, `OPENPOST_MEDIA_URL`, and provider callback entries.
+How to check: inspect `OPENPOST_APP_URL`, `OPENPOST_MEDIA_URL`, and social network callback entries.
 
 How to fix: replace internal URLs with the real public HTTPS domain.

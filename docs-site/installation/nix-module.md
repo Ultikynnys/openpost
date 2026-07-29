@@ -1,6 +1,6 @@
 # Nix Module
 
-OpenPost can also be deployed through a NixOS module. This is the production setup behind `https://app.openpost.social` (my instance).
+OpenPost can also run through a NixOS module. The hosted app at `https://app.openpost.social` uses this setup.
 
 ## What this example shows
 

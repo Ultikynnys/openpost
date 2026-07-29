@@ -21,8 +21,7 @@ export async function loadStudioConfig(): Promise<{
 	presets: StudioPreset[];
 }> {
 	const { data, error } = await client.GET('/studio/presets', {});
-	if (error || !data)
-		throw new Error(problemMessage(error, 'Could not load Studio configuration.'));
+	if (error || !data) throw new Error(problemMessage(error, 'Could not load the Studio setup.'));
 	return data as unknown as {
 		enabled: boolean;
 		schema_version: number;

@@ -16,6 +16,7 @@ https://your-domain.com/api/v1/accounts/youtube/callback
   - `https://www.googleapis.com/auth/userinfo.email`
   - `https://www.googleapis.com/auth/youtube.readonly`
   - `https://www.googleapis.com/auth/youtube.upload`
+  - `https://www.googleapis.com/auth/youtube`
 - One video attachment on the OpenPost post or YouTube-specific variant
 
 ## Configuration
@@ -40,13 +41,14 @@ If `redirect_uri` is omitted, OpenPost derives it from `OPENPOST_APP_URL`.
 - Uploads one video through the YouTube Data API `videos.insert` endpoint with resumable-upload handling.
 - Uploads videos as private by default, with YouTube-specific privacy settings available through publication/variant settings.
 - Supports title, description, tags, category, made-for-kids, thumbnail, and playlist settings when provided.
-- Derives fallback title/description from the post or platform variant when explicit video metadata is absent.
+- Uses the post or account version for a fallback title and description when those fields are empty.
 - Supports scheduling and platform variants through the normal OpenPost post flow.
+- Lists comments, sends replies, moderates comments, and deletes comments from the connected channel when Google grants access.
 
 ## Current Limits
 
-- Comment/moderation workflows are not the focus of the YouTube slice.
-- Live-account verification is still recommended before relying on production YouTube publishing, especially for app-review-sensitive metadata and playlist/thumbnail behavior.
+- Comment and moderation actions require YouTube permissions and can vary by channel or comment.
+- Test a live account before you rely on YouTube publishing, especially for app review, playlists, and thumbnails.
 
 ## Analytics
 

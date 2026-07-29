@@ -1,17 +1,17 @@
 # Scheduling
 
-OpenPost schedules canonical publications through a durable database-backed queue. A publication holds the shared source, destination renditions, media, schedule, and delivery state for every supported content mode.
+OpenPost saves scheduled posts in its database, so they survive a server restart. The same saved record keeps the shared content, account versions, media, time, and status.
 
 ## Plan from Calendar
 
 Calendar has month and week views. Filter it by workspace, platform, and status:
 
-- **Scheduled** items show their proposed run time and can be moved.
-- **Published** items show their actual run time when it is available and stay locked as history.
+- **Scheduled** items show when they should run and can be moved.
+- **Published** items show when they ran and cannot be moved.
 
-Select an empty future day to create a publication with that date and time already filled in. On desktop, drag a scheduled item to another future day or time. On touch layouts, open the item and use its reschedule controls. Published items cannot be moved.
+Select an empty future day to start a post with that date and time. On desktop, drag a scheduled item to another future day or time. On a phone or tablet, open the item and use its time controls.
 
-Calendar, Activity, and the sidebar planner all read the same publication inventory, so a text post, thread, Story, short video, or video appears once and opens in the composer that owns that content mode.
+Calendar, Activity, and the side planner show the same posts. Each text post, thread, Story, short video, or video appears once and opens in the right editor.
 
 ## Choose a time in the composer
 
@@ -19,21 +19,21 @@ The composer interprets dates and times in the workspace timezone. You can:
 
 - choose an exact future date and time;
 - request the next free slot from the workspace posting schedule;
-- save a proposed time while the publication remains a draft; or
-- schedule the publication, which validates it and creates the durable publishing job.
+- save a time while the post stays a draft; or
+- choose **Schedule**, which checks the post and saves the posting job.
 
-Setting `scheduled_at` on a draft does not queue it by itself. The schedule action creates the primary job and marks the publication and renditions as scheduled. Clearing the schedule returns them to draft without removing completed or failed job history.
+For API, CLI, and MCP users: setting `scheduled_at` on a draft does not schedule it by itself. The schedule action creates the posting job and marks the post and account versions as scheduled. Clearing the schedule returns them to draft and keeps old success and error history.
 
 Configure the workspace timezone, week start, reusable posting slots, and optional natural posting delay in **Settings → Workspace**.
 
 ## Delivery and recovery
 
-The background worker claims jobs from the configured OpenPost database, so scheduled work survives application restarts without Redis. SQLite is the self-hosted default; Postgres is supported and required for hosted cloud mode.
+OpenPost runs saved jobs from its database, so scheduled posts survive restarts without Redis. SQLite is the self-hosted default. The hosted service uses PostgreSQL.
 
-Use **Activity** to inspect scheduled, published, failed, and draft publications. A failed destination keeps its provider error and recovery action. Retry only after correcting the account, content, quota, or provider issue shown there.
+Use **Activity** to see drafts and scheduled, published, or failed posts. A failed account keeps the platform error and the next action. Fix the account, content, API limit, or platform issue before you retry.
 
 ## What to watch
 
 - Keep the workspace timezone correct before creating schedules.
-- Provider limits and account capabilities are checked again when a publication is scheduled or published.
-- Provider outages can leave destinations failed or waiting for retry; inspect Activity instead of assuming a queued job published.
+- OpenPost checks platform limits and account access again when you schedule or publish.
+- A platform outage can leave an account failed or waiting for another try. Check Activity instead of assuming the post went live.

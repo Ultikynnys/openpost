@@ -1,6 +1,6 @@
 # Billing And Usage Foundation
 
-OpenPost Cloud billing is built around local entitlement snapshots and durable usage counters. The backend should not call Polar on every API request.
+Managed OpenPost billing uses saved plan limits and durable usage counters. The backend does not call Polar on every API request.
 
 ## Current pieces
 

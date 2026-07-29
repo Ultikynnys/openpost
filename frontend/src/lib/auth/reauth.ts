@@ -140,5 +140,5 @@ export async function acquireReauthGrant(
 		await startOIDCReauth(action, options.providerID);
 		return null;
 	}
-	throw new Error('Add a passkey or link an identity provider before continuing.');
+	throw new Error('Add a passkey or link a work sign-in service before continuing.');
 }

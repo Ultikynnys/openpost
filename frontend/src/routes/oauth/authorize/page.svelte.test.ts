@@ -76,7 +76,7 @@ describe('OAuth authorization request validation', () => {
 			.element(screen.getByText(/Full MCP access can create and edit drafts/))
 			.toBeVisible();
 		await expect
-			.element(screen.getByText(/the MCP client decides when to show its approval prompt/))
+			.element(screen.getByText(/The MCP client decides when to ask for approval/))
 			.toBeVisible();
 	});
 
@@ -88,8 +88,8 @@ describe('OAuth authorization request validation', () => {
 		const screen = await render(AuthorizePage);
 
 		await expect
-			.element(screen.getByText(/Read-only access can inspect the selected workspace/))
+			.element(screen.getByText(/Read-only access can view the selected workspace/))
 			.toBeVisible();
-		await expect.element(screen.getByText(/cannot create or change data/)).toBeVisible();
+		await expect.element(screen.getByText(/cannot change data/)).toBeVisible();
 	});
 });

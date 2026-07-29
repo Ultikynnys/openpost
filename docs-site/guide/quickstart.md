@@ -37,7 +37,7 @@ cp .env.example .env
 
 Set fresh values for the two required secrets, then set `OPENPOST_APP_URL`, `OPENPOST_PUBLIC_URL`, and `OPENPOST_MEDIA_URL` for the URL where users will actually reach the app. For a local evaluation, `http://localhost:8080` is fine.
 
-Start with Bluesky if you want the easiest first provider: no server-side OAuth app is required. Add other provider env vars later as needed.
+Start with Bluesky if you want the easiest first platform: it does not need a server-side OAuth app. Add other platform settings later.
 
 ## 3. Generate secrets
 
@@ -67,13 +67,13 @@ Visit `http://localhost:8080`.
 1. Create your OpenPost account.
    The first account on the instance becomes the instance admin automatically.
 2. Create or select a workspace.
-3. Connect your first provider.
-4. Create a post, choose a scheduled time a few minutes ahead, and save it.
-5. Confirm the post appears in the activity view as scheduled, then wait for it to publish.
+3. Connect your first social account.
+4. Create a post, choose a time a few minutes ahead, then choose **Schedule**.
+5. Confirm the post appears in Activity as scheduled, then wait for it to go live.
 
-## 7. Recommended first provider
+## 7. Recommended first platform
 
-Start with **Bluesky** if you want the fastest validation path:
+Start with **Bluesky** if you want the fastest first check:
 
 1. In Bluesky, open Settings and create an app password.
 2. In OpenPost, go to Accounts and connect Bluesky with your handle and app password.
@@ -83,13 +83,13 @@ Start with **Bluesky** if you want the fastest validation path:
 
 - You see the registration or login screen on first load.
 - After signing in, OpenPost opens the workspace-aware app shell.
-- The Accounts screen shows your connected provider.
-- The composer lets you pick that account as a destination.
+- The Social accounts screen shows your connected account.
+- The editor lets you pick that account.
 - The Activity screen shows the scheduled post, then later shows it as published.
 
 ## HTTPS note
 
-`http://localhost:8080` is fine for a local evaluation. Before configuring production OAuth callbacks, put OpenPost behind HTTPS with a real domain and update `OPENPOST_APP_URL`, `OPENPOST_PUBLIC_URL`, and `OPENPOST_MEDIA_URL`. That matters for X, LinkedIn, Threads callback validation, WebAuthn/passkeys, and Threads public media fetches.
+`http://localhost:8080` is fine for a local test. Before you set up OAuth for real accounts, put OpenPost behind HTTPS with a real domain and update `OPENPOST_APP_URL`, `OPENPOST_PUBLIC_URL`, and `OPENPOST_MEDIA_URL`. X, LinkedIn, and Threads need exact callback addresses. Passkeys need HTTPS. Threads, Facebook, Instagram, and some TikTok flows need public media links.
 
 If you want to close self-service signups after setup, set `OPENPOST_DISABLE_REGISTRATIONS=true` and restart OpenPost. The first account is still allowed on a brand-new instance even when that flag is enabled.
 
@@ -98,4 +98,4 @@ If you want to close self-service signups after setup, set `OPENPOST_DISABLE_REG
 - [Docker Compose details](/installation/docker-compose)
 - [Single binary install](/installation/binary)
 - [Environment variables](/configuration/environment-variables)
-- [Provider setup](/providers/overview)
+- [Platform setup](/providers/overview)

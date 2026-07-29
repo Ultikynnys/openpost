@@ -1,12 +1,12 @@
 # TikTok
 
-TikTok supports video and photo publishing through OAuth plus the Content Posting API Direct Post and upload flows.
+TikTok supports video and photo posts through OAuth and the Content Posting API.
 
 ## What you need
 
 - TikTok developer app
 - Login Kit and Content Posting API access
-- Provider app registry entry with provider `tiktok`
+- Social app entry with provider key `tiktok`
 - Callback URL: `https://your-domain.com/api/v1/accounts/tiktok/callback`
 - Public `OPENPOST_MEDIA_URL` or S3/R2 public media URL for Direct Post media URLs
 - Scopes: `user.info.basic`, `user.info.profile`, `user.info.stats`, `video.list`, `video.publish`, `video.upload`, and photo-post access when using image posts
@@ -24,15 +24,15 @@ Example `OPENPOST_PROVIDER_APPS` entry:
 ]
 ```
 
-## Current scope and limits
+## Support and limits
 
-- Supports one video attachment for Direct Post.
-- Supports inbox/upload mode for video when configured.
+- Direct Post supports one video.
+- Inbox upload supports one video when enabled.
 - Supports 1-35 JPEG or WebP photos, up to 20 MB each, when TikTok app access allows the photo-post path.
 - Photo descriptions support up to 4,000 characters; video captions support up to 2,200 characters.
 - Text-only posts are not supported.
 - Pull-from-URL media must use public HTTPS URLs under a URL prefix or domain verified in the TikTok developer console.
-- Live-account and app-review behavior still needs deployment verification.
+- Test the real app and account after TikTok approves access.
 
 ## Analytics
 

@@ -124,7 +124,7 @@ That short brief makes editing faster and gives each post a job.`;
         class="flex min-h-11 cursor-pointer items-center gap-3 self-end rounded-lg border px-3 py-2"
       >
         <Checkbox bind:checked={normalizeBullets} />
-        <span class="text-sm font-medium">Normalize list bullets</span>
+        <span class="text-sm font-medium">Use the same bullet style</span>
       </label>
     </fieldset>
   </section>

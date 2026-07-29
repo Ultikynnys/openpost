@@ -110,8 +110,8 @@ func newPublicationUpdateCmd() *cobra.Command {
 	}
 	cmd.Flags().StringVar(&flags.title, "title", "", "publication title")
 	cmd.Flags().StringVar(&flags.profile, "content-profile", "", "content profile")
-	cmd.Flags().StringVar(&flags.content, "content", "", "canonical post or caption text")
-	cmd.Flags().StringVar(&flags.file, "file", "", "read canonical text from file or '-' for stdin")
+	cmd.Flags().StringVar(&flags.content, "content", "", "shared post or caption text")
+	cmd.Flags().StringVar(&flags.file, "file", "", "read shared text from file or '-' for stdin")
 	cmd.Flags().StringVar(&flags.url, "url", "", "source URL; pass an empty value to clear")
 	cmd.Flags().StringVar(&flags.schedule, "schedule", "", "new schedule time; use draft to clear")
 	cmd.Flags().BoolVar(&flags.force, "force", false, "overwrite after reviewing a revision conflict")

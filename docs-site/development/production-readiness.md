@@ -1,103 +1,81 @@
-# Production Architecture and Readiness
+# Production Architecture and Checks
 
-OpenPost runs as a production self-hosted product and managed service. This page records the shared architecture, remaining provider verification work, and the checks that keep both deployment models ready. Private credentials and infrastructure stay in the deployment and operations layer.
+OpenPost uses one product core for the managed app and self-hosted servers. This page records the current architecture and the checks needed before a release or public campaign.
 
-## Product Direction
+## Product and public sites
 
-- Keep **OpenPost** as the product name.
-- Use **OpenPost Cloud** for the official hosted service.
-- Keep `openpost.social` as the marketing site, `docs.openpost.social` as the docs site, and `app.openpost.social` as the app.
-- Position the product as: write one idea, adapt it into platform-native renditions, and publish intentionally.
-- Keep self-hosting credible: no artificial self-hosted feature crippling.
+- **OpenPost** is the product name.
+- The official service is the **managed app**.
+- `openpost.social` is the marketing site.
+- `docs.openpost.social` is the docs site.
+- `app.openpost.social` is the managed app.
+- The self-hosted server uses the same AGPL application code.
 
-## Architecture Principles
+## Shared architecture
 
-- Keep one shared product core in this repo.
-- Keep secrets, production deployment config, provider credentials, monitoring, and private admin scripts outside this repo.
-- Prefer interface-backed hosted primitives so self-hosted and cloud use the same API paths.
-- Keep SQLite and local media as first-class self-hosted defaults.
-- Add Postgres and S3/R2 as cloud-ready drivers, not replacements.
-- Treat billing as entitlements and usage limits, not provider-specific checks scattered through handlers.
-- Use background jobs for provider publishing, media processing, token refresh, and other restart-sensitive work.
+- `OPENPOST_EDITION=selfhost|cloud` selects the server mode.
+- Self-hosted mode uses SQLite and local media by default.
+- Cloud mode requires Postgres, S3-compatible media storage, and Polar billing settings.
+- The API keeps normal database work portable across SQLite and Postgres.
+- Durable database jobs handle publishing, media work, token refresh, analytics, comments, and inbox updates that must survive a restart.
+- The built SvelteKit app is embedded in the Go server.
 
-## Current architecture and operating checks
+Keep production secrets, social app keys, monitoring, backups, and private operator scripts outside this repository.
 
-### 1. Cloud Foundation
+## Billing and limits
 
-- `OPENPOST_EDITION=selfhost|cloud` is implemented. Cloud mode now refuses to boot unless the required Postgres, S3-compatible media, and Polar billing config is present.
-- `OPENPOST_DATABASE_DRIVER=sqlite|postgres` is implemented. SQLite remains the self-hosted default; Postgres is the hosted/cloud path.
-- `OPENPOST_STORAGE_DRIVER=local|s3` is implemented with local filesystem and S3-compatible media storage.
-- Keep runtime database expressions portable. Background job recovery, job workspace scoping, publish-job cleanup, MCP scheduling cleanup, and schedule overview date aggregation now avoid SQLite-only JSON/date expressions so cloud Postgres deployments use the same paths.
-- Add usage counters and entitlement checks at API boundaries. The foundation is in place with monthly `usage_counters`, workspace-creation entitlement checks, team invitation seat checks, and scheduled-post usage accounting.
-- Enforce quota boundaries for workspace, team, provider, media, scheduling, and publishing paths. Social account connection quota enforcement is in place in the shared account saver, team invitations reserve active plus pending seats, media upload quota enforcement is in place for monthly uploaded bytes and stored bytes, scheduled-post quota enforcement is in place for single posts and threads, and publishing-worker quota enforcement is in place for published posts and provider write calls.
-- Add monthly usage counters for scheduled posts, published posts, uploaded bytes, stored bytes, and provider write calls. The publishing worker records successful published posts and attempted provider writes separately.
+- The managed app uses Polar for checkout, subscriptions, the billing portal, and signed webhooks.
+- OpenPost saves the current subscription and plan limits in its own database. Normal API requests do not call Polar.
+- Limits cover workspaces, members, social accounts, posts, media, schedules, and provider writes.
+- Self-hosted mode has permissive defaults unless the operator changes them.
+- The managed app allows one account and one workspace before checkout. An active plan is required to connect social accounts, upload media, schedule, or publish.
+- The public prices and limits live in `marketing-site/src/routes/_marketing.ts`.
 
-### 2. Billing And Plans
+## Social networks
 
-- Use Polar for OpenPost Cloud checkout, subscriptions, customer portal, and webhooks. Cloud mode now requires the Polar access token, webhook secret, checkout/return URLs, and Starter/Creator/Pro/Team/Agency product IDs at startup.
-- Store local subscription state and entitlement snapshots; do not call Polar on every request. The Polar checkout, customer portal, and webhook foundation now creates hosted billing sessions, verifies signed events, deduplicates webhook deliveries, and upserts organization subscription snapshots.
-- Keep self-hosted entitlement defaults permissive and configurable.
-- Keep cloud pre-checkout access constrained. Cloud mode now allows a first bootstrap workspace, then evaluates workspace expansion from active organization subscription snapshots instead of falling back to self-hosted unlimited behavior.
-- Keep the public plan catalog, backend entitlement snapshots, and Polar product metadata aligned. The current prices and limits are maintained in the [managed pricing page](https://openpost.social/pricing) and `marketing-site/src/routes/_marketing.ts`.
-- Keep cloud access before checkout constrained. Any trial access must come from Polar's `trialing` state and must not be described as automatic.
+The current publishing adapters are X, Mastodon, Bluesky, LinkedIn, Threads, Facebook, Instagram, TikTok, YouTube, and Discord.
 
-### 3. Provider Readiness
+- Bluesky and Discord need no shared server app keys.
+- Mastodon can use set server apps or create an app for a public server during connection.
+- Facebook, Instagram, and YouTube let the user choose the Page, account, or channel after OAuth.
+- Threads, Facebook, Instagram, and TikTok need public HTTPS media links for server-side media fetches.
+- Each account and format still needs a live test. Working code and server setup do not prove that a social network will accept a real post.
 
-- The provider app registry is implemented for cloud and self-hosted credentials. Startup builds adapters from a normalized registry populated by legacy env vars, optional `OPENPOST_PROVIDER_APPS` JSON, and active encrypted `provider_apps` database rows managed through instance-admin APIs for hosted/operator-managed credentials.
-- Replace fixed Mastodon env-only config with dynamic instance registration for cloud.
-- Keep user-supplied remote URLs guarded against SSRF. Dynamic Mastodon registration and MCP URL media ingestion now reject private/local targets, validate redirects, use guarded dial-time resolution, and ignore environment proxy settings for these fetches.
-- Add production OAuth app checklists for X, LinkedIn, Threads, Facebook, Instagram, YouTube, TikTok, Mastodon, and Bluesky.
-- Delay platform launch promises until provider-specific publish, refresh, media, and retry behavior is verified end to end. TikTok, Facebook, Instagram, and YouTube now have first-slice adapters, but all four still need live-account verification before being treated as fully proven production providers.
+Analytics, comments, and inbox reads use optional adapter interfaces. They do not run inside the core publishing interface. Page loads read saved data; background jobs call social network APIs.
 
-### 4. Media Pipeline
+## Posts and media
 
-- Move cloud uploads to direct browser-to-S3/R2 upload sessions. The S3 storage driver now issues authenticated upload sessions with presigned PUT targets, pending media reservations, completion finalization, dedupe, and quota accounting.
-- Track media assets separately from provider-uploaded media IDs.
-- Store size, checksum, dimensions, duration, processing status, storage driver, object key, and public URL mode.
-- Add provider media state for X, LinkedIn, Mastodon, Threads, Instagram,
-  Facebook, YouTube, and TikTok. Destination-scoped provider media state now
-  records successful upload IDs for retry reuse while avoiding cached public
-  URLs for Threads, Instagram, Facebook, and TikTok.
-- Keep Threads and other public-URL providers working through signed/public media URLs.
+- Publications are the user-visible post list.
+- Post and Thread use the text-and-thread composer and a linked editor row.
+- Story, Short video, and Video use focused editors.
+- Each selected account can have its own text, media, format, and settings.
+- Schedules and current status stay on the publication and its account versions.
+- Media uses local storage or S3-compatible storage through `BlobStorage`.
+- Direct S3/R2 uploads use a signed browser upload when the file fits one request. Larger files stream through bounded multipart uploads.
+- OpenPost Studio saves still-image designs, pages, templates, brand items, history, and media links. Its saved document format does not depend on Fabric.js.
 
-### 5. Draft And Rendition Model
+## API, CLI, and MCP
 
-- Keep **Post** and **Draft** as the user-facing units of work.
-- Use **Renditions** as destination-specific versions with format-specific validation.
-- Keep the composer centered on base content, destinations, media, per-platform renditions, and release timing.
-- Leave old source-idea compatibility tables in place only until a migration can safely remove or repurpose them.
-- Support release choreography: same time, staggered posts, platform-first launches, and follow-up threads.
+- The web app, CLI, MCP, and direct HTTP clients share backend access checks, plan limits, validation, jobs, and audit records.
+- Remote MCP is available at `/mcp`.
+- The local `openpost-mcp` process forwards standard input and output messages to that endpoint.
+- MCP and API tokens can be read-only or full-access and can be limited to one workspace.
+- MCP exposes a small search tool plus separate read and write execution tools. The server checks every operation again before it runs.
+- Settings shows recent MCP tool calls and lets users remove tokens and OAuth grants.
 
-### 6. MCP And ChatGPT App
+## Public copy and docs
 
-- Expose a remote MCP endpoint for OpenPost Cloud at `/mcp`.
-- Keep the MCP server backend-owned, not frontend-owned.
-- The local `openpost-mcp` stdio binary is implemented for desktop/self-hosted clients. The CLI stdio proxy loads the active OpenPost profile/token and forwards frames to `/mcp`.
-- Reuse CLI/API client behavior where possible, but keep MCP stdout strict.
-- Start with safe semantic tools and prompts: list workspaces, list accounts, create/list/update drafts, set post renditions, upload media from URL, schedule post or draft, cancel post, get post status, suggest next slot, and prompt templates for planning posts, adapting renditions, and reviewing the queue. The remote MCP foundation now supports workspace/account listing, draft creation/review/revision, destination-specific rendition updates, guarded URL media upload, quota-checked scheduling for new posts and existing drafts, post status reads, scheduled-post queue inspection/cancellation, next-slot suggestions, and agentic scheduling prompt templates.
-- Require auth for remote MCP, scope sessions, log tool calls, and expose revocation in settings. Tool-call logging is now persisted in `mcp_tool_calls`, recent calls are visible in settings with API-token client attribution, Apps SDK-facing protected-resource/tool security metadata, invocation status labels, and output schemas are in place. Settings can create/revoke dedicated `mcp:read` or `mcp:full` tokens, OAuth authorization-code + PKCE account linking mints audience-bound MCP tokens, and both manual tokens and OAuth approvals can be limited to one workspace. Read tokens receive only read-safe tools and search results, and mutation attempts are rejected server-side.
+- `CHANGELOG.md` is the source for the public changelog and GitHub release notes.
+- Marketing includes product, platform, pricing, security, open-source, comparison, changelog, and free-tool pages.
+- The sitemap must include every current public page, platform guide, comparison, and tool.
+- User docs explain the product. Self-hosting docs explain server work. Developer docs explain the code and contracts.
+- Keep claims about access, limits, app review, and live tests with the relevant social network page.
 
-### 7. Marketing, SEO, And Docs
+## Verification order
 
-- Keep `marketing-site/` public in this repo.
-- Keep `docs-site/` technical and task-oriented.
-- Keep pricing, platform, comparison, security, open-source, changelog, and tools pages crawlable on `openpost.social`. The public sitemap now covers each current landing page, platform guide, comparison, and tool.
-- Keep the free tools useful without an account. The current set covers social image design, character counting, platform previews, thread splitting, handle checks, LinkedIn formatting, and timezone-aware posting plans, with focused browser checks.
-- Keep app, public Studio, and marketing form controls on the shared Shadcn-svelte primitives so focus, touch targets, dark mode, and interaction states do not drift.
-- Keep `CHANGELOG.md` authoritative. The public changelog and tagged GitHub release notes are generated from it.
-- Keep docs on install, providers, configuration, CLI, operations, and development.
-
-### 8. Verification
-
-- Add Playwright smoke tests for marketing, login, onboarding, composer, scheduling, accounts, settings, and media. Coverage is now in place for marketing, docs audience separation, browser registration/login/onboarding, app settings/billing/MCP activity/session revocation, Activity job pagination, provider discovery, custom Mastodon connect, plan onboarding, account-specific composer previews, composer scheduling through suggested slots, and media-library upload/listing.
-- Add backend regression tests before each schema/service change.
-- Keep `devenv shell -- lint` as the push gate.
-- For hosted deployment work, verify the real app URL, docs URL, marketing URL, release workflow, database backups, and logs.
-
-## Change verification order
-
-1. Update source behavior, generated contracts, tests, and public docs in the same change.
+1. Update behavior, generated contracts, tests, and public docs together.
 2. Run `devenv shell -- doctor` before broad or release work.
-3. Run targeted checks while iterating, then `devenv shell -- verify`.
-4. For visible changes, run the relevant app, docs, or marketing browser suite at desktop and phone widths.
-5. For a production release, follow [Releases and Versioning](/development/releases) and verify the workflow, release, deployed revision, and public readiness.
+3. Run focused checks while editing, then `devenv shell -- verify`.
+4. For visible changes, run the related app, docs, or marketing browser suite at desktop and phone widths.
+5. Before a public campaign, complete the [Launch Verification Matrix](/providers/launch-matrix) for each account and format.
+6. For a production release, follow [Releases and Versioning](/development/releases) and verify the workflow, release, deployed revision, and public readiness.

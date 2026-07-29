@@ -11,7 +11,7 @@ openpost instance diagnostics \
   --json
 ```
 
-The snapshot includes health/readiness checks, token presence, workspace context, and a redacted last-100-line log tail. It does not print raw tokens or server secrets.
+The report checks server health, setup, tokens, and the current workspace. It also includes the last 100 log lines with private data removed. It does not print full tokens or server secrets.
 
 ## First Checks
 
@@ -19,7 +19,7 @@ The snapshot includes health/readiness checks, token presence, workspace context
 2. Compare the callback URL in the provider console with the OpenPost callback URL exactly.
 3. Confirm `OPENPOST_APP_URL` is the public HTTPS app origin.
 4. For media providers that fetch files server-side, confirm `OPENPOST_MEDIA_URL` or `OPENPOST_S3_PUBLIC_BASE_URL` is public HTTPS.
-5. Open the failed post and inspect each destination error message.
+5. Open the failed post and read the error for each account.
 6. Check logs around the callback or scheduled publish time.
 
 ## Common Symptoms
@@ -33,19 +33,19 @@ The snapshot includes health/readiness checks, token presence, workspace context
 | Scheduled post fails later             | Token expired, revoked, or provider rejected the payload                | Reconnect the account and retry with provider-compatible media.                                                                 |
 | Provider returns permission errors     | App lacks product access, scopes, or review approval                    | Enable the product and request the listed scopes in the provider console.                                                       |
 
-## Destination failure actions
+## What to do when one account fails
 
-Activity shows each destination separately. A publication can succeed on one account and fail on another.
+Activity shows each account on its own. A post can work on one account and fail on another.
 
-| Failure                                                  | What OpenPost does                                                        | Next action                           |
-| -------------------------------------------------------- | ------------------------------------------------------------------------- | ------------------------------------- |
-| Invalid content, unsupported media, or duplicate content | Stops automatic retries for that destination                              | Edit the draft, then publish again    |
-| Expired or revoked authentication                        | Stops automatic retries                                                   | Reconnect the account                 |
-| Provider permission or billing restriction               | Stops automatic retries                                                   | Open the provider or billing settings |
-| Rate limit, network failure, or provider outage          | Retries with bounded backoff and the provider's retry time when available | Wait, use **Retry destination**, or retry all failed destinations from the notification |
-| Unknown rejection                                        | Keeps a safe generic message and does not guess that retrying is safe     | Review the draft and provider status  |
+| Failure                                                  | What OpenPost does                                                            | Next action                                                               |
+| -------------------------------------------------------- | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| Invalid content, unsupported media, or duplicate content | Stops automatic retries for that account                                      | Edit the draft, then publish again                                        |
+| Expired or revoked authentication                        | Stops automatic retries                                                       | Reconnect the account                                                     |
+| Provider permission or billing restriction               | Stops automatic retries                                                       | Open the provider or billing settings                                     |
+| Rate limit, network failure, or social network outage    | Waits longer between retries and uses the network's retry time when available | Wait, use **Retry account**, or retry all failed accounts from the notice |
+| Unknown rejection                                        | Keeps a safe generic message and does not guess that retrying is safe         | Review the draft and provider status                                      |
 
-OpenPost stores only a safe failure category, status, provider code when it is suitable to expose, retry time, and direct action. Provider response bodies and credentials are not shown. Manual retry uses the existing publication job. It can target one rendition or every retryable failed rendition while skipping successful destinations; OpenPost does not migrate the whole queue to one job per destination.
+OpenPost saves the error type, status, safe error code, next retry time, and the action you can take. It does not show full social network responses or account keys. A manual retry uses the same post job. It can retry one failed account or all failed accounts without posting again to accounts that already worked.
 
 ## X
 
@@ -71,7 +71,7 @@ OpenPost stores only a safe failure category, status, provider code when it is s
 ## LinkedIn
 
 - Callback must match `https://your-domain.com/api/v1/accounts/linkedin/callback` unless `LINKEDIN_REDIRECT_URI` overrides it.
-- LinkedIn permissions and app review can block publishing or social-action/comment workflows even when OAuth succeeds.
+- LinkedIn permissions and app review can block posts or comments even when OAuth succeeds.
 - If thread child posts fail, set `LINKEDIN_DISABLE_THREAD_REPLIES=true` until the app has the required comment permissions.
 - Video upload uses LinkedIn's Videos API and still needs live-account re-verification before broad production claims.
 
@@ -119,5 +119,5 @@ Before filing an issue or escalating an operator incident, include:
 - Provider name and account type being tested
 - Deployment method and public app/media URLs
 - Exact callback URL configured in the provider console
-- Failed post destination error, if the account connection succeeded
+- Failed account error from the post, if the account connection succeeded
 - Whether the same account can publish text-only content

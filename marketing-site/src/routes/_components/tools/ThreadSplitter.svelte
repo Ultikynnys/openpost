@@ -94,7 +94,7 @@ Then turn that idea into a short series: explain the problem, share the method, 
     <div class="mt-5 grid gap-4 sm:grid-cols-2">
       <div>
         <label for="thread-platform" class="text-sm font-medium"
-          >Destination</label
+          >Social network</label
         >
         <AppSelect
           id="thread-platform"
@@ -104,7 +104,7 @@ Then turn that idea into a short series: explain the problem, share the method, 
             label: `${item.name} · ${item.limit.toLocaleString()}`,
           }))}
           class="mt-2 h-11 w-full md:h-11"
-          ariaLabel="Destination"
+          ariaLabel="Social network"
           onValueChange={(value) => (platform = value as PlatformKey)}
         />
       </div>

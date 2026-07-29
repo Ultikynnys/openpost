@@ -41,7 +41,7 @@ openpost [flags]
 | --- | --- |
 | `openpost account` | Manage connected social accounts |
 | `openpost auth` | Authenticate with an OpenPost instance |
-| `openpost billing` | Manage OpenPost Cloud billing |
+| `openpost billing` | Manage billing for the managed app |
 | `openpost completion` | Generate shell completion script |
 | `openpost instance` | Manage OpenPost instance profiles |
 | `openpost jobs` | List background jobs |
@@ -360,7 +360,7 @@ openpost auth token revoke &lt;id&gt;
 
 ### `openpost billing`
 
-Manage OpenPost Cloud billing
+Manage billing for the managed app
 
 Inspect billing status and create hosted checkout or customer portal URLs for the active workspace.
 
@@ -1667,9 +1667,9 @@ openpost publication update &lt;publication-id&gt; [flags]
 
 | Flag | Default | Description |
 | --- | --- | --- |
-| `--content` | `-` | canonical post or caption text |
+| `--content` | `-` | shared post or caption text |
 | `--content-profile` | `-` | content profile |
-| `--file` | `-` | read canonical text from file or '-' for stdin |
+| `--file` | `-` | read shared text from file or '-' for stdin |
 | `--force` | `false` | overwrite after reviewing a revision conflict |
 | `--schedule` | `-` | new schedule time; use draft to clear |
 | `--title` | `-` | publication title |

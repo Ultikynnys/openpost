@@ -66,8 +66,8 @@ export const PLATFORM_LIMITS: Record<string, PlatformLimitDefinition> = {
 		key: 'linkedin',
 		name: 'LinkedIn',
 		charLimit: 3000,
-		media: 'One image, video, or document per rendition',
-		note: 'Thread children publish as comments; use format-first publications for video and documents.'
+		media: 'One image, video, or document per account version',
+		note: 'Thread replies publish as comments. Use the focused editor for videos and documents.'
 	},
 	threads: {
 		key: 'threads',
@@ -85,24 +85,31 @@ export const PLATFORM_LIMITS: Record<string, PlatformLimitDefinition> = {
 	},
 	instagram: {
 		key: 'instagram',
-		name: 'Instagram Business',
+		name: 'Instagram Professional',
 		charLimit: 2200,
 		media: 'One image/video or a 2-10 item carousel',
-		note: 'Business accounts behind Facebook Pages only.'
+		note: 'Business or Creator accounts linked to Facebook Pages.'
 	},
 	tiktok: {
 		key: 'tiktok',
 		name: 'TikTok',
 		charLimit: 2200,
 		media: 'One video or 1-35 JPEG/WebP photos',
-		note: 'Public URL ownership verification and provider review may apply.'
+		note: 'Public link checks and app review may apply.'
 	},
 	youtube: {
 		key: 'youtube',
 		name: 'YouTube',
 		charLimit: 5000,
 		media: 'Exactly one video',
-		note: 'The current adapter uploads scheduled videos as private.'
+		note: 'Private by default. Unaudited Google projects may force private uploads.'
+	},
+	discord: {
+		key: 'discord',
+		name: 'Discord',
+		charLimit: 2000,
+		media: 'Up to 10 files, using a safe 10 MiB limit for each file',
+		note: 'Discord webhooks can publish and delete messages, but cannot read a channel inbox.'
 	}
 };
 

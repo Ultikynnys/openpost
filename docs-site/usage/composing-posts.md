@@ -1,26 +1,26 @@
 # Composing Posts
 
-OpenPost uses a fast text-and-thread composer for Post and Thread. The focused composer handles stories, short videos, videos, and other format-specific fields. Both use the same publication and rendition model.
+OpenPost uses the text-and-thread composer for Post and Thread. A focused editor handles Stories, short videos, videos, and their extra fields. Both save the shared content and each account version together.
 
-## Typical workflow
+## Steps
 
 1. Choose Post, Thread, Story, Short video, or Video.
 2. Write the shared content and add media.
 3. Select connected accounts in **Publish to**.
-4. Open an account's cog to review its resolved output and destination options.
-5. Fix any compatibility issues, then save, validate, schedule, or publish.
+4. Open an account's settings to review its final version and options.
+5. Fix any errors, then save, check, schedule, or publish.
 
-Multiple images stay part of the Post intent. OpenPost resolves them to the provider's image, carousel, multi-image, or photo-post output. If you attach a video to Post, the composer asks you to switch to Short video or Video.
+Multiple images stay in the Post. OpenPost sends them as an image, carousel, multi-image post, or photo post based on the platform. If you add a video to Post, the editor asks you to switch to Short video or Video.
 
-## Drafts and renditions
+## Drafts and account versions
 
-Draft publications are the source of truth before publishing. Their ordered segments hold shared content and media. Each selected account has a rendition with its resolved output, destination settings, segment overrides, and media-item settings.
+A draft keeps the shared text, thread parts, and media. Each selected account has its own final text, platform settings, thread changes, and media settings.
 
-The composer status row identifies the source content or active account override, reports whether the draft is saved, unsaved, saving, or conflicted, and counts destinations that are ready. A custom text rendition has a visible **Reset to shared content** action.
+The status row shows whether you are editing shared text or one account version. It also shows whether the draft is saved, saving, not saved, or in conflict, and how many accounts are ready. Use **Reset to shared content** to remove custom text for one account.
 
-Deselecting an account keeps its rendition and settings. Use **Delete destination** only when you want to remove that saved rendition.
+Deselecting an account keeps its saved version and settings. Use **Delete account version** only when you want to remove them.
 
-Each draft save includes the revision loaded by the editor. OpenPost saves source content, thread parts, media, destinations, overrides, and settings in one transaction. Saves are serialized, and scheduling or publishing waits for the pending save.
+Each save includes the draft version loaded by the editor. OpenPost saves shared content, thread parts, media, selected accounts, custom text, and settings together. It finishes one save before starting the next. Scheduling and publishing wait for an active save.
 
 If another tab or teammate saves first, OpenPost stops instead of overwriting their work. The conflict dialog lists the affected areas and lets you:
 
@@ -29,20 +29,20 @@ If another tab or teammate saves first, OpenPost stops instead of overwriting th
 - overwrite only after reviewing the latest revision;
 - keep editing without taking an action yet.
 
-When the latest change belongs to a known OpenPost user, the dialog names that editor without exposing draft contents or unrelated workspace data. “Overwrite” first adopts the current server revision and then performs the same compare-and-set save; there is no hidden force-write path.
+When OpenPost knows who made the latest change, the dialog names that person without showing draft content or other workspace data. **Overwrite** first loads the latest saved version, then saves your copy over it.
 
 Closing or hiding a tab triggers a best-effort save, but browsers do not guarantee unload requests. Wait for the saved state before closing when the content matters.
 
 ## Platform previews
 
-The **Publish to** menu shows every selected account separately, including multiple accounts from the same provider. Each row shows the resolved output and a compact settings summary. The account cog opens destination content overrides and only the options that apply to the current intent, output, and media shape.
+The **Publish to** menu shows each selected account, including more than one account from the same platform. Each row shows the final output and a short settings summary. Account settings show custom content and only the options that fit the current post, format, and media.
 
-Drafts can be saved while incomplete. Scheduling and publishing re-resolve live account capabilities and block stale privacy choices, removed playlists, expired permissions, invalid media, and conflicting attachments.
+You can save an incomplete draft. Before scheduling or publishing, OpenPost checks the account again. It blocks old privacy choices, removed playlists, expired access, invalid media, and conflicting files.
 
-See [Destination Options](/usage/destination-options) for the provider matrix and setting scopes.
+See [Account Options](/usage/destination-options) for the options each social network supports.
 
 ## Practical advice
 
-- Keep shared content canonical and customize only where a destination needs it.
-- Add alt text and media tags from the destination cog because providers use different media metadata.
-- Resolve all errors before scheduling. Warnings can describe provider approval, quota, or live-account limits that OpenPost cannot remove.
+- Keep the shared text simple. Change it only when an account needs a different version.
+- Add alt text and media tags in account settings because platforms use different media details.
+- Fix all errors before scheduling. A warning may point to app review, API limits, or account limits that OpenPost cannot change.

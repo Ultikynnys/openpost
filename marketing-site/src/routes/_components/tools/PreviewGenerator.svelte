@@ -31,7 +31,7 @@
   let author = $state("OpenPost");
   let handle = $state("openpost");
   let draft = $state(
-    "One source can become several better posts. Tailor the destination, check the preview, then schedule with confidence.",
+    "One shared draft can become a better post for each account. Tailor the text, check the preview, then schedule it.",
   );
   let localMedia = $state<LocalMedia[]>([]);
   let publicMediaUrl = $state("");
@@ -282,7 +282,7 @@
     aria-labelledby="preview-controls-title"
   >
     <h2 id="preview-controls-title" class="text-lg font-semibold">
-      Build the destination
+      Build the platform version
     </h2>
     <p class="mt-1 text-sm leading-6 text-muted-foreground">
       Controls appear only when the selected platform supports them.
@@ -348,7 +348,7 @@
         <summary
           class="focus-ring flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 rounded-md text-sm font-semibold"
         >
-          Add identity, poll, link, or media
+          Add account details, a poll, a link, or media
           <span
             class="text-xl font-normal text-muted-foreground group-open:rotate-45"
             aria-hidden="true">+</span
@@ -555,10 +555,10 @@
       >
         <div>
           <h2 id="destination-preview-title" class="text-lg font-semibold">
-            Destination preview
+            Post preview
           </h2>
           <p class="mt-1 text-sm text-muted-foreground">
-            Provider interfaces can change.
+            Social network designs can change.
           </p>
         </div>
         {#if previewMedia.length > 0}

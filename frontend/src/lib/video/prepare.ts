@@ -49,7 +49,7 @@ export async function prepareVideoForUpload(
 	if (metadata.durationSeconds > effective.maxDurationSeconds) {
 		throw new VideoPreparationError(
 			'too-long',
-			`This video is ${formatDuration(metadata.durationSeconds)}. The selected destinations allow ${formatDuration(effective.maxDurationSeconds)}. Trim it before uploading.`
+			`This video is ${formatDuration(metadata.durationSeconds)}. The selected accounts allow ${formatDuration(effective.maxDurationSeconds)}. Trim it before uploading.`
 		);
 	}
 
@@ -105,7 +105,7 @@ export async function prepareVideoForUpload(
 		const message =
 			file.size > effective.maxBytes
 				? `This browser could not reduce the video below ${formatBytes(effective.maxBytes)}.`
-				: 'This browser cannot create the H.264 MP4 required by the selected destinations.';
+				: 'This browser cannot create the H.264 MP4 required by the selected accounts.';
 		throw new VideoPreparationError(
 			file.size > effective.maxBytes ? 'cannot-fit' : 'encoder-unavailable',
 			`${message} Try Chrome or Edge, or convert the file to H.264 MP4 first.`

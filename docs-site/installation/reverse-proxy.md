@@ -1,10 +1,10 @@
 # Reverse Proxy
 
-HTTPS and a stable public URL matter for provider OAuth, passkeys, MCP OAuth discovery, and public-URL media publishing.
+HTTPS and a stable public URL matter for social network sign-in, passkeys, MCP sign-in, and public media links.
 
 ## Why it matters
 
-- Providers validate callback URLs exactly.
+- Social networks check callback URLs exactly.
 - `OPENPOST_APP_URL` should match what users open in the browser.
 - `OPENPOST_PUBLIC_URL` must match the externally visible origin for passkeys and MCP metadata.
 - `OPENPOST_MEDIA_URL` must be public HTTPS for Threads, Facebook, Instagram, and TikTok pull-from-URL publishing.
@@ -48,9 +48,9 @@ Set the proxy and any upstream CDN request-body limit to the largest video size 
 
 S3-compatible deployments send files up to 5 GB directly to the bucket. Larger files and local-storage uploads pass through the reverse proxy as an authenticated stream. See [Media Storage](/configuration/media-storage) for the full flow.
 
-## Callback URLs
+## Social network callback URLs
 
-Update your provider apps to use your public domain:
+Update your social network apps to use your public domain:
 
 - `https://openpost.example.com/api/v1/accounts/x/callback`
 - `https://openpost.example.com/api/v1/accounts/linkedin/callback`
@@ -62,37 +62,16 @@ Update your provider apps to use your public domain:
 
 Mastodon uses `urn:ietf:wg:oauth:2.0:oob` by default, so you usually do not add a Mastodon callback URL unless you override `MASTODON_REDIRECT_URI`.
 
-## Public-media providers
+## Social networks that fetch media
 
-Threads, Facebook, Instagram, and TikTok need the media endpoint to be publicly reachable over HTTPS. TikTok additionally requires ownership verification for the configured URL prefix/domain. If `OPENPOST_MEDIA_URL` points to a private hostname or local path, capability validation blocks publishing before the provider request.
+Threads, Facebook, Instagram, and TikTok need to open the media link over public HTTPS. TikTok also requires proof that you own the link prefix or domain. If `OPENPOST_MEDIA_URL` points to a private host or local path, OpenPost blocks the post before it contacts the social network.
 
-## Subpath mounts (e.g. `https://example.com/openpost/`)
+## Subpaths such as `https://example.com/openpost/`
 
-**Not supported in v1.x.** The SvelteKit frontend is built with
+**Not supported.** The SvelteKit frontend is built with
 `@sveltejs/adapter-static` and the Go binary embeds the resulting
 `build/` directory. Asset URLs (`/_app/...`, `/sw.js`,
-`/manifest.webmanifest`, etc.) are emitted as absolute paths starting
-with `/`, not as paths relative to the mount point. The OAuth callback
-`Location` header (now fixed to be absolute) also assumes the SPA is
-served from the root.
+`/manifest.webmanifest`, and others) start at the root. Sign-in callback
+links also assume that OpenPost is served from the root.
 
-If you need to share a host with other apps, run OpenPost on its own
-subdomain (`https://openpost.example.com`) and let the reverse proxy
-terminate at the root. This is the only configuration exercised by
-the maintainers and the only one the CI matrix covers.
-
-If you absolutely must try a subpath mount, you will need to:
-
-- Strip the prefix in the proxy (e.g. `location /openpost/ { proxy_pass http://127.0.0.1:8080/; }`).
-- Manually rewrite every absolute asset path in the SvelteKit build
-  output (search-and-replace `/openpost` → `/` in `build/` before
-  embedding). This is fragile and not part of the supported
-  install path.
-- Expect OAuth callbacks to land on `/accounts?status=success`
-  (the URL the binary sets), not `/openpost/accounts?status=success`.
-  Browser will follow the redirect to a 404 unless the proxy also
-  rewrites the response `Location` header.
-
-Track subpath support on the
-[ROADMAP](https://github.com/rodrgds/openpost/blob/main/ROADMAP.md)
-before requesting it.
+Run OpenPost on its own subdomain, such as `https://openpost.example.com`.

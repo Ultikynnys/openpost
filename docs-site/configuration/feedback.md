@@ -26,7 +26,7 @@ The message is required. Screenshot and diagnostics are off by default and indep
 - Diagnostics show their categories and exact JSON before send.
 - Closing the form sends nothing.
 
-A queued response means OpenPost saved the report for background delivery. It does not claim the external destination already received it. Delivery uses the existing durable jobs table and retries a failed webhook up to the job limit.
+A saved response means OpenPost saved the report and will send it in the background. It does not mean the receiving service has it yet. OpenPost retries a failed webhook up to the job limit.
 
 ## Privacy limits
 
@@ -50,4 +50,4 @@ Normal logs contain job and destination failure status, not report diagnostics o
 - Feedback is available only to authenticated users and is limited to five submissions per user per minute. The fixed window is stored in the database, so a restart or a second hosted app instance does not reset the limit.
 - The destination is server-configured; there is no browser-to-webhook path and no maintainer endpoint.
 - Queued delivery and failed attempts remain visible through the existing jobs administration surface. Normal logs do not contain the report body or diagnostics.
-- Publishing retries still use the existing publication job. Manual recovery can target one failed rendition or all retryable failed renditions, but OpenPost does not create a separate queue job for every destination in this pass.
+- A post retry uses the same saved job. You can retry one failed account or all failed accounts without posting again to accounts that worked.

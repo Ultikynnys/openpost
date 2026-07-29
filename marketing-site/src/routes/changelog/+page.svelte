@@ -11,7 +11,7 @@
   <title>OpenPost changelog</title>
   <meta
     name="description"
-    content="Recent OpenPost changes to account security, the composer, responsive app experience, provider publishing, CLI, and MCP."
+    content="Recent OpenPost changes to account security, the post editor, mobile and desktop use, social network publishing, CLI, and MCP."
   />
   <link rel="canonical" href={`${siteUrl}/changelog`} />
 </svelte:head>

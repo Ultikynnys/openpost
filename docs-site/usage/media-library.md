@@ -1,42 +1,42 @@
 # Media
 
-Media is the workspace hub for reusable assets, editable Studio designs, templates, and the brand kit.
+Media keeps your files, Studio designs, templates, and brand items in one place.
 
 ## Assets
 
-The Assets view contains uploads, camera captures, Studio exports, edited derivatives, and background-removal results. Search filenames and alt text, filter by type, source, dimensions, aspect, collection, tag, or date, and sort by recency, name, size, or recent use.
+The Assets view contains uploads, camera photos, Studio exports, edited copies, and images with the background removed. Search names and alt text. Filter by type, source, size, shape, collection, tag, or date.
 
-Select assets in order to apply a collection or tag, change favorites, or delete a safe batch. Collections and tags organize files; deleting either never deletes its assets.
+Select files to add a collection or tag, mark favorites, or delete a group. Deleting a collection or tag does not delete its files.
 
-Open an asset to inspect its preview, type, dimensions, source, creation time, alt text, collections, tags, original/derivative link, editable design, and usage. Image editing creates a Studio design or a new derivative. It never overwrites the original.
+Open a file to see its preview, type, size, source, date, alt text, collections, tags, original file, design, and where it is used. Editing an image makes a new Studio design or a new copy. It never replaces the original.
 
-Deletion is blocked while a post, publication, design, template, brand asset, brand font, preview, or export still refers to the file. The detail view lists those references so you can remove the correct dependency first. Scheduled cleanup follows the same reference rules.
+OpenPost will not delete a file while a post, design, template, brand item, font, preview, or export still uses it. The file page shows each use so you can remove it first. Cleanup uses the same rules.
 
-## Shared media picker
+## Add media to a post
 
-Every web composer media entry point uses one picker:
+Each post editor uses the same media picker:
 
-- **Library** reuses existing workspace assets without uploading another copy.
-- **Upload** uses direct object-storage upload when configured and falls back to multipart upload.
+- **Library** uses a saved file without uploading another copy.
+- **Upload** adds a file from your device.
 - **Camera** captures a still image after browser permission.
-- **Create** saves composer recovery state and opens [OpenPost Studio](/usage/studio).
+- **Create** saves your post and opens [OpenPost Studio](/usage/studio).
 
-Selection remains ordered. The picker applies the MIME, count, and purpose constraints resolved from the currently selected provider accounts rather than using one fixed four-item limit.
+OpenPost keeps files in the order you choose. It checks the file types and count against the rules for all selected accounts.
 
-## Video preparation and editing
+## Prepare and edit video
 
-The Media upload dialog and every video-capable composer use the same client-side pipeline. OpenPost inspects the selected file in the browser, keeps a compatible H.264/AAC MP4 unchanged, remuxes compatible tracks without re-encoding, or transcodes and compresses the video when the selected destinations require it. The strictest size, duration, format, and aspect constraints from all selected accounts apply to the shared upload.
+OpenPost checks a video in your browser before upload. It keeps a compatible H.264/AAC MP4 as it is. If needed, it changes or shrinks the video to fit the selected accounts. The strictest size, length, file type, and shape rules apply.
 
-For a single video, the editor can trim to exact in and out points, preview the selected range, and crop with destination-aware aspect presets. Drag the crop window or move it with the arrow keys, then use crop zoom to choose the visible region. OpenPost tests a real H.264 frame encode before it enables cropping. Browsers that cannot encode H.264 can still trim compatible files without re-encoding.
+For one video, you can trim the start and end, preview the result, and crop it for the selected accounts. Drag the crop area or move it with the arrow keys. Use zoom to choose what stays in view. Some browsers can trim a compatible file but cannot crop it.
 
-Conversion and editing stay in the browser. The upload view reports separate inspection, remux, conversion, transfer, finalization, and server-check stages and lets you cancel the active work. After transfer, a durable server job verifies the real container, codecs, dimensions, duration, frame rate, rotation, pixel format, audio, and bitrate and creates a poster. A video cannot be scheduled or published until that check succeeds. Failed checks remain visible in Media with the server error and a retry action.
+Video changes happen in your browser. The upload view shows progress and lets you cancel. After upload, the server checks the file and makes a poster image. You cannot schedule or publish the video until this check passes. A failed check stays in Media with the error and a retry button.
 
-Provider transfer remains provider-specific after preparation: X uses chunked media upload, Mastodon uses asynchronous media processing, Bluesky uses its video service and job polling, LinkedIn initializes and finalizes video upload ranges, TikTok uses its direct or inbox transfer path, YouTube uses resumable upload, and public-URL providers fetch the stored video over HTTPS.
+OpenPost then sends the video in the way each social network requires. Threads, Facebook, Instagram, and some TikTok posts download the file from a public HTTPS link.
 
-## Storage and provenance
+## Storage and source files
 
-Uploaded files, captures, exports, derivatives, brand assets, and custom fonts count toward workspace media storage. Internal design and template previews are hidden from the library and excluded from the displayed quota total.
+Uploads, camera photos, exports, edited copies, brand files, and custom fonts count toward the workspace storage limit. Hidden design and template previews do not count.
 
-Each derivative records its source, parent asset when applicable, and Studio design/page origin. Deleting a design never deletes its exports. Deleting an original is allowed only after all active references are removed; parent links on surviving derivatives then become empty.
+Each edited copy keeps a link to its source file and Studio page when relevant. Deleting a design does not delete its exports. You can delete an original only after nothing else uses it. Saved edited copies remain.
 
-For providers that fetch media by URL, such as Threads, keep the exported asset available until publication completes. S3/R2 direct browser uploads also require a bucket CORS rule for the OpenPost app origin.
+Keep media available until posts to Threads, Facebook, Instagram, and some TikTok accounts finish. If you run OpenPost with S3 or R2, see [Media Storage](/configuration/media-storage) for the browser upload rule.
