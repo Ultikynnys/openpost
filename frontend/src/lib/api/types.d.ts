@@ -304,6 +304,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/users/{user_id}/impersonation-links": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create a user impersonation link
+         * @description Creates a five-minute, one-use sign-in link for a non-admin user. The caller must use an unscoped instance-admin browser session.
+         */
+        post: operations["create-user-impersonation-link"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/analytics": {
         parameters: {
             query?: never;
@@ -435,6 +455,26 @@ export interface paths {
         get: operations["get-auth-configuration"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/impersonation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Consume a user impersonation link
+         * @description Consumes a five-minute, one-use impersonation code and creates a tracked browser session for the target user.
+         */
+        post: operations["consume-user-impersonation-link"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3623,6 +3663,25 @@ export interface components {
             return_url: string;
             workspace_id: string;
         };
+        ConsumeUserImpersonationLinkInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ConsumeUserImpersonationLinkInputBody.json
+             */
+            readonly $schema?: string;
+            /** @description One-use impersonation code from the URL fragment */
+            code: string;
+        };
+        ConsumeUserImpersonationLinkOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ConsumeUserImpersonationLinkOutputBody.json
+             */
+            readonly $schema?: string;
+            message: string;
+        };
         ContentOverview: {
             account_id: string;
             /** Format: int64 */
@@ -4119,6 +4178,18 @@ export interface components {
             readonly $schema?: string;
             /** @description Created post IDs in order */
             post_ids: string[] | null;
+        };
+        CreateUserImpersonationLinkOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/CreateUserImpersonationLinkOutputBody.json
+             */
+            readonly $schema?: string;
+            /** @description Link expiration time */
+            expires_at: string;
+            /** @description One-use private-browser sign-in URL */
+            url: string;
         };
         CreateWorkspaceInputBody: {
             /**
@@ -4824,6 +4895,25 @@ export interface components {
             id: string;
             /** @description Whether the user is an instance administrator */
             is_admin: boolean;
+            /** @description Most recent tracked browser session activity time */
+            last_active_at: string;
+            /**
+             * Format: int64
+             * @description Number of organizations the user belongs to
+             */
+            organization_count: number;
+            /** @description Active or trialing organization plan IDs available to the user */
+            plan_ids: string[] | null;
+            /**
+             * Format: int64
+             * @description Number of publications created by the user
+             */
+            publication_count: number;
+            /**
+             * Format: int64
+             * @description Number of social accounts available through the user's workspaces
+             */
+            social_account_count: number;
             /**
              * Format: int64
              * @description Number of workspaces the user can access
@@ -9017,6 +9107,12 @@ export interface operations {
                 page?: number;
                 /** @description Users per page */
                 per_page?: number;
+                /** @description Case-insensitive email or display-name search */
+                search?: string;
+                /** @description Directory sort field */
+                sort?: "created_at" | "email" | "display_name" | "last_active_at" | "workspace_count" | "publication_count";
+                /** @description Directory sort direction */
+                direction?: "asc" | "desc";
             };
             header?: never;
             path?: never;
@@ -9044,6 +9140,83 @@ export interface operations {
             };
             /** @description Forbidden */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "create-user-impersonation-link": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Target user ID */
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreateUserImpersonationLinkOutputBody"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Conflict */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -9511,6 +9684,67 @@ export interface operations {
             };
             /** @description Error */
             default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "consume-user-impersonation-link": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConsumeUserImpersonationLinkInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    "Set-Cookie"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConsumeUserImpersonationLinkOutputBody"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };

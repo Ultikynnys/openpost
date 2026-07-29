@@ -204,6 +204,22 @@ type UserSession struct {
 	CreatedAt  time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"created_at"`
 }
 
+type UserImpersonationGrant struct {
+	bun.BaseModel `bun:"table:user_impersonation_grants"`
+
+	ID                string    `bun:",pk" json:"id"`
+	TokenHash         string    `bun:",unique,notnull" json:"-"`
+	AdminUserID       string    `bun:",notnull" json:"admin_user_id"`
+	TargetUserID      string    `bun:",notnull" json:"target_user_id"`
+	ExpiresAt         time.Time `bun:",notnull" json:"expires_at"`
+	UsedAt            time.Time `bun:",nullzero" json:"used_at"`
+	CreatedIPAddress  string    `bun:"created_ip_address" json:"created_ip_address"`
+	CreatedUserAgent  string    `bun:"created_user_agent" json:"created_user_agent"`
+	ConsumedIPAddress string    `bun:"consumed_ip_address" json:"consumed_ip_address"`
+	ConsumedUserAgent string    `bun:"consumed_user_agent" json:"consumed_user_agent"`
+	CreatedAt         time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"created_at"`
+}
+
 type IdentityProvider struct {
 	bun.BaseModel `bun:"table:identity_providers"`
 

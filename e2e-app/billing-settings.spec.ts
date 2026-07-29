@@ -153,6 +153,8 @@ test("instance admins can review usage, users, and update status", async ({
   let profileRequests = 0;
   let overviewRequests = 0;
   const requestedUserPages: number[] = [];
+  const requestedUserSorts: string[] = [];
+  let impersonationLinkRequests = 0;
   let updateStatusRequests = 0;
 
   await page.route("**/api/v1/auth/me", async (route) => {
@@ -184,12 +186,14 @@ test("instance admins can review usage, users, and update status", async ({
     });
   });
   await page.route("**/api/v1/admin/users?**", async (route) => {
-    const requestedPage = Number(
-      new URL(route.request().url()).searchParams.get("page") ?? "1",
-    );
+    const requestURL = new URL(route.request().url());
+    const requestedPage = Number(requestURL.searchParams.get("page") ?? "1");
     requestedUserPages.push(requestedPage);
-    const pageStart = (requestedPage - 1) * 20;
-    const userCount = requestedPage === 3 ? 2 : 20;
+    requestedUserSorts.push(
+      `${requestURL.searchParams.get("sort")}:${requestURL.searchParams.get("direction")}`,
+    );
+    const pageStart = (requestedPage - 1) * 25;
+    const userCount = requestedPage === 2 ? 17 : 25;
     const users = Array.from({ length: userCount }, (_, index) => {
       const userNumber = pageStart + index + 1;
       return {
@@ -198,12 +202,17 @@ test("instance admins can review usage, users, and update status", async ({
         display_name:
           userNumber === 1
             ? "Ada Admin"
-            : userNumber === 21
+            : userNumber === 26
               ? "Page Two User"
               : `User ${userNumber}`,
         avatar_url: "",
         is_admin: userNumber === 1,
+        plan_ids: userNumber === 1 ? ["team"] : ["creator"],
+        organization_count: (userNumber % 2) + 1,
         workspace_count: userNumber % 4,
+        social_account_count: userNumber % 3,
+        publication_count: userNumber * 2,
+        last_active_at: `2026-07-${String(29 - (index % 20)).padStart(2, "0")}T15:30:00Z`,
         created_at: `2026-07-${String(29 - (index % 20)).padStart(2, "0")}T12:00:00Z`,
       };
     });
@@ -213,11 +222,24 @@ test("instance admins can review usage, users, and update status", async ({
         users,
         total: 42,
         page: requestedPage,
-        per_page: 20,
-        total_pages: 3,
+        per_page: 25,
+        total_pages: 2,
       },
     });
   });
+  await page.route(
+    "**/api/v1/admin/users/*/impersonation-links",
+    async (route) => {
+      impersonationLinkRequests += 1;
+      await route.fulfill({
+        contentType: "application/json",
+        json: {
+          url: "http://127.0.0.1:18180/impersonate#code=one-use-test-code",
+          expires_at: "2026-07-29T12:05:00Z",
+        },
+      });
+    },
+  );
   await page.route("**/api/v1/admin/update-status", async (route) => {
     updateStatusRequests += 1;
     await route.fulfill({
@@ -239,7 +261,6 @@ test("instance admins can review usage, users, and update status", async ({
 
   await expect.poll(() => profileRequests).toBeGreaterThan(0);
   await expect.poll(() => overviewRequests).toBeGreaterThan(0);
-  await expect.poll(() => requestedUserPages).toContain(1);
   await expect.poll(() => updateStatusRequests).toBeGreaterThan(0);
   await expect(
     page.getByRole("heading", { name: "Instance", level: 1 }),
@@ -250,15 +271,6 @@ test("instance admins can review usage, users, and update status", async ({
   await expect(overview).toContainText("42");
   await expect(overview).toContainText("Published posts");
   await expect(overview.locator('[data-slot="chart"]')).toHaveCount(2);
-
-  const directory = page.getByTestId("instance-user-directory");
-  await expect(directory).toContainText("Ada Admin");
-  await expect(directory).toContainText("Instance admin");
-  await expect(overview).toContainText("Showing 1–20 of 42");
-  await overview.getByRole("button", { name: "Go to user page 2" }).click();
-  await expect.poll(() => requestedUserPages).toContain(2);
-  await expect(directory).toContainText("Page Two User");
-  await expect(overview).toContainText("Showing 21–40 of 42");
 
   const status = page.getByTestId("instance-update-status");
   await expect(status).toContainText("OpenPost v1.28.0 is available.");
@@ -271,6 +283,48 @@ test("instance admins can review usage, users, and update status", async ({
     "https://github.com/rodrgds/openpost/releases/tag/v1.28.0",
   );
   await expect(status.getByRole("button", { name: /update/i })).toHaveCount(0);
+
+  await page.locator('[data-settings-tab="users"]').click();
+  await expect(page).toHaveURL(/settings\?tab=users/);
+  await expect(
+    page.getByRole("heading", { name: "Users", level: 1 }),
+  ).toBeVisible();
+  await expect.poll(() => requestedUserPages).toContain(1);
+
+  const usersPanel = page.getByTestId("instance-admin-users");
+  const directory = page.getByTestId("instance-user-directory");
+  await expect(directory).toContainText("Ada Admin");
+  await expect(directory).toContainText("Instance admin");
+  await expect(directory).toContainText("Creator");
+  await expect(directory).toContainText("Publications");
+  await expect(usersPanel).toContainText("Showing 1–25 of 42");
+
+  await directory.getByRole("button", { name: "Sort by User" }).click();
+  await expect.poll(() => requestedUserSorts).toContain("display_name:asc");
+
+  await directory
+    .getByRole("button", { name: "Impersonate User 2", exact: true })
+    .click();
+  await expect.poll(() => impersonationLinkRequests).toBe(1);
+  const impersonationDialog = page.getByRole("dialog");
+  await expect(impersonationDialog).toContainText("Impersonate User 2");
+  await expect(
+    impersonationDialog.getByRole("textbox", {
+      name: "Private sign-in link",
+    }),
+  ).toHaveValue("http://127.0.0.1:18180/impersonate#code=one-use-test-code");
+  await expect(impersonationDialog).toContainText(
+    "private or incognito window",
+  );
+  await impersonationDialog
+    .locator("button")
+    .filter({ hasText: /^Close$/ })
+    .click();
+
+  await usersPanel.getByRole("button", { name: "Go to user page 2" }).click();
+  await expect.poll(() => requestedUserPages).toContain(2);
+  await expect(directory).toContainText("Page Two User");
+  await expect(usersPanel).toContainText("Showing 26–42 of 42");
 
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(directory).toBeVisible();

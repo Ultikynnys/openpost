@@ -34,7 +34,12 @@
 		{ id: 'plan', label: m.settings_plan() }
 	]);
 	const instanceDestinations = $derived<SettingsDestination[]>(
-		showInstance ? [{ id: 'instance', label: m.settings_instance() }] : []
+		showInstance
+			? [
+					{ id: 'instance', label: m.settings_instance() },
+					{ id: 'users', label: m.settings_instance_users() }
+				]
+			: []
 	);
 	const allDestinations = $derived([
 		...personalDestinations,

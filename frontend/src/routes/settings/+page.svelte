@@ -13,6 +13,7 @@
 	import AppToast from '$lib/components/app-toast.svelte';
 	import InlineNotice from '$lib/components/inline-notice.svelte';
 	import InstanceAdminOverview from '$lib/components/instance-admin-overview.svelte';
+	import InstanceAdminUsers from '$lib/components/instance-admin-users.svelte';
 	import DestructiveConfirmDialog from '$lib/components/destructive-confirm-dialog.svelte';
 	import ProfileAvatarUploader from '$lib/components/profile-avatar-uploader.svelte';
 	import AccountDataCard from '$lib/components/account-data-card.svelte';
@@ -496,18 +497,26 @@
 		{ id: 'members', label: m.settings_members() },
 		{ id: 'sso', label: m.settings_sso() },
 		{ id: 'plan', label: m.settings_plan() },
-		...(authState.user?.is_admin ? [{ id: 'instance' as const, label: m.settings_instance() }] : [])
+		...(authState.user?.is_admin
+			? [
+					{ id: 'instance' as const, label: m.settings_instance() },
+					{ id: 'users' as const, label: m.settings_instance_users() }
+				]
+			: [])
 	]);
 	const activeSettingsTab = $derived.by(() => {
 		const requested = normalizeSettingsTab(
 			page.url.searchParams.get('tab') || page.url.hash.replace(/^#/, '') || null
 		);
-		return requested === 'instance' && !authState.user?.is_admin ? 'general' : requested;
+		return (requested === 'instance' || requested === 'users') && !authState.user?.is_admin
+			? 'general'
+			: requested;
 	});
 	const settingsLoadingVariant = $derived.by(() => {
 		if (activeSettingsTab === 'profile') return 'profile' as const;
 		if (['members', 'sso', 'plan', 'security'].includes(activeSettingsTab)) return 'cards' as const;
-		if (['developer', 'schedule', 'instance'].includes(activeSettingsTab)) return 'list' as const;
+		if (['developer', 'schedule', 'instance', 'users'].includes(activeSettingsTab))
+			return 'list' as const;
 		return 'form' as const;
 	});
 	const profileEmail = $derived(authState.user?.email ?? '');
@@ -535,6 +544,7 @@
 		if (activeSettingsTab === 'security') return m.settings_security();
 		if (activeSettingsTab === 'developer') return m.settings_developer();
 		if (activeSettingsTab === 'instance') return m.settings_instance();
+		if (activeSettingsTab === 'users') return m.settings_instance_users();
 		if (activeSettingsTab === 'members') return m.settings_team_members();
 		if (activeSettingsTab === 'sso') return m.settings_sso();
 		if (activeSettingsTab === 'plan') return m.settings_plan();
@@ -547,6 +557,7 @@
 		if (activeSettingsTab === 'security') return m.settings_account_security_body();
 		if (activeSettingsTab === 'developer') return m.settings_developer_description();
 		if (activeSettingsTab === 'instance') return m.settings_instance_description();
+		if (activeSettingsTab === 'users') return m.settings_instance_users_page_description();
 		if (activeSettingsTab === 'members') return m.settings_members_description();
 		if (activeSettingsTab === 'sso') return m.settings_sso_description();
 		if (activeSettingsTab === 'plan') return m.settings_plan_description();
@@ -1780,6 +1791,12 @@
 				</section>
 
 				{#if authState.user?.is_admin}
+					<section id="users" class:hidden={activeSettingsTab !== 'users'} class="scroll-mt-24">
+						{#if activeSettingsTab === 'users'}
+							<InstanceAdminUsers />
+						{/if}
+					</section>
+
 					<section
 						id="instance"
 						class:hidden={activeSettingsTab !== 'instance'}

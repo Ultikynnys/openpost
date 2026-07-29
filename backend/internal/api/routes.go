@@ -167,7 +167,13 @@ func RegisterHumaRoutes(api huma.API, deps RouteDeps) {
 	handlers.NewAnalyticsHandler(deps.DB, deps.Authenticator, deps.AnalyticsService).RegisterRoutes(api)
 	handlers.NewCommunicationsHandler(deps.DB, deps.Authenticator, deps.CommunicationsService).RegisterRoutes(api)
 	handlers.NewNotificationHandler(deps.DB, deps.Authenticator, deps.NotificationService).RegisterRoutes(api)
-	handlers.NewInstanceAdminHandler(deps.DB, deps.Authenticator).RegisterRoutes(api)
+	handlers.NewInstanceAdminHandler(
+		deps.DB,
+		deps.Authenticator,
+		deps.AuthService,
+		deps.SessionService,
+		deps.FrontendURL,
+	).RegisterRoutes(api)
 	handlers.NewUpdateStatusHandler(deps.DB, deps.Authenticator, deps.UpdateStatusService).RegisterRoutes(api)
 
 	mcpOAuthHandler := deps.MCPOAuthHandler

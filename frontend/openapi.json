@@ -1701,6 +1701,43 @@
 				],
 				"type": "object"
 			},
+			"ConsumeUserImpersonationLinkInputBody": {
+				"additionalProperties": false,
+				"properties": {
+					"$schema": {
+						"description": "A URL to the JSON Schema for this object.",
+						"examples": ["https://example.com/schemas/ConsumeUserImpersonationLinkInputBody.json"],
+						"format": "uri",
+						"readOnly": true,
+						"type": "string"
+					},
+					"code": {
+						"description": "One-use impersonation code from the URL fragment",
+						"maxLength": 200,
+						"minLength": 1,
+						"type": "string"
+					}
+				},
+				"required": ["code"],
+				"type": "object"
+			},
+			"ConsumeUserImpersonationLinkOutputBody": {
+				"additionalProperties": false,
+				"properties": {
+					"$schema": {
+						"description": "A URL to the JSON Schema for this object.",
+						"examples": ["https://example.com/schemas/ConsumeUserImpersonationLinkOutputBody.json"],
+						"format": "uri",
+						"readOnly": true,
+						"type": "string"
+					},
+					"message": {
+						"type": "string"
+					}
+				},
+				"required": ["message"],
+				"type": "object"
+			},
 			"ContentOverview": {
 				"additionalProperties": false,
 				"properties": {
@@ -2707,6 +2744,28 @@
 					}
 				},
 				"required": ["post_ids"],
+				"type": "object"
+			},
+			"CreateUserImpersonationLinkOutputBody": {
+				"additionalProperties": false,
+				"properties": {
+					"$schema": {
+						"description": "A URL to the JSON Schema for this object.",
+						"examples": ["https://example.com/schemas/CreateUserImpersonationLinkOutputBody.json"],
+						"format": "uri",
+						"readOnly": true,
+						"type": "string"
+					},
+					"expires_at": {
+						"description": "Link expiration time",
+						"type": "string"
+					},
+					"url": {
+						"description": "One-use private-browser sign-in URL",
+						"type": "string"
+					}
+				},
+				"required": ["url", "expires_at"],
 				"type": "object"
 			},
 			"CreateWorkspaceInputBody": {
@@ -4199,6 +4258,32 @@
 						"description": "Whether the user is an instance administrator",
 						"type": "boolean"
 					},
+					"last_active_at": {
+						"description": "Most recent tracked browser session activity time",
+						"type": "string"
+					},
+					"organization_count": {
+						"description": "Number of organizations the user belongs to",
+						"format": "int64",
+						"type": "integer"
+					},
+					"plan_ids": {
+						"description": "Active or trialing organization plan IDs available to the user",
+						"items": {
+							"type": "string"
+						},
+						"type": ["array", "null"]
+					},
+					"publication_count": {
+						"description": "Number of publications created by the user",
+						"format": "int64",
+						"type": "integer"
+					},
+					"social_account_count": {
+						"description": "Number of social accounts available through the user's workspaces",
+						"format": "int64",
+						"type": "integer"
+					},
 					"workspace_count": {
 						"description": "Number of workspaces the user can access",
 						"format": "int64",
@@ -4211,7 +4296,12 @@
 					"display_name",
 					"avatar_url",
 					"is_admin",
+					"plan_ids",
+					"organization_count",
 					"workspace_count",
+					"social_account_count",
+					"publication_count",
+					"last_active_at",
 					"created_at"
 				],
 				"type": "object"
@@ -12884,12 +12974,54 @@
 						"in": "query",
 						"name": "per_page",
 						"schema": {
-							"default": 20,
+							"default": 25,
 							"description": "Users per page",
 							"format": "int64",
 							"maximum": 100,
 							"minimum": 1,
 							"type": "integer"
+						}
+					},
+					{
+						"description": "Case-insensitive email or display-name search",
+						"explode": false,
+						"in": "query",
+						"name": "search",
+						"schema": {
+							"description": "Case-insensitive email or display-name search",
+							"maxLength": 200,
+							"type": "string"
+						}
+					},
+					{
+						"description": "Directory sort field",
+						"explode": false,
+						"in": "query",
+						"name": "sort",
+						"schema": {
+							"default": "created_at",
+							"description": "Directory sort field",
+							"enum": [
+								"created_at",
+								"email",
+								"display_name",
+								"last_active_at",
+								"workspace_count",
+								"publication_count"
+							],
+							"type": "string"
+						}
+					},
+					{
+						"description": "Directory sort direction",
+						"explode": false,
+						"in": "query",
+						"name": "direction",
+						"schema": {
+							"default": "desc",
+							"description": "Directory sort direction",
+							"enum": ["asc", "desc"],
+							"type": "string"
 						}
 					}
 				],
@@ -12946,6 +13078,98 @@
 					}
 				},
 				"summary": "List instance users",
+				"tags": ["Admin"]
+			}
+		},
+		"/admin/users/{user_id}/impersonation-links": {
+			"post": {
+				"description": "Creates a five-minute, one-use sign-in link for a non-admin user. The caller must use an unscoped instance-admin browser session.",
+				"operationId": "create-user-impersonation-link",
+				"parameters": [
+					{
+						"description": "Target user ID",
+						"in": "path",
+						"name": "user_id",
+						"required": true,
+						"schema": {
+							"description": "Target user ID",
+							"type": "string"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/CreateUserImpersonationLinkOutputBody"
+								}
+							}
+						},
+						"description": "OK"
+					},
+					"401": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Unauthorized"
+					},
+					"403": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Forbidden"
+					},
+					"404": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Not Found"
+					},
+					"409": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Conflict"
+					},
+					"422": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Unprocessable Entity"
+					},
+					"500": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Internal Server Error"
+					}
+				},
+				"summary": "Create a user impersonation link",
 				"tags": ["Admin"]
 			}
 		},
@@ -13479,6 +13703,83 @@
 					}
 				},
 				"summary": "Get public authentication configuration",
+				"tags": ["Auth"]
+			}
+		},
+		"/auth/impersonation": {
+			"post": {
+				"description": "Consumes a five-minute, one-use impersonation code and creates a tracked browser session for the target user.",
+				"operationId": "consume-user-impersonation-link",
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/ConsumeUserImpersonationLinkInputBody"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"200": {
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/ConsumeUserImpersonationLinkOutputBody"
+								}
+							}
+						},
+						"description": "OK",
+						"headers": {
+							"Set-Cookie": {
+								"schema": {
+									"type": "string"
+								}
+							}
+						}
+					},
+					"400": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Bad Request"
+					},
+					"409": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Conflict"
+					},
+					"422": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Unprocessable Entity"
+					},
+					"500": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Internal Server Error"
+					}
+				},
+				"summary": "Consume a user impersonation link",
 				"tags": ["Auth"]
 			}
 		},
