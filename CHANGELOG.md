@@ -4,6 +4,10 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- Restored hosted X publishing on PostgreSQL by making provider-cost reservation upserts unambiguous, and retried transient Threads error code 24 after container creation.
+
 ## [1.43.1] - 2026-07-29
 
 ### Fixed

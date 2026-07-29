@@ -3,6 +3,7 @@ package platform
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -707,7 +708,7 @@ func (t *ThreadsAdapter) publishContainer(ctx context.Context, accessToken, user
 
 		// Threads may return code 24 briefly right after container creation/status=FINISHED.
 		// Retry a few times with short backoff to handle propagation lag.
-		if strings.Contains(err.Error(), `"code":24`) && attempt < maxPublishAttempts {
+		if isThreadsPublishPropagationError(err) && attempt < maxPublishAttempts {
 			select {
 			case <-ctx.Done():
 				return "", ctx.Err()
@@ -731,6 +732,11 @@ func (t *ThreadsAdapter) publishContainer(ctx context.Context, accessToken, user
 	}
 
 	return publishResp.ID, nil
+}
+
+func isThreadsPublishPropagationError(err error) bool {
+	var providerErr *HTTPError
+	return errors.As(err, &providerErr) && providerErr.Code == "24"
 }
 
 func validateThreadsMedia(media []MediaItem) []MediaValidationIssue {

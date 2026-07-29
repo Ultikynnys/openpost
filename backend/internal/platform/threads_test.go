@@ -131,6 +131,42 @@ func TestThreadsReplyAndHideComment(t *testing.T) {
 	}
 }
 
+func TestThreadsPublishContainerRetriesTypedPropagationError(t *testing.T) {
+	originalClient := httpClient
+	defer func() { httpClient = originalClient }()
+
+	attempts := 0
+	httpClient = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		if req.Method != http.MethodPost || req.URL.String() != "https://graph.threads.net/v1.0/user-1/threads_publish" {
+			t.Fatalf("unexpected request %s %s", req.Method, req.URL.String())
+		}
+		attempts++
+		if attempts == 1 {
+			return &http.Response{
+				StatusCode: http.StatusBadRequest,
+				Header:     make(http.Header),
+				Body:       io.NopCloser(strings.NewReader(`{"error":{"code":24}}`)),
+				Request:    req,
+			}, nil
+		}
+		return jsonResponse(req, `{"id":"thread-1"}`), nil
+	})}
+
+	id, err := NewThreadsAdapter("", "", "").publishContainer(
+		context.Background(),
+		"threads-token",
+		"user-1",
+		"creation-1",
+	)
+
+	if err != nil {
+		t.Fatalf("publishContainer returned error: %v", err)
+	}
+	if id != "thread-1" || attempts != 2 {
+		t.Fatalf("expected one code-24 retry and thread-1, got id=%q attempts=%d", id, attempts)
+	}
+}
+
 func TestThreadsDeleteCommentUnsupported(t *testing.T) {
 	err := NewThreadsAdapter("", "", "").DeleteComment(context.Background(), "threads-token", "user-1", "reply-1")
 	if !errors.Is(err, ErrUnsupportedCommentAction) {
