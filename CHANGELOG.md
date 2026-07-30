@@ -4,6 +4,10 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- Added the missing `packages/video-project/` workspace package to the Docker build context so the frontend can resolve `@openpost/video-project` during containerized builds.
+
 ## [1.44.3] - 2026-07-30
 
 ### Fixed
