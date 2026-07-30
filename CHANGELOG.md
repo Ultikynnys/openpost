@@ -4,9 +4,12 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [1.44.4] - 2026-07-30
+
 ### Fixed
 
 - Added the missing `packages/video-project/` workspace package to the Docker build context so the frontend can resolve `@openpost/video-project` during containerized builds.
+- Added the Paraglide i18n Vite plugin to the marketing-site build so shared frontend components can resolve `$lib/paraglide/messages` at build time.
 
 ## [1.44.3] - 2026-07-30
 
