@@ -124,13 +124,13 @@ test("settings keeps hosted X costs separate from product usage", async ({
 
   const costs = page.getByTestId("provider-cost-usage");
   await expect(costs).toBeVisible();
-  await expect(costs).toContainText("Variable provider usage");
+  await expect(costs).toContainText("X API use");
   await expect(costs).toContainText(
-    "$0.215 confirmed + $0.20 reserved of the $5.00 monthly safety limit",
+    "$0.215 confirmed + $0.20 held of the $5.00 monthly safety limit",
   );
   await expect(costs).toContainText("Posts without links");
   await expect(costs).toContainText("Posts with links");
-  await expect(costs).toContainText("1 unresolved reservation");
+  await expect(costs).toContainText("1 request still being checked");
   await expect(
     costs.getByRole("link", { name: "View X pricing" }),
   ).toHaveAttribute("href", "https://docs.x.com/x-api/getting-started/pricing");
@@ -462,17 +462,20 @@ test("settings lists and revokes active web sessions", async ({
     "E2E Other Browser",
   );
 
-  const otherSession = page
-    .getByTestId("auth-session-row")
-    .filter({ hasText: "Browser on device" });
-  await otherSession.getByRole("button", { name: "Revoke" }).click();
+  const otherSession = page.getByTestId("auth-session-row").filter({
+    has: page.getByRole("button", { name: "Remove access" }),
+  });
+  await expect(otherSession).toHaveCount(1);
+  await otherSession.getByRole("button", { name: "Remove access" }).click();
   await page
     .getByRole("dialog")
-    .getByRole("button", { name: "Revoke" })
+    .getByRole("button", { name: "Remove access" })
     .click();
-  await expect(page.getByTestId("auth-session-list")).not.toContainText(
-    "Browser on device",
-  );
+  await expect(
+    page.getByTestId("auth-session-list").getByRole("button", {
+      name: "Remove access",
+    }),
+  ).toHaveCount(0);
 });
 
 test("settings creates read-only MCP API tokens by default", async ({
@@ -489,9 +492,9 @@ test("settings creates read-only MCP API tokens by default", async ({
   await page.goto("/settings?tab=developer");
 
   await expect(page.getByTestId("api-token-scope")).toContainText(
-    "MCP / inspect only",
+    "MCP / read only",
   );
-  await expect(page.getByText(/Recommended for inspection/)).toBeVisible();
+  await expect(page.getByText(/Best for read-only work/)).toBeVisible();
   await page.locator("#api-token-name").fill("ChatGPT App E2E");
   await page.getByRole("button", { name: "Create Token" }).click();
 
@@ -499,7 +502,7 @@ test("settings creates read-only MCP API tokens by default", async ({
   await expect(page.getByText(/op_cli_[a-f0-9]{8}_/)).toBeVisible();
   const createdToken = page.getByText("ChatGPT App E2E").locator("..");
   await expect(createdToken).toBeVisible();
-  await expect(createdToken).toContainText("MCP / inspect only");
+  await expect(createdToken).toContainText("MCP / read only");
 });
 
 test("settings creates and accepts workspace invitations", async ({

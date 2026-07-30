@@ -4,6 +4,12 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [1.44.2] - 2026-07-30
+
+### Fixed
+
+- Allowed functional software WebGL2 rendering for Video Studio and aligned release browser tests with the current settings, calendar, and private-beta UI contracts.
+
 ## [1.44.1] - 2026-07-30
 
 ### Fixed

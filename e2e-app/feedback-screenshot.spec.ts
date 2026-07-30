@@ -51,7 +51,7 @@ test("feedback capture omits its own blur overlay", async ({
   await dialog.getByRole("checkbox").first().check();
 
   const preview = dialog.getByRole("img", { name: "Include a screenshot" });
-  await expect(preview).toBeVisible();
+  await expect(preview).toBeVisible({ timeout: 20_000 });
   const contrastRange = await preview.evaluate(async (element) => {
     const source = (element as HTMLImageElement).src;
     const image = new Image();

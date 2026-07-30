@@ -73,5 +73,5 @@ async function canEncodeAAC(): Promise<boolean> {
 function canCreateWebGL2Context(): boolean {
 	if (typeof document === 'undefined') return false;
 	const canvas = document.createElement('canvas');
-	return Boolean(canvas.getContext('webgl2', { failIfMajorPerformanceCaveat: true }));
+	return Boolean(canvas.getContext('webgl2'));
 }

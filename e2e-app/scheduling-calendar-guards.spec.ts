@@ -661,7 +661,7 @@ test("the day drawer keeps scheduled posts compact and icon-led", async ({
   ).toBeVisible();
 
   const destinations = drawer.getByTestId("day-post-destinations");
-  await expect(destinations).toHaveAttribute("aria-label", "Destinations: 3");
+  await expect(destinations).toHaveAttribute("aria-label", "Accounts: 3");
   await expect(destinations.locator("svg")).toHaveCount(3);
   await expect(drawer.getByText("Bluesky", { exact: true })).not.toBeVisible();
   await expect(drawer.getByText("LinkedIn", { exact: true })).not.toBeVisible();

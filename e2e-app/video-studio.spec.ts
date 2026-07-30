@@ -641,11 +641,12 @@ test("active recordings preserve camera and microphone device switches as segmen
 });
 
 test("rollout flag blocks every entry route", async ({ page }) => {
+  const configResponse = await page.request.get("/api/v1/video-studio/config");
+  expect(configResponse.ok()).toBeTruthy();
+  const body = (await configResponse.json()) as Record<string, unknown>;
   await page.route("**/api/v1/video-studio/config", async (route) => {
-    const response = await route.fetch();
-    const body = (await response.json()) as Record<string, unknown>;
     await route.fulfill({
-      response,
+      status: 200,
       contentType: "application/json",
       body: JSON.stringify({ ...body, enabled: false }),
     });
