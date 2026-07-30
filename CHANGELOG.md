@@ -4,6 +4,18 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [1.45.0] - 2026-07-30
+
+### Added
+
+- Added workspace creation from the desktop and mobile workspace switchers, with a focused name dialog that refreshes the workspace list and selects the new workspace immediately.
+- Added anonymous, cookie-free Umami analytics to the public marketing and documentation sites while keeping the authenticated application untracked.
+- Added the official OpenPost Discord community to the marketing navigation and footer, documentation navigation, and repository overview.
+
+### Fixed
+
+- Allowed canonical composer source and first-segment URLs to satisfy link-profile capability requirements across providers while preserving unrelated validation and provider-availability errors.
+
 ## [1.44.4] - 2026-07-30
 
 ### Fixed
