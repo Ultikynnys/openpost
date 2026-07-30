@@ -4,6 +4,12 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [1.44.1] - 2026-07-30
+
+### Fixed
+
+- Updated the public post-preview browser test to follow the new accessible preview-options sheet on desktop and mobile.
+
 ## [1.44.0] - 2026-07-30
 
 ### Added

@@ -207,8 +207,9 @@ test("free marketing tools produce useful output", async ({ page }) => {
   await page.getByRole("option", { name: "Mastodon", exact: true }).click();
   await expect(page.locator("select")).toHaveCount(0);
   await page
-    .locator("summary")
-    .filter({ hasText: "Add account details, a poll, a link, or media" })
+    .getByRole("button", {
+      name: /Account, links, polls, and media/,
+    })
     .click();
   await page.getByLabel("Handle").fill("@alice@hachyderm.io");
   await expect(
