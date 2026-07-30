@@ -4,6 +4,12 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [1.44.3] - 2026-07-30
+
+### Fixed
+
+- Retried transient Cachix installation failures in CI and release workflows without disabling the shared Devenv cache.
+
 ## [1.44.2] - 2026-07-30
 
 ### Fixed

@@ -86,6 +86,7 @@ jobs:
         uses: cachix/cachix-action@v16
         with:
           name: devenv
+          installCommand: bash scripts/install-cachix-with-retry.sh
 
       - name: Restore shared Nix store
         id: nix-cache-restore
@@ -126,6 +127,7 @@ jobs:
         uses: cachix/cachix-action@v16
         with:
           name: devenv
+          installCommand: bash scripts/install-cachix-with-retry.sh
 
       - name: Restore shared Nix store
         uses: nix-community/cache-nix-action/restore@v7
@@ -201,6 +203,7 @@ jobs:
         uses: cachix/cachix-action@v16
         with:
           name: devenv
+          installCommand: bash scripts/install-cachix-with-retry.sh
 
       - name: Restore shared Nix store
         uses: nix-community/cache-nix-action/restore@v7
@@ -283,6 +286,7 @@ jobs:
         uses: cachix/cachix-action@v16
         with:
           name: devenv
+          installCommand: bash scripts/install-cachix-with-retry.sh
 
       - name: Restore shared Nix store
         uses: nix-community/cache-nix-action/restore@v7
@@ -325,6 +329,7 @@ jobs:
         uses: cachix/cachix-action@v16
         with:
           name: devenv
+          installCommand: bash scripts/install-cachix-with-retry.sh
 
       - name: Restore shared Nix store
         uses: nix-community/cache-nix-action/restore@v7

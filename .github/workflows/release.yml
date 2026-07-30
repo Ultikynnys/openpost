@@ -27,6 +27,7 @@ jobs:
         uses: cachix/cachix-action@v16
         with:
           name: devenv
+          installCommand: bash scripts/install-cachix-with-retry.sh
 
       - name: Install devenv
         shell: bash
