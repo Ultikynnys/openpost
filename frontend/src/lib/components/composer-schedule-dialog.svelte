@@ -5,7 +5,6 @@
 	import { Calendar } from '$lib/components/ui/calendar';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import { Input } from '$lib/components/ui/input';
-	import { ScrollArea } from '$lib/components/ui/scroll-area';
 	import * as Select from '$lib/components/ui/select';
 	import { m } from '$lib/paraglide/messages';
 	import ArrowRightIcon from 'lucide-svelte/icons/arrow-right';
@@ -224,44 +223,20 @@
 						{weekStartsOn}
 					/>
 				</div>
-				<div class="border-t md:flex md:min-h-0 md:flex-col md:border-t-0 md:border-l">
-					<div class="shrink-0 border-b px-3 py-2 text-center text-sm font-medium">
+				<div class="border-t md:border-t-0 md:border-l">
+					<div class="border-b px-3 py-2 text-center text-sm font-medium">
 						{m.compose_time()}
 					</div>
 					<div
 						data-testid="schedule-dialog-time-list"
-						class="p-2 md:min-h-0 md:flex-1 md:overflow-hidden"
+						class="p-2 md:max-h-72 md:overflow-y-auto"
 					>
-						{#if desktopCalendar.current}
-							<ScrollArea type="auto" class="h-full" scrollbarYClasses="py-1">
-								<div class="pr-2">
-									{#if timeSlots.length === 0}
-										<p class="px-2 py-6 text-center text-xs text-muted-foreground">
-											{m.compose_no_remaining_slots_today()}
-										</p>
-									{:else}
-										<div class="grid grid-cols-1 gap-1.5">
-											{#each timeSlots as time (time)}
-												<Button
-													type="button"
-													variant={selectedTime === time ? 'default' : 'ghost'}
-													size="sm"
-													onclick={() => selectTime(time)}
-													class="h-9 justify-center text-sm tabular-nums"
-												>
-													{time}
-												</Button>
-											{/each}
-										</div>
-									{/if}
-								</div>
-							</ScrollArea>
-						{:else if timeSlots.length === 0}
+						{#if timeSlots.length === 0}
 							<p class="px-2 py-6 text-center text-xs text-muted-foreground">
 								{m.compose_no_remaining_slots_today()}
 							</p>
 						{:else}
-							<div class="grid grid-cols-2 gap-1.5">
+							<div class="grid grid-cols-2 gap-1.5 md:grid-cols-1">
 								{#each timeSlots as time (time)}
 									<Button
 										type="button"
