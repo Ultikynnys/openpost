@@ -4,6 +4,12 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [1.46.1] - 2026-07-31
+
+### Fixed
+
+- Fixed feedback submission failing with a 503 on Postgres: the rate-limiter upsert referenced `request_count` unqualified inside `ON CONFLICT DO UPDATE`, which Postgres rejects as ambiguous when the table is aliased by the query builder. Qualifying the references restores feedback delivery, and a Postgres-gated regression test covers the rate limiter path.
+
 ## [1.46.0] - 2026-07-31
 
 ### Added

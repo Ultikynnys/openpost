@@ -162,9 +162,12 @@ func (s *Service) AllowSubmission(ctx context.Context, userID string, limit int,
 	windowStart := s.now().UTC().Truncate(window)
 	row := &rateLimitWindow{UserID: userID, WindowStart: windowStart, RequestCount: 1}
 	result, err := s.db.NewInsert().Model(row).
+		// bun aliases the model as `rate_limit_window`. Qualify the existing-row
+		// references so Postgres can resolve them: with a table alias in place,
+		// an unqualified `request_count` in ON CONFLICT DO UPDATE is ambiguous.
 		On("CONFLICT (user_id, window_start) DO UPDATE").
-		Set("request_count = request_count + 1").
-		Where("request_count < ?", limit).
+		Set("request_count = rate_limit_window.request_count + 1").
+		Where("rate_limit_window.request_count < ?", limit).
 		Exec(ctx)
 	if err != nil {
 		return false, fmt.Errorf("apply feedback rate limit: %w", err)
