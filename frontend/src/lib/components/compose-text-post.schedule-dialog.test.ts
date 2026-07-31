@@ -23,9 +23,7 @@ describe('schedule dialog mobile layout', () => {
 		);
 		expect(shellClasses).not.toContain('overflow-y-auto');
 		expect(bodyClasses).toEqual(expect.arrayContaining(['min-h-0', 'flex-1', 'overflow-y-auto']));
-		expect(timeListClasses).toEqual(
-			expect.arrayContaining(['md:max-h-72', 'md:overflow-y-auto'])
-		);
+		expect(timeListClasses).toEqual(expect.arrayContaining(['md:max-h-72', 'md:overflow-y-auto']));
 	});
 
 	it('shows two paged months at the desktop breakpoint', () => {

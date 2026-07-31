@@ -28,6 +28,7 @@
 		workspace_id?: string;
 		user_id?: string;
 		text: string;
+		example?: string;
 		category: string;
 		is_built_in: boolean;
 		created_at: string;
@@ -41,6 +42,7 @@
 	let selectedCategory = $state<string>('all');
 	let showAddPrompt = $state(false);
 	let newPromptText = $state('');
+	let newPromptExample = $state('');
 	let newPromptCategory = $state('');
 	let submitting = $state(false);
 	let toastMessage = $state('');
@@ -115,12 +117,14 @@
 				body: {
 					workspace_id: workspaceCtx.currentWorkspace.id,
 					text: newPromptText.trim(),
+					example: newPromptExample.trim(),
 					category: newPromptCategory
 				}
 			});
 			if (err) throw err;
 			showAddPrompt = false;
 			newPromptText = '';
+			newPromptExample = '';
 			toastTone = 'success';
 			toastMessage = m.prompts_created();
 			await loadPrompts();
@@ -166,7 +170,7 @@
 			});
 			if (err) throw new Error(err.detail || m.prompts_random_failed());
 			if (!data) throw new Error(m.prompts_random_failed());
-			ui.setPrompt(data.text);
+			ui.setPrompt({ text: data.text, example: data.example });
 			goto(resolve('/'));
 		} catch (e) {
 			console.error('Failed to get random prompt:', e);
@@ -175,8 +179,8 @@
 		}
 	}
 
-	function usePrompt(text: string) {
-		ui.setPrompt(text);
+	function usePrompt(prompt: Prompt) {
+		ui.setPrompt({ text: prompt.text, example: prompt.example ?? '' });
 		goto(resolve('/'));
 	}
 
@@ -302,14 +306,22 @@
 								>
 									<button
 										type="button"
-										class="min-h-24 flex-1 rounded-t-md p-3 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-										onclick={() => usePrompt(prompt.text)}
+										class="flex-1 rounded-t-md p-3 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+										onclick={() => usePrompt(prompt)}
 									>
 										<p
-											class="line-clamp-4 text-sm leading-relaxed text-foreground/80 group-hover:text-foreground"
+											class="line-clamp-3 text-sm leading-relaxed text-foreground/80 group-hover:text-foreground"
 										>
 											{prompt.text}
 										</p>
+										{#if prompt.example}
+											<p
+												class="mt-2 line-clamp-3 border-t pt-2 text-xs leading-relaxed text-muted-foreground group-hover:text-muted-foreground/80"
+											>
+												<span class="font-medium">{m.prompts_example_label()}:</span>
+												{prompt.example}
+											</p>
+										{/if}
 									</button>
 									<div
 										class="flex min-h-10 w-full items-center justify-between border-t px-3 py-1.5"
@@ -358,6 +370,16 @@
 								placeholder={m.prompts_text_placeholder()}
 								rows={3}
 							/>
+						</div>
+						<div class="space-y-2">
+							<label class="text-sm font-medium" for="prompt-example">{m.prompts_example()}</label>
+							<Textarea
+								id="prompt-example"
+								bind:value={newPromptExample}
+								placeholder={m.prompts_example_placeholder()}
+								rows={4}
+							/>
+							<p class="text-xs text-muted-foreground">{m.prompts_example_hint()}</p>
 						</div>
 						<div class="space-y-2">
 							<label class="text-sm font-medium" for="prompt-category">{m.prompts_category()}</label

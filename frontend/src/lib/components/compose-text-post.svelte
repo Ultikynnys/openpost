@@ -34,6 +34,7 @@
 	import XIcon from 'lucide-svelte/icons/x';
 	import LightbulbIcon from 'lucide-svelte/icons/lightbulb';
 	import ShuffleIcon from 'lucide-svelte/icons/shuffle';
+	import CheckIcon from 'lucide-svelte/icons/check';
 	import ImageIcon from 'lucide-svelte/icons/image';
 	import UnlinkIcon from 'lucide-svelte/icons/unlink';
 	import GripVerticalIcon from 'lucide-svelte/icons/grip-vertical';
@@ -91,6 +92,7 @@
 	import InlineNotice from './inline-notice.svelte';
 	import DestructiveConfirmDialog from './destructive-confirm-dialog.svelte';
 	import DraftConflictDialog from './draft-conflict-dialog.svelte';
+	import PromptApplyDialog from './prompt-apply-dialog.svelte';
 	import MediaPicker from './media-picker.svelte';
 	import { consumeStudioReturnToken, createStudioReturnToken } from '$lib/studio/api';
 	import {
@@ -229,8 +231,10 @@
 	let randomDelayOverride = $state<string>('default');
 
 	let showPromptCard = $state(false);
-	let currentPrompt = $state<{ text: string; category: string } | null>(null);
+	let currentPrompt = $state<{ text: string; example: string; category: string } | null>(null);
 	let loadingPrompt = $state(false);
+	let promptApplyDialogOpen = $state(false);
+	let pendingPromptToApply = $state<{ text: string; example: string } | null>(null);
 
 	let variants = $state<Map<string, Record<string, VariantPost>>>(new Map());
 	let activeVariantAccountId = $state<string | null>(null);
@@ -1752,11 +1756,10 @@
 	});
 
 	$effect(() => {
-		const text = ui.promptText;
-		if (text && !initialPost && !loadingWorkspaces) {
-			posts = [{ ...makeEmptyPost(), content: text }];
-			activePostIndex = 0;
+		const prompt = ui.pendingPrompt;
+		if (prompt && !initialPost && !loadingWorkspaces) {
 			ui.clearPrompt();
+			requestApplyPrompt(prompt);
 		}
 	});
 
@@ -2604,7 +2607,11 @@
 			});
 			if (err) throw err;
 			if (data) {
-				currentPrompt = { text: data.text, category: data.category };
+				currentPrompt = {
+					text: data.text,
+					example: data.example ?? '',
+					category: data.category
+				};
 				showPromptCard = true;
 			}
 		} catch (e) {
@@ -2617,6 +2624,40 @@
 	function dismissPrompt() {
 		showPromptCard = false;
 		currentPrompt = null;
+	}
+
+	function resolvePromptContent(prompt: { text: string; example?: string }): string {
+		return prompt.example?.trim() ? prompt.example : prompt.text;
+	}
+
+	function applyPromptContent(prompt: { text: string; example?: string }) {
+		posts = [{ ...makeEmptyPost(), content: resolvePromptContent(prompt) }];
+		activePostIndex = 0;
+		variants = new Map();
+		activeVariantAccountId = null;
+		scheduleAutoSave();
+	}
+
+	function requestApplyPrompt(prompt: { text: string; example?: string }) {
+		if (hasContent) {
+			pendingPromptToApply = { text: prompt.text, example: prompt.example ?? '' };
+			promptApplyDialogOpen = true;
+			return;
+		}
+		applyPromptContent(prompt);
+	}
+
+	function confirmApplyPrompt() {
+		const prompt = pendingPromptToApply;
+		if (!prompt) return;
+		applyPromptContent(prompt);
+		pendingPromptToApply = null;
+		promptApplyDialogOpen = false;
+	}
+
+	function cancelApplyPrompt() {
+		pendingPromptToApply = null;
+		promptApplyDialogOpen = false;
 	}
 
 	// --------------------------------------------------------------------------
@@ -3265,7 +3306,7 @@
 			<div class="mx-auto w-full max-w-2xl px-3 py-4 md:px-6 md:py-6">
 				<!-- Prompt Card -->
 				{#if showPromptCard}
-					<div class="relative mb-5 rounded border bg-muted/30 p-4 pr-24">
+					<div class="relative mb-5 rounded border bg-muted/30 p-4 pr-20">
 						<div class="absolute top-2 right-2 flex items-center gap-1">
 							<Button
 								variant="ghost"
@@ -3296,6 +3337,24 @@
 							</div>
 						{:else if currentPrompt}
 							<p class="text-sm leading-relaxed text-foreground/80">{currentPrompt.text}</p>
+							{#if currentPrompt.example}
+								<p
+									class="mt-3 border-t pt-3 text-sm leading-relaxed whitespace-pre-wrap text-foreground/90"
+								>
+									{currentPrompt.example}
+								</p>
+							{/if}
+							<div class="mt-3 flex justify-end">
+								<Button
+									size="sm"
+									class="gap-1.5"
+									onclick={() => requestApplyPrompt(currentPrompt!)}
+									title={m.compose_apply_prompt_title()}
+								>
+									<CheckIcon class="size-3.5" />
+									{m.compose_apply_prompt()}
+								</Button>
+							</div>
 						{:else}
 							<p class="text-sm text-muted-foreground">{m.compose_no_prompts()}</p>
 						{/if}
@@ -3747,4 +3806,11 @@
 	onReload={reloadSavedTextDraft}
 	onSaveCopy={saveConflictedTextDraftAsCopy}
 	onOverwrite={overwriteSavedTextDraft}
+/>
+
+<PromptApplyDialog
+	bind:open={promptApplyDialogOpen}
+	example={pendingPromptToApply ? resolvePromptContent(pendingPromptToApply) : ''}
+	onConfirm={confirmApplyPrompt}
+	onCancel={cancelApplyPrompt}
 />

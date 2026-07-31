@@ -4,6 +4,14 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [1.46.0] - 2026-07-31
+
+### Added
+
+- Expanded writing prompts with a full example post for every built-in prompt, plus 30 new founder post prompts (Building in Public, Founder Story, Industry Commentary, Team & Culture, Lessons & Frameworks, and Engagement Starters categories) with ready-to-publish examples.
+- Applying a writing prompt now fills the text-and-thread composer with the prompt's full example, and confirms with a dialog before replacing content the user already wrote. The composer's inspiration card shows the example and an Apply example button.
+- Custom writing prompts can now include an optional example post that is inserted into the composer when applied.
+
 ## [1.45.0] - 2026-07-30
 
 ### Added

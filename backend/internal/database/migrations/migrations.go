@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/openpost/backend/internal/models"
 	"github.com/uptrace/bun"
 	"github.com/uptrace/bun/dialect"
 )
@@ -139,6 +140,10 @@ func prepareMigration(ctx context.Context, db *bun.DB, migration migration) erro
 		if err := addVideoProjectIDToMediaAttachments(ctx, db); err != nil {
 			return fmt.Errorf("migration %s media project linkage preparation failed: %w", migration.name, err)
 		}
+	case 55:
+		if err := ensurePromptExampleColumn(ctx, db); err != nil {
+			return fmt.Errorf("migration %s prompt example preparation failed: %w", migration.name, err)
+		}
 	}
 	return nil
 }
@@ -153,6 +158,34 @@ func addVideoProjectIDToMediaAttachments(ctx context.Context, db *bun.DB) error 
 		return err
 	}
 	_, err = db.ExecContext(ctx, "ALTER TABLE media_attachments ADD COLUMN video_project_id TEXT NOT NULL DEFAULT ''")
+	return err
+}
+
+// ensurePromptExampleColumn guarantees the prompts table has the example column
+// before the raw SQL migration runs. Legacy databases created prompts through
+// the base-table bootstrap without the column, and migration regression tests
+// use minimal schemas that may not include the prompts table at all.
+func ensurePromptExampleColumn(ctx context.Context, db *bun.DB) error {
+	exists, err := migrationTableExists(ctx, db, "prompts")
+	if err != nil {
+		return err
+	}
+	if !exists {
+		if _, err := db.NewCreateTable().
+			Model((*models.Prompt)(nil)).
+			IfNotExists().
+			Exec(ctx); err != nil {
+			return err
+		}
+	}
+	present, err := migrationColumnExists(ctx, db, "prompts", "example")
+	if err != nil {
+		return err
+	}
+	if present {
+		return nil
+	}
+	_, err = db.ExecContext(ctx, "ALTER TABLE prompts ADD COLUMN example TEXT NOT NULL DEFAULT ''")
 	return err
 }
 

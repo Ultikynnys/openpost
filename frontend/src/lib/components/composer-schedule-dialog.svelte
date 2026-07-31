@@ -227,10 +227,7 @@
 					<div class="border-b px-3 py-2 text-center text-sm font-medium">
 						{m.compose_time()}
 					</div>
-					<div
-						data-testid="schedule-dialog-time-list"
-						class="p-2 md:max-h-72 md:overflow-y-auto"
-					>
+					<div data-testid="schedule-dialog-time-list" class="p-2 md:max-h-72 md:overflow-y-auto">
 						{#if timeSlots.length === 0}
 							<p class="px-2 py-6 text-center text-xs text-muted-foreground">
 								{m.compose_no_remaining_slots_today()}

@@ -1,5 +1,10 @@
 import { type DateValue } from '@internationalized/date';
 
+export interface PendingPrompt {
+	text: string;
+	example: string;
+}
+
 class UIState {
 	isComposeOpen = $state(false);
 	composeInitialDate = $state<DateValue | undefined>(undefined);
@@ -8,7 +13,7 @@ class UIState {
 	refreshCounter = $state(0);
 	composerResetCounter = $state(0);
 	activeComposerDraftId = $state<string | null>(null);
-	promptText = $state<string | null>(null);
+	pendingPrompt = $state<PendingPrompt | null>(null);
 	isFeedbackOpen = $state(false);
 
 	openCompose(date?: DateValue) {
@@ -35,12 +40,12 @@ class UIState {
 		this.isComposeOpen = true;
 	}
 
-	setPrompt(text: string) {
-		this.promptText = text;
+	setPrompt(prompt: { text: string; example?: string }) {
+		this.pendingPrompt = { text: prompt.text, example: prompt.example ?? '' };
 	}
 
 	clearPrompt() {
-		this.promptText = null;
+		this.pendingPrompt = null;
 	}
 
 	setActiveComposerDraft(id: string) {

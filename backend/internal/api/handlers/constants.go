@@ -56,4 +56,10 @@ const (
 	promptCategoryPredictions   = "Predictions"
 	promptCategoryQuickEasy     = "Quick & Easy"
 	promptCategoryDeveloper     = "Developer"
+	promptCategoryBuildInPublic = "Building in Public"
+	promptCategoryFounderStory  = "Founder Story"
+	promptCategoryIndustry      = "Industry Commentary"
+	promptCategoryTeamCulture   = "Team & Culture"
+	promptCategoryLessons       = "Lessons & Frameworks"
+	promptCategoryEngageStart   = "Engagement Starters"
 )

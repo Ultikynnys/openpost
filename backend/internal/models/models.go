@@ -1525,6 +1525,7 @@ type Prompt struct {
 	WorkspaceID string    `json:"workspace_id"` // null = global prompt
 	UserID      string    `json:"user_id"`      // null = workspace/global prompt
 	Text        string    `bun:",notnull" json:"text"`
+	Example     string    `bun:",notnull,default:''" json:"example"`
 	Category    string    `bun:",notnull" json:"category"`
 	IsBuiltIn   bool      `bun:",default:false" json:"is_built_in"`
 	CreatedAt   time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"created_at"`

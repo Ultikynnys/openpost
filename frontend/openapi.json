@@ -2822,6 +2822,11 @@
 						"minLength": 1,
 						"type": "string"
 					},
+					"example": {
+						"description": "Full example post for the prompt",
+						"maxLength": 2000,
+						"type": "string"
+					},
 					"text": {
 						"description": "Prompt text",
 						"maxLength": 500,
@@ -2833,7 +2838,7 @@
 						"type": "string"
 					}
 				},
-				"required": ["text", "category"],
+				"required": ["text", "example", "category"],
 				"type": "object"
 			},
 			"CreatePublicationInputBody": {
@@ -7541,6 +7546,10 @@
 						"description": "Creation time (ISO 8601)",
 						"type": "string"
 					},
+					"example": {
+						"description": "Full example post for the prompt (may be empty)",
+						"type": "string"
+					},
 					"id": {
 						"description": "Prompt ID",
 						"type": "string"
@@ -7562,7 +7571,7 @@
 						"type": "string"
 					}
 				},
-				"required": ["id", "text", "category", "is_built_in", "created_at"],
+				"required": ["id", "text", "example", "category", "is_built_in", "created_at"],
 				"type": "object"
 			},
 			"ProviderAppResponse": {

@@ -4382,6 +4382,8 @@ export interface components {
             readonly $schema?: string;
             /** @description Prompt category */
             category: string;
+            /** @description Full example post for the prompt */
+            example: string;
             /** @description Prompt text */
             text: string;
             /** @description Workspace ID (for workspace prompt) */
@@ -6539,6 +6541,8 @@ export interface components {
             category: string;
             /** @description Creation time (ISO 8601) */
             created_at: string;
+            /** @description Full example post for the prompt (may be empty) */
+            example: string;
             /** @description Prompt ID */
             id: string;
             /** @description Whether this is a built-in prompt */
