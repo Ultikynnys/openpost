@@ -982,7 +982,8 @@
 
 	async function startCheckout(planID: string) {
 		const workspaceID = workspaceCtx.currentWorkspace?.id;
-		const organizationID = workspaceCtx.currentWorkspace?.organization_id ?? '';
+		const organizationID =
+			billingStatus?.organization_id ?? workspaceCtx.currentWorkspace?.organization_id ?? '';
 		if (!workspaceID) return;
 		billingBusyPlan = planID;
 		billingError = '';
@@ -1009,7 +1010,8 @@
 
 	async function openBillingPortal() {
 		const workspaceID = workspaceCtx.currentWorkspace?.id;
-		const organizationID = workspaceCtx.currentWorkspace?.organization_id ?? '';
+		const organizationID =
+			billingStatus?.organization_id ?? workspaceCtx.currentWorkspace?.organization_id ?? '';
 		if (!workspaceID) return;
 		billingPortalBusy = true;
 		billingError = '';

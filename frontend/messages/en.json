@@ -1673,7 +1673,7 @@
 	"settings_revoke_token_body": "Any CLI or automation using this token will stop working.",
 	"settings_no_invitations": "No pending invitations.",
 	"settings_billing": "Billing",
-	"settings_billing_body": "Review the current plan and usage for your team.",
+	"settings_billing_body": "Review this organization's plan, usage, and billing.",
 	"settings_billing_load_failed": "Could not load plan details.",
 	"settings_customer_portal": "Customer portal",
 	"settings_current_plan": "Current plan",

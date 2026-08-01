@@ -23,14 +23,18 @@ func newSubscriptionEntitlementTestDB(t *testing.T) *bun.DB {
 
 	db := bun.NewDB(sqldb, sqlitedialect.New())
 	for _, model := range []interface{}{
+		(*models.Organization)(nil),
 		(*models.Workspace)(nil),
 		(*models.WorkspaceMember)(nil),
+		(*models.OrganizationMember)(nil),
 		(*models.BillingSubscription)(nil),
 	} {
 		_, err := db.NewCreateTable().Model(model).IfNotExists().Exec(context.Background())
 		require.NoError(t, err)
 	}
-	_, err = db.NewInsert().Model(&models.Workspace{ID: "ws-1", Name: "Launch"}).Exec(context.Background())
+	_, err = db.NewInsert().Model(&models.Organization{ID: "org-1", Name: "Subscribed", CreatedByID: "user-1"}).Exec(context.Background())
+	require.NoError(t, err)
+	_, err = db.NewInsert().Model(&models.Workspace{ID: "ws-1", OrganizationID: "org-1", Name: "Launch"}).Exec(context.Background())
 	require.NoError(t, err)
 	t.Cleanup(func() {
 		require.NoError(t, db.Close())
@@ -47,12 +51,19 @@ func seedWorkspaceMember(t *testing.T, db *bun.DB, userID string) {
 		Role:        models.WorkspaceRoleAdmin,
 	}).Exec(context.Background())
 	require.NoError(t, err)
+	_, err = db.NewInsert().Model(&models.OrganizationMember{
+		OrganizationID: "org-1",
+		UserID:         userID,
+		Role:           models.OrganizationRoleOwner,
+	}).On("CONFLICT DO NOTHING").Exec(context.Background())
+	require.NoError(t, err)
 }
 
 func seedBillingSubscription(t *testing.T, db *bun.DB, status, snapshot string) {
 	t.Helper()
 
 	_, err := db.NewInsert().Model(&models.BillingSubscription{
+		OrganizationID:         "org-1",
 		WorkspaceID:            "ws-1",
 		Provider:               "polar",
 		ProviderCustomerID:     "customer-1",
@@ -62,6 +73,62 @@ func seedBillingSubscription(t *testing.T, db *bun.DB, status, snapshot string) 
 		EntitlementSnapshot:    snapshot,
 	}).Exec(context.Background())
 	require.NoError(t, err)
+}
+
+func TestSubscriptionServiceUsesUsersActiveSubscriptionForLegacyPersonalWorkspace(t *testing.T) {
+	t.Parallel()
+
+	db := newSubscriptionEntitlementTestDB(t)
+	seedWorkspaceMember(t, db, "user-1")
+	_, err := db.NewInsert().Model(&models.Organization{ID: "org-without-plan", Name: "Legacy", CreatedByID: "user-1"}).Exec(t.Context())
+	require.NoError(t, err)
+	_, err = db.NewUpdate().Model((*models.Workspace)(nil)).
+		Set("organization_id = ?", "org-without-plan").
+		Where("id = ?", "ws-1").Exec(t.Context())
+	require.NoError(t, err)
+	seedBillingSubscription(t, db, "active", `{"limits":{"social_accounts":10}}`)
+	service := NewSubscriptionService(db, NewCloudBootstrapService())
+
+	decision, err := service.Check(t.Context(), Request{
+		UserID:      "user-1",
+		WorkspaceID: "ws-1",
+		Limit:       LimitSocialAccounts,
+		Current:     1,
+		Amount:      1,
+	})
+
+	require.NoError(t, err)
+	require.True(t, decision.Allowed)
+	require.Equal(t, int64(10), decision.Limit)
+}
+
+func TestSubscriptionServiceDoesNotApplyUsersPlanToAnotherOwnersWorkspace(t *testing.T) {
+	t.Parallel()
+
+	db := newSubscriptionEntitlementTestDB(t)
+	_, err := db.NewInsert().Model(&models.Organization{ID: "org-other", Name: "Other", CreatedByID: "user-2"}).Exec(t.Context())
+	require.NoError(t, err)
+	_, err = db.NewUpdate().Model((*models.Workspace)(nil)).
+		Set("organization_id = ?", "org-other").
+		Where("id = ?", "ws-1").Exec(t.Context())
+	require.NoError(t, err)
+	_, err = db.NewInsert().Model(&models.OrganizationMember{
+		OrganizationID: "org-1", UserID: "user-1", Role: models.OrganizationRoleOwner,
+	}).Exec(t.Context())
+	require.NoError(t, err)
+	seedBillingSubscription(t, db, "active", `{"limits":{"social_accounts":10}}`)
+	service := NewSubscriptionService(db, NewCloudBootstrapService())
+
+	decision, err := service.Check(t.Context(), Request{
+		UserID:      "user-1",
+		WorkspaceID: "ws-1",
+		Limit:       LimitSocialAccounts,
+		Current:     0,
+		Amount:      1,
+	})
+
+	require.NoError(t, err)
+	require.False(t, decision.Allowed)
 }
 
 func TestSubscriptionServiceAllowsWithinActiveSubscriptionLimit(t *testing.T) {

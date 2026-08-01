@@ -42,8 +42,9 @@
 		pending = true;
 		error = '';
 		try {
+			const organizationID = workspaceCtx.currentWorkspace?.organization_id?.trim() ?? '';
 			const { data, error: responseError } = await client.POST('/workspaces', {
-				body: { name }
+				body: { name, ...(organizationID ? { organization_id: organizationID } : {}) }
 			});
 			if (responseError || !data?.id) {
 				throw new Error(responseError?.detail || m.onboarding_create_failed());

@@ -37,6 +37,7 @@ func newWorkspaceTestServerWithAuthenticator(t *testing.T, entitlement entitleme
 		(*models.User)(nil),
 		(*models.Organization)(nil),
 		(*models.OrganizationMember)(nil),
+		(*models.BillingSubscription)(nil),
 		(*models.Workspace)(nil),
 		(*models.WorkspaceMember)(nil),
 		(*models.WorkspaceInvitation)(nil),
@@ -158,6 +159,38 @@ func TestCreateWorkspaceCloudBootstrapAllowsFirstWorkspaceOnly(t *testing.T) {
 	var count int
 	require.NoError(t, srv.db.NewSelect().ColumnExpr("COUNT(*)").TableExpr("workspaces").Scan(context.Background(), &count))
 	require.Equal(t, 1, count)
+}
+
+func TestCreateWorkspaceReusesOwnersActiveSubscribedOrganization(t *testing.T) {
+	t.Parallel()
+
+	srv := newWorkspaceTestServer(t, entitlements.NewSelfHostedService())
+	ctx := t.Context()
+	_, err := srv.db.NewInsert().Model(&models.Organization{
+		ID: "org-agency", Name: "Agency", CreatedByID: "user-1", CreatedAt: time.Now().UTC(),
+	}).Exec(ctx)
+	require.NoError(t, err)
+	_, err = srv.db.NewInsert().Model(&models.OrganizationMember{
+		OrganizationID: "org-agency", UserID: "user-1", Role: models.OrganizationRoleOwner,
+	}).Exec(ctx)
+	require.NoError(t, err)
+	_, err = srv.db.NewInsert().Model(&models.BillingSubscription{
+		OrganizationID:         "org-agency",
+		ProviderCustomerID:     "customer-1",
+		ProviderSubscriptionID: "subscription-1",
+		Status:                 "active",
+		PlanID:                 "agency",
+		EntitlementSnapshot:    `{}`,
+		UpdatedAt:              time.Now().UTC(),
+	}).Exec(ctx)
+	require.NoError(t, err)
+
+	resp := srv.createWorkspace(t, "Client workspace")
+	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
+
+	var workspace models.Workspace
+	require.NoError(t, srv.db.NewSelect().Model(&workspace).Where("name = ?", "Client workspace").Scan(ctx))
+	require.Equal(t, "org-agency", workspace.OrganizationID)
 }
 
 func TestCreateWorkspaceRejectsWhenEntitlementLimitExceeded(t *testing.T) {

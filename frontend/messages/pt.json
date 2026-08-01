@@ -1673,7 +1673,7 @@
 	"settings_revoke_token_body": "Qualquer CLI ou automação que use este token deixará de funcionar.",
 	"settings_no_invitations": "Não existem convites pendentes.",
 	"settings_billing": "Faturação",
-	"settings_billing_body": "Consulta o plano e a utilização atuais da tua equipa.",
+	"settings_billing_body": "Consulta o plano, a utilização e a faturação desta organização.",
 	"settings_billing_load_failed": "Não foi possível carregar os detalhes do plano.",
 	"settings_customer_portal": "Portal do cliente",
 	"settings_current_plan": "Plano atual",

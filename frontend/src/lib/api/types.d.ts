@@ -4628,7 +4628,7 @@ export interface components {
             readonly $schema?: string;
             /** @description Workspace name */
             name: string;
-            /** @description Organization ID. Omit to create a personal organization for this workspace. */
+            /** @description Organization ID. Omit to use the signed-in owner's active subscribed organization when available, or create a personal organization. */
             organization_id?: string;
         };
         CreateWorkspaceInvitationInputBody: {

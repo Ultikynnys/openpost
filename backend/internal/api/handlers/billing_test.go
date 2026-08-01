@@ -377,6 +377,75 @@ func TestGetBillingStatusRouteWithSubscriptionAndUsage(t *testing.T) {
 	require.Equal(t, float64(42), usage["scheduled_posts_monthly"])
 }
 
+func TestGetBillingStatusUsesOwnersActiveSubscriptionForLegacyWorkspace(t *testing.T) {
+	t.Parallel()
+
+	srv := newBillingAPITestServer(t)
+	ctx := context.Background()
+	_, err := srv.db.NewInsert().Model(&models.Organization{
+		ID: "org_legacy", Name: "Legacy", CreatedByID: "user-1",
+	}).Exec(ctx)
+	require.NoError(t, err)
+	_, err = srv.db.NewInsert().Model(&models.OrganizationMember{
+		OrganizationID: "org_legacy", UserID: "user-1", Role: models.OrganizationRoleOwner,
+	}).Exec(ctx)
+	require.NoError(t, err)
+	_, err = srv.db.NewInsert().Model(&models.Workspace{
+		ID: "ws-legacy", OrganizationID: "org_legacy", Name: "Legacy",
+	}).Exec(ctx)
+	require.NoError(t, err)
+	_, err = srv.db.NewInsert().Model(&models.WorkspaceMember{
+		WorkspaceID: "ws-legacy", UserID: "user-1", Role: models.WorkspaceRoleAdmin,
+	}).Exec(ctx)
+	require.NoError(t, err)
+	_, err = srv.db.NewInsert().Model(&models.BillingSubscription{
+		OrganizationID:         "org_ws-1",
+		WorkspaceID:            "ws-1",
+		Provider:               "polar",
+		ProviderCustomerID:     "cus-agency",
+		ProviderSubscriptionID: "sub-agency",
+		Status:                 "active",
+		PlanID:                 "agency",
+		EntitlementSnapshot:    `{"limits":{"social_accounts":25}}`,
+	}).Exec(ctx)
+	require.NoError(t, err)
+	_, err = srv.db.NewInsert().Model(&models.UsageCounter{
+		WorkspaceID: "ws-legacy",
+		Metric:      string(entitlements.LimitScheduledPostsMonthly),
+		PeriodStart: time.Date(time.Now().UTC().Year(), time.Now().UTC().Month(), 1, 0, 0, 0, 0, time.UTC),
+		Value:       3,
+	}).Exec(ctx)
+	require.NoError(t, err)
+	require.NoError(t, srv.usage.SetProviderCostPolicy(usageservice.NewXProviderCostPolicy(
+		500_000,
+		15_000,
+		200_000,
+	)))
+	_, err = srv.usage.RecordProviderCost(ctx, usageservice.ProviderCostEventInput{
+		WorkspaceID:  "ws-legacy",
+		Provider:     usageservice.ProviderX,
+		Operation:    usageservice.XOperationPostCreate,
+		OperationKey: "legacy-workspace-x-cost",
+		Units:        1,
+		OccurredAt:   time.Now().UTC(),
+	})
+	require.NoError(t, err)
+
+	resp := srv.getJSON(t, "/api/v1/billing/status?workspace_id=ws-legacy")
+
+	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
+	var out map[string]any
+	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &out))
+	require.Equal(t, "ws-legacy", out["workspace_id"])
+	require.Equal(t, "org_ws-1", out["organization_id"])
+	require.Equal(t, "agency", out["plan_id"])
+	require.Equal(t, "active", out["status"])
+	require.Equal(t, float64(3), out["usage"].(map[string]any)[string(entitlements.LimitScheduledPostsMonthly)])
+	providerCosts := out["provider_costs"].([]any)
+	require.Len(t, providerCosts, 1)
+	require.Equal(t, float64(15_000), providerCosts[0].(map[string]any)["cost_microusd"])
+}
+
 func TestGetBillingStatusSeparatesHostedProviderCostFromProductUsage(t *testing.T) {
 	t.Parallel()
 
@@ -386,7 +455,20 @@ func TestGetBillingStatusSeparatesHostedProviderCostFromProductUsage(t *testing.
 		15_000,
 		200_000,
 	)))
-	_, err := srv.usage.RecordProviderCost(context.Background(), usageservice.ProviderCostEventInput{
+	_, err := srv.db.NewInsert().Model(&models.Workspace{
+		ID: "ws-2", OrganizationID: "org_ws-1", Name: "Second",
+	}).Exec(context.Background())
+	require.NoError(t, err)
+	_, err = srv.usage.RecordProviderCost(context.Background(), usageservice.ProviderCostEventInput{
+		WorkspaceID:  "ws-2",
+		Provider:     usageservice.ProviderX,
+		Operation:    usageservice.XOperationPostCreate,
+		OperationKey: "billing-status-second-workspace",
+		Units:        1,
+		OccurredAt:   time.Now().UTC(),
+	})
+	require.NoError(t, err)
+	_, err = srv.usage.RecordProviderCost(context.Background(), usageservice.ProviderCostEventInput{
 		WorkspaceID:  "ws-1",
 		Provider:     usageservice.ProviderX,
 		Operation:    usageservice.XOperationPostCreate,
@@ -417,10 +499,10 @@ func TestGetBillingStatusSeparatesHostedProviderCostFromProductUsage(t *testing.
 	xCost := providerCosts[0].(map[string]any)
 	require.Equal(t, "x", xCost["provider"])
 	require.Equal(t, "USD", xCost["currency"])
-	require.Equal(t, float64(15_000), xCost["cost_microusd"])
+	require.Equal(t, float64(30_000), xCost["cost_microusd"])
 	require.Equal(t, float64(1), xCost["reserved_event_count"])
 	require.Equal(t, float64(200_000), xCost["reserved_cost_microusd"])
-	require.Equal(t, float64(500_000), xCost["budget_microusd"])
+	require.Equal(t, float64(1_000_000), xCost["budget_microusd"])
 	require.Equal(t, usageservice.XPricingSourceURL, xCost["pricing_source_url"])
 }
 

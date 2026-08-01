@@ -200,18 +200,9 @@ func (h *BillingHandler) getOrganizationStatus(ctx context.Context, input *GetOr
 
 func (h *BillingHandler) billingStatusForOrganization(ctx context.Context, organizationID, workspaceID string) (*BillingStatusOutput, error) {
 	now := time.Now().UTC()
-	usageSnapshot, err := h.usage.SnapshotOrganizationMonthly(ctx, organizationID, now)
+	usageSnapshot, providerCosts, err := h.billingUsageForScope(ctx, organizationID, workspaceID, now)
 	if err != nil {
 		return nil, huma.Error500InternalServerError("failed to load billing usage")
-	}
-	var providerCosts []usage.ProviderCostSummary
-	if workspaceID != "" {
-		providerCosts, err = h.usage.SnapshotProviderCosts(ctx, workspaceID, now)
-	} else {
-		providerCosts, err = h.usage.SnapshotOrganizationProviderCosts(ctx, organizationID, now)
-	}
-	if err != nil {
-		return nil, huma.Error500InternalServerError("failed to load provider cost usage")
 	}
 	response := BillingStatusResponse{
 		OrganizationID: organizationID,
@@ -254,6 +245,84 @@ func (h *BillingHandler) billingStatusForOrganization(ctx context.Context, organ
 	}
 	response.Limits = limits
 	return &BillingStatusOutput{Body: response}, nil
+}
+
+func (h *BillingHandler) billingUsageForScope(ctx context.Context, organizationID, workspaceID string, now time.Time) (map[entitlements.LimitKey]int64, []usage.ProviderCostSummary, error) {
+	usageSnapshot, err := h.usage.SnapshotOrganizationMonthly(ctx, organizationID, now)
+	if err != nil {
+		return nil, nil, err
+	}
+	providerCosts, err := h.usage.SnapshotOrganizationProviderCosts(ctx, organizationID, now)
+	if err != nil || workspaceID == "" {
+		return usageSnapshot, providerCosts, err
+	}
+	var workspaceOrganizationID string
+	err = h.db.NewSelect().
+		Table("workspaces").
+		Column("organization_id").
+		Where("id = ?", workspaceID).
+		Scan(ctx, &workspaceOrganizationID)
+	if err == sql.ErrNoRows || strings.TrimSpace(workspaceOrganizationID) == organizationID {
+		return usageSnapshot, providerCosts, nil
+	}
+	if err != nil {
+		return nil, nil, err
+	}
+	workspaceUsage, err := h.usage.SnapshotMonthly(ctx, workspaceID, now)
+	if err != nil {
+		return nil, nil, err
+	}
+	for metric, value := range workspaceUsage {
+		usageSnapshot[metric] += value
+	}
+	workspaceCosts, err := h.usage.SnapshotProviderCosts(ctx, workspaceID, now)
+	if err != nil {
+		return nil, nil, err
+	}
+	return usageSnapshot, mergeProviderCostSummaries(providerCosts, workspaceCosts), nil
+}
+
+func mergeProviderCostSummaries(base, extra []usage.ProviderCostSummary) []usage.ProviderCostSummary {
+	merged := append([]usage.ProviderCostSummary(nil), base...)
+	providerIndex := make(map[string]int, len(merged))
+	for index := range merged {
+		providerIndex[merged[index].Provider] = index
+	}
+	for _, addition := range extra {
+		index, found := providerIndex[addition.Provider]
+		if !found {
+			providerIndex[addition.Provider] = len(merged)
+			merged = append(merged, addition)
+			continue
+		}
+		target := &merged[index]
+		target.EventCount += addition.EventCount
+		target.Units += addition.Units
+		target.CostMicrousd += addition.CostMicrousd
+		target.ReservedEventCount += addition.ReservedEventCount
+		target.ReservedUnits += addition.ReservedUnits
+		target.ReservedMicrousd += addition.ReservedMicrousd
+		target.BudgetMicrousd += addition.BudgetMicrousd
+		operationIndex := make(map[string]int, len(target.Operations))
+		for operationIndexValue := range target.Operations {
+			operationIndex[target.Operations[operationIndexValue].Operation] = operationIndexValue
+		}
+		for _, operationAddition := range addition.Operations {
+			operationIndexValue, operationFound := operationIndex[operationAddition.Operation]
+			if !operationFound {
+				target.Operations = append(target.Operations, operationAddition)
+				continue
+			}
+			operationTarget := &target.Operations[operationIndexValue]
+			operationTarget.EventCount += operationAddition.EventCount
+			operationTarget.Units += operationAddition.Units
+			operationTarget.CostMicrousd += operationAddition.CostMicrousd
+			operationTarget.ReservedEventCount += operationAddition.ReservedEventCount
+			operationTarget.ReservedUnits += operationAddition.ReservedUnits
+			operationTarget.ReservedMicrousd += operationAddition.ReservedMicrousd
+		}
+	}
+	return merged
 }
 
 type CreateBillingCheckoutInput struct {
@@ -463,7 +532,47 @@ func (h *BillingHandler) resolveBillingScope(ctx context.Context, organizationID
 	if strings.TrimSpace(workspace.OrganizationID) == "" {
 		return "org_" + workspaceID, workspaceID, nil
 	}
-	return workspace.OrganizationID, workspaceID, nil
+	resolvedOrganizationID := strings.TrimSpace(workspace.OrganizationID)
+	hasSubscription, err := h.db.NewSelect().
+		Model((*models.BillingSubscription)(nil)).
+		Where("organization_id = ?", resolvedOrganizationID).
+		Exists(ctx)
+	if err != nil {
+		return "", "", huma.Error500InternalServerError("failed to resolve billing organization")
+	}
+	if hasSubscription {
+		return resolvedOrganizationID, workspaceID, nil
+	}
+	ownsWorkspaceOrganization, err := h.db.NewSelect().
+		Model((*models.Organization)(nil)).
+		Where("id = ?", resolvedOrganizationID).
+		Where("created_by = ?", userID).
+		Exists(ctx)
+	if err != nil {
+		return "", "", huma.Error500InternalServerError("failed to resolve billing organization")
+	}
+	if !ownsWorkspaceOrganization {
+		return resolvedOrganizationID, workspaceID, nil
+	}
+	var subscribedOrganizationID string
+	err = h.db.NewSelect().
+		TableExpr("billing_subscriptions AS bs").
+		ColumnExpr("bs.organization_id").
+		Join("JOIN organization_members AS om ON om.organization_id = bs.organization_id").
+		Where("om.user_id = ?", userID).
+		Join("JOIN organizations AS o ON o.id = bs.organization_id").
+		Where("o.created_by = ?", userID).
+		Where("LOWER(bs.status) IN (?)", bun.List([]string{"active", "trialing"})).
+		OrderExpr("bs.updated_at DESC").
+		Limit(1).
+		Scan(ctx, &subscribedOrganizationID)
+	if err == nil {
+		return subscribedOrganizationID, workspaceID, nil
+	}
+	if err != sql.ErrNoRows {
+		return "", "", huma.Error500InternalServerError("failed to resolve billing organization")
+	}
+	return resolvedOrganizationID, workspaceID, nil
 }
 
 func (h *BillingHandler) checkOrganizationAccess(ctx context.Context, organizationID, userID string, requireAdmin bool) error {

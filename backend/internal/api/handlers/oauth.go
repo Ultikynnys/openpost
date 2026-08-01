@@ -528,7 +528,7 @@ func (h *OAuthHandler) ensureCanStartAccountConnection(ctx context.Context, work
 	if err := h.checkWorkspaceEditAccess(ctx, workspaceID, userID); err != nil {
 		return err
 	}
-	if err := h.accountSaver.CheckSocialAccountQuota(ctx, workspaceID); err != nil {
+	if err := h.accountSaver.CheckSocialAccountQuota(ctx, middleware.GetUserID(ctx), workspaceID); err != nil {
 		return huma.Error403Forbidden(accountConnectionErrorMessage(err))
 	}
 	return nil

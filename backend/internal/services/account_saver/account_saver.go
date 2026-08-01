@@ -133,7 +133,7 @@ func (s *AccountSaver) SaveAccountsFromInputs(ctx context.Context, inputs []Save
 		}
 	}
 	if quotaAmount > 0 {
-		if err := s.checkSocialAccountQuota(ctx, first.WorkspaceID, quotaAmount); err != nil {
+		if err := s.checkSocialAccountQuota(ctx, first.UserID, first.WorkspaceID, quotaAmount); err != nil {
 			return nil, err
 		}
 	}
@@ -376,11 +376,11 @@ func firstNonEmptyTokenExtra(extra map[string]string, keys ...string) string {
 	return ""
 }
 
-func (s *AccountSaver) CheckSocialAccountQuota(ctx context.Context, workspaceID string) error {
-	return s.checkSocialAccountQuota(ctx, workspaceID, 1)
+func (s *AccountSaver) CheckSocialAccountQuota(ctx context.Context, userID, workspaceID string) error {
+	return s.checkSocialAccountQuota(ctx, userID, workspaceID, 1)
 }
 
-func (s *AccountSaver) checkSocialAccountQuota(ctx context.Context, workspaceID string, amount int64) error {
+func (s *AccountSaver) checkSocialAccountQuota(ctx context.Context, userID, workspaceID string, amount int64) error {
 	current, err := s.db.NewSelect().
 		Model((*models.SocialAccount)(nil)).
 		Where("workspace_id = ?", workspaceID).
@@ -392,6 +392,7 @@ func (s *AccountSaver) checkSocialAccountQuota(ctx context.Context, workspaceID 
 
 	decision, err := s.entitlement.Check(ctx, entitlements.Request{
 		WorkspaceID: workspaceID,
+		UserID:      userID,
 		Limit:       entitlements.LimitSocialAccounts,
 		Current:     int64(current),
 		Amount:      amount,

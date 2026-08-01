@@ -37,6 +37,9 @@ func (s *SubscriptionService) Check(ctx context.Context, req Request) (Decision,
 	}
 
 	sub, err := s.loadSubscription(ctx, organizationID, strings.TrimSpace(req.WorkspaceID))
+	if err == sql.ErrNoRows && strings.TrimSpace(req.UserID) != "" && s.userOwnsWorkspaceOrganization(ctx, strings.TrimSpace(req.UserID), strings.TrimSpace(req.WorkspaceID)) {
+		sub, err = s.loadActiveUserSubscription(ctx, strings.TrimSpace(req.UserID))
+	}
 	if err == sql.ErrNoRows {
 		return Decision{
 			Allowed: false,
@@ -66,6 +69,34 @@ func (s *SubscriptionService) Check(ctx context.Context, req Request) (Decision,
 		Limits: snapshot.Limits,
 	})
 	return static.Check(ctx, req)
+}
+
+func (s *SubscriptionService) userOwnsWorkspaceOrganization(ctx context.Context, userID, workspaceID string) bool {
+	if userID == "" || workspaceID == "" {
+		return false
+	}
+	owned, err := s.db.NewSelect().
+		TableExpr("workspaces AS w").
+		Join("JOIN organizations AS o ON o.id = w.organization_id").
+		Where("w.id = ?", workspaceID).
+		Where("o.created_by = ?", userID).
+		Exists(ctx)
+	return err == nil && owned
+}
+
+func (s *SubscriptionService) loadActiveUserSubscription(ctx context.Context, userID string) (models.BillingSubscription, error) {
+	var sub models.BillingSubscription
+	err := s.db.NewSelect().
+		Model(&sub).
+		ModelTableExpr("billing_subscriptions AS bs").
+		ColumnExpr("bs.*").
+		Join("JOIN organization_members AS om ON om.organization_id = bs.organization_id").
+		Where("om.user_id = ?", userID).
+		Where("LOWER(bs.status) IN (?)", bun.List([]string{"active", "trialing"})).
+		OrderExpr("bs.updated_at DESC").
+		Limit(1).
+		Scan(ctx)
+	return sub, err
 }
 
 func (s *SubscriptionService) resolveOrganizationID(ctx context.Context, req Request) (string, error) {
@@ -102,6 +133,7 @@ func (s *SubscriptionService) loadSubscription(ctx context.Context, organization
 		err = s.db.NewSelect().
 			Model(&sub).
 			Where("workspace_id = ?", workspaceID).
+			Where("(organization_id = '' OR organization_id = ?)", organizationID).
 			Scan(ctx)
 	}
 	return sub, err

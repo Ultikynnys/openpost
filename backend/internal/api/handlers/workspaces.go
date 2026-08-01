@@ -49,7 +49,7 @@ func (h *WorkspaceHandler) SetNotificationService(service *notifications.Service
 type CreateWorkspaceInput struct {
 	Body struct {
 		Name           string `json:"name" minLength:"1" maxLength:"100" doc:"Workspace name"`
-		OrganizationID string `json:"organization_id,omitempty" doc:"Organization ID. Omit to create a personal organization for this workspace."`
+		OrganizationID string `json:"organization_id,omitempty" doc:"Organization ID. Omit to use the signed-in owner's active subscribed organization when available, or create a personal organization."`
 	}
 }
 
@@ -205,6 +205,12 @@ func (h *WorkspaceHandler) CreateWorkspace(api huma.API) {
 			if err := h.requireOrganizationAdmin(ctx, organizationID, userID); err != nil {
 				return nil, err
 			}
+		} else {
+			var resolveErr error
+			organizationID, resolveErr = h.preferredOrganizationForNewWorkspace(ctx, userID)
+			if resolveErr != nil {
+				return nil, huma.Error500InternalServerError("failed to resolve workspace organization")
+			}
 		}
 		if err := h.checkCreateWorkspaceEntitlement(ctx, organizationID, userID); err != nil {
 			return nil, err
@@ -272,6 +278,29 @@ func (h *WorkspaceHandler) CreateWorkspace(api huma.API) {
 		resp.Body.WorkspaceCreatedAt = workspace.CreatedAt.Format(time.RFC3339)
 		return resp, nil
 	})
+}
+
+func (h *WorkspaceHandler) preferredOrganizationForNewWorkspace(ctx context.Context, userID string) (string, error) {
+	var organizationID string
+	err := h.db.NewSelect().
+		TableExpr("organizations AS o").
+		ColumnExpr("o.id").
+		Join("JOIN organization_members AS om ON om.organization_id = o.id").
+		Join("JOIN billing_subscriptions AS bs ON bs.organization_id = o.id").
+		Where("om.user_id = ?", userID).
+		Where("o.created_by = ?", userID).
+		Where("om.role IN (?)", bun.List([]string{models.OrganizationRoleOwner, models.OrganizationRoleAdmin})).
+		Where("LOWER(bs.status) IN (?)", bun.List([]string{"active", "trialing"})).
+		OrderExpr("bs.updated_at DESC").
+		Limit(1).
+		Scan(ctx, &organizationID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	return organizationID, nil
 }
 
 func (h *WorkspaceHandler) ListWorkspaceTeam(api huma.API) {
