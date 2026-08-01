@@ -47,6 +47,7 @@
 		renderStudioPages,
 		renderStudioPreview
 	} from '../static-renderer';
+	import { canAttachStudioPreview } from '../preview-generation';
 	import { StudioBackgroundRemoval } from '../background-removal';
 	import type {
 		StudioBrandKit,
@@ -133,6 +134,7 @@
 	let previewPending = false;
 	let previewBusy = false;
 	let previewTask: Promise<void> | null = null;
+	let previewGeneration = 0;
 	let lastPreviewAt = 0;
 	let coverPreviewMediaID = '';
 	let exportDialogOpen = $state(false);
@@ -245,6 +247,7 @@
 		}
 		const unsubscribe = editor.onChange(() => {
 			clearTimeout(saveTimer);
+			previewGeneration += 1;
 			previewPending = !guestMode;
 			if (guestMode && !meaningfulEditTracked) {
 				meaningfulEditTracked = true;
@@ -594,6 +597,7 @@
 		let metricOutcome: 'success' | 'error' = 'success';
 		const documentSnapshot = structuredClone(editor.document);
 		const pageSnapshot = structuredClone(page);
+		const requestedGeneration = previewGeneration;
 		try {
 			const blob = await renderStudioPreview(documentSnapshot, pageSnapshot);
 			const uploaded = await uploadMediaFile({
@@ -606,7 +610,15 @@
 				designDocumentId: editor.id,
 				designPageId: page.id
 			});
-			if (!editor.document?.pages.some((item) => item.id === page.id)) return;
+			if (
+				!canAttachStudioPreview(
+					requestedGeneration,
+					previewGeneration,
+					Boolean(editor.document?.pages.some((item) => item.id === page.id))
+				)
+			) {
+				return;
+			}
 			const nextDocument = structuredClone(editor.document);
 			const nextPage = nextDocument.pages.find((item) => item.id === page.id);
 			if (!nextPage) return;
@@ -623,6 +635,7 @@
 		} finally {
 			finishMetric(metricOutcome);
 			previewBusy = false;
+			if (previewPending && recoveryReason === 'idle') schedulePreview();
 		}
 	}
 
