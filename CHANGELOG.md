@@ -4,6 +4,8 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [1.47.0] - 2026-08-01
+
 ### Added
 
 - Added a reusable workspace color setting and applied it to workspace menus and calendar surfaces.
