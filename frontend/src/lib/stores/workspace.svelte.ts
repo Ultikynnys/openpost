@@ -17,6 +17,7 @@ export class WorkspaceContextError extends Error {
 
 interface WorkspaceSettings {
 	avatar_url: string;
+	color: string;
 	timezone: string;
 	week_start: number;
 	media_cleanup_days: number;
@@ -32,6 +33,7 @@ const STORAGE_KEY = 'openpost_current_workspace';
 function defaultWorkspaceSettings(): WorkspaceSettings {
 	return {
 		avatar_url: '',
+		color: '#f97316',
 		timezone: 'UTC',
 		week_start: 1,
 		media_cleanup_days: 0,
@@ -284,6 +286,13 @@ export class WorkspaceContext {
 					if (browser) {
 						localStorage.setItem(STORAGE_KEY, JSON.stringify(this.currentWorkspace));
 					}
+				}
+			}
+			if (updates.color !== undefined) {
+				this.settings.color = updates.color;
+				if (this.currentWorkspace) {
+					this.currentWorkspace = { ...this.currentWorkspace, color: updates.color } as Workspace;
+					if (browser) localStorage.setItem(STORAGE_KEY, JSON.stringify(this.currentWorkspace));
 				}
 			}
 			if (updates.week_start !== undefined) this.settings.week_start = updates.week_start;

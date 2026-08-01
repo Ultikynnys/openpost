@@ -19,6 +19,7 @@
 	import { workspaceCtx } from '$lib/stores/workspace.svelte';
 	import { m } from '$lib/paraglide/messages';
 	import { getLocaleTag } from '$lib/i18n';
+	import { workspaceColor } from '$lib/workspace-color';
 	import FileTextIcon from 'lucide-svelte/icons/file-text';
 	import ImageIcon from 'lucide-svelte/icons/image';
 	import MaximizeIcon from 'lucide-svelte/icons/maximize-2';
@@ -57,6 +58,9 @@
 
 	const workspaceId = $derived(workspaceCtx.currentWorkspace?.id ?? '');
 	const viewerTimeZone = $derived(workspaceCtx.settings.timezone || 'UTC');
+	const plannerColor = $derived(
+		workspaceCtx.currentWorkspace ? workspaceColor(workspaceCtx.currentWorkspace) : '#f97316'
+	);
 	const plannerToday = $derived(workspaceClock(viewerTimeZone).date);
 	const rollingWeeks = $derived(
 		buildRollingCalendarWeeks(plannerToday, workspaceCtx.weekStartsOn, renderedWeekCount)
@@ -374,10 +378,8 @@
 									{day.date.day}
 									{#if (dayCounts.get(day.key) ?? 0) > 0}
 										<span
-											class={[
-												'pointer-events-none absolute bottom-0.5 size-1 rounded-full ring-1 ring-sidebar',
-												day.today ? 'bg-sidebar-primary-foreground' : 'bg-primary'
-											]}
+											class="pointer-events-none absolute bottom-0.5 size-1 rounded-full ring-1 ring-sidebar"
+											style:background-color={plannerColor}
 											aria-hidden="true"
 										></span>
 									{/if}

@@ -4,6 +4,7 @@
 	import { resolve } from '$app/paths';
 	import { auth } from '$lib/stores/auth';
 	import { workspaceCtx } from '$lib/stores/workspace.svelte';
+	import { getAuthenticatedMediaURL } from '$lib/media-url';
 	import { ui } from '$lib/stores/ui.svelte';
 	import { m } from '$lib/paraglide/messages';
 	import {
@@ -112,9 +113,11 @@
 	}
 
 	function workspaceAvatarURL(workspace: Workspace | null | undefined) {
-		return (
-			(workspace as (Workspace & { avatar_url?: string }) | null | undefined)?.avatar_url ?? ''
-		).trim();
+		return getAuthenticatedMediaURL(
+			(
+				(workspace as (Workspace & { avatar_url?: string }) | null | undefined)?.avatar_url ?? ''
+			).trim()
+		);
 	}
 
 	function workspaceInitials(workspace: Workspace | null | undefined) {

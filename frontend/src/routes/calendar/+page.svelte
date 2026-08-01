@@ -24,6 +24,7 @@
 	import * as Sheet from '$lib/components/ui/sheet';
 	import * as Tooltip from '$lib/components/ui/tooltip';
 	import { getLocaleTag } from '$lib/i18n';
+	import { workspaceColor } from '$lib/workspace-color';
 	import { m } from '$lib/paraglide/messages';
 	import { ui } from '$lib/stores/ui.svelte';
 	import { WorkspaceContextError, workspaceCtx } from '$lib/stores/workspace.svelte';
@@ -707,17 +708,9 @@
 		);
 	}
 
-	function workspaceHue(workspaceId: string) {
-		let hash = 0;
-		for (let index = 0; index < workspaceId.length; index++) {
-			hash = workspaceId.charCodeAt(index) + ((hash << 5) - hash);
-		}
-		return Math.abs(hash) % 360;
-	}
-
 	function workspaceDotStyle(workspaceId: string) {
-		const hue = workspaceHue(workspaceId);
-		return `background-color: oklch(0.46 0.16 ${hue});`;
+		const workspace = workspaces.find((candidate) => candidate.id === workspaceId);
+		return `background-color: ${workspace ? workspaceColor(workspace) : '#f97316'};`;
 	}
 
 	function platformLabel(platform: string) {
@@ -1263,7 +1256,6 @@
 
 								<div class="min-h-0 flex-1 space-y-1 overflow-hidden">
 									{#each dayItems.slice(0, 2) as item (item.key)}
-										{@const primaryAccount = item.accounts[0]}
 										<button
 											type="button"
 											draggable={item.movable}
@@ -1285,11 +1277,27 @@
 												style={workspaceDotStyle(item.workspaceId)}
 												aria-hidden="true"
 											></span>
-											{#if primaryAccount}
-												<PlatformIcon
-													platform={primaryAccount.platform}
-													class="size-3.5 shrink-0"
-												/>
+											{#if item.accounts.length > 0}
+												<span
+													class="flex shrink-0 items-center -space-x-1"
+													aria-label={m.calendar_account_count({ count: item.accounts.length })}
+												>
+													{#each item.accounts.slice(0, 3) as account (account.id)}
+														<span
+															class="flex size-4 items-center justify-center rounded-full border border-border bg-background ring-1 ring-background"
+															title={`${platformLabel(account.platform)} ${account.label}`}
+														>
+															<PlatformIcon platform={account.platform} class="size-2.5" />
+														</span>
+													{/each}
+													{#if item.accounts.length > 3}
+														<span
+															class="flex size-4 items-center justify-center rounded-full border border-border bg-muted text-[8px] font-medium text-muted-foreground ring-1 ring-background"
+														>
+															+{item.accounts.length - 3}
+														</span>
+													{/if}
+												</span>
 											{/if}
 											<time class="shrink-0 text-[11px] font-medium text-current/75 tabular-nums">
 												{formatTime(item.occursAt)}

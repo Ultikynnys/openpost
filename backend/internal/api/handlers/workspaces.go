@@ -68,6 +68,7 @@ type WorkspaceResponse struct {
 	OrganizationName   string `json:"organization_name"`
 	WorkspaceName      string `json:"name"`
 	AvatarURL          string `json:"avatar_url"`
+	Color              string `json:"color"`
 	WorkspaceCreatedAt string `json:"created_at"`
 	Role               string `json:"role" enum:"admin,editor,viewer" doc:"Current user's workspace role"`
 	CanEdit            bool   `json:"can_edit" doc:"Whether the current user can change workspace content"`
@@ -855,12 +856,13 @@ func (h *WorkspaceHandler) ListWorkspaces(api huma.API) {
 			OrganizationName string    `bun:"organization_name"`
 			Name             string    `bun:"name"`
 			AvatarURL        string    `bun:"avatar_url"`
+			Color            string    `bun:"color"`
 			Role             string    `bun:"role"`
 			CreatedAt        time.Time `bun:"created_at"`
 		}
 		query := h.db.NewSelect().
 			TableExpr("workspaces AS w").
-			ColumnExpr("w.id, w.organization_id, w.name, w.avatar_url, w.created_at, wm.role").
+			ColumnExpr("w.id, w.organization_id, w.name, w.avatar_url, w.color, w.created_at, wm.role").
 			ColumnExpr("COALESCE(o.name, '') AS organization_name").
 			Join("JOIN workspace_members AS wm ON wm.workspace_id = w.id").
 			Join("LEFT JOIN organizations AS o ON o.id = w.organization_id").
@@ -901,6 +903,7 @@ func (h *WorkspaceHandler) ListWorkspaces(api huma.API) {
 				OrganizationName:   ws.OrganizationName,
 				WorkspaceName:      ws.Name,
 				AvatarURL:          ws.AvatarURL,
+				Color:              normalizedWorkspaceColor(ws.Color),
 				WorkspaceCreatedAt: ws.CreatedAt.Format(time.RFC3339),
 				Role:               ws.Role,
 				CanEdit:            decision.Allowed && (ws.Role == models.WorkspaceRoleAdmin || ws.Role == models.WorkspaceRoleEditor),
@@ -998,6 +1001,7 @@ type GetWorkspaceSettingsInput struct {
 type GetWorkspaceSettingsOutput struct {
 	Body struct {
 		AvatarURL           string `json:"avatar_url"`
+		Color               string `json:"color"`
 		Timezone            string `json:"timezone"`
 		WeekStart           int    `json:"week_start"`
 		MediaCleanupDays    int    `json:"media_cleanup_days"`
@@ -1013,6 +1017,7 @@ type UpdateWorkspaceSettingsInput struct {
 	PathID string `path:"id" doc:"Workspace ID"`
 	Body   struct {
 		AvatarURL           *string `json:"avatar_url,omitempty"`
+		Color               *string `json:"color,omitempty" pattern:"^#[0-9A-Fa-f]{6}$" doc:"Workspace accent color as a six-digit hex value"`
 		Timezone            *string `json:"timezone,omitempty"`
 		WeekStart           *int    `json:"week_start,omitempty"`
 		MediaCleanupDays    *int    `json:"media_cleanup_days,omitempty"`
@@ -1027,6 +1032,7 @@ type UpdateWorkspaceSettingsInput struct {
 type UpdateWorkspaceSettingsOutput struct {
 	Body struct {
 		AvatarURL           string `json:"avatar_url"`
+		Color               string `json:"color"`
 		Timezone            string `json:"timezone"`
 		WeekStart           int    `json:"week_start"`
 		MediaCleanupDays    int    `json:"media_cleanup_days"`
@@ -1075,6 +1081,7 @@ func (h *WorkspaceHandler) GetWorkspaceSettings(api huma.API) {
 
 		return &GetWorkspaceSettingsOutput{Body: struct {
 			AvatarURL           string `json:"avatar_url"`
+			Color               string `json:"color"`
 			Timezone            string `json:"timezone"`
 			WeekStart           int    `json:"week_start"`
 			MediaCleanupDays    int    `json:"media_cleanup_days"`
@@ -1085,6 +1092,7 @@ func (h *WorkspaceHandler) GetWorkspaceSettings(api huma.API) {
 			SlotIntervalMinutes int    `json:"slot_interval_minutes"`
 		}{
 			AvatarURL:           workspace.AvatarURL,
+			Color:               normalizedWorkspaceColor(workspace.Color),
 			Timezone:            workspace.Timezone,
 			WeekStart:           workspace.WeekStart,
 			MediaCleanupDays:    workspace.MediaCleanupDays,
@@ -1136,6 +1144,13 @@ func (h *WorkspaceHandler) UpdateWorkspaceSettings(api huma.API) {
 			}
 			workspace.AvatarURL = avatarURL
 		}
+		if input.Body.Color != nil {
+			color, valid := normalizedWorkspaceColorInput(*input.Body.Color)
+			if !valid {
+				return nil, huma.Error400BadRequest("color must be a six-digit hex value")
+			}
+			workspace.Color = color
+		}
 		if input.Body.WeekStart != nil {
 			if *input.Body.WeekStart < 0 || *input.Body.WeekStart > 1 {
 				return nil, huma.Error400BadRequest("week_start must be 0 (Sunday) or 1 (Monday)")
@@ -1180,7 +1195,7 @@ func (h *WorkspaceHandler) UpdateWorkspaceSettings(api huma.API) {
 		}
 
 		_, err = h.db.NewUpdate().Model(&workspace).
-			Column("avatar_url", "timezone", "week_start", "media_cleanup_days", "random_delay_minutes", "draft_gap_minutes", "slot_start_hour", "slot_end_hour", "slot_interval_minutes").
+			Column("avatar_url", "color", "timezone", "week_start", "media_cleanup_days", "random_delay_minutes", "draft_gap_minutes", "slot_start_hour", "slot_end_hour", "slot_interval_minutes").
 			Where("id = ?", input.PathID).
 			Exec(ctx)
 		if err != nil {
@@ -1193,6 +1208,7 @@ func (h *WorkspaceHandler) UpdateWorkspaceSettings(api huma.API) {
 
 		return &UpdateWorkspaceSettingsOutput{Body: struct {
 			AvatarURL           string `json:"avatar_url"`
+			Color               string `json:"color"`
 			Timezone            string `json:"timezone"`
 			WeekStart           int    `json:"week_start"`
 			MediaCleanupDays    int    `json:"media_cleanup_days"`
@@ -1203,6 +1219,7 @@ func (h *WorkspaceHandler) UpdateWorkspaceSettings(api huma.API) {
 			SlotIntervalMinutes int    `json:"slot_interval_minutes"`
 		}{
 			AvatarURL:           workspace.AvatarURL,
+			Color:               normalizedWorkspaceColor(workspace.Color),
 			Timezone:            workspace.Timezone,
 			WeekStart:           workspace.WeekStart,
 			MediaCleanupDays:    workspace.MediaCleanupDays,
@@ -1224,4 +1241,27 @@ func normalizedWorkspaceTimezone(value string) (string, bool) {
 		return "", false
 	}
 	return timezone, true
+}
+
+const defaultWorkspaceColor = "#f97316"
+
+func normalizedWorkspaceColor(value string) string {
+	color, valid := normalizedWorkspaceColorInput(value)
+	if !valid {
+		return defaultWorkspaceColor
+	}
+	return color
+}
+
+func normalizedWorkspaceColorInput(value string) (string, bool) {
+	color := strings.ToLower(strings.TrimSpace(value))
+	if len(color) != 7 || color[0] != '#' {
+		return "", false
+	}
+	for _, digit := range color[1:] {
+		if (digit < '0' || digit > '9') && (digit < 'a' || digit > 'f') {
+			return "", false
+		}
+	}
+	return color, true
 }

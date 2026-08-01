@@ -18,6 +18,7 @@ const workspaceA = {
 	id: 'workspace-a',
 	name: 'Workspace A',
 	avatar_url: '',
+	color: '#f97316',
 	created_at: '2026-01-01T00:00:00Z',
 	organization_id: '',
 	organization_name: '',
@@ -37,6 +38,7 @@ const workspaceB = {
 function settings(timezone: string) {
 	return {
 		avatar_url: '',
+		color: '#f97316',
 		timezone,
 		week_start: 1,
 		media_cleanup_days: 30,

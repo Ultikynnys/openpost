@@ -137,6 +137,7 @@ type Workspace struct {
 	OrganizationID      string    `bun:"organization_id" json:"organization_id"`
 	Name                string    `bun:",notnull" json:"name"`
 	AvatarURL           string    `bun:"avatar_url" json:"avatar_url"`
+	Color               string    `bun:",notnull,default:'#f97316'" json:"color"`
 	Timezone            string    `bun:",default:'UTC'" json:"timezone"`
 	WeekStart           int       `bun:",default:1" json:"week_start"`             // 0=Sunday, 1=Monday
 	MediaCleanupDays    int       `bun:",default:0" json:"media_cleanup_days"`     // 0 = disabled

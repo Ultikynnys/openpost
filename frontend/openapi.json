@@ -4714,6 +4714,9 @@
 					"avatar_url": {
 						"type": "string"
 					},
+					"color": {
+						"type": "string"
+					},
 					"draft_gap_minutes": {
 						"format": "int64",
 						"type": "integer"
@@ -4748,6 +4751,7 @@
 				},
 				"required": [
 					"avatar_url",
+					"color",
 					"timezone",
 					"week_start",
 					"media_cleanup_days",
@@ -12518,6 +12522,11 @@
 					"avatar_url": {
 						"type": "string"
 					},
+					"color": {
+						"description": "Workspace accent color as a six-digit hex value",
+						"pattern": "^#[0-9A-Fa-f]{6}$",
+						"type": "string"
+					},
 					"draft_gap_minutes": {
 						"format": "int64",
 						"type": "integer"
@@ -12565,6 +12574,9 @@
 					"avatar_url": {
 						"type": "string"
 					},
+					"color": {
+						"type": "string"
+					},
 					"draft_gap_minutes": {
 						"format": "int64",
 						"type": "integer"
@@ -12599,6 +12611,7 @@
 				},
 				"required": [
 					"avatar_url",
+					"color",
 					"timezone",
 					"week_start",
 					"media_cleanup_days",
@@ -13860,6 +13873,9 @@
 						"description": "Whether the current user can change workspace content",
 						"type": "boolean"
 					},
+					"color": {
+						"type": "string"
+					},
 					"created_at": {
 						"type": "string"
 					},
@@ -13907,6 +13923,7 @@
 					"organization_name",
 					"name",
 					"avatar_url",
+					"color",
 					"created_at",
 					"role",
 					"can_edit",

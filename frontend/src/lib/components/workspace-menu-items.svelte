@@ -9,6 +9,8 @@
 	import PlusIcon from 'lucide-svelte/icons/plus';
 	import SettingsIcon from 'lucide-svelte/icons/settings';
 	import type { Workspace } from '$lib/api/client';
+	import { getOptionalUnsavedChanges } from '$lib/unsaved-changes.svelte';
+	import { workspaceColor } from '$lib/workspace-color';
 
 	interface Props {
 		touchSize?: boolean;
@@ -65,6 +67,11 @@
 			</Avatar.Fallback>
 		</Avatar.Root>
 		<span class="min-w-0 flex-1 truncate">{workspace.name}</span>
+		<span
+			class="size-2 shrink-0 rounded-full ring-1 ring-foreground/10"
+			style:background-color={workspaceColor(workspace)}
+			aria-hidden="true"
+		></span>
 		{#if workspace.id === workspaceCtx.currentWorkspace?.id}
 			<CheckIcon class="size-4 text-primary" />
 		{/if}

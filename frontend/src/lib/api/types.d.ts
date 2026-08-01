@@ -5245,6 +5245,7 @@ export interface components {
              */
             readonly $schema?: string;
             avatar_url: string;
+            color: string;
             /** Format: int64 */
             draft_gap_minutes: number;
             /** Format: int64 */
@@ -8601,6 +8602,8 @@ export interface components {
              */
             readonly $schema?: string;
             avatar_url?: string;
+            /** @description Workspace accent color as a six-digit hex value */
+            color?: string;
             /** Format: int64 */
             draft_gap_minutes?: number;
             /** Format: int64 */
@@ -8625,6 +8628,7 @@ export interface components {
              */
             readonly $schema?: string;
             avatar_url: string;
+            color: string;
             /** Format: int64 */
             draft_gap_minutes: number;
             /** Format: int64 */
@@ -9131,6 +9135,7 @@ export interface components {
             avatar_url: string;
             /** @description Whether the current user can change workspace content */
             can_edit: boolean;
+            color: string;
             created_at: string;
             id: string;
             name: string;
