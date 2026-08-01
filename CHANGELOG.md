@@ -4,6 +4,19 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- Added a reusable workspace color setting and applied it to workspace menus and calendar surfaces.
+
+### Changed
+
+- Reorganized settings around workspace, organization, and personal ownership, with social accounts and members under the workspace and plan usage and SSO under the organization.
+
+### Fixed
+
+- Warned before discarding meaningful unsaved settings, exposed instance administration from Social Accounts, kept the sidebar planner mounted between Engagement and Messages, and prevented stale Studio preview work from replacing a newly saved design thumbnail.
+- Kept new workspaces in the owner's active subscribed organization, recovered existing owner-created workspaces that were split from that subscription, and aggregated hosted X API costs across the billed organization.
+
 ## [1.46.1] - 2026-07-31
 
 ### Fixed
@@ -259,7 +272,6 @@ This section consolidates the changes shipped between `v1.28.0` and `v1.41.2` be
 - Added normalized publication and rendition segments, provider-qualified output profiles, account capability resolution, scoped destination settings, and paginated account option searches.
 - Added authenticated, account-specific publishing options so composer fields can load live provider data such as YouTube playlists and regional video categories.
 - Added server-enforced `mcp:read` access for inspection-only agent connections, with mutation tools hidden and mutation attempts rejected at runtime.
-- Added a local five-destination sample campaign and reusable launch kit for reviewing agent-prepared renditions before connecting accounts or publishing.
 - Rebuilt the public platform and comparison guides and added six in-browser tools for character counting, post previews, thread splitting, handle checks, LinkedIn formatting, and timezone-aware posting plans.
 - Added email password recovery, authenticated password changes, account JSON exports, and permanent account deletion with billing, administration, shared-ownership, durable storage-cleanup, and re-authentication safeguards.
 - Added versioned Terms of Service and Privacy Policy acceptance for hosted registration, with public legal pages and an operator support contact.
