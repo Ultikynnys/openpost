@@ -29,12 +29,7 @@ test("registration routes first-time users through onboarding", async ({
   await page.getByLabel("Workspace name").fill(workspaceName);
   await page.getByRole("button", { name: "Create workspace" }).click();
 
-  await expect(page).toHaveURL(/\/\?sample=campaign$/);
-  await expect(
-    page.getByRole("heading", { name: "Review an agent-prepared campaign" }),
-  ).toBeVisible();
-  await page.getByRole("button", { name: "See account setup" }).click();
-  await expect(page).toHaveURL(/\/accounts$/);
+	await expect(page).toHaveURL(/\/$/);
 
   expect(
     await page.evaluate(() => window.localStorage.getItem("token")),

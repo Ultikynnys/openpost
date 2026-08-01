@@ -597,13 +597,7 @@ test("plan selection from signup starts checkout after onboarding", async ({
   await page.getByLabel("Workspace name").fill("Plan Handoff E2E");
   await page.getByRole("button", { name: "Create workspace" }).click();
 
-  await expect(page).toHaveURL(/\/\?sample=campaign&plan=creator/);
-  await expect(
-    page.getByRole("heading", { name: "Review an agent-prepared campaign" }),
-  ).toBeVisible();
-  await page.getByRole("button", { name: "Continue plan setup" }).click();
-
-  await expect(page).toHaveURL(/\/settings\?checkout=creator/);
+	await expect(page).toHaveURL(/\/settings\?checkout=creator/);
   expect(checkoutURL).toContain("/organizations/");
   expect(checkoutBody?.plan_id).toBe("creator");
 });

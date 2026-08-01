@@ -25,9 +25,10 @@
 	import LoaderIcon from 'lucide-svelte/icons/loader-2';
 	import UsersIcon from 'lucide-svelte/icons/users';
 	import { m } from '$lib/paraglide/messages';
-	import { sampleCampaignPathForPlan } from '$lib/sample-campaign';
+	import { getOptionalUnsavedChanges } from '$lib/unsaved-changes.svelte';
 
 	let workspaces = $derived<Workspace[]>(workspaceCtx.workspaces);
+	let authState = $derived($auth);
 	let selectedWorkspaceId = $derived(workspaceCtx.currentWorkspace?.id ?? '');
 	let loading = $state(true);
 	let error = $state('');
@@ -729,8 +730,6 @@
 							icon={UsersIcon}
 							title={m.accounts_empty_title()}
 							description={m.accounts_empty_body()}
-							actionLabel={m.accounts_sample_campaign_action()}
-							actionHref={sampleCampaignPathForPlan()}
 							variant="muted"
 							size="md"
 							headingLevel={3}

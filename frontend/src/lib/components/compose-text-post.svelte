@@ -89,7 +89,7 @@
 		type ResolvedComposerTarget
 	} from './compose/modes';
 	import { soundPreferences } from '$lib/stores/sound-preferences.svelte';
-	import InlineNotice from './inline-notice.svelte';
+	import AppToast from './app-toast.svelte';
 	import DestructiveConfirmDialog from './destructive-confirm-dialog.svelte';
 	import DraftConflictDialog from './draft-conflict-dialog.svelte';
 	import PromptApplyDialog from './prompt-apply-dialog.svelte';
@@ -101,7 +101,6 @@
 		storeComposerRecovery
 	} from '$lib/studio/recovery';
 	import type { ComposerRecoverySnapshot } from '$lib/studio/types';
-	import { sampleCampaignPathForPlan, SAMPLE_CAMPAIGN_DISMISSED_KEY } from '$lib/sample-campaign';
 	import { parseDraftConflict, type DraftConflictProblem } from '$lib/draft-conflict';
 	import { SerializedSaveQueue } from '$lib/serialized-save-queue';
 	import { buildComposerPreview } from '$lib/compose-preview';
@@ -215,7 +214,6 @@
 	let accountLoadError = $state('');
 	let accountsWorkspaceId = $state('');
 	let accountRetryIds: string[] | undefined = undefined;
-	let showSampleCampaignEntry = $state(false);
 	let workspaceRequestSequence = 0;
 	let accountRequestSequence = 0;
 	let nextSlotRequestSequence = 0;
@@ -1659,7 +1657,6 @@
 	}
 
 	onMount(() => {
-		showSampleCampaignEntry = localStorage.getItem(SAMPLE_CAMPAIGN_DISMISSED_KEY) !== 'true';
 		const handleVisibilityChange = () => {
 			if (document.visibilityState === 'hidden') void flushPendingTextDraft();
 		};
@@ -1701,11 +1698,6 @@
 			return goto(resolve(target as '/'));
 		});
 	});
-
-	function dismissSampleCampaignEntry() {
-		showSampleCampaignEntry = false;
-		localStorage.setItem(SAMPLE_CAMPAIGN_DISMISSED_KEY, 'true');
-	}
 
 	$effect(() => {
 		const post = initialPost;
@@ -3186,115 +3178,65 @@
 		onClear={() => (scheduleInputError = '')}
 	/>
 
-	<!-- ====================================================================== -->
-	<!-- Messages -->
-	<!-- ====================================================================== -->
 	{#if workspaceLoadError}
-		<div class="contents" data-testid="composer-workspaces-load-error">
-			<InlineNotice tone="error" message={workspaceLoadError} class="mx-3 mt-2 md:mx-4 md:mt-3">
-				{#snippet actions()}
-					<Button
-						variant="outline"
-						size="sm"
-						onclick={initializeComposer}
-						disabled={loadingWorkspaces}
-					>
-						{m.common_retry()}
-					</Button>
-				{/snippet}
-			</InlineNotice>
-		</div>
+		<AppToast
+			message={workspaceLoadError}
+			tone="error"
+			dismissLabel={m.common_dismiss()}
+			onDismiss={() => (workspaceLoadError = '')}
+			actionLabel={m.common_retry()}
+			onAction={() => void initializeComposer()}
+		/>
 	{:else if workspaceSettingsError}
-		<div class="contents" data-testid="composer-workspace-settings-error">
-			<InlineNotice tone="error" message={workspaceSettingsError} class="mx-3 mt-2 md:mx-4 md:mt-3">
-				{#snippet actions()}
-					<Button
-						variant="outline"
-						size="sm"
-						onclick={retryComposerWorkspaceSettings}
-						disabled={workspaceCtx.settingsLoading}
-					>
-						{m.common_retry()}
-					</Button>
-				{/snippet}
-			</InlineNotice>
-		</div>
+		<AppToast
+			message={workspaceSettingsError}
+			tone="error"
+			dismissLabel={m.common_dismiss()}
+			onDismiss={() => (workspaceSettingsError = '')}
+			actionLabel={m.common_retry()}
+			onAction={() => void retryComposerWorkspaceSettings()}
+		/>
 	{:else if accountLoadError}
-		<div class="contents" data-testid="composer-accounts-load-error">
-			<InlineNotice tone="error" message={accountLoadError} class="mx-3 mt-2 md:mx-4 md:mt-3">
-				{#snippet actions()}
-					<Button
-						variant="outline"
-						size="sm"
-						onclick={() => loadAccounts(selectedWorkspaceId, accountRetryIds)}
-						disabled={loadingAccounts}
-					>
-						{m.common_retry()}
-					</Button>
-				{/snippet}
-			</InlineNotice>
-		</div>
+		<AppToast
+			message={accountLoadError}
+			tone="error"
+			dismissLabel={m.common_dismiss()}
+			onDismiss={() => (accountLoadError = '')}
+			actionLabel={m.common_retry()}
+			onAction={() => void loadAccounts(selectedWorkspaceId, accountRetryIds)}
+		/>
 	{:else if capabilityResolveError}
-		<div class="contents" data-testid="composer-capabilities-load-error">
-			<InlineNotice tone="error" message={capabilityResolveError} class="mx-3 mt-2 md:mx-4 md:mt-3">
-				{#snippet actions()}
-					<Button
-						variant="outline"
-						size="sm"
-						onclick={resolveCapabilities}
-						disabled={capabilityResolveLoading}
-					>
-						{m.common_retry()}
-					</Button>
-				{/snippet}
-			</InlineNotice>
-		</div>
+		<AppToast
+			message={capabilityResolveError}
+			tone="error"
+			dismissLabel={m.common_dismiss()}
+			onDismiss={() => (capabilityResolveError = '')}
+			actionLabel={m.common_retry()}
+			onAction={() => void resolveCapabilities()}
+		/>
 	{/if}
 	{#if workspaceChangeNotice}
-		<InlineNotice
-			tone="info"
+		<AppToast
 			message={workspaceChangeNotice}
-			class="mx-3 mt-2 md:mx-4 md:mt-3"
-			onDismiss={() => (workspaceChangeNotice = '')}
 			dismissLabel={m.common_dismiss()}
+			onDismiss={() => (workspaceChangeNotice = '')}
 		/>
 	{/if}
 	{#if error}
-		<InlineNotice
-			tone="error"
+		<AppToast
 			message={error}
-			class="mx-3 mt-2 md:mx-4 md:mt-3"
-			onDismiss={() => (error = '')}
+			tone="error"
 			dismissLabel={m.common_dismiss()}
+			onDismiss={() => (error = '')}
 		/>
 	{/if}
 	{#if success}
-		<InlineNotice
-			tone="success"
+		<AppToast
 			message={success}
-			class="mx-3 mt-2 md:mx-4 md:mt-3"
+			tone="success"
+			dismissLabel={m.common_dismiss()}
 			onDismiss={() => (success = '')}
-			dismissLabel={m.common_dismiss()}
 		/>
-	{/if}
-	{#if showSampleCampaignEntry && !isEditMode && selectedWorkspaceId && !accountControlLoading && !accountLoadError && accounts.length === 0}
-		<InlineNotice
-			message={m.compose_sample_campaign_entry()}
-			class="mx-3 mt-2 md:mx-4 md:mt-3"
-			onDismiss={dismissSampleCampaignEntry}
-			dismissLabel={m.common_dismiss()}
-		>
-			{#snippet actions()}
-				<Button
-					href={sampleCampaignPathForPlan()}
-					variant="outline"
-					size="sm"
-					onclick={dismissSampleCampaignEntry}
-				>
-					{m.compose_sample_campaign_action()}
-				</Button>
-			{/snippet}
-		</InlineNotice>
 	{/if}
 
 	<!-- ====================================================================== -->
