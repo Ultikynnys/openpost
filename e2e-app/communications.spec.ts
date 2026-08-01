@@ -246,8 +246,37 @@ test("communications and notifications stay usable across desktop and phone layo
   );
   await expect(page.getByText("Item restored.")).toBeVisible();
 
-  await page.goto(`/messages?workspace=${workspace.id}`);
+  const sidebarCalendar = page.getByTestId("sidebar-rolling-calendar");
+  await expect(sidebarCalendar).toBeVisible();
+  await sidebarCalendar.evaluate((element) => {
+    element.scrollTop = Math.min(
+      40,
+      element.scrollHeight - element.clientHeight,
+    );
+    (
+      window as Window & { __openpostSidebarCalendar?: Element }
+    ).__openpostSidebarCalendar = element;
+  });
+  const sidebarCalendarScrollTop = await sidebarCalendar.evaluate(
+    (element) => element.scrollTop,
+  );
+  await page
+    .getByTestId("communications-navigation")
+    .getByRole("link", { name: "Messages" })
+    .click();
   await expect(page.getByRole("heading", { name: "Messages" })).toBeVisible();
+  await expect
+    .poll(() =>
+      sidebarCalendar.evaluate(
+        (element) =>
+          (window as Window & { __openpostSidebarCalendar?: Element })
+            .__openpostSidebarCalendar === element,
+      ),
+    )
+    .toBe(true);
+  await expect
+    .poll(() => sidebarCalendar.evaluate((element) => element.scrollTop))
+    .toBe(sidebarCalendarScrollTop);
   await page.getByText("Archived", { exact: true }).click();
   await expect(page.getByRole("button", { name: /Ada/ })).toBeVisible();
   await page.getByText("Archived", { exact: true }).click();
