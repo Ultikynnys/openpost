@@ -125,8 +125,10 @@ test("composer ignores stale accounts and recovers the current workspace", async
   await workspaceButton.click();
   await page.getByRole("menuitem", { name: new RegExp(second.name) }).click();
 
-  const loadError = page.getByTestId("composer-accounts-load-error");
-  await expect(loadError).toContainText("Failed to load accounts");
+  const loadError = page.locator("[data-sonner-toast]").filter({
+    hasText: "Failed to load accounts",
+  });
+  await expect(loadError).toBeVisible();
   await expect(page.getByTestId("composer-account-control")).toHaveCount(0);
 
   // The previous request may finish after the current one failed. It must still be ignored.
@@ -136,8 +138,8 @@ test("composer ignores stale accounts and recovers the current workspace", async
   await expect(page.getByTestId("composer-account-control")).toHaveCount(0);
   await expect(page.getByText("@stale_previous")).toHaveCount(0);
 
-  await loadError.getByRole("button", { name: "Try again" }).click();
-  await expect(loadError).toHaveCount(0);
+  await page.getByRole("button", { name: "Try again" }).click();
+  await expect(page.locator("[data-sonner-toast]")).toHaveCount(0);
   await page.getByTestId("composer-account-control").click();
   await expect(page.getByText("@current_workspace")).toBeVisible();
   await expect(page.getByText("@stale_previous")).toHaveCount(0);

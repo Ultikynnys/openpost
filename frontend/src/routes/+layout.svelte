@@ -326,7 +326,7 @@
 </svelte:head>
 
 {#if !isPreviewRoute}<ModeWatcher />{/if}
-<Toaster position="bottom-center" richColors />
+<Toaster position="bottom-center" richColors closeButton />
 {#if isPreviewRoute}
 	{@render children()}
 {:else if instance.isLoading || authState.isLoading || pendingRedirect || ssoChallengeInFlight || (authState.isAuthenticated && !authState.user?.legal_acceptance_required && !onboardingChecked)}

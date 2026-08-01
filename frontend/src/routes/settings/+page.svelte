@@ -2044,12 +2044,14 @@
 
 					<div class="mt-4 max-w-sm space-y-2">
 						<Label for="workspace-color">{m.settings_workspace_color()}</Label>
-						<StudioColorPicker
-							id="workspace-color"
-							label={m.settings_workspace_color()}
-							value={workspaceCtx.settings.color}
-							onChange={(color) => (workspaceCtx.settings.color = color)}
-						/>
+						<div class="[&>button]:min-h-11">
+							<StudioColorPicker
+								id="workspace-color"
+								label={m.settings_workspace_color()}
+								value={workspaceCtx.settings.color}
+								onChange={(color) => (workspaceCtx.settings.color = color)}
+							/>
+						</div>
 						<p class="text-sm text-muted-foreground">
 							{m.settings_workspace_color_description()}
 						</p>

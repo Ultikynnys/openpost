@@ -89,7 +89,7 @@ test("media library uploads and lists a local media file", async ({
     .click();
 
   await expect(
-    page.getByRole("status").getByText("Uploaded 1 file", { exact: true }),
+    page.locator("[data-sonner-toast]").filter({ hasText: "Uploaded 1 file" }),
   ).toBeVisible();
   await expect(page.getByText("launch-card.png")).toBeVisible();
   await expect(
@@ -189,7 +189,7 @@ test("video upload edits in the browser and becomes a verified media asset", asy
   await expect(uploadDialog.getByText("launch-video-edited.mp4")).toBeVisible();
   await uploadDialog.getByRole("button", { name: "Upload" }).click();
   await expect(
-    page.getByRole("status").getByText("Uploaded 1 file", { exact: true }),
+    page.locator("[data-sonner-toast]").filter({ hasText: "Uploaded 1 file" }),
   ).toBeVisible({ timeout: 60_000 });
   await expect(page.getByText("launch-video-edited.mp4")).toBeVisible();
 

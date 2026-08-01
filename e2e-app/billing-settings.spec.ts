@@ -425,11 +425,14 @@ test("settings keeps the active mobile tab visible and exposes dismissible statu
 
   await page.goto("/settings?tab=profile");
   await page.getByRole("button", { name: "Save Profile" }).click();
-  await expect(page.getByRole("status")).toHaveText("Profile updated");
-  const dismiss = page.getByRole("button", { name: "Dismiss notification" });
+  const savedToast = page.locator("[data-sonner-toast]").filter({
+    hasText: "Profile updated",
+  });
+  await expect(savedToast).toBeVisible();
+  const dismiss = page.getByRole("button", { name: "Close toast" });
   await expect(dismiss).toBeVisible();
   await dismiss.click();
-  await expect(page.getByRole("status")).toHaveCount(0);
+  await expect(savedToast).toHaveCount(0);
 });
 
 test("settings lists and revokes active web sessions", async ({

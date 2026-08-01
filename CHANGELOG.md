@@ -4,6 +4,11 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- Kept error toasts open until dismissed or retried and made every notification toast dismissible, and raised the workspace color picker to a touch-friendly height on small screens.
+- Updated end-to-end coverage to the sonner notification surface and hardened the Studio shape-menu assertion against the mounted menubar menu.
+
 ## [1.47.0] - 2026-08-01
 
 ### Added

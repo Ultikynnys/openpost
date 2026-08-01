@@ -32,7 +32,12 @@
 					}
 				}
 			: undefined;
-		const data = { action, closeButton: true, onDismiss };
+		const data = {
+			action,
+			closeButton: true,
+			onDismiss,
+			duration: tone === 'error' ? Infinity : undefined
+		};
 		const id =
 			tone === 'success'
 				? toast.success(message, data)

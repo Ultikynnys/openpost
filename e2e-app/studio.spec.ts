@@ -103,7 +103,7 @@ test("public Studio creates and restores a local design without authentication",
   await page.getByRole("button", { name: "Add shape" }).click({
     button: "right",
   });
-  const shapeMenu = page.getByRole("menu");
+  const shapeMenu = page.locator("[data-context-menu-content]");
   await expect(shapeMenu.getByText("Rounded", { exact: true })).toBeVisible();
   const shapeMenuBox = await shapeMenu.boundingBox();
   if (!shapeMenuBox) throw new Error("Studio shape menu did not render");
