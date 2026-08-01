@@ -355,7 +355,7 @@ test("desktop planning sidebar resumes drafts and stays out of mobile navigation
     page.getByRole("button", { name: "Media", exact: true }),
   ).toBeVisible();
   await expect(
-    page.getByRole("button", { name: "Accounts", exact: true }),
+    page.getByRole("button", { name: "Settings", exact: true }),
   ).toBeVisible();
   const draftList = page.getByTestId("sidebar-draft-list");
   await expect(draftList.locator("li")).toHaveCount(8);

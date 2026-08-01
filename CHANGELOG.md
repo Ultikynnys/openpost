@@ -4,6 +4,16 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [1.48.1] - 2026-08-01
+
+### Changed
+
+- Moved connected social accounts into Settings as a first-class workspace category and redirected legacy account links into the new location.
+
+### Fixed
+
+- Updated browser coverage for the Settings-owned Accounts destination.
+
 ## [1.48.0] - 2026-08-01
 
 ### Changed

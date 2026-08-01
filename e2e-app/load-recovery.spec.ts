@@ -126,7 +126,7 @@ test("accounts exposes independent recovery for accounts and providers", async (
     });
   });
 
-  await page.goto("/accounts");
+  await page.goto("/settings?tab=accounts");
 
   const accountsError = page.getByTestId("accounts-load-error");
   const providersError = page.getByTestId("providers-load-error");

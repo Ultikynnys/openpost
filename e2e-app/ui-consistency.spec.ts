@@ -269,12 +269,12 @@ for (const viewport of viewports) {
     } else {
       await page.locator('[data-settings-tab="accounts"]').click();
     }
-    await expect(page).toHaveURL(/\/accounts$/);
+    await expect(page).toHaveURL(/\/settings\?tab=accounts$/);
     await expect(page.getByTestId("settings-navigation")).toBeVisible();
     await expectNoDocumentOverflow(page);
 
     await page.goto("/settings?tab=accounts");
-    await expect(page).toHaveURL(/\/accounts$/);
+    await expect(page).toHaveURL(/\/settings\?tab=accounts$/);
     await expect(page.getByTestId("settings-navigation")).toBeVisible();
   });
 }

@@ -115,7 +115,7 @@ test("mobile shell and composer expose touch-first controls without overflow", a
   await expect(page.getByRole("menuitem", { name: "Settings" })).toBeVisible();
   await expect(
     page.getByRole("menuitem", { name: "Accounts" }),
-  ).toHaveAttribute("href", "/accounts");
+  ).toHaveAttribute("href", "/settings?tab=accounts");
   await expect(
     page.getByRole("menuitem", { name: "Settings" }),
   ).toHaveAttribute("href", "/settings");
