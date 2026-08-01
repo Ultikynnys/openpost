@@ -153,7 +153,7 @@
 			<a
 				{...props}
 				class={[props.class, 'min-h-11 gap-3']}
-				href={resolve('/accounts' as '/')}
+				href={resolve('/settings?tab=accounts' as '/')}
 				onclick={onNavigate}
 			>
 				<AccountsIcon class="size-4 text-muted-foreground" />

@@ -402,7 +402,7 @@
 			return;
 		}
 		if (destination.error_action === 'reconnect' || destination.error_action === 'open_provider') {
-			await goto(resolve('/accounts'));
+			await goto(resolve('/settings?tab=accounts'));
 			return;
 		}
 		if (destination.error_action === 'billing') {

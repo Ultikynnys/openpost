@@ -25,8 +25,8 @@
 	const workspaceDestinations = $derived<SettingsDestination[]>([
 		{ id: 'general', label: m.settings_general() },
 		{ id: 'brand', label: m.media_brand() },
-		{ id: 'schedule', label: m.settings_schedule() },
 		{ id: 'accounts', label: m.accounts_heading() },
+		{ id: 'schedule', label: m.settings_schedule() },
 		{ id: 'members', label: m.settings_members() }
 	]);
 	const organizationDestinations = $derived<SettingsDestination[]>([
@@ -52,7 +52,6 @@
 	);
 
 	function destinationHref(destination: SettingsDestinationID): string {
-		if (destination === 'accounts') return '/accounts';
 		return `/settings?tab=${destination}`;
 	}
 

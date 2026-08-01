@@ -109,7 +109,7 @@
 		}, 1000);
 
 		timeoutId = window.setTimeout(() => {
-			goto(resolve('/accounts'));
+			goto(resolve('/settings?tab=accounts'));
 		}, 5000);
 	}
 
@@ -202,7 +202,7 @@
 
 	function goToAccounts() {
 		clearRedirectTimers();
-		goto(resolve('/accounts'));
+		goto(resolve('/settings?tab=accounts'));
 	}
 
 	function optionTitle(option: SelectionOption) {

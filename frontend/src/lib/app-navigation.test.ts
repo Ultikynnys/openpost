@@ -10,7 +10,6 @@ describe('primary application navigation', () => {
 			'Inbox',
 			'Analytics',
 			'Media',
-			'Social accounts',
 			'Settings'
 		]);
 	});

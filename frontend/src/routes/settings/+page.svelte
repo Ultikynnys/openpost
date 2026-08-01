@@ -22,6 +22,7 @@
 	import MediaPicker from '$lib/components/media-picker.svelte';
 	import BrandKitEditor from '$lib/studio/components/brand-kit-editor.svelte';
 	import StudioColorPicker from '$lib/studio/components/studio-color-picker.svelte';
+	import AccountsPage from '../accounts/+page.svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { auth } from '$lib/stores/auth';
@@ -499,6 +500,7 @@
 		{ id: 'developer', label: m.settings_developer() },
 		{ id: 'general', label: m.settings_general() },
 		{ id: 'brand', label: m.media_brand() },
+		{ id: 'accounts', label: m.accounts_heading() },
 		{ id: 'schedule', label: m.settings_schedule() },
 		{ id: 'members', label: m.settings_members() },
 		{ id: 'sso', label: m.settings_sso() },
@@ -521,7 +523,7 @@
 	const settingsLoadingVariant = $derived.by(() => {
 		if (activeSettingsTab === 'profile') return 'profile' as const;
 		if (['members', 'sso', 'plan', 'security'].includes(activeSettingsTab)) return 'cards' as const;
-		if (['developer', 'schedule', 'instance', 'users'].includes(activeSettingsTab))
+		if (['developer', 'schedule', 'accounts', 'instance', 'users'].includes(activeSettingsTab))
 			return 'list' as const;
 		return 'form' as const;
 	});
@@ -560,6 +562,7 @@
 		if (activeSettingsTab === 'plan') return m.settings_plan();
 		if (activeSettingsTab === 'schedule') return m.settings_schedule();
 		if (activeSettingsTab === 'brand') return m.media_brand();
+		if (activeSettingsTab === 'accounts') return m.accounts_heading();
 		return m.settings_general();
 	});
 	const activeSettingsDescription = $derived.by(() => {
@@ -573,6 +576,7 @@
 		if (activeSettingsTab === 'plan') return m.settings_plan_description();
 		if (activeSettingsTab === 'schedule') return m.settings_schedule_description();
 		if (activeSettingsTab === 'brand') return m.media_brand_description();
+		if (activeSettingsTab === 'accounts') return m.accounts_description();
 		return m.settings_general_description({
 			workspace: workspaceCtx.currentWorkspace?.name || m.settings_workspace()
 		});
@@ -606,7 +610,8 @@
 		if (value === 'team') return 'members';
 		if (value === 'tokens' || value === 'account')
 			return value === 'tokens' ? 'developer' : 'profile';
-		if (value === 'workspace' || value === 'social-accounts' || value === 'media') return 'general';
+		if (value === 'workspace' || value === 'media') return 'general';
+		if (value === 'social-accounts' || value === 'accounts') return 'accounts';
 		return value && isSettingsTab(value) ? value : 'general';
 	}
 
@@ -1650,13 +1655,6 @@
 
 	let lastProfileUserID = $state('');
 	$effect(() => {
-		const requestedTab = page.url.searchParams.get('tab');
-		if (requestedTab === 'accounts' || requestedTab === 'social-accounts') {
-			void goto(resolve('/accounts'), { replaceState: true });
-		}
-	});
-
-	$effect(() => {
 		const user = authState.user;
 		if (user?.id && user.id !== lastProfileUserID) {
 			lastProfileUserID = user.id;
@@ -1852,6 +1850,12 @@
 							type="submit"
 						/>
 					</form>
+				</section>
+
+				<section id="accounts" class:hidden={activeSettingsTab !== 'accounts'} class="scroll-mt-24">
+					{#if activeSettingsTab === 'accounts'}
+						<AccountsPage />
+					{/if}
 				</section>
 
 				{#if authState.user?.is_admin}
@@ -2063,7 +2067,7 @@
 							<p class="text-sm font-medium">{m.settings_connected_channels()}</p>
 							<p class="text-sm text-muted-foreground">{m.settings_connected_channels_body()}</p>
 						</div>
-						<Button variant="outline" onclick={() => goto(resolve('/accounts'))}
+						<Button variant="outline" onclick={() => goto(resolve('/settings?tab=accounts'))}
 							>{m.settings_manage_accounts()}</Button
 						>
 					</div>

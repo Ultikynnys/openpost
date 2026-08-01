@@ -33,13 +33,6 @@ export const primaryNavigation: PrimaryNavigationItem[] = [
 		mobile: false
 	},
 	{ id: 'media', label: 'Media', href: '/media', match: ['/media'], mobile: true },
-	{
-		id: 'accounts',
-		label: 'Social accounts',
-		href: '/accounts',
-		match: ['/accounts'],
-		mobile: true
-	},
 	{ id: 'settings', label: 'Settings', href: '/settings', match: ['/settings'], mobile: false }
 ];
 

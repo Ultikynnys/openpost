@@ -372,7 +372,7 @@ FORM: Publications are the primary rows; provider renditions disclose in place w
 			title={m.analytics_no_accounts_title()}
 			description={m.analytics_no_accounts_description()}
 			actionLabel={m.analytics_no_accounts_action()}
-			actionHref="/accounts"
+			actionHref="/settings?tab=accounts"
 			size="lg"
 		/>
 	{:else}
@@ -383,7 +383,9 @@ FORM: Publications are the primary rows; provider renditions disclose in place w
 					message={`${account.username}: ${account.error_message || m.analytics_permission_required()}`}
 				>
 					{#snippet actions()}
-						<Button href="/accounts" variant="outline" size="sm">{m.analytics_reconnect()}</Button>
+						<Button href="/settings?tab=accounts" variant="outline" size="sm"
+							>{m.analytics_reconnect()}</Button
+						>
 					{/snippet}
 				</InlineNotice>
 			{/each}

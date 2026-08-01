@@ -26,6 +26,8 @@
 		loadingItems?: number;
 		/** Number of controls represented in the loading header */
 		loadingActionCount?: number;
+		/** Render only the content when the page is embedded in another shell */
+		embedded?: boolean;
 		/** Page content */
 		children: Snippet;
 	}
@@ -41,17 +43,12 @@
 		loadingVariant = 'profile',
 		loadingItems = 4,
 		loadingActionCount = 2,
+		embedded = false,
 		children
 	}: Props = $props();
 </script>
 
-<div
-	data-slot="page-container"
-	class="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 px-4 py-5 sm:px-6 sm:py-6 lg:px-8"
-	style="container-type: inline-size;"
->
-	<PageHeader {title} icon={Icon} {description} {actions} {loading} {loadingActionCount} />
-
+{#if embedded}
 	<div data-slot="page-content" class="min-w-0" aria-busy={loading}>
 		{#if loading}
 			<PageLoading
@@ -64,4 +61,25 @@
 			{@render children()}
 		{/if}
 	</div>
-</div>
+{:else}
+	<div
+		data-slot="page-container"
+		class="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 px-4 py-5 sm:px-6 sm:py-6 lg:px-8"
+		style="container-type: inline-size;"
+	>
+		<PageHeader {title} icon={Icon} {description} {actions} {loading} {loadingActionCount} />
+
+		<div data-slot="page-content" class="min-w-0" aria-busy={loading}>
+			{#if loading}
+				<PageLoading
+					layout={loadingLayout}
+					variant={loadingVariant}
+					label={loadingMessage}
+					items={loadingItems}
+				/>
+			{:else}
+				{@render children()}
+			{/if}
+		</div>
+	</div>
+{/if}

@@ -128,7 +128,9 @@
 				{/if}
 
 				<div class="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-					<Button href={resolve('/accounts')} variant="outline">{m.common_cancel()}</Button>
+					<Button href={resolve('/settings?tab=accounts')} variant="outline"
+						>{m.common_cancel()}</Button
+					>
 					<Button type="submit" disabled={loading}>
 						{loading
 							? m.accounts_mastodon_callback_connecting()

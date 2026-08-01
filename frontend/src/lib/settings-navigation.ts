@@ -6,6 +6,7 @@ export const settingsTabIDs = [
 	'users',
 	'general',
 	'brand',
+	'accounts',
 	'schedule',
 	'members',
 	'sso',
@@ -13,4 +14,4 @@ export const settingsTabIDs = [
 ] as const;
 
 export type SettingsTabID = (typeof settingsTabIDs)[number];
-export type SettingsDestinationID = SettingsTabID | 'accounts';
+export type SettingsDestinationID = SettingsTabID;

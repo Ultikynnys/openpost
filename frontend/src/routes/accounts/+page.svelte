@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { page } from '$app/state';
 	import { auth } from '$lib/stores/auth';
 	import { workspaceCtx } from '$lib/stores/workspace.svelte';
 	import { client, type Workspace, type SocialAccount, type ProviderInfo } from '$lib/api/client';
@@ -26,6 +27,8 @@
 	import UsersIcon from 'lucide-svelte/icons/users';
 	import { m } from '$lib/paraglide/messages';
 	import { getOptionalUnsavedChanges } from '$lib/unsaved-changes.svelte';
+
+	let embedded = $derived(page.url.pathname === '/settings');
 
 	let workspaces = $derived<Workspace[]>(workspaceCtx.workspaces);
 	let authState = $derived($auth);
@@ -267,6 +270,10 @@
 	}
 
 	onMount(() => {
+		if (!embedded) {
+			void goto(resolve('/settings?tab=accounts'), { replaceState: true });
+			return;
+		}
 		const params = new URLSearchParams(window.location.search);
 		const urlError = params.get('error');
 		if (urlError) {
@@ -665,10 +672,6 @@
 	}
 </script>
 
-<svelte:head>
-	<title>{m.accounts_page_title()}</title>
-</svelte:head>
-
 {#if toastMessage}
 	<AppToast
 		message={toastMessage}
@@ -687,10 +690,17 @@
 	{loading}
 	loadingLayout="sections"
 	loadingMessage={m.common_loading()}
+	{embedded}
 >
-	<div class="grid min-w-0 items-start gap-8 lg:grid-cols-[13rem_minmax(0,1fr)]">
-		<SettingsNavigation active="accounts" showInstance={Boolean(authState.user?.is_admin)} />
-		<div class="min-w-0">
+	<div
+		class={embedded
+			? 'min-w-0'
+			: 'grid min-w-0 items-start gap-8 lg:grid-cols-[13rem_minmax(0,1fr)]'}
+	>
+		{#if !embedded}
+			<SettingsNavigation active="accounts" showInstance={Boolean(authState.user?.is_admin)} />
+		{/if}
+		<div class:min-w-0={!embedded} class="min-w-0">
 			{#if !workspaces || workspaces.length === 0}
 				<EmptyState
 					icon={UsersIcon}
