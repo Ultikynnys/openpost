@@ -4,6 +4,8 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [1.47.1] - 2026-08-01
+
 ### Fixed
 
 - Kept error toasts open until dismissed or retried and made every notification toast dismissible, and raised the workspace color picker to a touch-friendly height on small screens.
