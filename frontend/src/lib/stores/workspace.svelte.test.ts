@@ -195,4 +195,20 @@ describe('workspace settings state', () => {
 		expect(context.settings.timezone).toBe('UTC');
 		expect(context.settingsReady).toBe(true);
 	});
+
+	it('tracks meaningful workspace edits until the explicit save succeeds', async () => {
+		mocks.get.mockResolvedValueOnce({ data: settings('Europe/Lisbon'), error: null });
+		mocks.patch.mockResolvedValueOnce({ data: settings('Europe/Lisbon'), error: null });
+		const context = new WorkspaceContext();
+		await context.setWorkspace(workspaceA);
+
+		expect(context.settingsDirty).toBe(false);
+		context.settings.color = '#2563eb';
+		expect(context.settingsDirty).toBe(true);
+
+		await context.saveSettings({ color: '#2563eb' });
+
+		expect(context.settingsDirty).toBe(false);
+		expect(context.currentWorkspace?.color).toBe('#2563eb');
+	});
 });

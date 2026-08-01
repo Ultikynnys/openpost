@@ -26,12 +26,12 @@
 		{ id: 'general', label: m.settings_general() },
 		{ id: 'brand', label: m.media_brand() },
 		{ id: 'schedule', label: m.settings_schedule() },
-		{ id: 'accounts', label: m.accounts_heading() }
+		{ id: 'accounts', label: m.accounts_heading() },
+		{ id: 'members', label: m.settings_members() }
 	]);
-	const teamDestinations = $derived<SettingsDestination[]>([
-		{ id: 'members', label: m.settings_members() },
-		{ id: 'sso', label: m.settings_sso() },
-		{ id: 'plan', label: m.settings_plan() }
+	const organizationDestinations = $derived<SettingsDestination[]>([
+		{ id: 'plan', label: m.settings_plan() },
+		{ id: 'sso', label: m.settings_sso() }
 	]);
 	const instanceDestinations = $derived<SettingsDestination[]>(
 		showInstance
@@ -44,7 +44,7 @@
 	const allDestinations = $derived([
 		...personalDestinations,
 		...workspaceDestinations,
-		...teamDestinations,
+		...organizationDestinations,
 		...instanceDestinations
 	]);
 	const activeLabel = $derived(
@@ -77,7 +77,7 @@
 	</a>
 {/snippet}
 
-<aside class="min-w-0 lg:sticky lg:top-6" data-testid="settings-navigation">
+<aside class="min-w-0 lg:sticky lg:top-6 lg:self-start" data-testid="settings-navigation">
 	<Select.Root
 		type="single"
 		value={active}
@@ -102,8 +102,8 @@
 			</Select.Group>
 			<Select.Separator />
 			<Select.Group>
-				<Select.GroupHeading>{m.settings_team_billing()}</Select.GroupHeading>
-				{#each teamDestinations as destination (destination.id)}
+				<Select.GroupHeading>{m.settings_organization()}</Select.GroupHeading>
+				{#each organizationDestinations as destination (destination.id)}
 					<Select.Item value={destination.id}>{destination.label}</Select.Item>
 				{/each}
 			</Select.Group>
@@ -135,9 +135,9 @@
 		{/each}
 
 		<p class="px-2 pt-4 text-[11px] font-medium tracking-[0.12em] text-muted-foreground uppercase">
-			{m.settings_team_billing()}
+			{m.settings_organization()}
 		</p>
-		{#each teamDestinations as destination (destination.id)}
+		{#each organizationDestinations as destination (destination.id)}
 			{@render destinationLink(destination)}
 		{/each}
 

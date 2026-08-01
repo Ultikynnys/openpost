@@ -3,7 +3,7 @@
 	import { ModeWatcher } from 'mode-watcher';
 	import { onMount } from 'svelte';
 	import { auth } from '$lib/stores/auth';
-	import { goto } from '$app/navigation';
+	import { beforeNavigate, goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/stores';
 	import * as Sidebar from '$lib/components/ui/sidebar';
@@ -24,8 +24,24 @@
 	import FeedbackDialog from '$lib/components/feedback-dialog.svelte';
 	import { captureWebReauthGrant, storeReauthGrant } from '$lib/auth/reauth';
 	import { client } from '$lib/api/client';
+	import { Toaster } from '$lib/components/ui/sonner';
+	import { setUnsavedChanges, UnsavedChangesContext } from '$lib/unsaved-changes.svelte';
 
 	let { children } = $props();
+	const unsavedChanges = setUnsavedChanges(new UnsavedChangesContext());
+
+	beforeNavigate((navigation) => {
+		if (!unsavedChanges.hasChanges) return;
+		if (navigation.type === 'leave') return;
+		if (currentPath === '/settings' && navigation.to?.url.pathname === '/settings') return;
+		if (!unsavedChanges.confirmDiscard()) navigation.cancel();
+	});
+
+	function warnBeforeUnload(event: BeforeUnloadEvent) {
+		if (!unsavedChanges.hasChanges) return;
+		event.preventDefault();
+		event.returnValue = '';
+	}
 
 	const instance = instanceStore();
 
@@ -303,11 +319,14 @@
 	});
 </script>
 
+<svelte:window onbeforeunload={warnBeforeUnload} />
+
 <svelte:head>
 	<title>OpenPost</title>
 </svelte:head>
 
 {#if !isPreviewRoute}<ModeWatcher />{/if}
+<Toaster position="bottom-center" richColors />
 {#if isPreviewRoute}
 	{@render children()}
 {:else if instance.isLoading || authState.isLoading || pendingRedirect || ssoChallengeInFlight || (authState.isAuthenticated && !authState.user?.legal_acceptance_required && !onboardingChecked)}

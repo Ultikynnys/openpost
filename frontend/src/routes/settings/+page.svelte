@@ -10,7 +10,6 @@
 	import SettingsNavigation from '$lib/components/settings-navigation.svelte';
 	import PageLoading from '$lib/components/page-loading.svelte';
 	import SectionHeader from '$lib/components/section-header.svelte';
-	import AppToast from '$lib/components/app-toast.svelte';
 	import InlineNotice from '$lib/components/inline-notice.svelte';
 	import InstanceAdminOverview from '$lib/components/instance-admin-overview.svelte';
 	import InstanceAdminUsers from '$lib/components/instance-admin-users.svelte';
@@ -20,13 +19,16 @@
 	import OrganizationSSOSettings from '$lib/components/organization-sso-settings.svelte';
 	import SettingsFormFooter from '$lib/components/settings-form-footer.svelte';
 	import MediaPreviewImage from '$lib/components/media-preview-image.svelte';
+	import MediaPicker from '$lib/components/media-picker.svelte';
 	import BrandKitEditor from '$lib/studio/components/brand-kit-editor.svelte';
+	import StudioColorPicker from '$lib/studio/components/studio-color-picker.svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { auth } from '$lib/stores/auth';
 	import { getApiBase } from '$lib/stores/instance.svelte';
 	import type { SettingsTabID } from '$lib/settings-navigation';
 	import { loadStudioBrandKit } from '$lib/studio/api';
+	import { getAuthenticatedMediaURL } from '$lib/media-url';
 	import type { StudioBrandKit } from '$lib/studio/types';
 	import { createPasskeyCredential } from '$lib/auth/webauthn';
 	import { acquireReauthGrant, startOIDCIdentityLink } from '$lib/auth/reauth';
@@ -54,9 +56,11 @@
 	import PaletteIcon from 'lucide-svelte/icons/palette';
 	import ServerCogIcon from 'lucide-svelte/icons/server-cog';
 	import { client } from '$lib/api/client';
+	import { showToast } from '$lib/toast';
 	import { getLocaleTag } from '$lib/i18n';
 	import { hostedPlanFromSearchParams } from '$lib/billing';
 	import { m } from '$lib/paraglide/messages';
+	import { getOptionalUnsavedChanges } from '$lib/unsaved-changes.svelte';
 	import {
 		apiTokenScopeOptions as apiTokenScopes,
 		billingPlans as billingPlanDefinitions,
@@ -95,8 +99,7 @@
 	});
 
 	let saving = $state(false);
-	let toastMessage = $state('');
-	let toastTone = $state<'success' | 'error'>('success');
+	const unsavedChanges = getOptionalUnsavedChanges();
 	let profileDisplayName = $state('');
 	let profileBusy = $state(false);
 	let profileError = $state('');
@@ -132,6 +135,9 @@
 	let apiTokenName = $state('OpenPost MCP');
 	let apiTokenScope = $state('mcp:read');
 	let apiTokenWorkspaceScope = $state('current');
+	let savedAPITokenDraft = $state(
+		JSON.stringify({ name: 'OpenPost MCP', scope: 'mcp:read', workspace: 'current' })
+	);
 	let createdAPIToken = $state('');
 	let billingBusyPlan = $state('');
 	let billingPortalBusy = $state(false);
@@ -170,10 +176,10 @@
 	let apiTokensRequestSequence = 0;
 	let destructiveDialogOpen = $state(false);
 	let destructiveAction = $state.raw<SettingsDestructiveAction | null>(null);
+	let workspaceImagePickerOpen = $state(false);
 
 	function notify(message: string, tone: 'success' | 'error' = 'success') {
-		toastMessage = message;
-		toastTone = tone;
+		showToast(message, tone);
 	}
 
 	function requestDestructiveAction(action: SettingsDestructiveAction) {
@@ -520,6 +526,10 @@
 		return 'form' as const;
 	});
 	const profileEmail = $derived(authState.user?.email ?? '');
+	const profileDirty = $derived(profileDisplayName !== (authState.user?.display_name ?? ''));
+	const securityDraftDirty = $derived(Boolean(identityPassword || otherSecurityDraftDirty()));
+	const developerDraftDirty = $derived(apiTokenDraftSnapshot() !== savedAPITokenDraft);
+	const memberDraftDirty = $derived(Boolean(inviteEmail.trim()) || inviteRole !== 'editor');
 	const profileAvatarURL = $derived(authState.user?.avatar_url ?? '');
 	const profileInitials = $derived.by(() => {
 		const source = profileDisplayName || profileEmail || 'OP';
@@ -875,12 +885,21 @@
 			if (err || !data) throw new Error(err?.detail || m.settings_action_failed());
 			createdAPIToken = data.token;
 			apiTokenName = fallbackName;
+			savedAPITokenDraft = apiTokenDraftSnapshot();
 			await loadAPITokens();
 		} catch (e) {
 			apiTokenError = (e as Error).message;
 		} finally {
 			apiTokenBusy = false;
 		}
+	}
+
+	function apiTokenDraftSnapshot() {
+		return JSON.stringify({
+			name: apiTokenName,
+			scope: apiTokenScope,
+			workspace: apiTokenWorkspaceScope
+		});
 	}
 
 	async function revokeAuthSession(session: AuthSessionSummary) {
@@ -1200,6 +1219,7 @@
 		try {
 			await workspaceCtx.saveSettings({
 				avatar_url: workspaceCtx.settings.avatar_url,
+				color: workspaceCtx.settings.color,
 				timezone: workspaceCtx.settings.timezone,
 				week_start: workspaceCtx.settings.week_start,
 				media_cleanup_days: workspaceCtx.settings.media_cleanup_days,
@@ -1218,6 +1238,45 @@
 		} finally {
 			saving = false;
 		}
+	}
+
+	$effect(() => {
+		unsavedChanges?.set(
+			'workspace-settings',
+			workspaceCtx.settingsDirty,
+			m.settings_unsaved_changes()
+		);
+		return () => unsavedChanges?.clear('workspace-settings');
+	});
+
+	$effect(() => {
+		unsavedChanges?.set('profile-settings', profileDirty, m.settings_unsaved_changes());
+		return () => unsavedChanges?.clear('profile-settings');
+	});
+
+	$effect(() => {
+		unsavedChanges?.set('security-settings', securityDraftDirty, m.settings_unsaved_changes());
+		return () => unsavedChanges?.clear('security-settings');
+	});
+
+	$effect(() => {
+		unsavedChanges?.set('developer-settings', developerDraftDirty, m.settings_unsaved_changes());
+		return () => unsavedChanges?.clear('developer-settings');
+	});
+
+	$effect(() => {
+		unsavedChanges?.set('member-settings', memberDraftDirty, m.settings_unsaved_changes());
+		return () => unsavedChanges?.clear('member-settings');
+	});
+
+	function otherSecurityDraftDirty() {
+		return Boolean(
+			totpCurrentPassword ||
+			passkeyCurrentPassword ||
+			totpCode ||
+			newPasskeyName ||
+			totpSetupChallengeId
+		);
 	}
 
 	function parseDurationInput(input: string, allowZero: boolean = false): number | null {
@@ -1271,6 +1330,17 @@
 	let newTimeInput = $state('09:00');
 	let newTimeError = $state('');
 	let newTimeDays = $state<number[]>([1, 2, 3, 4, 5]);
+	let savedScheduleDraft = $state(JSON.stringify({ time: '09:00', days: [1, 2, 3, 4, 5] }));
+	const scheduleDraftDirty = $derived(scheduleDraftSnapshot() !== savedScheduleDraft);
+
+	$effect(() => {
+		unsavedChanges?.set('schedule-draft', scheduleDraftDirty, m.settings_unsaved_changes());
+		return () => unsavedChanges?.clear('schedule-draft');
+	});
+
+	function scheduleDraftSnapshot() {
+		return JSON.stringify({ time: newTimeInput, days: newTimeDays });
+	}
 
 	const dayOrder = $derived.by(() => {
 		const start = workspaceCtx.settings.week_start === 0 ? 0 : 1;
@@ -1406,6 +1476,7 @@
 			}
 			if (isCurrentWorkspace(workspaceID)) {
 				await loadSchedules(workspaceID);
+				savedScheduleDraft = scheduleDraftSnapshot();
 				notify(m.settings_time_added());
 			}
 		} catch (e) {
@@ -1673,15 +1744,6 @@
 	<title>{m.settings_page_title()}</title>
 </svelte:head>
 
-{#if toastMessage}
-	<AppToast
-		message={toastMessage}
-		tone={toastTone}
-		dismissLabel={m.common_dismiss_notification()}
-		onDismiss={() => (toastMessage = '')}
-	/>
-{/if}
-
 <PageContainer
 	title={activeSettingsTitle}
 	description={activeSettingsDescription}
@@ -1707,7 +1769,7 @@
 				showInstance={Boolean(authState.user?.is_admin)}
 			/>
 
-			<div class="min-w-0 space-y-10">
+			<div class="min-w-0 space-y-6">
 				<section id="profile" class:hidden={activeSettingsTab !== 'profile'} class="scroll-mt-24">
 					{#if avatarUploaderOpen}
 						<ProfileAvatarUploader
@@ -1802,7 +1864,7 @@
 					<section
 						id="instance"
 						class:hidden={activeSettingsTab !== 'instance'}
-						class="scroll-mt-24 space-y-10"
+						class="scroll-mt-24 space-y-6"
 					>
 						{#if activeSettingsTab === 'instance'}
 							<InstanceAdminOverview />
@@ -1920,13 +1982,27 @@
 					class="scroll-mt-24 space-y-4"
 				>
 					<div class="rounded-lg border bg-muted/20 p-4">
+						{#if workspaceImagePickerOpen}
+							<MediaPicker
+								bind:open={workspaceImagePickerOpen}
+								workspaceId={workspaceCtx.currentWorkspace?.id ?? ''}
+								accept={['image/*']}
+								maxSelection={1}
+								multiple={false}
+								showCreate={false}
+								title={m.settings_workspace_image_url()}
+								onConfirm={(ids) => {
+									if (ids[0]) workspaceCtx.settings.avatar_url = `/media/${ids[0]}`;
+								}}
+							/>
+						{/if}
 						<div class="flex flex-col gap-4 sm:flex-row sm:items-center">
 							<div
 								class="flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-muted text-lg font-semibold text-muted-foreground"
 							>
 								{#if workspaceCtx.settings.avatar_url}
 									<img
-										src={workspaceCtx.settings.avatar_url}
+										src={getAuthenticatedMediaURL(workspaceCtx.settings.avatar_url)}
 										alt={workspaceCtx.currentWorkspace?.name || m.settings_workspace()}
 										class="h-full w-full object-cover"
 									/>
@@ -1942,18 +2018,41 @@
 											m.settings_personal_workspace()}
 									</span>
 								</div>
-								<div class="space-y-2">
-									<Label for="workspace-avatar-url">{m.settings_workspace_image_url()}</Label>
-									<Input
-										id="workspace-avatar-url"
-										type="url"
-										bind:value={workspaceCtx.settings.avatar_url}
-										placeholder="https://example.com/app-icon.png"
-										maxlength={1000}
-									/>
+								<div class="flex flex-wrap gap-2">
+									<Button
+										type="button"
+										variant="outline"
+										onclick={() => (workspaceImagePickerOpen = true)}
+									>
+										<ImageIcon class="mr-2 size-4" />
+										{m.settings_workspace_image_url()}
+									</Button>
+									{#if workspaceCtx.settings.avatar_url}
+										<Button
+											type="button"
+											variant="ghost"
+											class="text-destructive hover:text-destructive"
+											onclick={() => (workspaceCtx.settings.avatar_url = '')}
+										>
+											<TrashIcon class="mr-2 size-4" />{m.settings_remove()}
+										</Button>
+									{/if}
 								</div>
 							</div>
 						</div>
+					</div>
+
+					<div class="mt-4 max-w-sm space-y-2">
+						<Label for="workspace-color">{m.settings_workspace_color()}</Label>
+						<StudioColorPicker
+							id="workspace-color"
+							label={m.settings_workspace_color()}
+							value={workspaceCtx.settings.color}
+							onChange={(color) => (workspaceCtx.settings.color = color)}
+						/>
+						<p class="text-sm text-muted-foreground">
+							{m.settings_workspace_color_description()}
+						</p>
 					</div>
 					<div
 						class="flex flex-col gap-3 border-t pt-5 sm:flex-row sm:items-center sm:justify-between"

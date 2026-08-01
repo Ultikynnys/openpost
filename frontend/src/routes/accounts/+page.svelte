@@ -78,6 +78,20 @@
 	let editingAccount = $state<SocialAccount | null>(null);
 	let editAccountSlug = $state('');
 	let editMessagesEnabled = $state(false);
+	const unsavedChanges = getOptionalUnsavedChanges();
+	const accountEditDirty = $derived(
+		Boolean(
+			editingAccount &&
+			(editAccountSlug !== accountSlug(editingAccount) ||
+				(editingAccount.messaging_supported &&
+					editMessagesEnabled !== (editingAccount.messages_enabled ?? false)))
+		)
+	);
+
+	$effect(() => {
+		unsavedChanges?.set('social-account-settings', accountEditDirty, m.settings_unsaved_changes());
+		return () => unsavedChanges?.clear('social-account-settings');
+	});
 	let editAccountLoading = $state(false);
 	let editAccountError = $state('');
 	let disconnectDialogOpen = $state(false);
@@ -215,6 +229,12 @@
 		editMessagesEnabled = account.messages_enabled ?? false;
 		editAccountError = '';
 		editAccountDialogOpen = true;
+	}
+
+	function handleEditAccountDialogOpen(nextOpen: boolean) {
+		if (!nextOpen && accountEditDirty && unsavedChanges && !unsavedChanges.confirmDiscard()) return;
+		editAccountDialogOpen = nextOpen;
+		if (!nextOpen) editingAccount = null;
 	}
 
 	async function updateAccountSlug() {
@@ -669,7 +689,7 @@
 	loadingMessage={m.common_loading()}
 >
 	<div class="grid min-w-0 items-start gap-8 lg:grid-cols-[13rem_minmax(0,1fr)]">
-		<SettingsNavigation active="accounts" />
+		<SettingsNavigation active="accounts" showInstance={Boolean(authState.user?.is_admin)} />
 		<div class="min-w-0">
 			{#if !workspaces || workspaces.length === 0}
 				<EmptyState
@@ -1071,7 +1091,7 @@
 	</Dialog.Content>
 </Dialog.Root>
 
-<Dialog.Root bind:open={editAccountDialogOpen}>
+<Dialog.Root open={editAccountDialogOpen} onOpenChange={handleEditAccountDialogOpen}>
 	<Dialog.Content class="sm:max-w-md">
 		<Dialog.Header>
 			<Dialog.Title>{m.accounts_details()}</Dialog.Title>

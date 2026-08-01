@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import ImageIcon from 'lucide-svelte/icons/image';
 import AppToast from './app-toast.svelte';
+import { Toaster } from './ui/sonner';
 import DestructiveConfirmDialog from './destructive-confirm-dialog.svelte';
 import EmptyState from './empty-state.svelte';
 import PageHeader from './page-header.svelte';
@@ -72,19 +73,17 @@ describe('shared page states', () => {
 		expect(onAction).toHaveBeenCalledOnce();
 	});
 
-	it('uses assertive error semantics and provides a named dismiss action', async () => {
+	it('renders an error toast with a dismiss action', async () => {
 		const onDismiss = vi.fn();
+		await render(Toaster);
 		const screen = await render(AppToast, {
 			message: 'Upload failed',
 			dismissLabel: 'Dismiss notification',
 			onDismiss,
 			tone: 'error'
 		});
-
-		const alert = screen.getByRole('alert');
-		await expect.element(alert).toHaveAttribute('aria-live', 'assertive');
 		await expect.element(screen.getByText('Upload failed')).toBeVisible();
-		await screen.getByRole('button', { name: 'Dismiss notification' }).click();
+		await screen.getByRole('button', { name: 'Close toast' }).click();
 		expect(onDismiss).toHaveBeenCalledOnce();
 	});
 

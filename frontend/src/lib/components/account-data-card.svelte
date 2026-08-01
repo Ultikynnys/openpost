@@ -17,6 +17,7 @@
 	import { auth } from '$lib/stores/auth';
 	import { workspaceCtx } from '$lib/stores/workspace.svelte';
 	import { m } from '$lib/paraglide/messages';
+	import { getOptionalUnsavedChanges } from '$lib/unsaved-changes.svelte';
 
 	interface Props {
 		email: string;
@@ -31,6 +32,15 @@
 	let confirmPassword = $state('');
 	let passwordBusy = $state(false);
 	let exportPassword = $state('');
+	const unsavedChanges = getOptionalUnsavedChanges();
+	const dirty = $derived(
+		Boolean(currentPassword || newPassword || confirmPassword || exportPassword)
+	);
+
+	$effect(() => {
+		unsavedChanges?.set('account-data-settings', dirty, m.settings_unsaved_changes());
+		return () => unsavedChanges?.clear('account-data-settings');
+	});
 	let exportBusy = $state(false);
 	let deletionBusy = $state(false);
 	let deletionOpen = $state(false);

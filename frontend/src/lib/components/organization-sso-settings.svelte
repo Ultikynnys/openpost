@@ -14,6 +14,7 @@
 	import PlusIcon from 'lucide-svelte/icons/plus';
 	import ShieldCheckIcon from 'lucide-svelte/icons/shield-check';
 	import { m } from '$lib/paraglide/messages';
+	import { getOptionalUnsavedChanges } from '$lib/unsaved-changes.svelte';
 
 	type Provider = components['schemas']['OIDCProviderAdminResponse'];
 	type Policy = components['schemas']['Policy'];
@@ -61,10 +62,53 @@
 	let domainName = $state('');
 	let domainProviderID = $state('');
 	let pendingDNS = $state<{ name: string; value: string } | null>(null);
+	let savedPolicySnapshot = $state('');
+	let savedProviderSnapshot = $state('');
+	const unsavedChanges = getOptionalUnsavedChanges();
+	const policySnapshot = $derived(
+		JSON.stringify({
+			policyMode,
+			acceptedProviderIDs,
+			assuranceHours,
+			passwordLoginAllowed,
+			apiTokenMode,
+			maxTokenDays,
+			requireTokenReauth
+		})
+	);
+	const providerDraftDirty = $derived(
+		providerID
+			? providerFormSnapshot() !== savedProviderSnapshot
+			: Boolean(
+					providerName ||
+					issuer ||
+					clientID ||
+					clientSecret ||
+					scopes !== 'openid email profile' ||
+					emailClaim !== 'email' ||
+					nameClaim !== 'name' ||
+					pictureClaim !== 'picture' ||
+					!useUserInfo ||
+					!requireVerifiedEmail ||
+					!jitEnabled ||
+					!providerActive
+				)
+	);
+	const dirty = $derived(
+		active &&
+			(providerDraftDirty ||
+				Boolean(domainName.trim()) ||
+				(Boolean(savedPolicySnapshot) && policySnapshot !== savedPolicySnapshot))
+	);
 
 	$effect(() => {
 		const key = active ? organizationID : '';
 		if (key && key !== loadedKey) void load(key);
+	});
+
+	$effect(() => {
+		unsavedChanges?.set('organization-sso', dirty, m.settings_unsaved_changes());
+		return () => unsavedChanges?.clear('organization-sso');
 	});
 
 	async function load(targetOrganizationID = organizationID) {
@@ -100,6 +144,7 @@
 			maxTokenDays = Math.max(1, Math.round(policy.max_token_lifetime_seconds / 86400));
 			requireTokenReauth = policy.require_token_reauth;
 		}
+		savedPolicySnapshot = policySnapshot;
 		if (!domainProviderID && providers[0]) domainProviderID = providers[0].id;
 		loadedKey = targetOrganizationID;
 		loading = false;
@@ -119,6 +164,25 @@
 		requireVerifiedEmail = true;
 		jitEnabled = false;
 		providerActive = true;
+		savedProviderSnapshot = '';
+	}
+
+	function providerFormSnapshot() {
+		return JSON.stringify({
+			providerID,
+			providerName,
+			issuer,
+			clientID,
+			clientSecret,
+			scopes,
+			emailClaim,
+			nameClaim,
+			pictureClaim,
+			useUserInfo,
+			requireVerifiedEmail,
+			jitEnabled,
+			providerActive
+		});
 	}
 
 	function editProvider(provider: Provider) {
@@ -135,6 +199,7 @@
 		requireVerifiedEmail = provider.require_verified_email;
 		jitEnabled = provider.jit_enabled;
 		providerActive = provider.is_active;
+		savedProviderSnapshot = providerFormSnapshot();
 	}
 
 	async function saveProvider(event: SubmitEvent) {
@@ -216,7 +281,10 @@
 			}
 		});
 		if (saveError) error = saveError.detail ?? m.settings_sso_policy_save_failed();
-		else notice = m.settings_sso_policy_saved();
+		else {
+			notice = m.settings_sso_policy_saved();
+			savedPolicySnapshot = policySnapshot;
+		}
 		busy = '';
 	}
 

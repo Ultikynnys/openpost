@@ -62,6 +62,7 @@ export class WorkspaceContext {
 	currentWorkspace = $state<Workspace | null>(null);
 	workspaces = $state<Workspace[]>([]);
 	settings = $state<WorkspaceSettings>(defaultWorkspaceSettings());
+	savedSettings = $state<WorkspaceSettings>(defaultWorkspaceSettings());
 	settingsLoading = $state(false);
 	settingsError = $state('');
 	settingsWorkspaceID = $state('');
@@ -73,6 +74,12 @@ export class WorkspaceContext {
 			this.settingsWorkspaceID === this.currentWorkspace?.id &&
 			!this.settingsLoading &&
 			!this.settingsError
+		);
+	}
+
+	get settingsDirty() {
+		return (
+			this.settingsReady && JSON.stringify(this.settings) !== JSON.stringify(this.savedSettings)
 		);
 	}
 
@@ -113,6 +120,7 @@ export class WorkspaceContext {
 		this.settingsRequestSequence += 1;
 		this.currentWorkspace = null;
 		this.settings = defaultWorkspaceSettings();
+		this.savedSettings = defaultWorkspaceSettings();
 		this.settingsLoading = false;
 		this.settingsError = '';
 		this.settingsWorkspaceID = '';
@@ -159,6 +167,7 @@ export class WorkspaceContext {
 					this.currentWorkspace = exists;
 					localStorage.setItem(STORAGE_KEY, JSON.stringify(exists));
 					this.settings = defaultWorkspaceSettings();
+					this.savedSettings = defaultWorkspaceSettings();
 					this.settingsLoading = false;
 					this.settingsError = '';
 					this.settingsWorkspaceID = '';
@@ -212,8 +221,9 @@ export class WorkspaceContext {
 				return;
 			}
 
-			this.settings = {
+			const loadedSettings: WorkspaceSettings = {
 				avatar_url: data.avatar_url || '',
+				color: data.color || '#f97316',
 				timezone: safeWorkspaceTimezone(data.timezone),
 				week_start: data.week_start ?? 1,
 				media_cleanup_days: data.media_cleanup_days ?? 0,
@@ -223,10 +233,13 @@ export class WorkspaceContext {
 				slot_end_hour: data.slot_end_hour ?? 23,
 				slot_interval_minutes: data.slot_interval_minutes ?? 15
 			};
+			this.settings = loadedSettings;
+			this.savedSettings = structuredClone(loadedSettings);
 			this.settingsWorkspaceID = workspaceID;
 			this.currentWorkspace = {
 				...this.currentWorkspace,
-				avatar_url: data.avatar_url || ''
+				avatar_url: data.avatar_url || '',
+				color: data.color || '#f97316'
 			} as Workspace;
 			if (browser) {
 				localStorage.setItem(STORAGE_KEY, JSON.stringify(this.currentWorkspace));
@@ -307,6 +320,7 @@ export class WorkspaceContext {
 			if (updates.slot_end_hour !== undefined) this.settings.slot_end_hour = updates.slot_end_hour;
 			if (updates.slot_interval_minutes !== undefined)
 				this.settings.slot_interval_minutes = updates.slot_interval_minutes;
+			this.savedSettings = { ...this.savedSettings, ...structuredClone(updates) };
 		} catch (e) {
 			console.error('Failed to save workspace settings:', e);
 			throw e;

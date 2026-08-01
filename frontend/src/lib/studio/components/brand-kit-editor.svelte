@@ -25,6 +25,7 @@
 	import ImageIcon from 'lucide-svelte/icons/image';
 	import TypeIcon from 'lucide-svelte/icons/type';
 	import { m } from '$lib/paraglide/messages';
+	import { getOptionalUnsavedChanges } from '$lib/unsaved-changes.svelte';
 
 	interface EditableBackground {
 		id: string;
@@ -55,6 +56,12 @@
 	let fontWeight = $state(400);
 	let fontStyle = $state<'normal' | 'italic'>('normal');
 	let fontLicenseAcknowledged = $state(false);
+	let savedSnapshot = $state('');
+	const unsavedChanges = getOptionalUnsavedChanges();
+	const editorSnapshot = $derived(
+		JSON.stringify({ name, colors, backgrounds, textStyles, assets, fonts })
+	);
+	const dirty = $derived(Boolean(savedSnapshot) && editorSnapshot !== savedSnapshot);
 
 	function initializeEditor() {
 		if (initialized) return;
@@ -73,10 +80,16 @@
 				fonts.find((font) => font.media_id === style.font_asset_id)?.css_family || style.font_family
 		}));
 		assets = structuredClone($state.snapshot(kit.assets));
+		savedSnapshot = JSON.stringify({ name, colors, backgrounds, textStyles, assets, fonts });
 		void loadStudioBrandFonts(kit).catch(() => {
 			// A failed preview does not prevent the user from replacing or removing the font.
 		});
 	}
+
+	$effect(() => {
+		unsavedChanges?.set('brand-kit', dirty, m.settings_unsaved_changes());
+		return () => unsavedChanges?.clear('brand-kit');
+	});
 
 	function updateColor(index: number, field: 'name' | 'value', value: string) {
 		colors = colors.map((color, itemIndex) =>
@@ -265,6 +278,7 @@
 				fonts
 			});
 			onSaved(saved);
+			savedSnapshot = editorSnapshot;
 			success = m.brand_saved();
 		} catch (cause) {
 			error = cause instanceof Error ? cause.message : m.brand_save_failed();

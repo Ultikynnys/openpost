@@ -2,6 +2,7 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { workspaceCtx } from '$lib/stores/workspace.svelte';
+	import { getAuthenticatedMediaURL } from '$lib/media-url';
 	import { m } from '$lib/paraglide/messages';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
 	import * as Avatar from '$lib/components/ui/avatar';
@@ -28,6 +29,7 @@
 		showSettings = true
 	}: Props = $props();
 	const itemClass = $derived(touchSize ? 'min-h-11 gap-3' : 'gap-3 py-2');
+	const unsavedChanges = getOptionalUnsavedChanges();
 
 	function initials(value: string) {
 		const parts = value.split(/[\s._-]+/).filter(Boolean);
@@ -35,11 +37,14 @@
 	}
 
 	function avatarURL(workspace: Workspace) {
-		return ((workspace as Workspace & { avatar_url?: string }).avatar_url ?? '').trim();
+		return getAuthenticatedMediaURL(
+			((workspace as Workspace & { avatar_url?: string }).avatar_url ?? '').trim()
+		);
 	}
 
 	async function switchWorkspace(workspace: Workspace) {
 		if (workspace.id !== workspaceCtx.currentWorkspace?.id) {
+			if (unsavedChanges && !unsavedChanges.confirmDiscard()) return;
 			await workspaceCtx.setWorkspace(workspace);
 		}
 		onSelect?.();
