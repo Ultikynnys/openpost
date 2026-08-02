@@ -4,6 +4,8 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [1.49.0] - 2026-08-02
+
 ### Added
 
 - Added a Quick Cut workflow for single-source edits with source-scale kept sections, keyframe snapping, and local MP4 or WebM stream-copy export without video transcoding.
