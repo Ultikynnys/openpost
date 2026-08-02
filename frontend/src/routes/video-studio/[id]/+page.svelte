@@ -27,6 +27,7 @@ FORM: Operate surface; no floating-card dashboard, unlimited NLE chrome, hidden 
 		projectDurationUS,
 		removePrimaryRanges,
 		reorderPrimaryClip,
+		rippleDeleteCaptionWords,
 		resizePrimaryGap,
 		setCaptionCueText,
 		setClipSpeed,
@@ -120,7 +121,9 @@ FORM: Operate surface; no floating-card dashboard, unlimited NLE chrome, hidden 
 	} from '$lib/video-studio/types';
 	import Timeline from '$lib/video-studio/components/timeline.svelte';
 	import VideoPreview from '$lib/video-studio/components/video-preview.svelte';
+	import QuickCutWorkspace from '$lib/video-studio/components/quick-cut-workspace.svelte';
 	import ExportDialog from '$lib/video-studio/components/export-dialog.svelte';
+	import { quickCutCompatibility } from '$lib/video-studio/lossless';
 	import ArrowLeftIcon from 'lucide-svelte/icons/arrow-left';
 	import CameraIcon from 'lucide-svelte/icons/camera';
 	import CaptionsIcon from 'lucide-svelte/icons/captions';
@@ -228,6 +231,8 @@ FORM: Operate surface; no floating-card dashboard, unlimited NLE chrome, hidden 
 	let playheadUS = $state(0);
 	let playing = $state(false);
 	let timelineZoom = $state(1);
+	let timelineHeight = $state(264);
+	let timelineResize = $state<{ startY: number; startHeight: number } | null>(null);
 	let editShared = $state(true);
 	let historyVersion = $state(0);
 	let mutationVersion = $state(0);
@@ -243,6 +248,8 @@ FORM: Operate surface; no floating-card dashboard, unlimited NLE chrome, hidden 
 	let localRevisions = $state<LocalProjectRevision[]>([]);
 	let cloudRevisions = $state<CloudVideoProjectRevision[]>([]);
 	let exportBusy = $state(false);
+	let fastExportBusy = $state(false);
+	let fastExportProgress = $state(0);
 	let exportProgress = $state(0);
 	let exportError = $state('');
 	let exportFile = $state<File | null>(null);
@@ -293,6 +300,7 @@ FORM: Operate surface; no floating-card dashboard, unlimited NLE chrome, hidden 
 	let brandKit = $state.raw<StudioBrandKit | null>(null);
 	let localTextStyles = $state.raw<LocalVideoTextStyle[]>([]);
 	let exportController: AbortController | null = null;
+	let fastExportController: AbortController | null = null;
 	let recoverableRecording = $state<RecordingManifest | null>(null);
 	let autosaveTimer: ReturnType<typeof setTimeout> | undefined;
 	let playbackFrame = 0;
@@ -303,6 +311,7 @@ FORM: Operate surface; no floating-card dashboard, unlimited NLE chrome, hidden 
 	const history = new VideoProjectHistory(200);
 
 	const project = $derived(localProject?.document);
+	const quickCutMode = $derived(project?.editing_mode === 'quick-cut');
 	const returnToken = $derived(page.url.searchParams.get('return_token') ?? '');
 	const requiredVariantIDs = $derived.by(() => {
 		const values = (page.url.searchParams.get('required_variants') ?? '')
@@ -440,6 +449,7 @@ FORM: Operate surface; no floating-card dashboard, unlimited NLE chrome, hidden 
 		if (autosaveTimer) clearTimeout(autosaveTimer);
 		cancelAnimationFrame(playbackFrame);
 		exportController?.abort();
+		fastExportController?.abort();
 		analysisController?.abort();
 		if (recordingSession) void recordingSession.cancel();
 		revokeExportURLs();
@@ -512,6 +522,47 @@ FORM: Operate surface; no floating-card dashboard, unlimited NLE chrome, hidden 
 		setTimeout(() => URL.revokeObjectURL(url), 0);
 	}
 
+	function switchEditingMode(mode: 'quick-cut' | 'studio'): void {
+		if (!project || project.editing_mode === mode) return;
+		if (mode === 'quick-cut' && !quickCutCompatibility(project).compatible) {
+			error = m.video_studio_quick_lossless_blocked();
+			return;
+		}
+		playing = false;
+		mutate(
+			mode === 'quick-cut' ? m.video_studio_workflow_quick() : m.video_studio_workflow_full(),
+			(document) => {
+				document.editing_mode = mode;
+				return document;
+			}
+		);
+	}
+
+	async function startFastExport(): Promise<void> {
+		if (!project || !localProject || fastExportBusy) return;
+		fastExportBusy = true;
+		fastExportProgress = 0;
+		error = '';
+		fastExportController = new AbortController();
+		try {
+			const { exportQuickCutLosslessly } = await import('$lib/video-studio/lossless-exporter');
+			const file = await exportQuickCutLosslessly(cloneVideoProject(project), {
+				projectID: localProject.id,
+				signal: fastExportController.signal,
+				onProgress: (fraction) => (fastExportProgress = fraction)
+			});
+			await saveExportFile(file);
+		} catch (cause) {
+			if (!(cause instanceof DOMException && cause.name === 'AbortError')) {
+				recordFailure(cause, 'export.quick-cut');
+				error = cause instanceof Error ? cause.message : m.video_studio_export_failed();
+			}
+		} finally {
+			fastExportBusy = false;
+			fastExportController = null;
+		}
+	}
+
 	async function initialize(): Promise<void> {
 		loading = true;
 		error = '';
@@ -539,6 +590,9 @@ FORM: Operate surface; no floating-card dashboard, unlimited NLE chrome, hidden 
 			}
 			analysisBackend = capabilities.webGPU ? 'WebGPU' : 'WASM';
 			const loaded = await loadLocalVideoProject(page.params.id ?? '');
+			if (returnToken && loaded.document.editing_mode === 'quick-cut') {
+				loaded.document.editing_mode = 'studio';
+			}
 			localProject = loaded;
 			await refreshPersistedExports(loaded.id);
 			selectedExportVariants = [variantID];
@@ -713,6 +767,29 @@ FORM: Operate surface; no floating-card dashboard, unlimited NLE chrome, hidden 
 		selectedAudioItemID = '';
 		selectedCaptionCueID = cueID;
 		compactInspectorOpen = true;
+	}
+
+	function beginTimelineResize(event: PointerEvent): void {
+		event.preventDefault();
+		timelineResize = { startY: event.clientY, startHeight: timelineHeight };
+		(event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+	}
+
+	function continueTimelineResize(event: PointerEvent): void {
+		if (!timelineResize) return;
+		timelineHeight = Math.max(
+			208,
+			Math.min(
+				Math.round(window.innerHeight * 0.68),
+				timelineResize.startHeight + timelineResize.startY - event.clientY
+			)
+		);
+	}
+
+	function endTimelineResize(event: PointerEvent): void {
+		timelineResize = null;
+		const target = event.currentTarget as HTMLElement;
+		if (target.hasPointerCapture(event.pointerId)) target.releasePointerCapture(event.pointerId);
 	}
 
 	function trimClip(clipID: string, edge: 'start' | 'end', deltaUS: number): void {
@@ -1233,27 +1310,44 @@ FORM: Operate surface; no floating-card dashboard, unlimited NLE chrome, hidden 
 	}
 
 	function applyGuidedFocusKeyframes(): void {
+		applySmoothZoom('punch');
+	}
+
+	function applySmoothZoom(preset: 'in' | 'out' | 'punch'): void {
 		if (!selectedClip || !selectedDerived || !selectedPresentation) return;
 		const localTimeUS = Math.max(
 			0,
 			Math.min(selectedDerived.duration_us, playheadUS - selectedDerived.timeline_start_us)
 		);
-		const startUS = Math.max(0, localTimeUS - 300_000);
-		const endUS = Math.min(selectedDerived.duration_us, localTimeUS + 1_200_000);
+		const startUS = Math.max(0, localTimeUS - 400_000);
+		const endUS = Math.min(selectedDerived.duration_us, localTimeUS + 1_000_000);
 		const baseScale = selectedPresentation.scale;
+		const focusScale = Math.min(4, baseScale * 1.22);
+		const scale =
+			preset === 'in'
+				? [
+						{ time_us: startUS, value: baseScale, easing: 'focus-spring' as const },
+						{ time_us: endUS, value: focusScale, easing: 'ease-out' as const }
+					]
+				: preset === 'out'
+					? [
+							{ time_us: startUS, value: focusScale, easing: 'focus-spring' as const },
+							{ time_us: endUS, value: baseScale, easing: 'ease-out' as const }
+						]
+					: [
+							{ time_us: startUS, value: baseScale, easing: 'focus-spring' as const },
+							{
+								time_us: Math.min(endUS, startUS + 320_000),
+								value: focusScale,
+								easing: 'focus-spring' as const
+							},
+							{ time_us: endUS, value: baseScale, easing: 'ease-out' as const }
+						];
 		const keyframes = {
 			...(selectedPresentation.keyframes ?? {}),
-			scale: [
-				{ time_us: startUS, value: baseScale, easing: 'focus-spring' as const },
-				{
-					time_us: Math.min(endUS, startUS + 320_000),
-					value: Math.min(4, baseScale * 1.18),
-					easing: 'focus-spring' as const
-				},
-				{ time_us: endUS, value: baseScale, easing: 'ease-out' as const }
-			]
+			scale
 		};
-		mutate(m.video_studio_add_focus_keyframes(), (document) => {
+		mutate(m.video_studio_smooth_zoom(), (document) => {
 			const clip = primaryClipByID(document, selectedClipID);
 			if (!clip) return document;
 			if (editShared) clip.video.keyframes = keyframes;
@@ -1888,6 +1982,20 @@ FORM: Operate surface; no floating-card dashboard, unlimited NLE chrome, hidden 
 				}
 			])
 		);
+	}
+
+	function rippleDeleteTranscriptWord(cue: CaptionCue, wordIndex: number): void {
+		const word = cue.words[wordIndex];
+		if (!word) return;
+		mutate(m.video_studio_delete_transcript_word({ word: word.text }), (document) =>
+			rippleDeleteCaptionWords(
+				document,
+				[{ cue_id: cue.id, word_index: wordIndex }],
+				() => `clip_${crypto.randomUUID()}`
+			)
+		);
+		playheadUS = Math.min(word.start_us, durationUS);
+		transcriptAnalysis = null;
 	}
 
 	function applySelectedSilences(): void {
@@ -2797,7 +2905,7 @@ FORM: Operate surface; no floating-card dashboard, unlimited NLE chrome, hidden 
 		</Button>
 	</main>
 {:else if localProject && project}
-	<div class="flex h-dvh min-h-0 flex-col overflow-hidden bg-background text-foreground">
+	<div class="dark flex h-dvh min-h-0 flex-col overflow-hidden bg-background text-foreground">
 		<header class="flex min-h-14 shrink-0 items-center gap-2 border-b px-2 sm:px-3">
 			<Button
 				href={resolve('/video-studio')}
@@ -2833,7 +2941,34 @@ FORM: Operate surface; no floating-card dashboard, unlimited NLE chrome, hidden 
 						: m.video_studio_local_only()}
 				</span>
 			</div>
-			<div class="ml-auto hidden items-center gap-1 md:flex">
+			<div
+				class="ml-auto hidden rounded-md border bg-muted/30 p-0.5 md:flex"
+				aria-label={m.video_studio_workflow_heading()}
+			>
+				<button
+					type="button"
+					class={[
+						'min-h-8 rounded px-2.5 text-xs font-medium transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
+						quickCutMode ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground'
+					]}
+					disabled={Boolean(returnToken) ||
+						(!quickCutMode && !quickCutCompatibility(project).compatible)}
+					onclick={() => switchEditingMode('quick-cut')}
+				>
+					{m.video_studio_workflow_quick()}
+				</button>
+				<button
+					type="button"
+					class={[
+						'min-h-8 rounded px-2.5 text-xs font-medium transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
+						!quickCutMode ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground'
+					]}
+					onclick={() => switchEditingMode('studio')}
+				>
+					{m.video_studio_workflow_full()}
+				</button>
+			</div>
+			<div class="hidden items-center gap-1 md:flex">
 				<Button
 					variant="ghost"
 					size="icon-sm"
@@ -2864,13 +2999,15 @@ FORM: Operate surface; no floating-card dashboard, unlimited NLE chrome, hidden 
 					<HistoryIcon class="size-4" />
 				</Button>
 			</div>
-			<AppSelect
-				value={variantID}
-				onValueChange={(value) => (variantID = value as VariantID)}
-				options={variantOptions}
-				ariaLabel={m.video_studio_variant()}
-				class="hidden h-9 w-44 sm:flex"
-			/>
+			{#if !quickCutMode}
+				<AppSelect
+					value={variantID}
+					onValueChange={(value) => (variantID = value as VariantID)}
+					options={variantOptions}
+					ariaLabel={m.video_studio_variant()}
+					class="hidden h-9 w-44 sm:flex"
+				/>
+			{/if}
 			<Button
 				variant="outline"
 				size="sm"
@@ -2883,13 +3020,23 @@ FORM: Operate surface; no floating-card dashboard, unlimited NLE chrome, hidden 
 			</Button>
 			<Button
 				size="sm"
-				disabled={!fullEditor}
-				aria-label={fullEditor ? m.video_studio_export() : m.video_studio_mobile_export_disabled()}
-				title={fullEditor ? m.video_studio_export() : m.video_studio_mobile_export_disabled()}
-				onclick={openExportDialog}
+				disabled={fastExportBusy || (!quickCutMode && !fullEditor)}
+				aria-label={quickCutMode
+					? m.video_studio_quick_fast_export()
+					: fullEditor
+						? m.video_studio_export()
+						: m.video_studio_mobile_export_disabled()}
+				title={quickCutMode
+					? m.video_studio_quick_fast_export()
+					: fullEditor
+						? m.video_studio_export()
+						: m.video_studio_mobile_export_disabled()}
+				onclick={quickCutMode ? startFastExport : openExportDialog}
 			>
-				<DownloadIcon class="size-4" />
-				{m.video_studio_export()}
+				{#if fastExportBusy}<LoaderIcon class="size-4 animate-spin" />{:else}<DownloadIcon
+						class="size-4"
+					/>{/if}
+				{quickCutMode ? m.video_studio_quick_fast_export() : m.video_studio_export()}
 			</Button>
 		</header>
 
@@ -2919,7 +3066,25 @@ FORM: Operate surface; no floating-card dashboard, unlimited NLE chrome, hidden 
 			</InlineNotice>
 		{/if}
 
-		{#if fullEditor}
+		{#if quickCutMode}
+			<QuickCutWorkspace
+				{project}
+				projectID={localProject.id}
+				bind:playheadUS
+				{playing}
+				{selectedClipID}
+				{fastExportBusy}
+				{fastExportProgress}
+				onSeek={(timestampUS) => (playheadUS = timestampUS)}
+				onSelectClip={selectClip}
+				onTogglePlayback={togglePlayback}
+				onSplit={splitSelected}
+				onDelete={rippleDeleteSelected}
+				onTrim={trimClip}
+				onFastExport={() => void startFastExport()}
+				onOpenStudio={() => switchEditingMode('studio')}
+			/>
+		{:else if fullEditor}
 			<div
 				class="relative grid min-h-0 flex-1 grid-cols-[3.75rem_minmax(0,1fr)] min-[56rem]:grid-cols-[3.75rem_13rem_minmax(18rem,1fr)_15rem] xl:grid-cols-[4.5rem_17rem_minmax(20rem,1fr)_18rem]"
 			>
@@ -3246,6 +3411,23 @@ FORM: Operate surface; no floating-card dashboard, unlimited NLE chrome, hidden 
 											<p class="text-[11px] text-muted-foreground">
 												{formatTime(cue.start_us)}–{formatTime(cue.end_us)}
 											</p>
+											{#if cue.words.length > 0}
+												<div
+													class="flex flex-wrap gap-1"
+													aria-label={m.video_studio_edit_by_transcript()}
+												>
+													{#each cue.words as word, wordIndex (`${cue.id}:${wordIndex}:${word.start_us}`)}
+														<button
+															type="button"
+															class="min-h-8 rounded bg-muted px-2 text-xs transition-colors hover:bg-destructive hover:text-destructive-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+															title={m.video_studio_delete_transcript_word({ word: word.text })}
+															onclick={() => rippleDeleteTranscriptWord(cue, wordIndex)}
+														>
+															{word.text}
+														</button>
+													{/each}
+												</div>
+											{/if}
 											<Textarea
 												value={cue.text}
 												rows={2}
@@ -4346,14 +4528,17 @@ FORM: Operate surface; no floating-card dashboard, unlimited NLE chrome, hidden 
 									<p class="leading-5 text-muted-foreground">
 										{m.video_studio_keyframe_description()}
 									</p>
-									<Button
-										class="w-full"
-										variant="outline"
-										size="sm"
-										onclick={applyGuidedFocusKeyframes}
-									>
-										{m.video_studio_add_focus_keyframes()}
-									</Button>
+									<div class="grid grid-cols-3 gap-1.5">
+										<Button variant="outline" size="sm" onclick={() => applySmoothZoom('in')}>
+											{m.video_studio_smooth_zoom_in()}
+										</Button>
+										<Button variant="outline" size="sm" onclick={() => applySmoothZoom('out')}>
+											{m.video_studio_smooth_zoom_out()}
+										</Button>
+										<Button variant="outline" size="sm" onclick={applyGuidedFocusKeyframes}>
+											{m.video_studio_smooth_zoom_punch()}
+										</Button>
+									</div>
 								</div>
 							</details>
 							<div class="grid grid-cols-2 gap-2 border-t pt-4">
@@ -4395,7 +4580,16 @@ FORM: Operate surface; no floating-card dashboard, unlimited NLE chrome, hidden 
 				</aside>
 			</div>
 
-			<div class="min-h-52 shrink-0">
+			<div class="relative min-h-52 shrink-0" style:height={`${timelineHeight}px`}>
+				<button
+					type="button"
+					class="absolute inset-x-0 top-0 z-40 h-2 cursor-row-resize touch-none bg-transparent focus-visible:bg-primary/30 focus-visible:outline-none"
+					aria-label={m.video_studio_resize_timeline()}
+					onpointerdown={beginTimelineResize}
+					onpointermove={continueTimelineResize}
+					onpointerup={endTimelineResize}
+					onpointercancel={endTimelineResize}
+				></button>
 				<Timeline
 					{project}
 					projectID={localProject?.id ?? ''}

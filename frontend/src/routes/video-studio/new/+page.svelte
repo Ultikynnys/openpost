@@ -49,9 +49,13 @@ FORM: Operate surface; no template carousel, hidden permissions, automatic uploa
 	import MicIcon from 'lucide-svelte/icons/mic';
 	import MonitorIcon from 'lucide-svelte/icons/monitor-up';
 	import PlusIcon from 'lucide-svelte/icons/plus';
+	import ScissorsIcon from 'lucide-svelte/icons/scissors';
+	import SlidersHorizontalIcon from 'lucide-svelte/icons/sliders-horizontal';
 	import VolumeIcon from 'lucide-svelte/icons/volume-2';
 
 	let mode = $derived($page.url.searchParams.get('mode') ?? 'import');
+	const composerHandoff = $derived(Boolean($page.url.searchParams.get('return_token')));
+	let editingMode = $state<'quick-cut' | 'studio'>('studio');
 	let error = $state('');
 	let creating = $state(false);
 	let dragging = $state(false);
@@ -68,6 +72,7 @@ FORM: Operate surface; no template carousel, hidden permissions, automatic uploa
 	let availableDevices = $state<MediaDeviceInfo[]>([]);
 	let cameraDeviceID = $state('');
 	let microphoneDeviceID = $state('');
+	let cameraLayout = $state<'circle' | 'rounded' | 'portrait' | 'side-by-side' | 'full'>('circle');
 	let switchingDevice = $state<'camera' | 'microphone' | null>(null);
 	const estimatedRecordingBytes = $derived(
 		Math.ceil(
@@ -78,6 +83,9 @@ FORM: Operate surface; no template carousel, hidden permissions, automatic uploa
 	);
 
 	onMount(() => {
+		if (!composerHandoff && $page.url.searchParams.get('workflow') === 'quick-cut') {
+			editingMode = 'quick-cut';
+		}
 		void initializeEntry();
 	});
 
@@ -115,7 +123,7 @@ FORM: Operate surface; no template carousel, hidden permissions, automatic uploa
 			const name =
 				$page.url.searchParams.get('source_name') ||
 				`openpost-media-${mediaID}.${mimeType.startsWith('video/') ? 'mp4' : 'bin'}`;
-			project = await createBlankLocalVideoProject(name.replace(/\.[^.]+$/u, ''));
+			project = await createBlankLocalVideoProject(name.replace(/\.[^.]+$/u, ''), editingMode);
 			const expectedSize = Number(response.headers.get('Content-Length') ?? 0);
 			const stored = await writeProjectStream(
 				project.id,
@@ -154,11 +162,23 @@ FORM: Operate surface; no template carousel, hidden permissions, automatic uploa
 
 	async function createFromFiles(files: File[]): Promise<void> {
 		if (files.length === 0 || creating) return;
+		if (
+			editingMode === 'quick-cut' &&
+			(files.length !== 1 || !files[0]?.type.startsWith('video/'))
+		) {
+			error = m.video_studio_quick_single_video();
+			return;
+		}
 		creating = true;
 		error = '';
 		try {
 			void requestPersistentVideoStorage();
-			const project = await createLocalVideoProjectFromFiles(files);
+			const project = await createLocalVideoProjectFromFiles(
+				files,
+				undefined,
+				undefined,
+				editingMode
+			);
 			await openProject(project.id);
 		} catch (cause) {
 			error = cause instanceof Error ? cause.message : m.video_studio_create_failed();
@@ -233,7 +253,7 @@ FORM: Operate surface; no template carousel, hidden permissions, automatic uploa
 		creating = true;
 		try {
 			const manifest = await recording.stop();
-			await addRecordingToProject(recordingProject, manifest);
+			await addRecordingToProject(recordingProject, manifest, { cameraLayout });
 			const saved = await saveLocalVideoProject(recordingProject);
 			await deleteRecordingManifest(manifest.id);
 			await openProject(saved.id);
@@ -334,6 +354,63 @@ FORM: Operate surface; no template carousel, hidden permissions, automatic uploa
 			<h1 class="text-2xl font-semibold tracking-tight">{m.video_studio_new_heading()}</h1>
 			<p class="mt-2 text-sm leading-6 text-muted-foreground">{m.video_studio_new_intro()}</p>
 		</div>
+
+		{#if mode === 'import'}
+			<section class="mt-8" aria-labelledby="video-studio-workflow-title">
+				<h2 id="video-studio-workflow-title" class="text-sm font-semibold">
+					{m.video_studio_workflow_heading()}
+				</h2>
+				<div class="mt-3 grid gap-3 sm:grid-cols-2">
+					<button
+						type="button"
+						class={[
+							'flex min-h-28 items-start gap-4 rounded-lg border p-4 text-left transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
+							composerHandoff && 'cursor-not-allowed opacity-50',
+							editingMode === 'quick-cut'
+								? 'border-primary bg-primary/5 shadow-sm'
+								: 'hover:bg-muted/40'
+						]}
+						disabled={composerHandoff}
+						title={composerHandoff ? m.video_studio_quick_handoff_full() : undefined}
+						onclick={() => (editingMode = 'quick-cut')}
+					>
+						<span
+							class="grid size-10 shrink-0 place-items-center rounded-md bg-primary/10 text-primary"
+						>
+							<ScissorsIcon class="size-5" />
+						</span>
+						<span>
+							<span class="block font-medium">{m.video_studio_workflow_quick()}</span>
+							<span class="mt-1 block text-sm leading-5 text-muted-foreground">
+								{m.video_studio_workflow_quick_description()}
+							</span>
+						</span>
+					</button>
+					<button
+						type="button"
+						class={[
+							'flex min-h-28 items-start gap-4 rounded-lg border p-4 text-left transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
+							editingMode === 'studio'
+								? 'border-primary bg-primary/5 shadow-sm'
+								: 'hover:bg-muted/40'
+						]}
+						onclick={() => (editingMode = 'studio')}
+					>
+						<span
+							class="grid size-10 shrink-0 place-items-center rounded-md bg-primary/10 text-primary"
+						>
+							<SlidersHorizontalIcon class="size-5" />
+						</span>
+						<span>
+							<span class="block font-medium">{m.video_studio_workflow_full()}</span>
+							<span class="mt-1 block text-sm leading-5 text-muted-foreground">
+								{m.video_studio_workflow_full_description()}
+							</span>
+						</span>
+					</button>
+				</div>
+			</section>
+		{/if}
 
 		{#if error}<InlineNotice class="mt-5" tone="error" message={error} />{/if}
 
@@ -469,6 +546,20 @@ FORM: Operate surface; no template carousel, hidden permissions, automatic uploa
 									]}
 								/>
 							</label>
+							<label class="grid gap-1.5 text-sm">
+								<span class="font-medium">{m.video_studio_camera_layout()}</span>
+								<AppSelect
+									value={cameraLayout}
+									onValueChange={(value) => (cameraLayout = value as typeof cameraLayout)}
+									options={[
+										{ value: 'circle', label: m.video_studio_camera_circle() },
+										{ value: 'rounded', label: m.video_studio_camera_rounded() },
+										{ value: 'portrait', label: m.video_studio_camera_portrait() },
+										{ value: 'side-by-side', label: m.video_studio_camera_side_by_side() },
+										{ value: 'full', label: m.video_studio_camera_full() }
+									]}
+								/>
+							</label>
 						{/if}
 						{#if microphone}
 							<label class="grid gap-1.5 text-sm">
@@ -564,7 +655,11 @@ FORM: Operate surface; no template carousel, hidden permissions, automatic uploa
 				>
 					<FileVideoIcon class="size-7 text-primary" />
 					<h2 class="mt-4 font-medium">{m.video_studio_drop()}</h2>
-					<p class="mt-1 max-w-md text-sm text-muted-foreground">{m.video_studio_file_hint()}</p>
+					<p class="mt-1 max-w-md text-sm text-muted-foreground">
+						{editingMode === 'quick-cut'
+							? m.video_studio_quick_file_hint()
+							: m.video_studio_file_hint()}
+					</p>
 					<Button class="mt-5" disabled={creating || !entryReady} onclick={triggerFilePicker}>
 						{#if creating}<LoaderIcon class="size-4 animate-spin" />{/if}
 						{m.video_studio_choose_files()}
@@ -572,8 +667,10 @@ FORM: Operate surface; no template carousel, hidden permissions, automatic uploa
 					<Input
 						id="video-studio-new-files"
 						type="file"
-						multiple
-						accept="video/*,audio/*,image/jpeg,image/png,image/webp,image/gif"
+						multiple={editingMode === 'studio'}
+						accept={editingMode === 'quick-cut'
+							? 'video/*'
+							: 'video/*,audio/*,image/jpeg,image/png,image/webp,image/gif'}
 						class="sr-only !size-px !p-0"
 						onchange={chooseFiles}
 					/>

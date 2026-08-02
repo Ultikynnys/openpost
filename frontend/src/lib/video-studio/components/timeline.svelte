@@ -81,6 +81,8 @@
 		edge: 'start' | 'end';
 		lastClientX: number;
 	} | null>(null);
+	let pendingTrimPointer: { clientX: number; altKey: boolean } | null = null;
+	let trimFrame = 0;
 	type TimingDrag = {
 		kind: 'visual' | 'audio' | 'caption' | 'marker';
 		id: string;
@@ -90,6 +92,8 @@
 		originalEndUS: number;
 	};
 	let timingDrag = $state<TimingDrag | null>(null);
+	let pendingTimingPointer: { clientX: number; altKey: boolean } | null = null;
+	let timingFrame = 0;
 	let selectedMarkerID = $state('');
 	let snapGuideUS = $state<number | null>(null);
 	let snapStatus = $state('');
@@ -130,6 +134,8 @@
 		const delayedRefresh = window.setTimeout(() => void refresh(), 3_000);
 		return () => {
 			stopped = true;
+			cancelAnimationFrame(trimFrame);
+			cancelAnimationFrame(timingFrame);
 			window.clearTimeout(delayedRefresh);
 			for (const url of Object.values(thumbnailURLs)) URL.revokeObjectURL(url);
 		};
@@ -219,20 +225,31 @@
 
 	function continueTrim(event: PointerEvent): void {
 		if (!trimming) return;
-		const deltaPX = event.clientX - trimming.lastClientX;
+		pendingTrimPointer = { clientX: event.clientX, altKey: event.altKey };
+		if (!trimFrame) trimFrame = requestAnimationFrame(flushTrim);
+	}
+
+	function flushTrim(): void {
+		trimFrame = 0;
+		if (!trimming || !pendingTrimPointer) return;
+		const pointer = pendingTrimPointer;
+		pendingTrimPointer = null;
+		const deltaPX = pointer.clientX - trimming.lastClientX;
 		if (Math.abs(deltaPX) < 0.5) return;
-		trimming.lastClientX = event.clientX;
+		trimming.lastClientX = pointer.clientX;
 		const derived = derivedClips.find((item) => item.clip_id === trimming?.clipID);
 		if (!derived) return;
 		const boundaryUS =
 			trimming.edge === 'start' ? derived.timeline_start_us : derived.timeline_end_us;
 		const proposedUS = boundaryUS + Math.round((deltaPX / widthPX) * durationUS);
-		const result = snappedTime(proposedUS, `primary:${trimming.clipID}:`, event.altKey);
+		const result = snappedTime(proposedUS, `primary:${trimming.clipID}:`, pointer.altKey);
 		onTrim(trimming.clipID, trimming.edge, result.valueUS - boundaryUS);
 	}
 
 	function endTrim(event: PointerEvent): void {
 		if (!trimming) return;
+		if (trimFrame) cancelAnimationFrame(trimFrame);
+		flushTrim();
 		trimming = null;
 		snapGuideUS = null;
 		const target = event.currentTarget as HTMLElement;
@@ -287,12 +304,23 @@
 
 	function continueTimingDrag(event: PointerEvent): void {
 		if (!timingDrag) return;
-		const deltaUS = Math.round(((event.clientX - timingDrag.pointerStartX) / widthPX) * durationUS);
+		pendingTimingPointer = { clientX: event.clientX, altKey: event.altKey };
+		if (!timingFrame) timingFrame = requestAnimationFrame(flushTimingDrag);
+	}
+
+	function flushTimingDrag(): void {
+		timingFrame = 0;
+		if (!timingDrag || !pendingTimingPointer) return;
+		const pointer = pendingTimingPointer;
+		pendingTimingPointer = null;
+		const deltaUS = Math.round(
+			((pointer.clientX - timingDrag.pointerStartX) / widthPX) * durationUS
+		);
 		const duration = timingDrag.originalEndUS - timingDrag.originalStartUS;
 		const excludedID = `${timingDrag.kind}:${timingDrag.id}`;
 		if (timingDrag.kind === 'marker') {
 			const proposed = Math.max(0, Math.min(durationUS, timingDrag.originalStartUS + deltaUS));
-			const result = snappedTime(proposed, excludedID, event.altKey);
+			const result = snappedTime(proposed, excludedID, pointer.altKey);
 			applyTiming(timingDrag, result.valueUS, result.valueUS);
 			return;
 		}
@@ -302,12 +330,12 @@
 				Math.min(durationUS - duration, timingDrag.originalStartUS + deltaUS)
 			);
 			let endUS = startUS + duration;
-			const startSnap = snappedTime(startUS, excludedID, event.altKey);
+			const startSnap = snappedTime(startUS, excludedID, pointer.altKey);
 			if (startSnap.snapped) {
 				startUS = startSnap.valueUS;
 				endUS = startUS + duration;
 			} else {
-				const endSnap = snappedTime(endUS, excludedID, event.altKey);
+				const endSnap = snappedTime(endUS, excludedID, pointer.altKey);
 				if (endSnap.snapped) {
 					endUS = endSnap.valueUS;
 					startUS = endUS - duration;
@@ -321,7 +349,7 @@
 				0,
 				Math.min(timingDrag.originalEndUS - 50_000, timingDrag.originalStartUS + deltaUS)
 			);
-			const result = snappedTime(proposed, excludedID, event.altKey);
+			const result = snappedTime(proposed, excludedID, pointer.altKey);
 			applyTiming(timingDrag, result.valueUS, timingDrag.originalEndUS);
 			return;
 		}
@@ -329,12 +357,14 @@
 			timingDrag.originalStartUS + 50_000,
 			Math.min(durationUS, timingDrag.originalEndUS + deltaUS)
 		);
-		const result = snappedTime(proposed, excludedID, event.altKey);
+		const result = snappedTime(proposed, excludedID, pointer.altKey);
 		applyTiming(timingDrag, timingDrag.originalStartUS, result.valueUS);
 	}
 
 	function endTimingDrag(event: PointerEvent): void {
 		if (!timingDrag) return;
+		if (timingFrame) cancelAnimationFrame(timingFrame);
+		flushTimingDrag();
 		timingDrag = null;
 		snapGuideUS = null;
 		const target = event.currentTarget as HTMLElement;
@@ -374,7 +404,10 @@
 	}
 </script>
 
-<section class="flex min-h-0 flex-col border-t bg-background" aria-labelledby="timeline-title">
+<section
+	class="flex h-full min-h-0 flex-col border-t bg-background"
+	aria-labelledby="timeline-title"
+>
 	<div class="flex min-h-12 flex-wrap items-center gap-1 border-b px-2 sm:px-3">
 		<h2 id="timeline-title" class="mr-2 text-sm font-medium">{m.video_studio_timeline()}</h2>
 		<Button

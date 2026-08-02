@@ -32,20 +32,22 @@ const SUPPORTED_AUDIO_TYPES = new Set([
 ]);
 
 export async function createBlankLocalVideoProject(
-	title = 'Untitled video'
+	title = 'Untitled video',
+	editingMode: 'quick-cut' | 'studio' = 'studio'
 ): Promise<LocalVideoProject> {
 	return await createLocalVideoProject(
 		`local_video_${crypto.randomUUID()}`,
-		createBlankVideoProject(title)
+		createBlankVideoProject(title, editingMode)
 	);
 }
 
 export async function createLocalVideoProjectFromFiles(
 	files: File[],
 	title?: string,
-	signal?: AbortSignal
+	signal?: AbortSignal,
+	editingMode: 'quick-cut' | 'studio' = 'studio'
 ): Promise<LocalVideoProject> {
-	if (files.length === 0) return await createBlankLocalVideoProject(title);
+	if (files.length === 0) return await createBlankLocalVideoProject(title, editingMode);
 	const required = files.reduce((total, file) => total + file.size, 0);
 	const estimate = await navigator.storage?.estimate?.();
 	const budget = calculateStorageBudget(estimate?.usage ?? 0, estimate?.quota ?? 0, required);
@@ -53,7 +55,8 @@ export async function createLocalVideoProjectFromFiles(
 
 	const projectID = `local_video_${crypto.randomUUID()}`;
 	const document = createBlankVideoProject(
-		title ?? files[0].name.replace(/\.[^.]+$/u, '') ?? 'Untitled video'
+		title ?? files[0].name.replace(/\.[^.]+$/u, '') ?? 'Untitled video',
+		editingMode
 	);
 	const project = await createLocalVideoProject(projectID, document);
 	try {
@@ -80,8 +83,8 @@ export async function addFileToProject(
 	const extension = file.name.match(/\.[a-zA-Z0-9]{1,8}$/u)?.[0]?.toLowerCase() ?? '';
 	const storedName = `${sourceID}${extension}`;
 	const metadata = await inspectSource(file, signal);
-	if (metadata.duration_us > 20 * 60 * 1_000_000) {
-		throw new Error(`${file.name} is longer than the 20-minute project limit.`);
+	if (metadata.duration_us > 2 * 60 * 60 * 1_000_000) {
+		throw new Error(`${file.name} is longer than the 2-hour project limit.`);
 	}
 	const stored = await writeProjectFile(project.id, 'sources', storedName, file);
 	const source: VideoSource = {
@@ -128,7 +131,10 @@ export async function addFileToProject(
 
 export async function addRecordingToProject(
 	project: LocalVideoProject,
-	manifest: RecordingManifest
+	manifest: RecordingManifest,
+	options: {
+		cameraLayout?: 'circle' | 'rounded' | 'portrait' | 'side-by-side' | 'full';
+	} = {}
 ): Promise<void> {
 	const tracks = [...manifest.tracks].sort(
 		(left, right) => left.start_offset_us - right.start_offset_us
@@ -156,6 +162,7 @@ export async function addRecordingToProject(
 			track.duration_us
 		);
 		if (track.kind === 'camera') {
+			const cameraPresentation = recordingCameraPresentation(options.cameraLayout ?? 'circle');
 			project.document.visual_tracks[0] ??= {
 				id: `visual_${crypto.randomUUID()}`,
 				name: 'Camera',
@@ -172,16 +179,7 @@ export async function addRecordingToProject(
 				duration_us: source.duration_us,
 				speed: 1,
 				visible: true,
-				presentation: {
-					...defaultVideoPresentation(),
-					position_x: 0.82,
-					position_y: 0.78,
-					scale: 0.24,
-					corner_radius: 0.5,
-					border_width: 3,
-					shadow_blur: 18,
-					shadow_opacity: 0.28
-				}
+				presentation: cameraPresentation
 			});
 		}
 		if (track.kind === 'microphone' || track.kind === 'system-audio') {
@@ -208,6 +206,59 @@ export async function addRecordingToProject(
 				]
 			});
 		}
+	}
+}
+
+function recordingCameraPresentation(
+	layout: 'circle' | 'rounded' | 'portrait' | 'side-by-side' | 'full'
+): ReturnType<typeof defaultVideoPresentation> {
+	const base = defaultVideoPresentation();
+	switch (layout) {
+		case 'rounded':
+			return {
+				...base,
+				position_x: 0.8,
+				position_y: 0.77,
+				scale: 0.28,
+				corner_radius: 0.12,
+				border_width: 3,
+				shadow_blur: 18,
+				shadow_opacity: 0.28
+			};
+		case 'portrait':
+			return {
+				...base,
+				position_x: 0.79,
+				position_y: 0.68,
+				scale: 0.38,
+				crop: { x: 0.15, y: 0, width: 0.7, height: 1 },
+				corner_radius: 0.08,
+				border_width: 3,
+				shadow_blur: 20,
+				shadow_opacity: 0.3
+			};
+		case 'side-by-side':
+			return {
+				...base,
+				position_x: 0.75,
+				position_y: 0.5,
+				scale: 0.5,
+				crop: { x: 0, y: 0, width: 0.5, height: 1 }
+			};
+		case 'full':
+			return base;
+		case 'circle':
+		default:
+			return {
+				...base,
+				position_x: 0.82,
+				position_y: 0.78,
+				scale: 0.24,
+				corner_radius: 0.5,
+				border_width: 3,
+				shadow_blur: 18,
+				shadow_opacity: 0.28
+			};
 	}
 }
 
