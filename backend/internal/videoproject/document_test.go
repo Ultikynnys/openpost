@@ -64,6 +64,28 @@ func TestValidateCloudDocumentAndDuration(t *testing.T) {
 	require.Equal(t, map[string]string{"source": "media-1"}, MediaReferences(document))
 }
 
+func TestValidateEditingModeAndTwoHourLimit(t *testing.T) {
+	t.Parallel()
+	document := validDocument()
+	document.EditingMode = "quick-cut"
+	source := document.Sources["source"]
+	source.DurationUS = 60 * 60 * 1_000_000
+	document.Sources["source"] = source
+	document.PrimarySequence[0].SourceOutUS = source.DurationUS
+	require.NoError(t, Validate(document, true))
+
+	document.EditingMode = "unknown"
+	require.ErrorContains(t, Validate(document, true), "editing mode")
+	document.EditingMode = "studio"
+	source.DurationUS = 60*60*1_000_000 + 1
+	document.Sources["source"] = source
+	document.PrimarySequence[0].SourceOutUS = source.DurationUS
+	second := document.PrimarySequence[0]
+	second.ID = "clip-2"
+	document.PrimarySequence = append(document.PrimarySequence, second)
+	require.ErrorContains(t, Validate(document, true), "2 hours")
+}
+
 func TestValidateRejectsLocalSourcesInCloudDocument(t *testing.T) {
 	t.Parallel()
 	document := validDocument()

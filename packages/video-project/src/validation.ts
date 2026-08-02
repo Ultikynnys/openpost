@@ -15,6 +15,7 @@ import {
 
 const ROOT_FIELDS = [
   "schema_version",
+  "editing_mode",
   "title",
   "timebase",
   "sources",
@@ -1752,6 +1753,19 @@ export function validateVideoProject(value: unknown): VideoProjectValidation {
     );
   }
   if (
+    value.editing_mode !== undefined &&
+    value.editing_mode !== "quick-cut" &&
+    value.editing_mode !== "studio"
+  ) {
+    issues.push(
+      issue(
+        "$.editing_mode",
+        "editing-mode",
+        "Editing mode must be quick-cut or studio.",
+      ),
+    );
+  }
+  if (
     typeof value.title !== "string" ||
     !value.title.trim() ||
     value.title.length > 200
@@ -1843,7 +1857,7 @@ export function validateVideoProject(value: unknown): VideoProjectValidation {
         issue(
           "$",
           "duration",
-          "The final project duration cannot exceed 20 minutes.",
+          "The final project duration cannot exceed 2 hours.",
         ),
       );
     }

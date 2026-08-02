@@ -6,6 +6,7 @@ import {
   createBlankVideoProject,
   deletePrimaryItemLeaveGap,
   defaultClipAudio,
+  defaultCaptionStyle,
   defaultVideoPresentation,
   detachPrimaryClipAudio,
   derivePrimarySequence,
@@ -18,6 +19,7 @@ import {
   reflowCaptionText,
   removePrimaryRanges,
   reorderPrimaryClip,
+  rippleDeleteCaptionWords,
   referencedSourceIDs,
   captionsToSRT,
   captionsToWebVTT,
@@ -94,6 +96,23 @@ describe("video project document", () => {
       "square",
       "landscape",
     ]);
+  });
+
+  it("accepts one-hour footage and rejects sources beyond two hours", () => {
+    const project = projectWithClips();
+    project.sources.source!.duration_us = 60 * 60 * 1_000_000;
+    project.primary_sequence = [
+      {
+        ...project.primary_sequence[0]!,
+        source_in_us: 0,
+        source_out_us: 60 * 60 * 1_000_000,
+      },
+    ];
+    expect(validateVideoProject(project).valid).toBe(true);
+
+    project.sources.source!.duration_us = 2 * 60 * 60 * 1_000_000 + 1;
+    clipAt(project, 0).source_out_us = 2 * 60 * 60 * 1_000_000 + 1;
+    expect(validateVideoProject(project).valid).toBe(false);
   });
 
   it("rejects unknown root fields, missing sources, and invalid speed", () => {
@@ -351,6 +370,48 @@ describe("time, keyframes, captions, and suggestions", () => {
       [{ cue_id: "cue", word_index: 1 }],
     );
     expect(cut).toEqual({ start_us: 880_000, end_us: 1_620_000 });
+  });
+
+  it("ripple deletes a transcript word and keeps caption time aligned", () => {
+    const project = projectWithClips();
+    project.caption_tracks = [
+      {
+        id: "captions",
+        name: "Captions",
+        cues: [],
+        style: defaultCaptionStyle(),
+      },
+    ];
+    project.caption_tracks[0]!.cues = [
+      {
+        id: "cue",
+        start_us: 1_000_000,
+        end_us: 4_000_000,
+        text: "one two three",
+        words: [
+          { text: "one", start_us: 1_000_000, end_us: 2_000_000 },
+          { text: "two", start_us: 2_000_000, end_us: 3_000_000 },
+          { text: "three", start_us: 3_000_000, end_us: 4_000_000 },
+        ],
+      },
+    ];
+
+    const next = rippleDeleteCaptionWords(
+      project,
+      [{ cue_id: "cue", word_index: 1 }],
+      () => "split",
+    );
+
+    expect(projectDurationUS(next)).toBe(9_000_000);
+    expect(next.caption_tracks[0]!.cues[0]).toMatchObject({
+      start_us: 1_000_000,
+      end_us: 3_000_000,
+      text: "one three",
+      words: [
+        { text: "one", start_us: 1_000_000, end_us: 2_000_000 },
+        { text: "three", start_us: 2_000_000, end_us: 3_000_000 },
+      ],
+    });
   });
 
   it("keeps corrected caption text canonical and retimes word emphasis safely", () => {

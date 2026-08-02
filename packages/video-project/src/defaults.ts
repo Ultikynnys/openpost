@@ -100,9 +100,13 @@ export function defaultExportSettings(): ExportDefaults {
 	};
 }
 
-export function createBlankVideoProject(title = 'Untitled video'): VideoProjectDocumentV1 {
+export function createBlankVideoProject(
+	title = 'Untitled video',
+	editingMode: 'quick-cut' | 'studio' = 'studio'
+): VideoProjectDocumentV1 {
 	return {
 		schema_version: VIDEO_PROJECT_SCHEMA_VERSION,
+		editing_mode: editingMode,
 		title,
 		timebase: {
 			ticks_per_second: VIDEO_TICKS_PER_SECOND,

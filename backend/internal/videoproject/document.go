@@ -15,7 +15,7 @@ import (
 const (
 	SchemaVersion       = 1
 	TicksPerSecond      = int64(1_000_000)
-	MaxDurationUS       = int64(20 * 60 * 1_000_000)
+	MaxDurationUS       = int64(2 * 60 * 60 * 1_000_000)
 	MaxSources          = 250
 	MaxTimelineItems    = 2_000
 	MaxCaptionCues      = 5_000
@@ -324,6 +324,7 @@ type ExportDefaults struct {
 
 type Document struct {
 	SchemaVersion   int                   `json:"schema_version"`
+	EditingMode     string                `json:"editing_mode,omitempty" enum:"quick-cut,studio"`
 	Title           string                `json:"title"`
 	Timebase        Timebase              `json:"timebase"`
 	Sources         map[string]Source     `json:"sources"`
@@ -363,6 +364,9 @@ func ensureJSONEOF(decoder *json.Decoder) error {
 }
 
 func (d *Document) Normalize() {
+	if d.EditingMode == "" {
+		d.EditingMode = "studio"
+	}
 	d.Title = strings.TrimSpace(d.Title)
 	if d.Title == "" {
 		d.Title = defaultProjectTitle
@@ -408,7 +412,7 @@ func Validate(document Document, cloud bool) error {
 		return err
 	}
 	if DurationUS(document) > MaxDurationUS {
-		return fmt.Errorf("project duration cannot exceed 20 minutes")
+		return fmt.Errorf("project duration cannot exceed 2 hours")
 	}
 	encoded, err := json.Marshal(document)
 	if err != nil {
@@ -424,6 +428,9 @@ func Validate(document Document, cloud bool) error {
 func validateProjectMetadata(document Document) error {
 	if document.SchemaVersion != SchemaVersion {
 		return fmt.Errorf("unsupported Video Studio schema version")
+	}
+	if !oneOfString(document.EditingMode, "quick-cut", "studio") {
+		return fmt.Errorf("project editing mode is invalid")
 	}
 	if len(document.Title) > 200 {
 		return fmt.Errorf("project title cannot exceed 200 characters")

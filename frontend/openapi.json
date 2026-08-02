@@ -3955,6 +3955,10 @@
 						},
 						"type": ["array", "null"]
 					},
+					"editing_mode": {
+						"enum": ["quick-cut", "studio"],
+						"type": "string"
+					},
 					"export_defaults": {
 						"$ref": "#/components/schemas/ExportDefaults"
 					},

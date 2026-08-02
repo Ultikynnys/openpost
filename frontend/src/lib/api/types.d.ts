@@ -4915,6 +4915,8 @@ export interface components {
         Document: {
             audio_tracks: components["schemas"]["AudioTrack"][] | null;
             caption_tracks: components["schemas"]["CaptionTrack"][] | null;
+            /** @enum {string} */
+            editing_mode?: "quick-cut" | "studio";
             export_defaults: components["schemas"]["ExportDefaults"];
             markers: components["schemas"]["TimelineMarker"][] | null;
             primary_sequence: components["schemas"]["PrimarySequenceClip"][] | null;

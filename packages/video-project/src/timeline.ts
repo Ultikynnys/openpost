@@ -328,6 +328,82 @@ export function removePrimaryRanges(
   return next;
 }
 
+export function rippleDeleteCaptionWords(
+  project: VideoProjectDocumentV1,
+  selections: Array<{ cue_id: string; word_index: number }>,
+  createID: () => string = () => crypto.randomUUID(),
+): VideoProjectDocumentV1 {
+  const selected = new Set(
+    selections.map(
+      (selection) => `${selection.cue_id}:${selection.word_index}`,
+    ),
+  );
+  const ranges = mergeTimeRanges(
+    project.caption_tracks.flatMap((track) =>
+      track.cues.flatMap((cue) =>
+        cue.words.flatMap((word, index) =>
+          selected.has(`${cue.id}:${index}`)
+            ? [{ start_us: word.start_us, end_us: word.end_us }]
+            : [],
+        ),
+      ),
+    ),
+  ).filter((range) => range.end_us > range.start_us);
+  if (!ranges.length) return cloneVideoProject(project);
+
+  const next = removePrimaryRanges(project, ranges, createID);
+  next.caption_tracks = project.caption_tracks.map((track) => ({
+    ...structuredClone(track),
+    cues: track.cues.flatMap((cue) => {
+      const words = cue.words
+        .filter(
+          (word) =>
+            !ranges.some(
+              (range) =>
+                word.end_us > range.start_us && word.start_us < range.end_us,
+            ),
+        )
+        .map((word) => ({
+          ...word,
+          start_us: retimeAfterRemovedRanges(word.start_us, ranges),
+          end_us: retimeAfterRemovedRanges(word.end_us, ranges),
+        }))
+        .filter((word) => word.end_us > word.start_us);
+      if (cue.words.length > 0) {
+        if (!words.length) return [];
+        return [
+          {
+            ...structuredClone(cue),
+            start_us: words[0]!.start_us,
+            end_us: words.at(-1)!.end_us,
+            text: words.map((word) => word.text).join(" "),
+            words,
+          },
+        ];
+      }
+      const startUS = retimeAfterRemovedRanges(cue.start_us, ranges);
+      const endUS = retimeAfterRemovedRanges(cue.end_us, ranges);
+      return endUS > startUS
+        ? [{ ...structuredClone(cue), start_us: startUS, end_us: endUS }]
+        : [];
+    }),
+  }));
+  return next;
+}
+
+function retimeAfterRemovedRanges(
+  timestampUS: number,
+  ranges: Array<{ start_us: number; end_us: number }>,
+): number {
+  let removedUS = 0;
+  for (const range of ranges) {
+    if (timestampUS <= range.start_us) break;
+    removedUS += Math.min(timestampUS, range.end_us) - range.start_us;
+    if (timestampUS < range.end_us) break;
+  }
+  return Math.max(0, timestampUS - removedUS);
+}
+
 export function reorderPrimaryClip(
   project: VideoProjectDocumentV1,
   clipID: string,

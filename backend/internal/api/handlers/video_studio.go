@@ -527,7 +527,7 @@ func (h *VideoStudioHandler) getConfig(
 	out.Body.Enabled = h.enabled
 	out.Body.SchemaVersion = videoproject.SchemaVersion
 	out.Body.Limits = VideoStudioLimits{
-		MaxDurationSeconds: 20 * 60,
+		MaxDurationSeconds: 2 * 60 * 60,
 		MaxSources:         videoproject.MaxSources,
 		MaxDocumentBytes:   videoproject.MaxDocumentBytes,
 		MaxExportWidth:     1920,

@@ -2,7 +2,7 @@ export const VIDEO_PROJECT_SCHEMA_VERSION = 1 as const;
 export const VIDEO_TICKS_PER_SECOND = 1_000_000 as const;
 
 export const VIDEO_PROJECT_LIMITS = {
-  maxDurationUS: 20 * 60 * VIDEO_TICKS_PER_SECOND,
+  maxDurationUS: 2 * 60 * 60 * VIDEO_TICKS_PER_SECOND,
   maxSources: 250,
   maxTimelineItems: 2_000,
   maxCaptionCues: 5_000,
@@ -334,6 +334,7 @@ export interface ExportDefaults {
 
 export interface VideoProjectDocumentV1 {
   schema_version: typeof VIDEO_PROJECT_SCHEMA_VERSION;
+  editing_mode?: "quick-cut" | "studio";
   title: string;
   timebase: {
     ticks_per_second: typeof VIDEO_TICKS_PER_SECOND;
