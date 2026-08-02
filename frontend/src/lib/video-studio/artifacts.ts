@@ -21,12 +21,13 @@ import {
 import { hashLocalFile } from './file-hash';
 import { proxyReason, type ProxyReason } from './proxy-policy';
 
-const ARTIFACT_VERSION = 3;
+const ARTIFACT_VERSION = 4;
 const WAVEFORM_BUCKETS = 720;
-const MAX_KEYFRAMES = 4_000;
+const MAX_KEYFRAMES = 16_000;
 
 export interface SourceArtifactIndex {
 	version: number;
+	complete: boolean;
 	source_id: string;
 	duration_us: number;
 	frame_rate: number;
@@ -57,7 +58,8 @@ export async function ensureSourceArtifacts(
 		const stored = await readProjectFile(existing.path);
 		if (stored) {
 			try {
-				return JSON.parse(await stored.text()) as SourceArtifactIndex;
+				const parsed = JSON.parse(await stored.text()) as SourceArtifactIndex;
+				if (parsed.complete) return parsed;
 			} catch {
 				// Regenerate an invalid disposable artifact.
 			}
@@ -70,22 +72,27 @@ export async function ensureSourceArtifacts(
 			input.getPrimaryVideoTrack(),
 			input.getPrimaryAudioTrack()
 		]);
-		const [keyframesUS, waveformPeaks, packetStats] = await Promise.all([
+		const [keyframesUS, packetStats] = await Promise.all([
 			videoTrack
 				? indexKeyframes(new EncodedPacketSink(videoTrack), signal)
-				: Promise.resolve<number[]>([]),
-			audioTrack && (await audioTrack.canDecode())
-				? generateWaveformPeaks(
-						new AudioBufferSink(audioTrack),
-						source.duration_us,
-						WAVEFORM_BUCKETS,
-						signal
-					)
 				: Promise.resolve<number[]>([]),
 			videoTrack
 				? videoTrack.computePacketStats(180)
 				: Promise.resolve({ packetCount: 0, averagePacketRate: 0, averageBitrate: 0 })
 		]);
+		const estimatedFrameRate = packetStats.averagePacketRate || 0;
+		const reason = proxyReason(source, estimatedFrameRate);
+		let artifact: SourceArtifactIndex = {
+			version: ARTIFACT_VERSION,
+			complete: false,
+			source_id: source.id,
+			duration_us: source.duration_us,
+			frame_rate: estimatedFrameRate,
+			proxy_reason: reason,
+			keyframes_us: keyframesUS,
+			waveform_peaks: []
+		};
+		await saveArtifactIndex(projectID, source.id, contentHash, artifactKey, artifact);
 		if (videoTrack && (await videoTrack.canDecode())) {
 			await generateThumbnail(
 				projectID,
@@ -95,35 +102,20 @@ export async function ensureSourceArtifacts(
 				signal
 			);
 		}
-		const estimatedFrameRate = packetStats.averagePacketRate || 0;
-		const reason = proxyReason(source, estimatedFrameRate);
 		if (reason) {
 			await generateProxy(projectID, source, file, contentHash, signal);
 		}
-		const artifact: SourceArtifactIndex = {
-			version: ARTIFACT_VERSION,
-			source_id: source.id,
-			duration_us: source.duration_us,
-			frame_rate: estimatedFrameRate,
-			proxy_reason: reason,
-			keyframes_us: keyframesUS,
-			waveform_peaks: waveformPeaks
-		};
-		const encoded = new TextEncoder().encode(JSON.stringify(artifact));
-		const stored = await writeProjectFile(
-			projectID,
-			'analysis',
-			`${contentHash}-source-index-v${ARTIFACT_VERSION}.json`,
-			encoded
-		);
-		await indexDisposableAsset(
-			projectID,
-			source.id,
-			'analysis',
-			stored.path,
-			stored.size,
-			artifactKey
-		);
+		const waveformPeaks =
+			audioTrack && (await audioTrack.canDecode())
+				? await generateWaveformPeaks(
+						new AudioBufferSink(audioTrack),
+						source.duration_us,
+						WAVEFORM_BUCKETS,
+						signal
+					)
+				: [];
+		artifact = { ...artifact, complete: true, waveform_peaks: waveformPeaks };
+		await saveArtifactIndex(projectID, source.id, contentHash, artifactKey, artifact);
 		if (waveformPeaks.length) {
 			const waveform = new TextEncoder().encode(JSON.stringify(waveformPeaks));
 			const savedWaveform = await writeProjectFile(
@@ -145,6 +137,30 @@ export async function ensureSourceArtifacts(
 	} finally {
 		if (!input.disposed) input.dispose();
 	}
+}
+
+async function saveArtifactIndex(
+	projectID: string,
+	sourceID: string,
+	contentHash: string,
+	artifactKey: string,
+	artifact: SourceArtifactIndex
+): Promise<void> {
+	const encoded = new TextEncoder().encode(JSON.stringify(artifact));
+	const stored = await writeProjectFile(
+		projectID,
+		'analysis',
+		`${contentHash}-source-index-v${ARTIFACT_VERSION}.json`,
+		encoded
+	);
+	await indexDisposableAsset(
+		projectID,
+		sourceID,
+		'analysis',
+		stored.path,
+		stored.size,
+		artifactKey
+	);
 }
 
 export async function generateWaveformPeaks(
@@ -258,12 +274,18 @@ async function generateProxy(
 	contentHash: string,
 	signal?: AbortSignal
 ): Promise<void> {
-	const artifactHash = `${contentHash}:proxy:webm-720p30:v${ARTIFACT_VERSION}`;
+	const longSource = source.duration_us >= 30 * 60 * 1_000_000;
+	const maxEdge = longSource ? 960 : 1280;
+	const frameRate = longSource ? 24 : 30;
+	const videoBitrate = longSource ? 1_500_000 : 3_500_000;
+	const audioBitrate = longSource ? 96_000 : 128_000;
+	const profile = longSource ? 'webm-540p24' : 'webm-720p30';
+	const artifactHash = `${contentHash}:proxy:${profile}:v${ARTIFACT_VERSION}`;
 	const existing = (await listProjectAssets(projectID, source.id)).find(
 		(asset) => asset.kind === 'proxy' && asset.content_hash === artifactHash
 	);
 	if (existing && (await readProjectFile(existing.path))) return;
-	const scale = Math.min(1, 1280 / Math.max(source.width, source.height));
+	const scale = Math.min(1, maxEdge / Math.max(source.width, source.height));
 	const width = Math.max(2, Math.round((source.width * scale) / 2) * 2);
 	const height = Math.max(2, Math.round((source.height * scale) / 2) * 2);
 	const input = new Input({ formats: ALL_FORMATS, source: new BlobSource(file) });
@@ -284,16 +306,16 @@ async function generateProxy(
 				width,
 				height,
 				fit: 'contain',
-				frameRate: 30,
+				frameRate,
 				codec: 'vp9',
-				bitrate: 3_500_000,
+				bitrate: videoBitrate,
 				keyFrameInterval: 2,
-				hardwareAcceleration: 'no-preference',
+				hardwareAcceleration: 'prefer-hardware',
 				forceTranscode: true
 			},
 			audio: {
 				codec: 'opus',
-				bitrate: 128_000,
+				bitrate: audioBitrate,
 				sampleRate: 48_000,
 				numberOfChannels: 2,
 				forceTranscode: true
