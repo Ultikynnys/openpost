@@ -1,12 +1,18 @@
 # OpenPost Video Studio
 
-Video Studio is a local-first editor for short social videos. Open `/video-studio` in a current desktop Chromium browser to import or record footage, edit it, and export without an account or watermark.
+Video Studio is a local-first editor for social videos and recordings up to two hours. Open `/video-studio` in a current desktop Chromium browser to import or record footage, edit it, and export without an account or watermark.
 
 ## What stays on your device
 
 Guest projects, source files, recordings, captions, analysis results, proxies, and exports stay in browser-managed storage. Video Studio does not create a cloud project or upload a source until you choose **Save to OpenPost** or **Use in a post**. Clearing site data can remove local projects, so use **Protect local projects** when the browser offers persistent storage and keep downloads of important exports.
 
 Local voice detection and multilingual transcription download their disclosed model files only after you start the tool and confirm the download. The files are cached for offline reuse and can be removed from **Models**. Editing continues while analysis runs.
+
+## Choose Quick Cut or Full Studio
+
+**Quick Cut** is for one video source when the edit only removes source ranges. It shows the original source scale, lets you mark, split, and remove kept sections, and snaps every in point to a verified source keyframe. Fast export copies the encoded video and audio packets into a compatible MP4 or WebM container without transcoding. If a kept section starts between keyframes, snap it or open the complete renderer. Pixel changes, speed changes, fades, mixed sources, captions, overlays, and audio adjustments require **Full Studio**.
+
+**Full Studio** uses the four-zone desktop layout: tool rail, active media or effect panel, preview, inspector, and resizable multitrack timeline. The editor uses compact controls and a dark pasteboard, keeps common split and ripple actions close to the timeline, and moves secondary settings into the selection inspector.
 
 ## Edit one sequence for four formats
 
@@ -22,7 +28,7 @@ Four source-free starter templates set useful caption and canvas defaults for cl
 
 Transcription, voice activity detection, filler candidates, smart framing, and focus zooms run locally. They produce suggestions and never change the project until you apply them. Low-confidence words remain visible for review.
 
-Changing caption text changes only the caption. Removing a timed passage lets you choose between removing caption text and ripple-cutting the matching video range. Silence and filler batches show the time they remove, preview before application, and apply as one undoable action.
+Changing caption text changes only the caption. Each locally timed transcript word is also a direct edit control: select a word to remove its matching video range and retime the remaining caption words. Removing a complete timed passage still supports a ripple cut. Silence and filler batches show the time they remove, preview before application, and apply as one undoable action.
 
 ## Record screen, camera, and sound
 
@@ -34,7 +40,7 @@ Recording chunks and an append-only manifest are written to origin-private stora
 
 Autosave runs after editing pauses and at important workflow boundaries. The local history keeps the latest 20 automatic versions. Named checkpoints remain with the local project. A project saved to OpenPost also has cloud revisions and can be reopened on another desktop. If another browser changed it, Video Studio keeps the local copy and lets you load the OpenPost version or save the local edit as a new project.
 
-Preview and export use the same frame evaluator and bounded WebGL2 compositor. Preview runs in an OffscreenCanvas worker, keeps at most three video decoders active, and drops stale video-frame requests instead of growing a queue. Exports write incrementally to a selected file when the browser supports the File System Access API, or to a temporary origin-private file before download. The supported ceiling is 1080p at up to 60 fps. MP4 uses H.264 and AAC only when the exact selected profile, dimensions, frame rate, bitrate, and audio configuration pass browser probing; otherwise the editor offers WebM for download and explains why OpenPost handoff is unavailable.
+Preview and export use the same frame evaluator and bounded WebGL2 compositor. Preview runs in an OffscreenCanvas worker, keeps at most three video decoders active, and drops stale video-frame requests instead of growing a queue. Long, 4K, 60 fps, HEVC, and AV1 sources get a local VP9 preview proxy. Sources under 30 minutes use up to 720p30; longer sources use a smaller 540p24 profile to bound storage and decoding work. Keyframes and frame-rate data are indexed first, hardware encoding is preferred for the proxy, and waveform decoding runs afterward so long imports stay responsive. Exports always read the original source. They write incrementally to a selected file when the browser supports the File System Access API, or to a temporary origin-private file before download. The supported ceiling is 1080p at up to 60 fps. MP4 uses H.264 and AAC only when the exact selected profile, dimensions, frame rate, bitrate, and audio configuration pass browser probing; otherwise the editor offers WebM for download and explains why OpenPost handoff is unavailable.
 
 ## Use an export in a post
 
@@ -49,7 +55,7 @@ The included audio pack contains eight checked-in mastered loops and twelve chec
 ## Limits
 
 - Current desktop Chrome and Edge are the complete editing target. Mobile provides project preview and composer handoff.
-- Projects are limited to 20 minutes, 250 sources, 2,000 non-caption timeline items, 5,000 caption cues, four visual overlay tracks, eight audio tracks, two caption tracks, and a 5 MiB project document.
+- Projects are limited to 2 hours, 250 sources, 2,000 non-caption timeline items, 5,000 caption cues, four visual overlay tracks, eight audio tracks, two caption tracks, and a 5 MiB project document. Long, high-frame-rate sources use local preview proxies; exports always read the original source.
 - 4K files can be imported, but preview artifacts and exports are limited to 1080p.
 - Video Studio has no server render, transcription, or AI fallback.
 - Native cursor replacement, reverse playback, 4K or HDR export, live background removal, nested compositions, and direct publishing are not included.

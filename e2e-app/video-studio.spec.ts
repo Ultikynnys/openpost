@@ -108,6 +108,47 @@ async function syntheticVideoWithAudio(page: Page): Promise<Buffer> {
   return Buffer.from(bytes);
 }
 
+test("guest chooses Quick Cut and can move into Full Studio", async ({
+  page,
+}) => {
+  test.setTimeout(90_000);
+  const browserErrors: string[] = [];
+  page.on("pageerror", (error) => browserErrors.push(error.message));
+  page.on("console", (message) => {
+    if (message.type() === "error") browserErrors.push(message.text());
+  });
+
+  await page.goto("/video-studio/new");
+  await expect(
+    page.getByRole("heading", { name: "Choose how you want to edit" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: /Quick cut/ }).click();
+  const video = await syntheticVideo(page);
+  await page.locator("#video-studio-new-files").setInputFiles({
+    name: "quick-cut-e2e.webm",
+    mimeType: "video/webm",
+    buffer: video,
+  });
+
+  await expect(page).toHaveURL(/\/video-studio\/local_video_/);
+  await expect(
+    page.getByRole("heading", { name: "Source timeline" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Kept sections" }),
+  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "Set in" })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Fast export" }).last(),
+  ).toBeEnabled({ timeout: 20_000 });
+
+  await page.getByRole("button", { name: "Open Full Studio" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Timeline", exact: true }),
+  ).toBeVisible();
+  expect(browserErrors).toEqual([]);
+});
+
 test("guest imports, edits, autosaves, restores, and exports a local video", async ({
   page,
 }) => {

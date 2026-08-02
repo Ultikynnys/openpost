@@ -4,6 +4,15 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- Added a Quick Cut workflow for single-source edits with source-scale kept sections, keyframe snapping, and local MP4 or WebM stream-copy export without video transcoding.
+- Added one-click smooth zoom presets, word-level transcript ripple deletion, resizable timeline height, and camera recording layouts for circle, rounded, portrait, side-by-side, and full-frame compositions.
+
+### Changed
+
+- Reworked Video Studio into a dark, desktop editing workbench with an explicit Quick Cut or Full Studio choice, frame-coalesced timeline gestures, prioritized preview-proxy generation, and a two-hour project limit for long 1080p and 60 fps footage.
+
 ## [1.48.2] - 2026-08-01
 
 ### Fixed

@@ -31,12 +31,13 @@
         <Clapperboard class="size-5" aria-hidden="true" />
       </div>
       <h2 id="video-studio-launch-title" class="mt-5 text-2xl font-semibold">
-        Make one cut for every social format
+        Cut fast or build the complete edit
       </h2>
       <p class="mt-3 max-w-xl leading-7 text-muted-foreground">
-        Video Studio opens with a focused timeline, separate recording tracks,
-        local captions and cleanup suggestions, and streamed MP4 or WebM export.
-        Desktop Chromium gets the complete editor.
+        Quick Cut removes sections and copies source streams without a video
+        transcode. Full Studio adds four social formats, separate recording
+        tracks, local transcript editing, effects, and streamed MP4 or WebM
+        export. Desktop Chromium gets the complete editor.
       </p>
 
       <ul
@@ -81,7 +82,9 @@
     >
       <div class="flex items-center justify-between gap-4">
         <div>
-          <p class="text-xs font-medium tracking-wide text-orange-300 uppercase">
+          <p
+            class="text-xs font-medium tracking-wide text-orange-300 uppercase"
+          >
             OpenPost Video Studio
           </p>
           <h2 class="mt-1 text-lg font-semibold">One timeline, four frames</h2>

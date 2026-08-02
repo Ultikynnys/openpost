@@ -907,7 +907,7 @@ export const tools = [
     slug: "social-media-video-editor",
     name: "Social media video editor",
     description:
-      "Record or import a video, edit one timeline for four social formats, and export locally without a watermark.",
+      "Stream-copy simple cuts without transcoding or use the complete local editor for four social formats, captions, effects, and recording.",
     icon: Clapperboard,
   },
   {
