@@ -102,3 +102,6 @@ marketing-site/static/assets/
 
 # Wrangler
 .wrangler/
+
+# Local pnpm content-addressable store (stray copy created inside the repo)
+.pnpm-store/
