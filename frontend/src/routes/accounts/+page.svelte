@@ -692,11 +692,7 @@
 	loadingMessage={m.common_loading()}
 	{embedded}
 >
-	<div
-		class={embedded
-			? 'min-w-0'
-			: 'grid min-w-0 items-start gap-8 lg:grid-cols-[13rem_minmax(0,1fr)]'}
-	>
+	<div class={embedded ? 'min-w-0' : 'grid min-w-0 gap-8 lg:grid-cols-[13rem_minmax(0,1fr)]'}>
 		{#if !embedded}
 			<SettingsNavigation active="accounts" showInstance={Boolean(authState.user?.is_admin)} />
 		{/if}

@@ -211,6 +211,7 @@ func RegisterHumaRoutes(api huma.API, deps RouteDeps) {
 	workspaceHandler.SetNotificationService(deps.NotificationService)
 	workspaceHandler.CreateWorkspace(api)
 	workspaceHandler.ListWorkspaces(api)
+	workspaceHandler.DeleteWorkspace(api)
 	workspaceHandler.ListOrganizations(api)
 	workspaceHandler.ListOrganizationTeam(api)
 	workspaceHandler.ListWorkspaceTeam(api)

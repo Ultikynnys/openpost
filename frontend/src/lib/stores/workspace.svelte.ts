@@ -3,7 +3,7 @@ import { client, type Workspace } from '$lib/api/client';
 import { m } from '$lib/paraglide/messages';
 
 export type WorkspaceContextErrorCode =
-	'load-workspaces' | 'load-settings' | 'settings-not-ready' | 'save-settings';
+	'load-workspaces' | 'load-settings' | 'settings-not-ready' | 'save-settings' | 'delete-workspace';
 
 export class WorkspaceContextError extends Error {
 	constructor(
@@ -324,6 +324,24 @@ export class WorkspaceContext {
 		} catch (e) {
 			console.error('Failed to save workspace settings:', e);
 			throw e;
+		}
+	}
+
+	async deleteWorkspace(workspaceID: string): Promise<void> {
+		const { error } = await client.DELETE('/workspaces/{id}', {
+			params: { path: { id: workspaceID } }
+		});
+		if (error) {
+			throw new WorkspaceContextError(
+				'delete-workspace',
+				error.detail || m.workspace_delete_failed()
+			);
+		}
+		this.workspaces = this.workspaces.filter((workspace) => workspace.id !== workspaceID);
+		const fallback = this.workspaces[0] ?? null;
+		if (this.currentWorkspace?.id === workspaceID) {
+			this.clearWorkspaceState();
+			if (fallback) await this.setWorkspace(fallback);
 		}
 	}
 

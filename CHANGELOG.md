@@ -4,6 +4,18 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [1.50.0] - 2026-08-03
+
+### Added
+
+- Added a Delete workspace action in workspace general settings that removes the workspace, its members, posts, publications, accounts, media, schedules, prompts, and analytics, with media cleanup queued in the background.
+- Added an Accounts entry to the sidebar that opens the settings accounts page.
+
+### Changed
+
+- Wrapped the accessible data table in analytics trend charts in a visually hidden container so it stays a screen-reader-only table.
+- Hid the studio color picker screen eyedropper in browsers that do not support the EyeDropper API.
+
 ## [1.49.1] - 2026-08-03
 
 ### Fixed

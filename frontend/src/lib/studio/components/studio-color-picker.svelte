@@ -36,6 +36,7 @@
 	let hexInput = $state('#FFFFFF');
 	let rgb = $state<StudioRGB>({ r: 255, g: 255, b: 255 });
 	let hsl = $state<StudioHSL>({ h: 0, s: 0, l: 100 });
+	const supportsEyeDropper = typeof window !== 'undefined' && 'EyeDropper' in window;
 
 	function syncDraft(next: string): void {
 		hex = normalizeHex(next, hex);
@@ -122,15 +123,17 @@
 	<Popover.Content align="end" class="w-72 space-y-4 p-3">
 		<div class="flex items-center justify-between gap-2">
 			<p class="text-sm font-medium">{label}</p>
-			<Button
-				variant="ghost"
-				size="icon-xs"
-				onclick={pickFromScreen}
-				aria-label={m.studio_pick_color()}
-				title={m.studio_pick_color()}
-			>
-				<PipetteIcon />
-			</Button>
+			{#if supportsEyeDropper}
+				<Button
+					variant="ghost"
+					size="icon-xs"
+					onclick={pickFromScreen}
+					aria-label={m.studio_pick_color()}
+					title={m.studio_pick_color()}
+				>
+					<PipetteIcon />
+				</Button>
+			{/if}
 		</div>
 
 		{#if brandColors.length > 0}

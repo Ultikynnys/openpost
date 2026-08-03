@@ -88,7 +88,8 @@
 		| { kind: 'invitation'; invitationID: string }
 		| { kind: 'session'; session: AuthSessionSummary }
 		| { kind: 'api-token'; tokenID: string }
-		| { kind: 'time-row'; row: ScheduleRow };
+		| { kind: 'time-row'; row: ScheduleRow }
+		| { kind: 'workspace' };
 
 	const groupedTimezones = $derived.by(() => {
 		const groups: Record<string, typeof timezones> = {};
@@ -201,6 +202,7 @@
 				time: formatTime(destructiveAction.row.local_hour, destructiveAction.row.local_minute)
 			});
 		}
+		if (destructiveAction?.kind === 'workspace') return m.workspace_delete_title();
 		return '';
 	}
 
@@ -213,6 +215,7 @@
 		}
 		if (destructiveAction?.kind === 'api-token') return m.settings_revoke_token_body();
 		if (destructiveAction?.kind === 'time-row') return m.settings_remove_time_body();
+		if (destructiveAction?.kind === 'workspace') return m.workspace_delete_description();
 		return '';
 	}
 
@@ -221,6 +224,7 @@
 			return m.settings_sign_out();
 		}
 		if (destructiveAction?.kind === 'time-row') return m.settings_remove();
+		if (destructiveAction?.kind === 'workspace') return m.workspace_delete_confirm();
 		return m.settings_revoke();
 	}
 
@@ -239,7 +243,24 @@
 			await revokeAPIToken(action.tokenID);
 			return;
 		}
-		await removeTimeRow(action.row);
+		if (action.kind === 'time-row') {
+			await removeTimeRow(action.row);
+			return;
+		}
+		await deleteCurrentWorkspace();
+	}
+
+	async function deleteCurrentWorkspace() {
+		const workspace = workspaceCtx.currentWorkspace;
+		if (!workspace) return;
+		try {
+			await workspaceCtx.deleteWorkspace(workspace.id);
+			notify(m.workspace_delete_success(), 'success');
+			await goto(resolve('/'));
+		} catch (cause) {
+			notify(m.workspace_delete_failed(), 'error');
+			console.error('Failed to delete workspace:', cause);
+		}
 	}
 
 	function isCurrentWorkspace(workspaceID: string) {
@@ -1680,6 +1701,9 @@
 		if (tab === 'brand' && loadedBrandWorkspaceID !== workspaceID) {
 			void loadBrandKit(workspaceID);
 		}
+		if (tab === 'general' && loadedBrandWorkspaceID !== workspaceID) {
+			void loadBrandKit(workspaceID);
+		}
 	});
 
 	$effect(() => {
@@ -2053,6 +2077,7 @@
 								id="workspace-color"
 								label={m.settings_workspace_color()}
 								value={workspaceCtx.settings.color}
+								brandColors={brandKit?.colors ?? []}
 								onChange={(color) => (workspaceCtx.settings.color = color)}
 							/>
 						</div>
@@ -2070,6 +2095,27 @@
 						<Button variant="outline" onclick={() => goto(resolve('/settings?tab=accounts'))}
 							>{m.settings_manage_accounts()}</Button
 						>
+					</div>
+					<div
+						class="flex flex-col gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-4 sm:flex-row sm:items-center sm:justify-between"
+					>
+						<div>
+							<p class="text-sm font-medium text-destructive">{m.workspace_delete_title()}</p>
+							<p class="text-sm text-muted-foreground">
+								{m.workspace_delete_description()}
+							</p>
+						</div>
+						<Button
+							variant="destructive"
+							class="shrink-0"
+							disabled={workspaceCtx.workspaces.length <= 1}
+							title={workspaceCtx.workspaces.length <= 1
+								? m.workspace_delete_only_workspace()
+								: undefined}
+							onclick={() => requestDestructiveAction({ kind: 'workspace' })}
+						>
+							{m.workspace_delete_confirm()}
+						</Button>
 					</div>
 				</section>
 

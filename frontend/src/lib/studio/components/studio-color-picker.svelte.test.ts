@@ -1,8 +1,13 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import StudioColorPicker from './studio-color-picker.svelte';
 
 describe('StudioColorPicker', () => {
+	beforeEach(() => {
+		vi.restoreAllMocks();
+		delete (globalThis as any).window.EyeDropper;
+	});
+
 	it('keeps hex, HSL, and RGB drafts synchronized without falling back to black', async () => {
 		const onChange = vi.fn();
 		const screen = await render(StudioColorPicker, {
@@ -24,5 +29,39 @@ describe('StudioColorPicker', () => {
 		];
 		expect(channelInputs.map((input) => input.value)).toEqual(['255', '136', '0']);
 		expect(onChange).not.toHaveBeenCalledWith('#000000');
+	});
+
+	it('applies the picked screen color through onChange when EyeDropper is supported', async () => {
+		const onChange = vi.fn();
+		(globalThis as any).window.EyeDropper = class {
+			async open(): Promise<{ sRGBHex: string }> {
+				return { sRGBHex: '#abcdef' };
+			}
+		};
+		const screen = await render(StudioColorPicker, {
+			label: 'Workspace color',
+			value: '#f97316',
+			onChange
+		});
+
+		await screen.getByRole('button', { name: 'Workspace color' }).click();
+		await screen.getByRole('button', { name: 'Pick a color from the screen' }).click();
+		await vi.waitFor(() => {
+			expect(onChange).toHaveBeenCalledWith('#abcdef');
+		});
+	});
+
+	it('hides the screen color picker when EyeDropper is unavailable', async () => {
+		const screen = await render(StudioColorPicker, {
+			label: 'Workspace color',
+			value: '#f97316',
+			onChange: vi.fn()
+		});
+
+		await screen.getByRole('button', { name: 'Workspace color' }).click();
+		const pipette = [...document.querySelectorAll<HTMLButtonElement>('button')].find(
+			(button) => button.getAttribute('aria-label') === 'Pick a color from the screen'
+		);
+		expect(pipette).toBeUndefined();
 	});
 });

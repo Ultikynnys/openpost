@@ -382,7 +382,7 @@
 			tabindex={-1}
 			class="pb-[var(--mobile-bottom-nav-clearance)] md:pb-0"
 		>
-			<div class="flex flex-1 flex-col overflow-auto">
+			<div class="flex min-h-0 flex-1 flex-col overflow-auto">
 				{@render children()}
 			</div>
 			<MobileBottomNav />

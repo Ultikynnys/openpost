@@ -86,23 +86,25 @@
 			</LineChart>
 		</Chart.Container>
 
-		<table class="sr-only">
-			<caption>{label}</caption>
-			<thead>
-				<tr>
-					<th scope="col">{m.analytics_table_date()}</th>
-					<th scope="col">{m.analytics_table_value()}</th>
-				</tr>
-			</thead>
-			<tbody>
-				{#each points as point (`instance-trend-${point.date}`)}
+		<div class="sr-only">
+			<table>
+				<caption>{label}</caption>
+				<thead>
 					<tr>
-						<td>{point.date}</td>
-						<td>{formatValue(point.value)}</td>
+						<th scope="col">{m.analytics_table_date()}</th>
+						<th scope="col">{m.analytics_table_value()}</th>
 					</tr>
-				{/each}
-			</tbody>
-		</table>
+				</thead>
+				<tbody>
+					{#each points as point (`instance-trend-${point.date}`)}
+						<tr>
+							<td>{point.date}</td>
+							<td>{formatValue(point.value)}</td>
+						</tr>
+					{/each}
+				</tbody>
+			</table>
+		</div>
 	{:else}
 		<div
 			class="flex min-h-56 items-center justify-center border-y border-dashed text-sm text-muted-foreground"

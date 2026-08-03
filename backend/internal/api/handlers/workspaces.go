@@ -6,8 +6,11 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"net/http"
+	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -81,6 +84,16 @@ type WorkspaceResponse struct {
 
 type ListWorkspacesOutput struct {
 	Body []WorkspaceResponse
+}
+
+type DeleteWorkspaceInput struct {
+	PathID string `path:"id" doc:"Workspace ID"`
+}
+
+type DeleteWorkspaceOutput struct {
+	Body struct {
+		Deleted bool `json:"deleted"`
+	}
 }
 
 type OrganizationResponse struct {
@@ -946,6 +959,86 @@ func (h *WorkspaceHandler) ListWorkspaces(api huma.API) {
 		}
 		return resp, nil
 	})
+}
+
+func (h *WorkspaceHandler) DeleteWorkspace(api huma.API) {
+	huma.Register(api, huma.Operation{
+		OperationID: "delete-workspace",
+		Method:      http.MethodDelete,
+		Path:        "/workspaces/{id}",
+		Summary:     "Delete a workspace and its content",
+		Description: "Permanently deletes the workspace, its members, invitations, posts, publications, social accounts, media, schedules, prompts, and analytics. Requires a workspace admin role and at least one other workspace.",
+		Tags:        []string{tagWorkspaces},
+		Middlewares: huma.Middlewares{middleware.AuthMiddleware(api, h.auth)},
+		Errors:      []int{403, 404, 409, 500},
+	}, func(ctx context.Context, input *DeleteWorkspaceInput) (*DeleteWorkspaceOutput, error) {
+		workspaceID := input.PathID
+		userID := middleware.GetUserID(ctx)
+		if err := h.requireWorkspaceAdmin(ctx, workspaceID, userID); err != nil {
+			return nil, err
+		}
+
+		var otherWorkspaceIDs []string
+		if err := h.db.NewSelect().Model((*models.WorkspaceMember)(nil)).
+			Column("workspace_id").
+			Where("user_id = ? AND workspace_id != ?", userID, workspaceID).
+			Scan(ctx, &otherWorkspaceIDs); !isNoRowsOrNil(err) {
+			return nil, huma.Error500InternalServerError("failed to check remaining workspaces")
+		}
+		if len(otherWorkspaceIDs) == 0 {
+			return nil, huma.Error409Conflict("you cannot delete your only workspace")
+		}
+
+		objectKeys, err := h.workspaceStoredObjectKeys(ctx, workspaceID)
+		if err != nil {
+			return nil, huma.Error500InternalServerError("failed to enumerate workspace media")
+		}
+		err = h.db.RunInTx(ctx, &sql.TxOptions{}, func(txCtx context.Context, tx bun.Tx) error {
+			if len(objectKeys) > 0 {
+				if _, err := enqueueStorageCleanup(txCtx, tx, objectKeys); err != nil {
+					return err
+				}
+			}
+			return deleteWorkspaceData(txCtx, tx, []string{workspaceID})
+		})
+		if err != nil {
+			return nil, huma.Error500InternalServerError("failed to delete workspace")
+		}
+		return &DeleteWorkspaceOutput{Body: struct {
+			Deleted bool `json:"deleted"`
+		}{Deleted: true}}, nil
+	})
+}
+
+func (h *WorkspaceHandler) workspaceStoredObjectKeys(ctx context.Context, workspaceID string) ([]string, error) {
+	keys := make(map[string]struct{})
+	var media []models.MediaAttachment
+	if err := h.db.NewSelect().Model(&media).
+		Column("file_path", "thumbnail_object_key", "thumbnails").
+		Where("workspace_id = ?", workspaceID).Scan(ctx); !isNoRowsOrNil(err) {
+		return nil, err
+	}
+	for _, item := range media {
+		for _, key := range []string{filepath.Base(item.FilePath), item.ThumbnailObjectKey} {
+			if strings.TrimSpace(key) != "" {
+				keys[key] = struct{}{}
+			}
+		}
+		var thumbnails map[string]string
+		if json.Unmarshal([]byte(item.ThumbnailsJSON), &thumbnails) == nil {
+			for _, key := range thumbnails {
+				if strings.TrimSpace(key) != "" {
+					keys[key] = struct{}{}
+				}
+			}
+		}
+	}
+	ordered := make([]string, 0, len(keys))
+	for key := range keys {
+		ordered = append(ordered, key)
+	}
+	sort.Strings(ordered)
+	return ordered, nil
 }
 
 func workspaceInvitationResponses(invitations []models.WorkspaceInvitation, rawToken, acceptURL string) []WorkspaceInvitationResponse {
