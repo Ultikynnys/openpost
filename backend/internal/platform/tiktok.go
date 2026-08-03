@@ -3,6 +3,9 @@ package platform
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -42,22 +45,37 @@ func NewTikTokAdapter(clientKey, clientSecret, redirectURI string) *TikTokAdapte
 }
 
 func (t *TikTokAdapter) GenerateAuthURL(state string) (string, map[string]string) {
+	codeVerifier, err := generatePKCECodeVerifier()
+	if err != nil {
+		return "", nil
+	}
+	codeChallenge := generatePKCECodeChallenge(codeVerifier)
+
 	params := url.Values{}
 	params.Set("client_key", t.clientKey)
 	params.Set(oauthParamRedirectURI, t.redirectURI)
 	params.Set("response_type", oauthResponseType)
 	params.Set("scope", strings.Join(tiktokScopes(), ","))
 	params.Set("state", state)
-	return tiktokAuthURL + "?" + params.Encode(), nil
+	params.Set("code_challenge", codeChallenge)
+	params.Set("code_challenge_method", "S256")
+	return tiktokAuthURL + "?" + params.Encode(), map[string]string{
+		"code_verifier": codeVerifier,
+	}
 }
 
-func (t *TikTokAdapter) ExchangeCode(ctx context.Context, code string, _ map[string]string) (*TokenResult, error) {
+func (t *TikTokAdapter) ExchangeCode(ctx context.Context, code string, extra map[string]string) (*TokenResult, error) {
 	values := map[string]string{
 		"client_key":           t.clientKey,
 		oauthParamClientSecret: t.clientSecret,
 		oauthParamCode:         code,
 		grantType:              oauthGrantAuthCode,
 		oauthParamRedirectURI:  t.redirectURI,
+	}
+	if extra != nil {
+		if verifier := extra["code_verifier"]; verifier != "" {
+			values["code_verifier"] = verifier
+		}
 	}
 	tokenResp, err := t.exchangeToken(ctx, values, "tiktok token exchange")
 	if err != nil {
@@ -733,6 +751,20 @@ func truncateRunes(value string, max int) string {
 		return value
 	}
 	return string(runes[:max])
+}
+
+func generatePKCECodeVerifier() (string, error) {
+	const length = 64
+	b := make([]byte, length)
+	if _, err := rand.Read(b); err != nil {
+		return "", fmt.Errorf("generating pkce code verifier: %w", err)
+	}
+	return base64.RawURLEncoding.EncodeToString(b), nil
+}
+
+func generatePKCECodeChallenge(verifier string) string {
+	sum := sha256.Sum256([]byte(verifier))
+	return base64.RawURLEncoding.EncodeToString(sum[:])
 }
 
 func firstNonEmptyString(values ...string) string {
