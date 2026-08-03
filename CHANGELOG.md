@@ -4,6 +4,8 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [1.51.2] - 2026-08-03
+
 ### Fixed
 
 - Updated vulnerable transitive `brace-expansion` and `postcss` releases used by production dependency paths.
