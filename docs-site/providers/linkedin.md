@@ -14,11 +14,11 @@ LinkedIn uses OAuth 2.0 and has more approval friction than most other providers
 OpenPost always offers the member profile returned by LinkedIn OpenID Connect. Organization Pages are an explicit operator opt-in because LinkedIn gates their permissions behind approved products:
 
 ```sh
-LINKEDIN_DISABLE_THREAD_REPLIES=false
+OPENPOST_DISABLE_LINKEDIN_THREAD_REPLIES=false
 OPENPOST_LINKEDIN_ORGANIZATIONS_ENABLED=true
 ```
 
-If your LinkedIn app cannot obtain the permissions required for comment-style replies, set `LINKEDIN_DISABLE_THREAD_REPLIES=true`.
+If your LinkedIn app cannot obtain the permissions required for comment-style replies, set `OPENPOST_DISABLE_LINKEDIN_THREAD_REPLIES=true`. The legacy `LINKEDIN_DISABLE_THREAD_REPLIES` alias remains supported.
 
 With organizations enabled, the app must be approved for `rw_organization_admin`, `w_organization_social`, and `r_organization_social`. OpenPost lists only Pages for which the member has an approved `ADMINISTRATOR` role. The callback lets the user select their personal profile and several Pages. Each selection becomes a separate OpenPost account, while the shared OAuth token remains encrypted at rest.
 

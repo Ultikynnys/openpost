@@ -23,11 +23,11 @@ Start with one network. Check that its callback works before you add another.
 
 Working code and app keys do not prove that a real account can publish each post type. Use the [Launch Verification Matrix](/providers/launch-matrix) to record code, server setup, and live tests on their own.
 
-Social app keys can come from older environment variables, `OPENPOST_PROVIDER_APPS` JSON, or encrypted `provider_apps` database rows managed through the instance-admin API. The web app does not have a page for these keys. Most self-hosted servers should use environment variables or `OPENPOST_PROVIDER_APPS`. Admin scripts can use the API.
+Social app keys can come from older environment variables, `OPENPOST_PROVIDER_APPS` JSON, or encrypted rows managed in **Settings → Instance → Configuration → Provider apps**. Environment-defined apps are read-only in the interface and win over matching database rows. Matching database fallbacks remain visible and can be deleted while the environment app stays active.
 
 Mastodon often needs this setup because each server can need its own app. People can still connect a public Mastodon server from Accounts when that server allows automatic app setup. For other OAuth networks, use these settings when you want to supply your own app keys.
 
-OpenPost loads database rows at startup and uses them instead of matching environment or JSON values. Restart OpenPost after you change them.
+OpenPost loads the effective registry at startup. Restart OpenPost after you change a provider app.
 
 If connection or publishing fails, use [Provider Troubleshooting](/providers/troubleshooting) to collect diagnostics and map common OAuth, permission, media URL, and publishing errors to the right fix.
 

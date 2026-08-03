@@ -21,6 +21,7 @@ Account settings follow your user login across every workspace.
 
 - Display name and profile picture
 - Password, two-factor authentication, and passkeys
+- Linked Google and organization sign-in identities
 - Active browser sessions
 - CLI devices and API tokens
 - MCP and ChatGPT App tokens/activity
@@ -28,6 +29,12 @@ Account settings follow your user login across every workspace.
 Use an `mcp:read` token limited to one workspace when an AI tool only needs to read OpenPost. Use `mcp:full` only when it must create or change drafts and account versions, upload media, schedule, publish, cancel, reply, or moderate. You can remove either token. Check recent activity and remove access when the tool no longer needs it.
 
 Use this tab when the setting is about you, not a workspace.
+
+OpenPost keeps account linking explicit. If a Google or organization account
+uses the same email as an existing OpenPost user, sign in with the existing
+method first. Open **Settings → Account → Security**, confirm your current
+method, and link the external account there. You can then use either method to
+sign in. OpenPost blocks unlinking the last usable sign-in method.
 
 ## Organization
 
@@ -47,8 +54,14 @@ workspace access, password recovery, and API, CLI, and MCP credentials. Keep an
 MFA-protected local instance administrator in
 `OPENPOST_SSO_BREAK_GLASS_EMAILS` before enforcing SSO.
 
-## Social app keys
+## Instance
 
-Social app keys are server settings, not regular user settings. Set them with the older platform environment variables, `OPENPOST_PROVIDER_APPS`, or the instance-admin API. The web settings page does not have an Admin or Provider Apps section.
+Instance settings are available only to instance administrators.
 
-Self-hosted users need these settings when they bring their own OAuth keys. Mastodon is a common case because each server can need its own app. See [Platform Overview](/providers/overview) and [Mastodon](/providers/mastodon).
+- **Overview** shows account growth, publishing activity, and the running release.
+- **Configuration** manages optional account policy, authentication, email delivery, Studio, feedback, provider behavior, and OAuth provider applications.
+- **Users** shows instance-wide account, plan, access, and activity details.
+
+The Configuration screen identifies whether each value comes from the environment, an encrypted admin setting, or the application default. Environment values are read-only and win over database overrides. Dormant database fallbacks remain visible and removable so they cannot reactivate unnoticed after an environment value is removed. Saved admin values take effect after a server restart. Database, encryption, network, storage, and hosted billing settings remain deployment-only because OpenPost needs them before this screen can load.
+
+Self-hosted users need provider apps when they bring their own OAuth keys. Mastodon is a common case because each server can need its own app. See [Environment Variables](/configuration/environment-variables), [Platform Overview](/providers/overview), and [Mastodon](/providers/mastodon).

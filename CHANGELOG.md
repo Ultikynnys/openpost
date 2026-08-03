@@ -4,6 +4,36 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- Added an instance-admin Configuration screen for optional account, email, authentication, feature, provider behavior, and provider-app settings, with encrypted database values, write-only secrets, environment precedence, validation, fallback controls, and explicit restart status.
+- Added six-digit email confirmation for email-and-password registration with provider-neutral SMTP, Resend, and Cloudflare Email Service delivery, plus resend throttling, attempt limits, expiry, and one-time use.
+- Added first-party Google sign-in and explicit Google account linking through account security settings without unsafe email-based auto-linking.
+- Added required unique usernames and opt-in public publishing profiles with yearly activity, lifetime and peak post counts, current and longest streaks, and top platform and workspace summaries.
+- Added a complete touch editor for Video Studio phones with a compact timeline, bottom tool dock, contextual inspector sheets, and local export on capable browsers.
+- Added configurable focus zooms, camera crop and presentation controls, reusable color-effect looks, batch transcript-word removal, and recording layout selection before capture.
+- Added a reproducible one-hour 1080p60 Video Studio benchmark covering import, random seeks, playback rendering, request coalescing, proxy use, and decoder bounds.
+
+### Changed
+
+- Made email provider credentials optional at startup so administrators can configure delivery after installation; instances that require verification still block password registration until a transport is ready.
+- Made direct and file-backed environment provider apps authoritative over matching administrator-managed database rows.
+- Rebuilt the marketing homepage around the real OpenPost workflow and product surfaces, with scroll reveals, publishing-activity cells, and a shared animated footer used across marketing pages.
+- Moved Quick Cut packet analysis, combined or per-section stream-copy export, and preview-proxy encoding off the UI thread; fast exports now stream directly to a selected file, preserve every supported audio track and source metadata, and reject tracks that cannot be preserved instead of dropping them.
+- Made long-source artifact work staged and event-driven, with indexing, waveform, thumbnail, and proxy progress; serialized heavy work; storage preflight; cancellation, retry, proxy removal, and phase-level restart recovery.
+- Added continuous recording storage-headroom checks and camera or microphone device-loss recovery, including automatic safe stop before browser storage is exhausted.
+
+### Fixed
+
+- Kept Post/Thread drafts open to multiple media attachments, then blocked publishing only for destinations whose current media rules reject the draft, refreshed Threads and LinkedIn multi-image limits, and honored each Mastodon instance's media count and MOV support.
+- Kept hosted subscription fallback scoped to subscribed organizations the user owns or administers, so membership in another customer's organization cannot raise entitlements for an unrelated workspace.
+- Batched large media cleanup jobs at the worker limit, removed workspace-scoped notifications during deletion, and hid the delete action from workspace editors and viewers.
+- Kept visual overlays, detached audio, captions, markers, source offsets, fades, and animation keyframes aligned when Full Studio ripple-deletes clips, transcript cues, filler words, or silent sections.
+- Fixed Quick Cut stream-copy export by preserving a compatible source container and supplying the packet reservation metadata required for MP4 fast start.
+- Kept Quick Cut source boundaries on exact verified packet timestamps without project-frame rounding, and routed non-keyframe cuts to an explicit precise render instead of presenting them as lossless.
+- Switched ordinary playback to the browser's native hardware video path while retaining exact worker-rendered paused frames, prevented slow long-source frames from repeatedly reopening the preview decoder, kept editor shortcuts out of sliders and form controls, and cleared stale transcript-word selections after caption replacement.
+- Preserved OAuth callback errors through legacy account redirects and returned successful and failed connections to the embedded Accounts settings page.
+
 ## [1.50.1] - 2026-08-03
 
 ### Fixed

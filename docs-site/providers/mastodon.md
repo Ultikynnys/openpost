@@ -36,7 +36,7 @@ MASTODON_SERVERS='[
 
 ## Provider app API
 
-Instance admins can store encrypted Mastodon provider app rows through `POST /api/v1/admin/provider-apps`. Use this when a specific instance does not allow dynamic app registration or when you want OpenPost to use credentials you already created on that instance. The current web settings UI does not expose a Provider Apps panel, so most self-hosted operators should prefer `MASTODON_SERVERS` or `OPENPOST_PROVIDER_APPS`.
+Instance admins can store encrypted Mastodon provider apps in **Settings → Instance → Configuration → Provider apps** or through `POST /api/v1/admin/provider-apps`. Use this when a specific instance does not allow dynamic app registration or when you want OpenPost to use credentials you already created on that instance. `MASTODON_SERVERS` and `OPENPOST_PROVIDER_APPS` remain the environment-based deployment options and take precedence over matching database rows.
 
 ## Multiple instances
 
