@@ -9,6 +9,7 @@
 	import { getAuthenticatedMediaByID } from '$lib/media-url';
 	import { isSupportedMediaFile, uploadMediaFile } from '$lib/media-upload-client';
 	import { videoPreparationErrorMessage } from '$lib/video/errors';
+	import { extractVideoFrames } from '$lib/video/frames';
 	import { workspaceCtx } from '$lib/stores/workspace.svelte';
 	import { ui } from '$lib/stores/ui.svelte';
 	import { Button } from '$lib/components/ui/button';
@@ -65,6 +66,7 @@
 		uniqueIssueMessages
 	} from './compose/validation';
 	import { loadableDestinationOptionSources } from './compose/destination-options';
+	import ClapperboardIcon from 'lucide-svelte/icons/clapperboard';
 	import ImagePlusIcon from 'lucide-svelte/icons/image-plus';
 	import LoaderIcon from 'lucide-svelte/icons/loader-2';
 	import PlusIcon from 'lucide-svelte/icons/plus';
@@ -108,6 +110,11 @@
 		settingsByAccount?: Record<string, Record<string, unknown>>;
 		accountIds?: string[];
 		includeInCanonical?: boolean;
+	}
+
+	interface GeneratedThumbnailOption {
+		url: string;
+		timestampMs: number;
 	}
 
 	interface FocusedStudioSnapshotPayload {
@@ -170,6 +177,13 @@
 	let activeSettingsSegmentId = $state('segment-1');
 	let thumbnailMedia = $state<FocusedMedia | null>(null);
 	let thumbnailMediaId = $state('');
+	let thumbnailOptions = $state<GeneratedThumbnailOption[]>([]);
+	let generatingThumbnails = $state(false);
+	let applyingThumbnail = $state(false);
+	let thumbnailGenerateError = $state('');
+	let selectedThumbnailOptionUrl = $state('');
+	// Non-reactive map so Blobs are not deep-proxied by $state.
+	const thumbnailBlobs = new Map<string, Blob>();
 	let settingsByAccount = $state<Record<string, Record<string, unknown>>>({});
 	let settingsDialogOpen = $state(false);
 	let settingsAccountId = $state('');
@@ -373,6 +387,7 @@
 	onDestroy(() => {
 		clearAutoSaveTimer();
 		clearSavedIndicator();
+		revokeThumbnailOptions();
 		for (const session of previewSessions.values()) session.close();
 		previewSessions.clear();
 	});
@@ -749,6 +764,10 @@
 		media = [];
 		thumbnailMedia = null;
 		thumbnailMediaId = '';
+		revokeThumbnailOptions();
+		thumbnailOptions = [];
+		selectedThumbnailOptionUrl = '';
+		thumbnailGenerateError = '';
 		settingsByAccount = {};
 		segmentSettingsByAccount = {};
 		segments = emptySegmentsForMode(mode);
@@ -1579,7 +1598,81 @@
 	function clearThumbnail() {
 		thumbnailMedia = null;
 		thumbnailMediaId = '';
+		selectedThumbnailOptionUrl = '';
 		validationIssues = [];
+	}
+
+	function firstVideoMedia(): FocusedMedia | undefined {
+		return media.find((item) => item.mime_type.startsWith('video/'));
+	}
+
+	function revokeThumbnailOptions() {
+		for (const option of thumbnailOptions) URL.revokeObjectURL(option.url);
+		thumbnailBlobs.clear();
+	}
+
+	async function generateVideoThumbnails() {
+		const videoItem = firstVideoMedia();
+		if (!videoItem || generatingThumbnails) return;
+		generatingThumbnails = true;
+		thumbnailGenerateError = '';
+		revokeThumbnailOptions();
+		thumbnailOptions = [];
+		selectedThumbnailOptionUrl = '';
+		try {
+			const frames = await extractVideoFrames(previewSrc(videoItem));
+			thumbnailOptions = frames.map((frame) => ({
+				url: frame.url,
+				timestampMs: frame.timestampMs
+			}));
+			for (const frame of frames) thumbnailBlobs.set(frame.url, frame.blob);
+		} catch {
+			thumbnailGenerateError = m.compose_thumbnail_generate_failed();
+		} finally {
+			generatingThumbnails = false;
+		}
+	}
+
+	async function applyGeneratedThumbnail(option: GeneratedThumbnailOption) {
+		const videoItem = firstVideoMedia();
+		const blob = thumbnailBlobs.get(option.url);
+		if (!selectedWorkspaceId || applyingThumbnail || !videoItem || !blob) return;
+		applyingThumbnail = true;
+		thumbnailGenerateError = '';
+		try {
+			const result = await uploadMediaFile({
+				workspaceId: selectedWorkspaceId,
+				file: new File([blob], `thumbnail-${Math.round(option.timestampMs / 1000)}s.jpg`, {
+					type: 'image/jpeg'
+				}),
+				source: 'studio_export',
+				parentMediaId: videoItem.id,
+				prepareVideo: false
+			});
+			thumbnailMediaId = result.id;
+			thumbnailMedia = {
+				id: result.id,
+				mime_type: result.mime_type,
+				url: result.url,
+				size: result.size,
+				filename: result.original_filename || 'thumbnail.jpg',
+				role: 'thumbnail'
+			};
+			selectedThumbnailOptionUrl = option.url;
+			validationIssues = [];
+			queueAutoSave();
+		} catch {
+			thumbnailGenerateError = m.compose_thumbnail_upload_failed();
+		} finally {
+			applyingThumbnail = false;
+		}
+	}
+
+	function thumbnailTimestampLabel(timestampMs: number): string {
+		const totalSeconds = Math.round(timestampMs / 1000);
+		const minutes = Math.floor(totalSeconds / 60);
+		const seconds = totalSeconds % 60;
+		return `${minutes}:${seconds.toString().padStart(2, '0')}`;
 	}
 
 	function getScheduledAt(): string | undefined {
@@ -2745,6 +2838,24 @@
 										<ImagePlusIcon class="h-4 w-4" />
 										{m.compose_thumbnail()}
 									</Button>
+									{#if firstVideoMedia()}
+										<Button
+											type="button"
+											variant="outline"
+											class="h-11 gap-2"
+											disabled={!selectedWorkspaceId || generatingThumbnails}
+											onclick={generateVideoThumbnails}
+										>
+											{#if generatingThumbnails}
+												<LoaderIcon class="h-4 w-4 animate-spin" />
+											{:else}
+												<ClapperboardIcon class="h-4 w-4" />
+											{/if}
+											{generatingThumbnails
+												? m.compose_thumbnail_generating()
+												: m.compose_thumbnail_generate()}
+										</Button>
+									{/if}
 									<p class="text-sm text-muted-foreground">{m.compose_thumbnail_youtube()}</p>
 									{#if thumbnailMediaId}
 										<Button variant="ghost" size="sm" class="h-8 text-xs" onclick={clearThumbnail}>
@@ -2752,6 +2863,51 @@
 										</Button>
 									{/if}
 								</div>
+								{#if thumbnailOptions.length > 0}
+									<div class="mt-3">
+										<p class="mb-2 text-xs font-medium text-muted-foreground">
+											{m.compose_thumbnail_pick_one()}
+										</p>
+										<div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
+											{#each thumbnailOptions as option, index (option.url)}
+												<button
+													type="button"
+													class="group relative aspect-video overflow-hidden rounded-md border bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none disabled:opacity-60"
+													class:border-primary={selectedThumbnailOptionUrl === option.url}
+													aria-label={m.compose_thumbnail_option({ index: index + 1 })}
+													disabled={applyingThumbnail}
+													onclick={() => applyGeneratedThumbnail(option)}
+												>
+													<img
+														src={option.url}
+														alt={m.compose_thumbnail_option({ index: index + 1 })}
+														class="h-full w-full object-cover"
+													/>
+													<span
+														class="absolute bottom-1 left-1 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white"
+													>
+														{thumbnailTimestampLabel(option.timestampMs)}
+													</span>
+													{#if selectedThumbnailOptionUrl === option.url}
+														<span
+															class="absolute top-1 right-1 rounded bg-primary px-1.5 py-0.5 text-[10px] font-medium text-primary-foreground"
+														>
+															{m.compose_thumbnail_selected()}
+														</span>
+													{/if}
+												</button>
+											{/each}
+										</div>
+									</div>
+								{/if}
+								{#if thumbnailGenerateError}
+									<p
+										class="mt-2 text-xs text-destructive"
+										data-testid="composer-thumbnail-generate-error"
+									>
+										{thumbnailGenerateError}
+									</p>
+								{/if}
 								{#if thumbnailMedia}
 									<img
 										src={previewSrc(thumbnailMedia)}
