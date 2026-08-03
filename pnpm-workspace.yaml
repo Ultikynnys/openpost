@@ -4,9 +4,9 @@ packages:
   - "marketing-site"
   - "packages/*"
 overrides:
-  "brace-expansion@^5.0.0": 5.0.8
+  "brace-expansion@^5.0.0": 5.0.9
   cookie: 0.7.2
-  postcss: 8.5.18
+  postcss: 8.5.23
   sharp: 0.35.0
   "tar@^7.0.0": 7.5.21
 onlyBuiltDependencies:
@@ -21,6 +21,7 @@ allowBuilds:
   sharp: true
   vue-demi: true
 minimumReleaseAgeExclude:
-  - brace-expansion@5.0.8
+  - brace-expansion@5.0.9
+  - postcss@8.5.23
   - sharp@0.35.0
   - tar@7.5.21
