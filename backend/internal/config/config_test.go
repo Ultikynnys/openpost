@@ -59,6 +59,14 @@ var configTestEnvKeys = []string{
 	"OPENPOST_OIDC_BOOTSTRAP_ALLOWLIST",
 	"OPENPOST_SSO_BREAK_GLASS_EMAILS",
 	"OPENPOST_OIDC_NATIVE_CALLBACK_URL",
+	"OPENPOST_AUTH_GOOGLE_CLIENT_ID",
+	"OPENPOST_AUTH_GOOGLE_CLIENT_SECRET",
+	"OPENPOST_EMAIL_VERIFICATION_REQUIRED",
+	"OPENPOST_EMAIL_PROVIDER",
+	"OPENPOST_EMAIL_FROM",
+	"OPENPOST_RESEND_API_KEY",
+	"OPENPOST_CLOUDFLARE_EMAIL_ACCOUNT_ID",
+	"OPENPOST_CLOUDFLARE_EMAIL_API_TOKEN",
 	"OPENPOST_SMTP_HOST",
 	"OPENPOST_SMTP_PORT",
 	"OPENPOST_SMTP_USERNAME",
@@ -288,7 +296,46 @@ func TestLoadPasswordRecoveryConfiguration(t *testing.T) {
 	require.Equal(t, "openpost", cfg.SMTPUsername)
 	require.Equal(t, "smtp-secret", cfg.SMTPPassword)
 	require.Equal(t, "OpenPost <support@example.com>", cfg.SMTPFrom)
+	require.Equal(t, "OpenPost <support@example.com>", cfg.EmailFrom)
+	require.Equal(t, "smtp", cfg.EmailProvider)
 	require.Equal(t, "tls", cfg.SMTPTLSMode)
+}
+
+func TestLoadFirstPartyGoogleAndResendConfiguration(t *testing.T) {
+	t.Setenv("OPENPOST_AUTH_GOOGLE_CLIENT_ID", "google-client")
+	t.Setenv("OPENPOST_AUTH_GOOGLE_CLIENT_SECRET_FILE", writeEnvFile(t, "google-secret", "google-secret-value\n"))
+	t.Setenv("OPENPOST_EMAIL_VERIFICATION_REQUIRED", "true")
+	t.Setenv("OPENPOST_EMAIL_PROVIDER", "resend")
+	t.Setenv("OPENPOST_EMAIL_FROM", "OpenPost <hello@example.com>")
+	t.Setenv("OPENPOST_RESEND_API_KEY_FILE", writeEnvFile(t, "resend-key", "re_secret\n"))
+
+	cfg := Load()
+
+	require.Equal(t, "google-client", cfg.GoogleAuthClientID)
+	require.Equal(t, "google-secret-value", cfg.GoogleAuthClientSecret)
+	require.True(t, cfg.EmailVerificationRequired)
+	require.Equal(t, "resend", cfg.EmailProvider)
+	require.Equal(t, "OpenPost <hello@example.com>", cfg.EmailFrom)
+	require.Equal(t, "re_secret", cfg.ResendAPIKey)
+	require.NoError(t, cfg.ValidateRuntime())
+}
+
+func TestValidateRuntimeRejectsIncompleteFirstPartyAuthConfiguration(t *testing.T) {
+	t.Setenv("OPENPOST_AUTH_GOOGLE_CLIENT_ID", "google-client")
+	t.Setenv("OPENPOST_EMAIL_VERIFICATION_REQUIRED", "true")
+
+	err := Load().ValidateRuntime()
+
+	require.ErrorContains(t, err, "OPENPOST_AUTH_GOOGLE_CLIENT_ID and OPENPOST_AUTH_GOOGLE_CLIENT_SECRET")
+}
+
+func TestValidateRuntimeAllowsVerificationToBeEnabledBeforeEmailProviderSetup(t *testing.T) {
+	t.Setenv("OPENPOST_EMAIL_VERIFICATION_REQUIRED", "true")
+
+	cfg := Load()
+
+	require.Empty(t, cfg.EmailProvider)
+	require.NoError(t, cfg.ValidateRuntime())
 }
 
 func TestLoadSupportsFileBackedEnvValues(t *testing.T) {
@@ -527,8 +574,9 @@ func TestValidateRuntimeRejectsCloudWithoutAccountRecoveryAndLegalConfig(t *test
 	cfg.TermsVersion = ""
 	cfg.PrivacyVersion = ""
 	cfg.SupportEmail = ""
-	cfg.SMTPHost = ""
-	cfg.SMTPFrom = ""
+	cfg.EmailProvider = ""
+	cfg.EmailFrom = ""
+	cfg.EmailVerificationRequired = false
 
 	err := cfg.ValidateRuntime()
 
@@ -536,40 +584,42 @@ func TestValidateRuntimeRejectsCloudWithoutAccountRecoveryAndLegalConfig(t *test
 	require.ErrorContains(t, err, "OPENPOST_LEGAL_ACCEPTANCE_REQUIRED=true")
 	require.ErrorContains(t, err, "OPENPOST_TERMS_URL")
 	require.ErrorContains(t, err, "OPENPOST_PRIVACY_URL")
-	require.ErrorContains(t, err, "OPENPOST_SMTP_HOST")
-	require.ErrorContains(t, err, "OPENPOST_SMTP_FROM")
+	require.ErrorContains(t, err, "OPENPOST_EMAIL_VERIFICATION_REQUIRED=true")
 }
 
 func validCloudRuntimeConfig() *Config {
 	return &Config{
-		Edition:                 EditionCloud,
-		DatabaseDriver:          DatabaseDriverPostgres,
-		DatabaseURL:             "postgres://openpost:secret@db.internal:5432/openpost?sslmode=require",
-		StorageDriver:           StorageDriverS3,
-		S3Region:                "auto",
-		S3Bucket:                "openpost-media",
-		S3AccessKeyID:           "access-key",
-		S3SecretAccessKey:       "secret-key",
-		S3PublicBaseURL:         "https://media.openpost.social",
-		S3ForcePathStyle:        true,
-		PolarAccessToken:        "polar-token",
-		PolarWebhookSecret:      "whsec_secret",
-		PolarCheckoutURL:        "https://app.openpost.social/settings/billing?checkout_id={CHECKOUT_ID}",
-		PolarReturnURL:          "https://app.openpost.social/settings/billing",
-		PolarStarterProductID:   "starter-product",
-		PolarCreatorProductID:   "creator-product",
-		PolarProProductID:       "pro-product",
-		PolarTeamProductID:      "team-product",
-		PolarAgencyProductID:    "agency-product",
-		LegalAcceptanceRequired: true,
-		TermsURL:                "https://openpost.social/terms",
-		PrivacyURL:              "https://openpost.social/privacy",
-		TermsVersion:            "2026-07-22",
-		PrivacyVersion:          "2026-07-22",
-		SupportEmail:            "openpost@rgo.pt",
-		SMTPHost:                "smtp.example.com",
-		SMTPPort:                587,
-		SMTPFrom:                "OpenPost <openpost@example.com>",
+		Edition:                   EditionCloud,
+		DatabaseDriver:            DatabaseDriverPostgres,
+		DatabaseURL:               "postgres://openpost:secret@db.internal:5432/openpost?sslmode=require",
+		StorageDriver:             StorageDriverS3,
+		S3Region:                  "auto",
+		S3Bucket:                  "openpost-media",
+		S3AccessKeyID:             "access-key",
+		S3SecretAccessKey:         "secret-key",
+		S3PublicBaseURL:           "https://media.openpost.social",
+		S3ForcePathStyle:          true,
+		PolarAccessToken:          "polar-token",
+		PolarWebhookSecret:        "whsec_secret",
+		PolarCheckoutURL:          "https://app.openpost.social/settings/billing?checkout_id={CHECKOUT_ID}",
+		PolarReturnURL:            "https://app.openpost.social/settings/billing",
+		PolarStarterProductID:     "starter-product",
+		PolarCreatorProductID:     "creator-product",
+		PolarProProductID:         "pro-product",
+		PolarTeamProductID:        "team-product",
+		PolarAgencyProductID:      "agency-product",
+		LegalAcceptanceRequired:   true,
+		TermsURL:                  "https://openpost.social/terms",
+		PrivacyURL:                "https://openpost.social/privacy",
+		TermsVersion:              "2026-07-22",
+		PrivacyVersion:            "2026-07-22",
+		SupportEmail:              "openpost@rgo.pt",
+		EmailVerificationRequired: true,
+		EmailProvider:             "smtp",
+		EmailFrom:                 "OpenPost <openpost@example.com>",
+		SMTPHost:                  "smtp.example.com",
+		SMTPPort:                  587,
+		SMTPFrom:                  "OpenPost <openpost@example.com>",
 	}
 }
 

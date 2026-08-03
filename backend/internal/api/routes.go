@@ -15,9 +15,11 @@ import (
 	cliauth "github.com/openpost/backend/internal/services/cli_auth"
 	communicationsservice "github.com/openpost/backend/internal/services/communications"
 	servicecrypto "github.com/openpost/backend/internal/services/crypto"
+	"github.com/openpost/backend/internal/services/emailverification"
 	"github.com/openpost/backend/internal/services/entitlements"
 	"github.com/openpost/backend/internal/services/feedback"
 	"github.com/openpost/backend/internal/services/identity"
+	"github.com/openpost/backend/internal/services/instancesettings"
 	"github.com/openpost/backend/internal/services/mastodonapps"
 	"github.com/openpost/backend/internal/services/mcpoauth"
 	"github.com/openpost/backend/internal/services/mediasigner"
@@ -49,8 +51,11 @@ type RouteDeps struct {
 	TokenSource                  handlers.AccessTokenSource
 	MFAService                   *mfa.Service
 	PasswordResetSender          passwordmail.Sender
+	EmailVerificationService     *emailverification.Service
+	EmailVerificationRequired    bool
 	AccountPolicy                handlers.AccountPolicy
 	Providers                    map[string]platform.Adapter
+	ProviderApps                 []platform.AppConfig
 	ProviderRegistrars           []func(string, platform.Adapter)
 	MastodonAppService           *mastodonapps.Service
 	FrontendURL                  string
@@ -67,6 +72,7 @@ type RouteDeps struct {
 	PixabayAPIKey                string
 	FeedbackService              *feedback.Service
 	IdentityService              *identity.Service
+	InstanceSettingsService      *instancesettings.Service
 	AnalyticsService             *analyticsservice.Service
 	CommunicationsService        *communicationsservice.Service
 	NotificationService          *notifications.Service
@@ -132,11 +138,14 @@ func RegisterHumaRoutes(api huma.API, deps RouteDeps) {
 	)
 	authHandler.SetSessionService(deps.SessionService)
 	authHandler.SetPasswordResetSender(deps.PasswordResetSender, deps.PublicURL)
+	authHandler.SetEmailVerification(deps.EmailVerificationService, deps.PasswordResetSender, deps.EmailVerificationRequired)
 	authHandler.SetAccountPolicy(deps.AccountPolicy)
 	authHandler.SetIdentityService(deps.IdentityService)
 	authHandler.Configuration(api)
 	authHandler.AcceptAccountPolicy(api)
 	authHandler.Register(api)
+	authHandler.ConfirmEmailVerification(api)
+	authHandler.ResendEmailVerification(api)
 	authHandler.Login(api)
 	authHandler.Logout(api)
 	authHandler.RequestPasswordReset(api)
@@ -160,6 +169,7 @@ func RegisterHumaRoutes(api huma.API, deps RouteDeps) {
 	authHandler.FinishPasskeyRegistration(api)
 	authHandler.RemovePasskey(api)
 	handlers.NewOIDCHandler(deps.IdentityService, authHandler, deps.Authenticator).RegisterRoutes(api)
+	handlers.NewPublicProfileHandler(deps.DB).RegisterRoutes(api)
 
 	accountLifecycleHandler := handlers.NewAccountLifecycleHandler(
 		deps.DB,
@@ -175,7 +185,13 @@ func RegisterHumaRoutes(api huma.API, deps RouteDeps) {
 	cliAuthHandler.SetIdentityService(deps.IdentityService)
 	cliAuthHandler.RegisterRoutes(api)
 	handlers.NewMCPActivityHandler(deps.DB, deps.Authenticator).RegisterRoutes(api)
-	handlers.NewProviderAppHandler(providerapps.NewService(deps.DB, deps.TokenEncryptor), deps.DB, deps.Authenticator).RegisterRoutes(api)
+	handlers.NewProviderAppHandler(
+		providerapps.NewService(deps.DB, deps.TokenEncryptor),
+		deps.DB,
+		deps.Authenticator,
+		handlers.WithEnvironmentProviderApps(deps.ProviderApps),
+		handlers.WithProviderAppFrontendURL(deps.FrontendURL),
+	).RegisterRoutes(api)
 	handlers.NewCapabilityHandler().RegisterRoutes(api)
 	capabilityResolverHandler := handlers.NewCapabilityResolverHandler(deps.DB, deps.Authenticator, deps.Providers, deps.TokenSource)
 	capabilityResolverHandler.SetPublicMediaVerifier(deps.PublicMediaVerifier)
@@ -197,6 +213,7 @@ func RegisterHumaRoutes(api huma.API, deps RouteDeps) {
 		deps.SessionService,
 		deps.FrontendURL,
 	).RegisterRoutes(api)
+	handlers.NewInstanceSettingsHandler(deps.InstanceSettingsService, deps.DB, deps.Authenticator).RegisterRoutes(api)
 	handlers.NewUpdateStatusHandler(deps.DB, deps.Authenticator, deps.UpdateStatusService).RegisterRoutes(api)
 
 	mcpOAuthHandler := deps.MCPOAuthHandler

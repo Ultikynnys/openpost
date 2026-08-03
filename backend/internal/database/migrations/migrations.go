@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/openpost/backend/internal/models"
+	"github.com/openpost/backend/internal/usernames"
 	"github.com/uptrace/bun"
 	"github.com/uptrace/bun/dialect"
 )
@@ -119,31 +120,134 @@ func repairAppliedSchema(ctx context.Context, db *bun.DB, appliedSet map[int64]b
 }
 
 func prepareMigration(ctx context.Context, db *bun.DB, migration migration) error {
+	var (
+		err         error
+		description string
+	)
 	switch migration.version {
 	case 36:
-		if err := removeGlobalMediaHashConstraint(ctx, db); err != nil {
-			return fmt.Errorf("migration %s media hash preparation failed: %w", migration.name, err)
-		}
+		description = "media hash"
+		err = removeGlobalMediaHashConstraint(ctx, db)
 	case 39:
-		if err := addPublishingFailureColumnsToPostDestinations(ctx, db); err != nil {
-			return fmt.Errorf("migration %s post destination preparation failed: %w", migration.name, err)
-		}
+		description = "post destination"
+		err = addPublishingFailureColumnsToPostDestinations(ctx, db)
 	case 41:
-		if err := backfillPublicationTextEditors(ctx, db); err != nil {
-			return fmt.Errorf("migration %s publication editor backfill failed: %w", migration.name, err)
-		}
+		description = "publication editor backfill"
+		err = backfillPublicationTextEditors(ctx, db)
 	case 51:
-		if err := makeUserPasswordOptional(ctx, db); err != nil {
-			return fmt.Errorf("migration %s optional password preparation failed: %w", migration.name, err)
-		}
+		description = "optional password"
+		err = makeUserPasswordOptional(ctx, db)
 	case 53:
-		if err := addVideoProjectIDToMediaAttachments(ctx, db); err != nil {
-			return fmt.Errorf("migration %s media project linkage preparation failed: %w", migration.name, err)
-		}
+		description = "media project linkage"
+		err = addVideoProjectIDToMediaAttachments(ctx, db)
 	case 55:
-		if err := ensurePromptExampleColumn(ctx, db); err != nil {
-			return fmt.Errorf("migration %s prompt example preparation failed: %w", migration.name, err)
+		description = "prompt example"
+		err = ensurePromptExampleColumn(ctx, db)
+	case 57:
+		description = "public profile"
+		err = ensurePublicProfileUserFields(ctx, db)
+	case 58:
+		description = "email verification"
+		err = ensureEmailVerificationUserField(ctx, db)
+	}
+	if err != nil {
+		return fmt.Errorf("migration %s %s preparation failed: %w", migration.name, description, err)
+	}
+	return nil
+}
+
+func ensureEmailVerificationUserField(ctx context.Context, db *bun.DB) error {
+	exists, err := migrationTableExists(ctx, db, "users")
+	if err != nil || !exists {
+		return err
+	}
+	present, err := migrationColumnExists(ctx, db, "users", "email_verified_at")
+	if err != nil || present {
+		return err
+	}
+	if _, err = db.ExecContext(ctx, "ALTER TABLE users ADD COLUMN email_verified_at TIMESTAMP"); err != nil {
+		return err
+	}
+	_, err = db.ExecContext(ctx, `UPDATE users
+		SET email_verified_at = COALESCE(created_at, current_timestamp)
+		WHERE email_verified_at IS NULL`)
+	return err
+}
+
+func ensurePublicProfileUserFields(ctx context.Context, db *bun.DB) error {
+	exists, err := migrationTableExists(ctx, db, "users")
+	if err != nil || !exists {
+		return err
+	}
+	if err := ensurePublicProfileColumns(ctx, db); err != nil {
+		return err
+	}
+	if err := backfillPublicProfileUsernames(ctx, db); err != nil {
+		return err
+	}
+	_, err = db.ExecContext(ctx, `CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username_unique
+		ON users (LOWER(username)) WHERE username <> ''`)
+	return err
+}
+
+func ensurePublicProfileColumns(ctx context.Context, db *bun.DB) error {
+	usernamePresent, err := migrationColumnExists(ctx, db, "users", "username")
+	if err != nil {
+		return err
+	}
+	if !usernamePresent {
+		if _, err := db.ExecContext(ctx, "ALTER TABLE users ADD COLUMN username TEXT NOT NULL DEFAULT ''"); err != nil {
+			return err
 		}
+	}
+	publicProfilePresent, err := migrationColumnExists(ctx, db, "users", "public_profile_enabled")
+	if err != nil {
+		return err
+	}
+	if !publicProfilePresent {
+		columnType := "BOOLEAN"
+		if db.Dialect().Name() == dialect.SQLite {
+			columnType = "INTEGER"
+		}
+		if _, err := db.ExecContext(ctx, "ALTER TABLE users ADD COLUMN public_profile_enabled "+columnType+" NOT NULL DEFAULT FALSE"); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func backfillPublicProfileUsernames(ctx context.Context, db *bun.DB) error {
+	type migrationUser struct {
+		ID       string `bun:"id"`
+		Email    string `bun:"email"`
+		Username string `bun:"username"`
+	}
+	var users []migrationUser
+	if err := db.NewSelect().Table("users").Column("id", "email", "username").Order("created_at ASC", "id ASC").Scan(ctx, &users); err != nil {
+		return err
+	}
+	used := make(map[string]struct{}, len(users))
+	for _, user := range users {
+		if normalized := usernames.Normalize(user.Username); normalized != "" {
+			used[normalized] = struct{}{}
+		}
+	}
+	for _, user := range users {
+		if usernames.Normalize(user.Username) != "" {
+			continue
+		}
+		base := usernames.Suggest("", user.Email)
+		candidate := base
+		for attempt := 0; ; attempt++ {
+			candidate = usernames.Candidate(base, user.ID, attempt)
+			if _, taken := used[candidate]; !taken {
+				break
+			}
+		}
+		if _, err := db.NewUpdate().Table("users").Set("username = ?", candidate).Where("id = ?", user.ID).Exec(ctx); err != nil {
+			return err
+		}
+		used[candidate] = struct{}{}
 	}
 	return nil
 }

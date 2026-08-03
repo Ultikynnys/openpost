@@ -154,9 +154,11 @@ type User struct {
 
 	ID               string    `bun:",pk" json:"id"`
 	Email            string    `bun:",unique,notnull" json:"email"`
+	Username         string    `bun:",notnull,default:''" json:"username"`
 	DisplayName      string    `json:"display_name"`
 	AvatarURL        string    `json:"avatar_url"`
 	AvatarObjectKey  string    `json:"-"`
+	PublicProfile    bool      `bun:"public_profile_enabled,notnull,default:false" json:"public_profile_enabled"`
 	PasswordHash     string    `bun:",nullzero" json:"-"`
 	IsAdmin          bool      `bun:",notnull,default:false" json:"is_admin"`
 	IsBreakGlass     bool      `bun:"is_break_glass,notnull,default:false" json:"is_break_glass"`
@@ -166,7 +168,21 @@ type User struct {
 	TermsVersion     string    `bun:"terms_version,notnull,default:''" json:"terms_version"`
 	PrivacyVersion   string    `bun:"privacy_version,notnull,default:''" json:"privacy_version"`
 	LegalAcceptedAt  time.Time `bun:"legal_accepted_at,nullzero" json:"legal_accepted_at"`
+	EmailVerifiedAt  time.Time `bun:"email_verified_at,nullzero" json:"email_verified_at"`
 	CreatedAt        time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"created_at"`
+}
+
+type EmailVerificationChallenge struct {
+	bun.BaseModel `bun:"table:email_verification_challenges"`
+
+	ID         string    `bun:",pk" json:"id"`
+	UserID     string    `bun:"user_id,notnull" json:"user_id"`
+	CodeHash   string    `bun:"code_hash,notnull" json:"-"`
+	Attempts   int       `bun:",notnull,default:0" json:"attempts"`
+	ExpiresAt  time.Time `bun:"expires_at,notnull" json:"expires_at"`
+	SentAt     time.Time `bun:"sent_at,nullzero" json:"sent_at"`
+	ConsumedAt time.Time `bun:"consumed_at,nullzero" json:"consumed_at"`
+	CreatedAt  time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"created_at"`
 }
 
 type PasswordResetToken struct {
@@ -622,6 +638,19 @@ type ProviderApp struct {
 	IsActive        bool      `bun:",notnull,default:true" json:"is_active"`
 	CreatedAt       time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"created_at"`
 	UpdatedAt       time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"updated_at"`
+}
+
+// InstanceSetting stores an administrator-managed override for an optional
+// runtime setting. Values are encrypted even when they are not secrets so the
+// table never becomes a second plaintext environment file.
+type InstanceSetting struct {
+	bun.BaseModel `bun:"table:instance_settings"`
+
+	Key            string    `bun:",pk" json:"key"`
+	ValueEncrypted []byte    `bun:"value_encrypted,notnull" json:"-"`
+	UpdatedByID    string    `bun:"updated_by_id,nullzero" json:"updated_by_id,omitempty"`
+	CreatedAt      time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"created_at"`
+	UpdatedAt      time.Time `bun:",nullzero,notnull,default:current_timestamp" json:"updated_at"`
 }
 
 type SocialAccount struct {

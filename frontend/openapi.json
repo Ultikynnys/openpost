@@ -1038,6 +1038,9 @@
 						"readOnly": true,
 						"type": "string"
 					},
+					"email_verification_required": {
+						"type": "boolean"
+					},
 					"legal_acceptance_required": {
 						"type": "boolean"
 					},
@@ -1063,7 +1066,12 @@
 						"type": "string"
 					}
 				},
-				"required": ["registration_enabled", "password_reset_enabled", "legal_acceptance_required"],
+				"required": [
+					"registration_enabled",
+					"password_reset_enabled",
+					"email_verification_required",
+					"legal_acceptance_required"
+				],
 				"type": "object"
 			},
 			"AuthOutputBody": {
@@ -1074,6 +1082,19 @@
 						"examples": ["https://example.com/schemas/AuthOutputBody.json"],
 						"format": "uri",
 						"readOnly": true,
+						"type": "string"
+					},
+					"email_delivery_status": {
+						"description": "Whether the latest verification email delivery request succeeded",
+						"enum": ["sent", "failed"],
+						"type": "string"
+					},
+					"email_verification_email": {
+						"description": "Email address receiving the verification code",
+						"type": "string"
+					},
+					"email_verification_id": {
+						"description": "Opaque email verification challenge ID",
 						"type": "string"
 					},
 					"mfa_methods": {
@@ -1087,6 +1108,10 @@
 						"description": "Pending MFA token for follow-up verification",
 						"type": "string"
 					},
+					"requires_email_verification": {
+						"description": "Whether a six-digit email code must be confirmed before sign-in",
+						"type": "boolean"
+					},
 					"requires_mfa": {
 						"description": "Whether the login requires a second factor",
 						"type": "boolean"
@@ -1099,7 +1124,7 @@
 						"$ref": "#/components/schemas/UserProfile"
 					}
 				},
-				"required": ["requires_mfa"],
+				"required": ["requires_mfa", "requires_email_verification"],
 				"type": "object"
 			},
 			"AuthSessionStateOutputBody": {
@@ -2027,6 +2052,32 @@
 					}
 				},
 				"required": ["return_url"],
+				"type": "object"
+			},
+			"ConfirmEmailVerificationInputBody": {
+				"additionalProperties": false,
+				"properties": {
+					"$schema": {
+						"description": "A URL to the JSON Schema for this object.",
+						"examples": ["https://example.com/schemas/ConfirmEmailVerificationInputBody.json"],
+						"format": "uri",
+						"readOnly": true,
+						"type": "string"
+					},
+					"challenge_id": {
+						"description": "Opaque email verification challenge ID",
+						"minLength": 16,
+						"type": "string"
+					},
+					"code": {
+						"description": "Six-digit verification code",
+						"maxLength": 6,
+						"minLength": 6,
+						"pattern": "^[0-9]{6}$",
+						"type": "string"
+					}
+				},
+				"required": ["challenge_id", "code"],
 				"type": "object"
 			},
 			"ConfirmTOTPSetupInputBody": {
@@ -4943,6 +4994,166 @@
 				],
 				"type": "object"
 			},
+			"InstanceSettingOptionResponse": {
+				"additionalProperties": false,
+				"properties": {
+					"label": {
+						"description": "Human-readable option label",
+						"type": "string"
+					},
+					"value": {
+						"description": "Stored option value",
+						"type": "string"
+					}
+				},
+				"required": ["value", "label"],
+				"type": "object"
+			},
+			"InstanceSettingResponse": {
+				"additionalProperties": false,
+				"properties": {
+					"configured": {
+						"description": "Whether the desired value is non-empty",
+						"type": "boolean"
+					},
+					"database_override_configured": {
+						"description": "Whether an encrypted database fallback exists, including beneath an environment value",
+						"type": "boolean"
+					},
+					"description": {
+						"description": "Setting purpose and effect",
+						"type": "string"
+					},
+					"editable": {
+						"description": "Whether the administrator can save a database override",
+						"type": "boolean"
+					},
+					"environment_variables": {
+						"description": "Supported direct environment variable names",
+						"items": {
+							"type": "string"
+						},
+						"type": ["array", "null"]
+					},
+					"group": {
+						"description": "Configuration group",
+						"type": "string"
+					},
+					"key": {
+						"description": "Canonical environment variable name",
+						"type": "string"
+					},
+					"label": {
+						"description": "Human-readable setting name",
+						"type": "string"
+					},
+					"managed_by": {
+						"description": "Direct or file-backed environment variable that locks this setting",
+						"type": "string"
+					},
+					"optional": {
+						"description": "Whether an empty value is valid",
+						"type": "boolean"
+					},
+					"options": {
+						"description": "Allowed values for enum settings",
+						"items": {
+							"$ref": "#/components/schemas/InstanceSettingOptionResponse"
+						},
+						"type": ["array", "null"]
+					},
+					"requires_restart": {
+						"description": "Whether the saved value differs from the running process",
+						"type": "boolean"
+					},
+					"secret": {
+						"description": "Whether the value is sensitive and always redacted",
+						"type": "boolean"
+					},
+					"secret_configured": {
+						"description": "Whether a redacted secret value is configured",
+						"type": "boolean"
+					},
+					"source": {
+						"description": "Layer that owns the desired value",
+						"enum": ["environment", "database", "default"],
+						"type": "string"
+					},
+					"type": {
+						"description": "Input type",
+						"enum": ["boolean", "integer", "string", "secret", "url", "email", "enum", "list"],
+						"type": "string"
+					},
+					"updated_at": {
+						"description": "Last database update time",
+						"type": "string"
+					},
+					"value": {
+						"description": "Desired non-secret value. Secret values are never returned.",
+						"type": "string"
+					}
+				},
+				"required": [
+					"key",
+					"group",
+					"label",
+					"description",
+					"type",
+					"secret",
+					"optional",
+					"environment_variables",
+					"source",
+					"configured",
+					"secret_configured",
+					"database_override_configured",
+					"editable",
+					"requires_restart"
+				],
+				"type": "object"
+			},
+			"InstanceSettingUpdateInput": {
+				"additionalProperties": false,
+				"properties": {
+					"key": {
+						"description": "Canonical setting key",
+						"type": "string"
+					},
+					"unset": {
+						"description": "Remove the database override and fall back to the environment or default",
+						"type": "boolean"
+					},
+					"value": {
+						"description": "Replacement value. Secret values are write-only.",
+						"type": "string"
+					}
+				},
+				"required": ["key"],
+				"type": "object"
+			},
+			"InstanceSettingsResponse": {
+				"additionalProperties": false,
+				"properties": {
+					"$schema": {
+						"description": "A URL to the JSON Schema for this object.",
+						"examples": ["https://example.com/schemas/InstanceSettingsResponse.json"],
+						"format": "uri",
+						"readOnly": true,
+						"type": "string"
+					},
+					"requires_restart": {
+						"description": "Whether any saved setting needs a server restart",
+						"type": "boolean"
+					},
+					"settings": {
+						"items": {
+							"$ref": "#/components/schemas/InstanceSettingResponse"
+						},
+						"type": ["array", "null"]
+					}
+				},
+				"required": ["settings", "requires_restart"],
+				"type": "object"
+			},
 			"InstanceUserPage": {
 				"additionalProperties": false,
 				"properties": {
@@ -6709,6 +6920,10 @@
 					"id": {
 						"type": "string"
 					},
+					"kind": {
+						"enum": ["oauth", "sso"],
+						"type": "string"
+					},
 					"name": {
 						"type": "string"
 					},
@@ -6719,7 +6934,7 @@
 						"type": "string"
 					}
 				},
-				"required": ["id", "name", "start_url"],
+				"required": ["id", "name", "kind", "start_url"],
 				"type": "object"
 			},
 			"OIDCUnlinkIdentityInputBody": {
@@ -7610,6 +7825,14 @@
 						"description": "Creation time",
 						"type": "string"
 					},
+					"deletable": {
+						"description": "Whether the database row can be deleted through the admin API",
+						"type": "boolean"
+					},
+					"editable": {
+						"description": "Whether the row can be changed through the admin API",
+						"type": "boolean"
+					},
 					"id": {
 						"description": "Provider app ID",
 						"type": "string"
@@ -7638,6 +7861,15 @@
 						"description": "Whether an encrypted client secret is stored",
 						"type": "boolean"
 					},
+					"shadowed_by_environment": {
+						"description": "Whether an environment app currently takes precedence over this database row",
+						"type": "boolean"
+					},
+					"source": {
+						"description": "Configuration source",
+						"enum": ["environment", "database"],
+						"type": "string"
+					},
 					"updated_at": {
 						"description": "Last update time",
 						"type": "string"
@@ -7650,7 +7882,11 @@
 					"is_active",
 					"secret_configured",
 					"created_at",
-					"updated_at"
+					"updated_at",
+					"source",
+					"editable",
+					"deletable",
+					"shadowed_by_environment"
 				],
 				"type": "object"
 			},
@@ -8000,6 +8236,125 @@
 					}
 				},
 				"required": ["status", "checked_count", "failing_count"],
+				"type": "object"
+			},
+			"PublicProfileActivityDay": {
+				"additionalProperties": false,
+				"properties": {
+					"count": {
+						"description": "Published OpenPost publications on this date",
+						"format": "int64",
+						"type": "integer"
+					},
+					"date": {
+						"description": "UTC activity date in YYYY-MM-DD format",
+						"type": "string"
+					},
+					"level": {
+						"description": "Activity intensity from 0 through 4",
+						"format": "int64",
+						"type": "integer"
+					}
+				},
+				"required": ["date", "count", "level"],
+				"type": "object"
+			},
+			"PublicProfileOutputBody": {
+				"additionalProperties": false,
+				"properties": {
+					"$schema": {
+						"description": "A URL to the JSON Schema for this object.",
+						"examples": ["https://example.com/schemas/PublicProfileOutputBody.json"],
+						"format": "uri",
+						"readOnly": true,
+						"type": "string"
+					},
+					"active_days": {
+						"format": "int64",
+						"type": "integer"
+					},
+					"activity": {
+						"items": {
+							"$ref": "#/components/schemas/PublicProfileActivityDay"
+						},
+						"type": ["array", "null"]
+					},
+					"avatar_url": {
+						"type": "string"
+					},
+					"current_streak": {
+						"format": "int64",
+						"type": "integer"
+					},
+					"display_name": {
+						"type": "string"
+					},
+					"joined_at": {
+						"format": "date-time",
+						"type": "string"
+					},
+					"lifetime_posts": {
+						"format": "int64",
+						"type": "integer"
+					},
+					"longest_streak": {
+						"format": "int64",
+						"type": "integer"
+					},
+					"peak_posts": {
+						"format": "int64",
+						"type": "integer"
+					},
+					"top_platforms": {
+						"items": {
+							"$ref": "#/components/schemas/PublicProfileRanking"
+						},
+						"type": ["array", "null"]
+					},
+					"top_workspaces": {
+						"items": {
+							"$ref": "#/components/schemas/PublicProfileRanking"
+						},
+						"type": ["array", "null"]
+					},
+					"username": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"username",
+					"display_name",
+					"avatar_url",
+					"joined_at",
+					"lifetime_posts",
+					"peak_posts",
+					"current_streak",
+					"longest_streak",
+					"active_days",
+					"activity",
+					"top_platforms",
+					"top_workspaces"
+				],
+				"type": "object"
+			},
+			"PublicProfileRanking": {
+				"additionalProperties": false,
+				"properties": {
+					"count": {
+						"description": "Published destinations or publications",
+						"format": "int64",
+						"type": "integer"
+					},
+					"key": {
+						"description": "Stable platform or workspace identifier",
+						"type": "string"
+					},
+					"name": {
+						"description": "Display label",
+						"type": "string"
+					}
+				},
+				"required": ["key", "name", "count"],
 				"type": "object"
 			},
 			"PublicationLifecycleEventResponse": {
@@ -8603,9 +8958,16 @@
 						"maxLength": 1024,
 						"minLength": 12,
 						"type": "string"
+					},
+					"username": {
+						"description": "Unique public username",
+						"maxLength": 30,
+						"minLength": 3,
+						"pattern": "^[A-Za-z0-9](?:[A-Za-z0-9_-]*[A-Za-z0-9])?$",
+						"type": "string"
 					}
 				},
-				"required": ["email", "password"],
+				"required": ["email", "username", "password"],
 				"type": "object"
 			},
 			"RemoveAvatarOutputBody": {
@@ -9065,6 +9427,25 @@
 					}
 				},
 				"required": ["email"],
+				"type": "object"
+			},
+			"ResendEmailVerificationInputBody": {
+				"additionalProperties": false,
+				"properties": {
+					"$schema": {
+						"description": "A URL to the JSON Schema for this object.",
+						"examples": ["https://example.com/schemas/ResendEmailVerificationInputBody.json"],
+						"format": "uri",
+						"readOnly": true,
+						"type": "string"
+					},
+					"challenge_id": {
+						"description": "Opaque email verification challenge ID",
+						"minLength": 16,
+						"type": "string"
+					}
+				},
+				"required": ["challenge_id"],
 				"type": "object"
 			},
 			"ResetPasswordInputBody": {
@@ -9588,6 +9969,28 @@
 					}
 				},
 				"required": ["revoked"],
+				"type": "object"
+			},
+			"SaveInstanceSettingsInputBody": {
+				"additionalProperties": false,
+				"properties": {
+					"$schema": {
+						"description": "A URL to the JSON Schema for this object.",
+						"examples": ["https://example.com/schemas/SaveInstanceSettingsInputBody.json"],
+						"format": "uri",
+						"readOnly": true,
+						"type": "string"
+					},
+					"settings": {
+						"description": "Settings to update atomically",
+						"items": {
+							"$ref": "#/components/schemas/InstanceSettingUpdateInput"
+						},
+						"minItems": 1,
+						"type": ["array", "null"]
+					}
+				},
+				"required": ["settings"],
 				"type": "object"
 			},
 			"SaveProviderAppInputBody": {
@@ -12334,6 +12737,16 @@
 						"description": "User display name",
 						"maxLength": 120,
 						"type": "string"
+					},
+					"public_profile_enabled": {
+						"description": "Whether the public activity profile is visible",
+						"type": "boolean"
+					},
+					"username": {
+						"description": "Unique public username",
+						"maxLength": 30,
+						"minLength": 3,
+						"type": "string"
 					}
 				},
 				"type": "object"
@@ -12796,6 +13209,10 @@
 						"description": "User email address",
 						"type": "string"
 					},
+					"email_verified": {
+						"description": "Whether the account email address is verified",
+						"type": "boolean"
+					},
 					"has_password": {
 						"description": "Whether this account has a local password credential",
 						"type": "boolean"
@@ -12829,19 +13246,30 @@
 						"description": "Privacy version acknowledged by the user",
 						"type": "string"
 					},
+					"public_profile_enabled": {
+						"description": "Whether the public activity profile is visible",
+						"type": "boolean"
+					},
 					"terms_version": {
 						"description": "Terms version accepted by the user",
+						"type": "string"
+					},
+					"username": {
+						"description": "Unique public username",
 						"type": "string"
 					}
 				},
 				"required": [
 					"id",
 					"email",
+					"username",
 					"display_name",
 					"avatar_url",
+					"public_profile_enabled",
 					"is_admin",
 					"legal_acceptance_required",
 					"created_at",
+					"email_verified",
 					"has_password",
 					"is_managed"
 				],
@@ -14970,6 +15398,74 @@
 				"tags": ["Accounts"]
 			}
 		},
+		"/admin/instance-settings": {
+			"get": {
+				"description": "Returns the typed optional configuration registry. Secrets are redacted; environment values are read-only, while dormant database fallbacks remain removable.",
+				"operationId": "list-instance-settings",
+				"responses": {
+					"200": {
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/InstanceSettingsResponse"
+								}
+							}
+						},
+						"description": "OK"
+					},
+					"default": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Error"
+					}
+				},
+				"summary": "List administrator-managed instance settings",
+				"tags": ["Admin"]
+			},
+			"put": {
+				"description": "Validates and encrypts optional instance settings atomically. Changes apply after the server restarts.",
+				"operationId": "save-instance-settings",
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/SaveInstanceSettingsInputBody"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"200": {
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/InstanceSettingsResponse"
+								}
+							}
+						},
+						"description": "OK"
+					},
+					"default": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Error"
+					}
+				},
+				"summary": "Save administrator-managed instance settings",
+				"tags": ["Admin"]
+			}
+		},
 		"/admin/overview": {
 			"get": {
 				"description": "Returns instance-wide account, workspace, and publication activity totals for an instance administrator.",
@@ -15943,6 +16439,188 @@
 					}
 				},
 				"summary": "Get public authentication configuration",
+				"tags": ["Auth"]
+			}
+		},
+		"/auth/email-verification/confirm": {
+			"post": {
+				"operationId": "confirm-email-verification",
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/ConfirmEmailVerificationInputBody"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"200": {
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/AuthOutputBody"
+								}
+							}
+						},
+						"description": "OK",
+						"headers": {
+							"Set-Cookie": {
+								"schema": {
+									"type": "string"
+								}
+							}
+						}
+					},
+					"400": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Bad Request"
+					},
+					"403": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Forbidden"
+					},
+					"422": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Unprocessable Entity"
+					},
+					"429": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Too Many Requests"
+					},
+					"500": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Internal Server Error"
+					},
+					"503": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Service Unavailable"
+					}
+				},
+				"summary": "Verify a new account email with a six-digit code",
+				"tags": ["Auth"]
+			}
+		},
+		"/auth/email-verification/resend": {
+			"post": {
+				"operationId": "resend-email-verification",
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/ResendEmailVerificationInputBody"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"200": {
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/AuthOutputBody"
+								}
+							}
+						},
+						"description": "OK",
+						"headers": {
+							"Set-Cookie": {
+								"schema": {
+									"type": "string"
+								}
+							}
+						}
+					},
+					"400": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Bad Request"
+					},
+					"422": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Unprocessable Entity"
+					},
+					"429": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Too Many Requests"
+					},
+					"500": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Internal Server Error"
+					},
+					"503": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Service Unavailable"
+					}
+				},
+				"summary": "Send a replacement email verification code",
 				"tags": ["Auth"]
 			}
 		},
@@ -17620,6 +18298,16 @@
 						},
 						"description": "Unprocessable Entity"
 					},
+					"429": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Too Many Requests"
+					},
 					"500": {
 						"content": {
 							"application/problem+json": {
@@ -17629,6 +18317,16 @@
 							}
 						},
 						"description": "Internal Server Error"
+					},
+					"503": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Service Unavailable"
 					}
 				},
 				"summary": "Register a new user",
@@ -24390,6 +25088,67 @@
 				},
 				"summary": "Inspect provider readiness for a workspace",
 				"tags": ["Provider Readiness"]
+			}
+		},
+		"/public/profiles/{username}": {
+			"get": {
+				"operationId": "get-public-profile",
+				"parameters": [
+					{
+						"description": "Public profile username",
+						"in": "path",
+						"name": "username",
+						"required": true,
+						"schema": {
+							"description": "Public profile username",
+							"type": "string"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/PublicProfileOutputBody"
+								}
+							}
+						},
+						"description": "OK"
+					},
+					"404": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Not Found"
+					},
+					"422": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Unprocessable Entity"
+					},
+					"500": {
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/ErrorModel"
+								}
+							}
+						},
+						"description": "Internal Server Error"
+					}
+				},
+				"summary": "Get an opt-in public publishing profile",
+				"tags": ["Profiles"]
 			}
 		},
 		"/publications": {

@@ -37,6 +37,7 @@
 		showInstance
 			? [
 					{ id: 'instance', label: m.settings_instance() },
+					{ id: 'configuration', label: m.settings_configuration() },
 					{ id: 'users', label: m.settings_instance_users() }
 				]
 			: []

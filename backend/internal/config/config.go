@@ -62,6 +62,15 @@ type Config struct {
 	OIDCBootstrapAllowlist  []string
 	OIDCBreakGlassEmails    []string
 	OIDCNativeCallbackURL   string
+	GoogleAuthClientID      string
+	GoogleAuthClientSecret  string
+
+	EmailVerificationRequired bool
+	EmailProvider             string
+	EmailFrom                 string
+	ResendAPIKey              string
+	CloudflareEmailAccountID  string
+	CloudflareEmailAPIToken   string
 
 	SMTPHost       string
 	SMTPPort       int
@@ -191,6 +200,15 @@ func Load() *Config {
 		OIDCBootstrapAllowlist:  parseStringList(getEnvDefault("OPENPOST_OIDC_BOOTSTRAP_ALLOWLIST", "")),
 		OIDCBreakGlassEmails:    parseStringList(getEnvDefault("OPENPOST_SSO_BREAK_GLASS_EMAILS", "")),
 		OIDCNativeCallbackURL:   strings.TrimSpace(getEnvDefault("OPENPOST_OIDC_NATIVE_CALLBACK_URL", "openpost://oidc/callback")),
+		GoogleAuthClientID:      strings.TrimSpace(getEnvDefault("OPENPOST_AUTH_GOOGLE_CLIENT_ID", "")),
+		GoogleAuthClientSecret:  getEnvDefault("OPENPOST_AUTH_GOOGLE_CLIENT_SECRET", ""),
+
+		EmailVerificationRequired: getEnvBoolWithAliases(edition == EditionCloud, "OPENPOST_EMAIL_VERIFICATION_REQUIRED"),
+		EmailProvider:             getEnvEnum("OPENPOST_EMAIL_PROVIDER", "", "smtp", "resend", "cloudflare"),
+		EmailFrom:                 strings.TrimSpace(getEnvDefault("OPENPOST_EMAIL_FROM", "")),
+		ResendAPIKey:              getEnvDefault("OPENPOST_RESEND_API_KEY", ""),
+		CloudflareEmailAccountID:  strings.TrimSpace(getEnvDefault("OPENPOST_CLOUDFLARE_EMAIL_ACCOUNT_ID", "")),
+		CloudflareEmailAPIToken:   getEnvDefault("OPENPOST_CLOUDFLARE_EMAIL_API_TOKEN", ""),
 
 		SMTPHost:       getEnvDefault("OPENPOST_SMTP_HOST", ""),
 		SMTPPort:       getEnvInt("OPENPOST_SMTP_PORT", 587),
@@ -216,7 +234,7 @@ func Load() *Config {
 		LinkedInClientID:             getEnvWithFallbacks("LINKEDIN_CLIENT_ID", ""),
 		LinkedInClientSecret:         getEnvWithFallbacks("LINKEDIN_CLIENT_SECRET", ""),
 		LinkedInRedirectURI:          oauthRedirectFromFrontend("LINKEDIN_REDIRECT_URI", "", frontendURL, "/api/v1/accounts/linkedin/callback"),
-		DisableLinkedInThreadReplies: getEnvBoolWithAliases(false, "LINKEDIN_DISABLE_THREAD_REPLIES", "OPENPOST_DISABLE_LINKEDIN_THREAD_REPLIES"),
+		DisableLinkedInThreadReplies: getEnvBoolWithAliases(false, "OPENPOST_DISABLE_LINKEDIN_THREAD_REPLIES", "LINKEDIN_DISABLE_THREAD_REPLIES"),
 		EnableLinkedInOrganizations:  getEnvBoolWithAliases(false, "OPENPOST_LINKEDIN_ORGANIZATIONS_ENABLED"),
 
 		ThreadsClientID:     getEnvWithFallbacks("THREADS_CLIENT_ID", ""),
@@ -248,6 +266,19 @@ func Load() *Config {
 
 	if cfg.PublicURL == "" {
 		cfg.PublicURL = cfg.FrontendURL
+	}
+	if cfg.EmailFrom == "" {
+		cfg.EmailFrom = strings.TrimSpace(cfg.SMTPFrom)
+	}
+	if cfg.EmailProvider == "" {
+		switch {
+		case strings.TrimSpace(cfg.ResendAPIKey) != "":
+			cfg.EmailProvider = "resend"
+		case strings.TrimSpace(cfg.CloudflareEmailAccountID) != "" || strings.TrimSpace(cfg.CloudflareEmailAPIToken) != "":
+			cfg.EmailProvider = "cloudflare"
+		case strings.TrimSpace(cfg.SMTPHost) != "":
+			cfg.EmailProvider = "smtp"
+		}
 	}
 	if parsed, err := url.Parse(cfg.PublicURL); err == nil && parsed.Hostname() != "" {
 		cfg.WebAuthnRPID = parsed.Hostname()
@@ -406,6 +437,9 @@ func (c *Config) DatabaseDSN() string {
 }
 
 func (c *Config) ValidateRuntime() error {
+	if err := c.ValidateManagedSettings(); err != nil {
+		return err
+	}
 	if c.Edition != EditionCloud {
 		return nil
 	}
@@ -431,10 +465,20 @@ func (c *Config) ValidateRuntime() error {
 	return nil
 }
 
+func (c *Config) ValidateManagedSettings() error {
+	if invalid := c.invalidAuthenticationConfig(); len(invalid) > 0 {
+		return fmt.Errorf("invalid authentication configuration: %s", strings.Join(invalid, ", "))
+	}
+	return nil
+}
+
 func (c *Config) missingCloudAccountConfig() []string {
-	missing := make([]string, 0, 10)
+	missing := make([]string, 0, 12)
 	if !c.LegalAcceptanceRequired {
 		missing = append(missing, "OPENPOST_LEGAL_ACCEPTANCE_REQUIRED=true")
+	}
+	if !c.EmailVerificationRequired {
+		missing = append(missing, "OPENPOST_EMAIL_VERIFICATION_REQUIRED=true")
 	}
 	for key, value := range map[string]string{
 		"OPENPOST_TERMS_URL":       c.TermsURL,
@@ -442,18 +486,61 @@ func (c *Config) missingCloudAccountConfig() []string {
 		"OPENPOST_TERMS_VERSION":   c.TermsVersion,
 		"OPENPOST_PRIVACY_VERSION": c.PrivacyVersion,
 		"OPENPOST_SUPPORT_EMAIL":   c.SupportEmail,
-		"OPENPOST_SMTP_HOST":       c.SMTPHost,
-		"OPENPOST_SMTP_FROM":       c.SMTPFrom,
 	} {
 		if strings.TrimSpace(value) == "" {
 			missing = append(missing, key)
 		}
 	}
-	if strings.TrimSpace(c.SMTPUsername) != "" && strings.TrimSpace(c.SMTPPassword) == "" {
-		missing = append(missing, "OPENPOST_SMTP_PASSWORD")
-	}
 	sort.Strings(missing)
 	return missing
+}
+
+func (c *Config) invalidAuthenticationConfig() []string {
+	invalid := make([]string, 0, 8)
+	invalid = append(invalid, c.invalidGoogleAuthenticationConfig()...)
+	invalid = append(invalid, c.invalidEmailProviderConfig()...)
+	sort.Strings(invalid)
+	return invalid
+}
+
+func (c *Config) invalidGoogleAuthenticationConfig() []string {
+	googleID := strings.TrimSpace(c.GoogleAuthClientID)
+	googleSecret := strings.TrimSpace(c.GoogleAuthClientSecret)
+	if (googleID == "") != (googleSecret == "") {
+		return []string{"OPENPOST_AUTH_GOOGLE_CLIENT_ID and OPENPOST_AUTH_GOOGLE_CLIENT_SECRET must be configured together"}
+	}
+	return nil
+}
+
+func (c *Config) invalidEmailProviderConfig() []string {
+	invalid := make([]string, 0, 6)
+	if c.EmailProvider != "" && strings.TrimSpace(c.EmailFrom) == "" {
+		invalid = append(invalid, "OPENPOST_EMAIL_FROM is required when an email provider is configured")
+	}
+	switch c.EmailProvider {
+	case "":
+	case "smtp":
+		if strings.TrimSpace(c.SMTPHost) == "" {
+			invalid = append(invalid, "OPENPOST_SMTP_HOST is required for the SMTP email provider")
+		}
+		if strings.TrimSpace(c.SMTPUsername) != "" && strings.TrimSpace(c.SMTPPassword) == "" {
+			invalid = append(invalid, "OPENPOST_SMTP_PASSWORD is required when an SMTP username is configured")
+		}
+	case "resend":
+		if strings.TrimSpace(c.ResendAPIKey) == "" {
+			invalid = append(invalid, "OPENPOST_RESEND_API_KEY is required for the Resend email provider")
+		}
+	case "cloudflare":
+		if strings.TrimSpace(c.CloudflareEmailAccountID) == "" {
+			invalid = append(invalid, "OPENPOST_CLOUDFLARE_EMAIL_ACCOUNT_ID is required for the Cloudflare email provider")
+		}
+		if strings.TrimSpace(c.CloudflareEmailAPIToken) == "" {
+			invalid = append(invalid, "OPENPOST_CLOUDFLARE_EMAIL_API_TOKEN is required for the Cloudflare email provider")
+		}
+	default:
+		invalid = append(invalid, "OPENPOST_EMAIL_PROVIDER must be smtp, resend, or cloudflare")
+	}
+	return invalid
 }
 
 func (c *Config) missingCloudDataPlaneConfig() []string {

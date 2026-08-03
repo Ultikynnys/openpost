@@ -209,6 +209,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/instance-settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List administrator-managed instance settings
+         * @description Returns the typed optional configuration registry. Secrets are redacted; environment values are read-only, while dormant database fallbacks remain removable.
+         */
+        get: operations["list-instance-settings"];
+        /**
+         * Save administrator-managed instance settings
+         * @description Validates and encrypts optional instance settings atomically. Changes apply after the server restarts.
+         */
+        put: operations["save-instance-settings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/overview": {
         parameters: {
             query?: never;
@@ -455,6 +479,40 @@ export interface paths {
         get: operations["get-auth-configuration"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/email-verification/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Verify a new account email with a six-digit code */
+        post: operations["confirm-email-verification"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/email-verification/resend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Send a replacement email verification code */
+        post: operations["resend-email-verification"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2340,6 +2398,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/public/profiles/{username}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get an opt-in public publishing profile */
+        get: operations["get-public-profile"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/publications": {
         parameters: {
             query?: never;
@@ -3597,6 +3672,7 @@ export interface components {
              * @example https://example.com/schemas/AuthConfigurationOutputBody.json
              */
             readonly $schema?: string;
+            email_verification_required: boolean;
             legal_acceptance_required: boolean;
             password_reset_enabled: boolean;
             privacy_url?: string;
@@ -3613,10 +3689,21 @@ export interface components {
              * @example https://example.com/schemas/AuthOutputBody.json
              */
             readonly $schema?: string;
+            /**
+             * @description Whether the latest verification email delivery request succeeded
+             * @enum {string}
+             */
+            email_delivery_status?: "sent" | "failed";
+            /** @description Email address receiving the verification code */
+            email_verification_email?: string;
+            /** @description Opaque email verification challenge ID */
+            email_verification_id?: string;
             /** @description Enabled MFA methods for this account */
             mfa_methods?: string[] | null;
             /** @description Pending MFA token for follow-up verification */
             mfa_token?: string;
+            /** @description Whether a six-digit email code must be confirmed before sign-in */
+            requires_email_verification: boolean;
             /** @description Whether the login requires a second factor */
             requires_mfa: boolean;
             /** @description JWT authentication token */
@@ -4012,6 +4099,18 @@ export interface components {
              */
             readonly $schema?: string;
             return_url: string;
+        };
+        ConfirmEmailVerificationInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ConfirmEmailVerificationInputBody.json
+             */
+            readonly $schema?: string;
+            /** @description Opaque email verification challenge ID */
+            challenge_id: string;
+            /** @description Six-digit verification code */
+            code: string;
         };
         ConfirmTOTPSetupInputBody: {
             /**
@@ -5369,6 +5468,75 @@ export interface components {
             /** @description Daily UTC user registrations for the last 30 days */
             user_registration_trend: components["schemas"]["InstanceDailyMetric"][] | null;
         };
+        InstanceSettingOptionResponse: {
+            /** @description Human-readable option label */
+            label: string;
+            /** @description Stored option value */
+            value: string;
+        };
+        InstanceSettingResponse: {
+            /** @description Whether the desired value is non-empty */
+            configured: boolean;
+            /** @description Whether an encrypted database fallback exists, including beneath an environment value */
+            database_override_configured: boolean;
+            /** @description Setting purpose and effect */
+            description: string;
+            /** @description Whether the administrator can save a database override */
+            editable: boolean;
+            /** @description Supported direct environment variable names */
+            environment_variables: string[] | null;
+            /** @description Configuration group */
+            group: string;
+            /** @description Canonical environment variable name */
+            key: string;
+            /** @description Human-readable setting name */
+            label: string;
+            /** @description Direct or file-backed environment variable that locks this setting */
+            managed_by?: string;
+            /** @description Whether an empty value is valid */
+            optional: boolean;
+            /** @description Allowed values for enum settings */
+            options?: components["schemas"]["InstanceSettingOptionResponse"][] | null;
+            /** @description Whether the saved value differs from the running process */
+            requires_restart: boolean;
+            /** @description Whether the value is sensitive and always redacted */
+            secret: boolean;
+            /** @description Whether a redacted secret value is configured */
+            secret_configured: boolean;
+            /**
+             * @description Layer that owns the desired value
+             * @enum {string}
+             */
+            source: "environment" | "database" | "default";
+            /**
+             * @description Input type
+             * @enum {string}
+             */
+            type: "boolean" | "integer" | "string" | "secret" | "url" | "email" | "enum" | "list";
+            /** @description Last database update time */
+            updated_at?: string;
+            /** @description Desired non-secret value. Secret values are never returned. */
+            value?: string;
+        };
+        InstanceSettingUpdateInput: {
+            /** @description Canonical setting key */
+            key: string;
+            /** @description Remove the database override and fall back to the environment or default */
+            unset?: boolean;
+            /** @description Replacement value. Secret values are write-only. */
+            value?: string;
+        };
+        InstanceSettingsResponse: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/InstanceSettingsResponse.json
+             */
+            readonly $schema?: string;
+            /** @description Whether any saved setting needs a server restart */
+            requires_restart: boolean;
+            settings: components["schemas"]["InstanceSettingResponse"][] | null;
+        };
         InstanceUserPage: {
             /**
              * Format: uri
@@ -6179,6 +6347,8 @@ export interface components {
         };
         OIDCProviderSummary: {
             id: string;
+            /** @enum {string} */
+            kind: "oauth" | "sso";
             name: string;
             organization?: string;
             start_url: string;
@@ -6591,6 +6761,10 @@ export interface components {
             client_id: string;
             /** @description Creation time */
             created_at: string;
+            /** @description Whether the database row can be deleted through the admin API */
+            deletable: boolean;
+            /** @description Whether the row can be changed through the admin API */
+            editable: boolean;
             /** @description Provider app ID */
             id: string;
             /** @description Federated provider instance URL */
@@ -6605,6 +6779,13 @@ export interface components {
             redirect_uri?: string;
             /** @description Whether an encrypted client secret is stored */
             secret_configured: boolean;
+            /** @description Whether an environment app currently takes precedence over this database row */
+            shadowed_by_environment: boolean;
+            /**
+             * @description Configuration source
+             * @enum {string}
+             */
+            source: "environment" | "database";
             /** @description Last update time */
             updated_at: string;
         };
@@ -6761,6 +6942,57 @@ export interface components {
             /** Format: int64 */
             last_status_code?: number;
             status: string;
+        };
+        PublicProfileActivityDay: {
+            /**
+             * Format: int64
+             * @description Published OpenPost publications on this date
+             */
+            count: number;
+            /** @description UTC activity date in YYYY-MM-DD format */
+            date: string;
+            /**
+             * Format: int64
+             * @description Activity intensity from 0 through 4
+             */
+            level: number;
+        };
+        PublicProfileOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/PublicProfileOutputBody.json
+             */
+            readonly $schema?: string;
+            /** Format: int64 */
+            active_days: number;
+            activity: components["schemas"]["PublicProfileActivityDay"][] | null;
+            avatar_url: string;
+            /** Format: int64 */
+            current_streak: number;
+            display_name: string;
+            /** Format: date-time */
+            joined_at: string;
+            /** Format: int64 */
+            lifetime_posts: number;
+            /** Format: int64 */
+            longest_streak: number;
+            /** Format: int64 */
+            peak_posts: number;
+            top_platforms: components["schemas"]["PublicProfileRanking"][] | null;
+            top_workspaces: components["schemas"]["PublicProfileRanking"][] | null;
+            username: string;
+        };
+        PublicProfileRanking: {
+            /**
+             * Format: int64
+             * @description Published destinations or publications
+             */
+            count: number;
+            /** @description Stable platform or workspace identifier */
+            key: string;
+            /** @description Display label */
+            name: string;
         };
         PublicationLifecycleEventResponse: {
             created_at: string;
@@ -7034,6 +7266,8 @@ export interface components {
             email: string;
             /** @description User password (min 12 characters) */
             password: string;
+            /** @description Unique public username */
+            username: string;
         };
         RemoveAvatarOutputBody: {
             /**
@@ -7236,6 +7470,16 @@ export interface components {
              * @description Account email address
              */
             email: string;
+        };
+        ResendEmailVerificationInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ResendEmailVerificationInputBody.json
+             */
+            readonly $schema?: string;
+            /** @description Opaque email verification challenge ID */
+            challenge_id: string;
         };
         ResetPasswordInputBody: {
             /**
@@ -7444,6 +7688,16 @@ export interface components {
              */
             readonly $schema?: string;
             revoked: boolean;
+        };
+        SaveInstanceSettingsInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/SaveInstanceSettingsInputBody.json
+             */
+            readonly $schema?: string;
+            /** @description Settings to update atomically */
+            settings: components["schemas"]["InstanceSettingUpdateInput"][] | null;
         };
         SaveProviderAppInputBody: {
             /**
@@ -8546,6 +8800,10 @@ export interface components {
             avatar_url?: string;
             /** @description User display name */
             display_name?: string;
+            /** @description Whether the public activity profile is visible */
+            public_profile_enabled?: boolean;
+            /** @description Unique public username */
+            username?: string;
         };
         UpdateStatusResponse: {
             /**
@@ -8744,6 +9002,8 @@ export interface components {
             display_name: string;
             /** @description User email address */
             email: string;
+            /** @description Whether the account email address is verified */
+            email_verified: boolean;
             /** @description Whether this account has a local password credential */
             has_password: boolean;
             /** @description User ID */
@@ -8763,8 +9023,12 @@ export interface components {
             managed_organization_name?: string;
             /** @description Privacy version acknowledged by the user */
             privacy_version?: string;
+            /** @description Whether the public activity profile is visible */
+            public_profile_enabled: boolean;
             /** @description Terms version accepted by the user */
             terms_version?: string;
+            /** @description Unique public username */
+            username: string;
         };
         UserSessionSummary: {
             /**
@@ -9962,6 +10226,68 @@ export interface operations {
             };
         };
     };
+    "list-instance-settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InstanceSettingsResponse"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "save-instance-settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveInstanceSettingsInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InstanceSettingsResponse"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     "get-instance-overview": {
         parameters: {
             query?: never;
@@ -10743,6 +11069,155 @@ export interface operations {
             };
             /** @description Error */
             default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "confirm-email-verification": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConfirmEmailVerificationInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    "Set-Cookie"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthOutputBody"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "resend-email-verification": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResendEmailVerificationInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    "Set-Cookie"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthOutputBody"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -12135,8 +12610,26 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ErrorModel"];
                 };
             };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
             /** @description Internal Server Error */
             500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -17362,6 +17855,56 @@ export interface operations {
             };
             /** @description Forbidden */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "get-public-profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Public profile username */
+                username: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicProfileOutputBody"];
+                };
+            };
+            /** @description Not Found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

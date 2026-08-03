@@ -33,9 +33,11 @@ import (
 	cliauth "github.com/openpost/backend/internal/services/cli_auth"
 	communicationsservice "github.com/openpost/backend/internal/services/communications"
 	"github.com/openpost/backend/internal/services/crypto"
+	"github.com/openpost/backend/internal/services/emailverification"
 	"github.com/openpost/backend/internal/services/entitlements"
 	"github.com/openpost/backend/internal/services/feedback"
 	"github.com/openpost/backend/internal/services/identity"
+	"github.com/openpost/backend/internal/services/instancesettings"
 	"github.com/openpost/backend/internal/services/mastodonapps"
 	"github.com/openpost/backend/internal/services/mcpoauth"
 	"github.com/openpost/backend/internal/services/mediaanalysis"
@@ -65,6 +67,21 @@ func main() {
 
 	cfg := config.Load()
 	config.Init()
+
+	db, err := database.InitDBWithDriver(cfg.DatabaseDriver, cfg.DatabaseDSN())
+	if err != nil {
+		log.Fatal(err)
+	}
+	if err := database.CreateSchema(db); err != nil {
+		log.Fatalf("database schema initialization failed: %v", err)
+	}
+
+	tokenEncryptor := crypto.NewTokenEncryptor(cfg.EncryptionKey)
+	instanceSettingsService := instancesettings.NewService(db, tokenEncryptor, cfg)
+	if err := instanceSettingsService.ApplyStored(context.Background(), cfg); err != nil {
+		log.Fatalf("failed to load administrator-managed instance settings: %v", err)
+	}
+	instanceSettingsService.CaptureRuntime(cfg)
 	if err := cfg.ValidateRuntime(); err != nil {
 		log.Fatal(err)
 	}
@@ -104,19 +121,25 @@ func main() {
 		AllowCredentials: true,
 	}))
 
-	db, err := database.InitDBWithDriver(cfg.DatabaseDriver, cfg.DatabaseDSN())
-	if err != nil {
-		log.Fatal(err)
-	}
-	if err := database.CreateSchema(db); err != nil {
-		log.Fatalf("database schema initialization failed: %v", err)
-	}
-
-	tokenEncryptor := crypto.NewTokenEncryptor(cfg.EncryptionKey)
 	authService := auth.NewService(cfg.JWTSecret)
+	googleIssuer := ""
+	if cfg.GoogleAuthClientID != "" {
+		googleIssuer = "https://accounts.google.com"
+	}
+	firstPartyIdentityProviders := []identity.EnvironmentProviderConfig{{
+		ID:           identity.GoogleProviderID,
+		Source:       "first_party",
+		Issuer:       googleIssuer,
+		ClientID:     cfg.GoogleAuthClientID,
+		ClientSecret: cfg.GoogleAuthClientSecret,
+		Name:         "Google",
+		Scopes:       []string{"openid", "profile", "email"},
+		JITEnabled:   true,
+	}}
 	identityService := identity.NewService(db, tokenEncryptor, identity.Config{
-		PublicURL:         cfg.PublicURL,
-		NativeCallbackURL: cfg.OIDCNativeCallbackURL,
+		PublicURL:             cfg.PublicURL,
+		NativeCallbackURL:     cfg.OIDCNativeCallbackURL,
+		RegistrationsDisabled: cfg.DisableRegistrations,
 		Environment: identity.EnvironmentProviderConfig{
 			Issuer:            cfg.OIDCIssuer,
 			ClientID:          cfg.OIDCClientID,
@@ -126,6 +149,7 @@ func main() {
 			JITEnabled:        cfg.OIDCJITEnabled,
 			BootstrapSubjects: cfg.OIDCBootstrapAllowlist,
 		},
+		FirstParty: firstPartyIdentityProviders,
 	})
 	if err := identityService.SyncEnvironmentProvider(context.Background()); err != nil {
 		log.Printf("OIDC provider configuration is unavailable: %v", err)
@@ -164,21 +188,38 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	var passwordResetSender passwordmail.Sender
-	if cfg.SMTPHost != "" {
-		passwordResetSender, err = passwordmail.NewSMTPSender(passwordmail.SMTPConfig{
+	var authMailSender passwordmail.Sender
+	switch cfg.EmailProvider {
+	case "smtp":
+		authMailSender, err = passwordmail.NewSMTPSender(passwordmail.SMTPConfig{
 			Host:       cfg.SMTPHost,
 			Port:       cfg.SMTPPort,
 			Username:   cfg.SMTPUsername,
 			Password:   cfg.SMTPPassword,
-			From:       cfg.SMTPFrom,
+			From:       cfg.EmailFrom,
 			TLSMode:    cfg.SMTPTLSMode,
 			ServerName: cfg.SMTPServerName,
 		})
-		if err != nil {
-			log.Fatalf("password reset email configuration is invalid: %v", err)
-		}
+	case "resend":
+		authMailSender, err = passwordmail.NewResendSender(passwordmail.ResendConfig{
+			APIKey: cfg.ResendAPIKey,
+			From:   cfg.EmailFrom,
+		})
+	case "cloudflare":
+		authMailSender, err = passwordmail.NewCloudflareSender(passwordmail.CloudflareConfig{
+			AccountID: cfg.CloudflareEmailAccountID,
+			APIToken:  cfg.CloudflareEmailAPIToken,
+			From:      cfg.EmailFrom,
+		})
 	}
+	if err != nil {
+		log.Fatalf("authentication email configuration is invalid: %v", err)
+	}
+	emailVerificationService := emailverification.NewService(db, emailverification.Config{
+		Secret:                cfg.JWTSecret,
+		PromoteFirstVerified:  true,
+		RegistrationsDisabled: cfg.DisableRegistrations,
+	})
 	tokenManager := tokenmanager.NewTokenManager(db, tokenEncryptor)
 	usageService := usage.NewService(db)
 	publishSvc := publisher.NewService(db, tokenManager)
@@ -210,8 +251,10 @@ func main() {
 	if len(dbProviderApps) > 0 {
 		log.Printf("Loaded %d provider app config(s) from database", len(dbProviderApps))
 	}
-	providerAppConfigs := platform.MergeAppConfigs(cfg.ProviderApps, dynamicMastodonApps...)
-	providerAppConfigs = platform.MergeAppConfigs(providerAppConfigs, dbProviderApps...)
+	providerAppConfigs := platform.MergeAppConfigs(dynamicMastodonApps, dbProviderApps...)
+	// Direct and file-backed environment values are the operator-owned layer
+	// and remain authoritative over administrator-managed database fallbacks.
+	providerAppConfigs = platform.MergeAppConfigs(providerAppConfigs, cfg.ProviderApps...)
 	providers, providerEntries, err := platform.BuildAdapterRegistry(providerAppConfigs, platform.RegistryOptions{
 		DisableLinkedInThreadReplies: cfg.DisableLinkedInThreadReplies,
 		EnableLinkedInOrganizations:  cfg.EnableLinkedInOrganizations,
@@ -364,21 +407,23 @@ func main() {
 		RunningBuild:   runningBuildRevision(),
 	})
 	apiroutes.RegisterHumaRoutes(api, apiroutes.RouteDeps{
-		DB:                  db,
-		AuthService:         authService,
-		Authenticator:       authenticator,
-		SessionService:      sessionService,
-		APITokenService:     apiTokenService,
-		CLIAuthService:      cliAuthService,
-		MCPOAuthService:     mcpOAuthService,
-		BillingService:      billingService,
-		MediaStorage:        storage,
-		MediaSigner:         mediaSigner,
-		Entitlement:         entitlementService,
-		TokenEncryptor:      tokenEncryptor,
-		TokenSource:         tokenManager,
-		MFAService:          mfaService,
-		PasswordResetSender: passwordResetSender,
+		DB:                        db,
+		AuthService:               authService,
+		Authenticator:             authenticator,
+		SessionService:            sessionService,
+		APITokenService:           apiTokenService,
+		CLIAuthService:            cliAuthService,
+		MCPOAuthService:           mcpOAuthService,
+		BillingService:            billingService,
+		MediaStorage:              storage,
+		MediaSigner:               mediaSigner,
+		Entitlement:               entitlementService,
+		TokenEncryptor:            tokenEncryptor,
+		TokenSource:               tokenManager,
+		MFAService:                mfaService,
+		PasswordResetSender:       authMailSender,
+		EmailVerificationService:  emailVerificationService,
+		EmailVerificationRequired: cfg.EmailVerificationRequired,
 		AccountPolicy: handlers.AccountPolicy{
 			Required:       cfg.LegalAcceptanceRequired,
 			TermsURL:       cfg.TermsURL,
@@ -387,7 +432,8 @@ func main() {
 			PrivacyVersion: cfg.PrivacyVersion,
 			SupportEmail:   cfg.SupportEmail,
 		},
-		Providers: providers,
+		Providers:    providers,
+		ProviderApps: cfg.ProviderApps,
 		ProviderRegistrars: []func(string, platform.Adapter){
 			tokenManager.SetProvider,
 			publishSvc.SetProvider,
@@ -409,6 +455,7 @@ func main() {
 		PixabayAPIKey:                cfg.PixabayAPIKey,
 		FeedbackService:              feedbackService,
 		IdentityService:              identityService,
+		InstanceSettingsService:      instanceSettingsService,
 		AnalyticsService:             analyticsService,
 		CommunicationsService:        communicationsService,
 		NotificationService:          notificationService,
@@ -420,7 +467,7 @@ func main() {
 		MCPOAuthHandler:              mcpOAuthHandler,
 	})
 
-	RegisterSpaRoutes(e)
+	RegisterSpaRoutes(e, db, cfg.PublicURL)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

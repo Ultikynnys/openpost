@@ -13,6 +13,7 @@ import (
 	"github.com/danielgtaylor/huma/v2/adapters/humaecho"
 	"github.com/labstack/echo/v4"
 	"github.com/openpost/backend/internal/models"
+	"github.com/openpost/backend/internal/platform"
 	"github.com/openpost/backend/internal/services/crypto"
 	"github.com/openpost/backend/internal/services/providerapps"
 	"github.com/stretchr/testify/require"
@@ -25,7 +26,7 @@ type providerAppAdminTestServer struct {
 	encryptor *crypto.TokenEncryptor
 }
 
-func newProviderAppAdminTestServer(t *testing.T, isAdmin bool) *providerAppAdminTestServer {
+func newProviderAppAdminTestServer(t *testing.T, isAdmin bool, options ...ProviderAppHandlerOption) *providerAppAdminTestServer {
 	t.Helper()
 
 	db := createHandlerTestDB(t, (*models.User)(nil), (*models.ProviderApp)(nil))
@@ -42,7 +43,7 @@ func newProviderAppAdminTestServer(t *testing.T, isAdmin bool) *providerAppAdmin
 	e := echo.New()
 	api := humaecho.NewWithGroup(e, e.Group("/api/v1"), huma.DefaultConfig("Test", "1.0.0"))
 	encryptor := crypto.NewTokenEncryptor("0123456789abcdef0123456789abcdef")
-	NewProviderAppHandler(providerapps.NewService(db, encryptor), db, testAuthenticator{}).RegisterRoutes(api)
+	NewProviderAppHandler(providerapps.NewService(db, encryptor), db, testAuthenticator{}, options...).RegisterRoutes(api)
 	return &providerAppAdminTestServer{echo: e, db: db, encryptor: encryptor}
 }
 
@@ -224,4 +225,74 @@ func TestProviderAppAdminDeletesRows(t *testing.T) {
 
 	deleteResp = srv.requestJSON(t, http.MethodDelete, "/api/v1/admin/provider-apps/"+created.App.ID, nil)
 	require.Equal(t, http.StatusNotFound, deleteResp.Code, deleteResp.Body.String())
+}
+
+func TestProviderAppAdminShowsEnvironmentAppsAsLockedAndRejectsOverrides(t *testing.T) {
+	t.Parallel()
+
+	srv := newProviderAppAdminTestServer(t, true, WithEnvironmentProviderApps([]platform.AppConfig{{
+		Provider: "x", ClientID: "environment-client", ClientSecret: "environment-secret",
+		RedirectURI: "https://app.test/api/v1/accounts/x/callback",
+	}}))
+	listResp := srv.requestJSON(t, http.MethodGet, "/api/v1/admin/provider-apps", nil)
+	require.Equal(t, http.StatusOK, listResp.Code, listResp.Body.String())
+	require.NotContains(t, listResp.Body.String(), "environment-secret")
+	var list []ProviderAppResponse
+	require.NoError(t, json.Unmarshal(listResp.Body.Bytes(), &list))
+	require.Len(t, list, 1)
+	require.Equal(t, "environment", list[0].Source)
+	require.False(t, list[0].Editable)
+	require.True(t, list[0].SecretConfigured)
+
+	saveResp := srv.requestJSON(t, http.MethodPost, "/api/v1/admin/provider-apps", map[string]any{
+		"provider": "x", "client_id": "database-client", "client_secret": "database-secret",
+	})
+	require.Equal(t, http.StatusConflict, saveResp.Code, saveResp.Body.String())
+	require.NotContains(t, saveResp.Body.String(), "database-secret")
+}
+
+func TestProviderAppAdminExposesShadowedDatabaseFallbackForDeletion(t *testing.T) {
+	t.Parallel()
+
+	srv := newProviderAppAdminTestServer(t, true, WithEnvironmentProviderApps([]platform.AppConfig{{
+		Provider: "x", ClientID: "environment-client", ClientSecret: "environment-secret",
+	}}))
+	secret, err := srv.encryptor.Encrypt("database-secret")
+	require.NoError(t, err)
+	_, err = srv.db.NewInsert().Model(&models.ProviderApp{
+		ID: "database-x", Provider: "x", ClientID: "database-client", ClientSecretEnc: secret,
+		IsActive: true, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC(),
+	}).Exec(t.Context())
+	require.NoError(t, err)
+
+	listResp := srv.requestJSON(t, http.MethodGet, "/api/v1/admin/provider-apps", nil)
+	require.Equal(t, http.StatusOK, listResp.Code, listResp.Body.String())
+	var list []ProviderAppResponse
+	require.NoError(t, json.Unmarshal(listResp.Body.Bytes(), &list))
+	require.Len(t, list, 2)
+	var fallback ProviderAppResponse
+	for _, app := range list {
+		if app.Source == "database" {
+			fallback = app
+		}
+	}
+	require.True(t, fallback.Shadowed)
+	require.False(t, fallback.Editable)
+	require.True(t, fallback.Deletable)
+
+	deleteResp := srv.requestJSON(t, http.MethodDelete, "/api/v1/admin/provider-apps/"+fallback.ID, nil)
+	require.Equal(t, http.StatusOK, deleteResp.Code, deleteResp.Body.String())
+}
+
+func TestProviderAppAdminDerivesDefaultCallbackFromFrontendURL(t *testing.T) {
+	t.Parallel()
+
+	srv := newProviderAppAdminTestServer(t, true, WithProviderAppFrontendURL("https://app.test/"))
+	resp := srv.requestJSON(t, http.MethodPost, "/api/v1/admin/provider-apps", map[string]any{
+		"provider": "youtube", "client_id": "youtube-client", "client_secret": "youtube-secret",
+	})
+	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
+	var saved SaveProviderAppResponse
+	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &saved))
+	require.Equal(t, "https://app.test/api/v1/accounts/youtube/callback", saved.App.RedirectURI)
 }

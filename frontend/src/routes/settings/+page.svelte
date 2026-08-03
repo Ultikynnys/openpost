@@ -12,6 +12,7 @@
 	import SectionHeader from '$lib/components/section-header.svelte';
 	import InlineNotice from '$lib/components/inline-notice.svelte';
 	import InstanceAdminOverview from '$lib/components/instance-admin-overview.svelte';
+	import InstanceConfiguration from '$lib/components/instance-configuration.svelte';
 	import InstanceAdminUsers from '$lib/components/instance-admin-users.svelte';
 	import DestructiveConfirmDialog from '$lib/components/destructive-confirm-dialog.svelte';
 	import ProfileAvatarUploader from '$lib/components/profile-avatar-uploader.svelte';
@@ -103,6 +104,8 @@
 	let saving = $state(false);
 	const unsavedChanges = getOptionalUnsavedChanges();
 	let profileDisplayName = $state('');
+	let profileUsername = $state('');
+	let profilePublic = $state(false);
 	let profileBusy = $state(false);
 	let profileError = $state('');
 	let avatarUploaderOpen = $state(false);
@@ -529,6 +532,7 @@
 		...(authState.user?.is_admin
 			? [
 					{ id: 'instance' as const, label: m.settings_instance() },
+					{ id: 'configuration' as const, label: m.settings_configuration() },
 					{ id: 'users' as const, label: m.settings_instance_users() }
 				]
 			: [])
@@ -537,19 +541,29 @@
 		const requested = normalizeSettingsTab(
 			page.url.searchParams.get('tab') || page.url.hash.replace(/^#/, '') || null
 		);
-		return (requested === 'instance' || requested === 'users') && !authState.user?.is_admin
+		return (requested === 'instance' || requested === 'configuration' || requested === 'users') &&
+			!authState.user?.is_admin
 			? 'general'
 			: requested;
 	});
 	const settingsLoadingVariant = $derived.by(() => {
 		if (activeSettingsTab === 'profile') return 'profile' as const;
 		if (['members', 'sso', 'plan', 'security'].includes(activeSettingsTab)) return 'cards' as const;
-		if (['developer', 'schedule', 'accounts', 'instance', 'users'].includes(activeSettingsTab))
+		if (
+			['developer', 'schedule', 'accounts', 'instance', 'configuration', 'users'].includes(
+				activeSettingsTab
+			)
+		)
 			return 'list' as const;
 		return 'form' as const;
 	});
 	const profileEmail = $derived(authState.user?.email ?? '');
-	const profileDirty = $derived(profileDisplayName !== (authState.user?.display_name ?? ''));
+	const canDeleteCurrentWorkspace = $derived(workspaceCtx.currentWorkspace?.role === 'admin');
+	const profileDirty = $derived(
+		profileDisplayName !== (authState.user?.display_name ?? '') ||
+			profileUsername !== (authState.user?.username ?? '') ||
+			profilePublic !== Boolean(authState.user?.public_profile_enabled)
+	);
 	const securityDraftDirty = $derived(Boolean(identityPassword || otherSecurityDraftDirty()));
 	const developerDraftDirty = $derived(apiTokenDraftSnapshot() !== savedAPITokenDraft);
 	const memberDraftDirty = $derived(Boolean(inviteEmail.trim()) || inviteRole !== 'editor');
@@ -577,6 +591,7 @@
 		if (activeSettingsTab === 'security') return m.settings_security();
 		if (activeSettingsTab === 'developer') return m.settings_developer();
 		if (activeSettingsTab === 'instance') return m.settings_instance();
+		if (activeSettingsTab === 'configuration') return m.settings_configuration();
 		if (activeSettingsTab === 'users') return m.settings_instance_users();
 		if (activeSettingsTab === 'members') return m.settings_team_members();
 		if (activeSettingsTab === 'sso') return m.settings_sso();
@@ -591,6 +606,7 @@
 		if (activeSettingsTab === 'security') return m.settings_account_security_body();
 		if (activeSettingsTab === 'developer') return m.settings_developer_description();
 		if (activeSettingsTab === 'instance') return m.settings_instance_description();
+		if (activeSettingsTab === 'configuration') return m.settings_configuration_description();
 		if (activeSettingsTab === 'users') return m.settings_instance_users_page_description();
 		if (activeSettingsTab === 'members') return m.settings_members_description();
 		if (activeSettingsTab === 'sso') return m.settings_sso_description();
@@ -642,11 +658,17 @@
 		profileError = '';
 		try {
 			const { data, error: err } = await client.PATCH('/auth/profile', {
-				body: { display_name: profileDisplayName }
+				body: {
+					display_name: profileDisplayName,
+					username: profileUsername,
+					public_profile_enabled: profilePublic
+				}
 			});
 			if (err || !data) throw new Error(err?.detail || m.settings_action_failed());
 			auth.setUser(data);
 			profileDisplayName = data.display_name ?? '';
+			profileUsername = data.username ?? '';
+			profilePublic = Boolean(data.public_profile_enabled);
 			notify(m.settings_profile_updated());
 		} catch (e) {
 			profileError = (e as Error).message;
@@ -1680,6 +1702,8 @@
 		if (user?.id && user.id !== lastProfileUserID) {
 			lastProfileUserID = user.id;
 			profileDisplayName = user.display_name || '';
+			profileUsername = user.username || '';
+			profilePublic = Boolean(user.public_profile_enabled);
 		}
 	});
 
@@ -1837,6 +1861,29 @@
 										maxlength={120}
 									/>
 								</div>
+								<div class="space-y-2">
+									<Label for="profile-username">{m.settings_username()}</Label>
+									<div class="relative">
+										<span
+											class="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm text-muted-foreground"
+											aria-hidden="true">@</span
+										>
+										<Input
+											id="profile-username"
+											bind:value={profileUsername}
+											class="pl-7"
+											required
+											minlength={3}
+											maxlength={30}
+											pattern="[A-Za-z0-9](?:[A-Za-z0-9_-]*[A-Za-z0-9])?"
+											autocomplete="username"
+											aria-describedby="profile-username-help"
+										/>
+									</div>
+									<p id="profile-username-help" class="text-xs leading-5 text-muted-foreground">
+										{m.settings_username_help()}
+									</p>
+								</div>
 								<p class="text-sm text-muted-foreground">{profileEmail}</p>
 								<div class="flex flex-wrap gap-2">
 									<Button
@@ -1860,6 +1907,36 @@
 										</Button>
 									{/if}
 								</div>
+							</div>
+						</div>
+
+						<div class="flex items-start gap-3 rounded-xl border bg-muted/25 p-4">
+							<Checkbox
+								id="profile-public"
+								bind:checked={profilePublic}
+								aria-describedby="profile-public-description"
+							/>
+							<div class="min-w-0 flex-1">
+								<Label for="profile-public" class="font-medium">
+									{m.settings_public_profile()}
+								</Label>
+								<p
+									id="profile-public-description"
+									class="mt-1 text-sm leading-6 text-muted-foreground"
+								>
+									{m.settings_public_profile_description()}
+								</p>
+								{#if authState.user?.public_profile_enabled && authState.user.username}
+									<a
+										href={`/u/${authState.user.username}`}
+										target="_blank"
+										rel="noreferrer"
+										class="mt-2 inline-flex min-h-11 items-center gap-2 text-sm font-medium text-primary hover:underline"
+									>
+										{m.settings_view_public_profile()}
+										<ExternalLinkIcon class="size-4" aria-hidden="true" />
+									</a>
+								{/if}
 							</div>
 						</div>
 
@@ -2002,6 +2079,16 @@
 							{/if}
 						</div>
 					</section>
+
+					<section
+						id="configuration"
+						class:hidden={activeSettingsTab !== 'configuration'}
+						class="scroll-mt-24"
+					>
+						{#if activeSettingsTab === 'configuration'}
+							<InstanceConfiguration active />
+						{/if}
+					</section>
 				{/if}
 
 				<section
@@ -2096,27 +2183,29 @@
 							>{m.settings_manage_accounts()}</Button
 						>
 					</div>
-					<div
-						class="flex flex-col gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-4 sm:flex-row sm:items-center sm:justify-between"
-					>
-						<div>
-							<p class="text-sm font-medium text-destructive">{m.workspace_delete_title()}</p>
-							<p class="text-sm text-muted-foreground">
-								{m.workspace_delete_description()}
-							</p>
-						</div>
-						<Button
-							variant="destructive"
-							class="shrink-0"
-							disabled={workspaceCtx.workspaces.length <= 1}
-							title={workspaceCtx.workspaces.length <= 1
-								? m.workspace_delete_only_workspace()
-								: undefined}
-							onclick={() => requestDestructiveAction({ kind: 'workspace' })}
+					{#if canDeleteCurrentWorkspace}
+						<div
+							class="flex flex-col gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-4 sm:flex-row sm:items-center sm:justify-between"
 						>
-							{m.workspace_delete_confirm()}
-						</Button>
-					</div>
+							<div>
+								<p class="text-sm font-medium text-destructive">{m.workspace_delete_title()}</p>
+								<p class="text-sm text-muted-foreground">
+									{m.workspace_delete_description()}
+								</p>
+							</div>
+							<Button
+								variant="destructive"
+								class="shrink-0"
+								disabled={workspaceCtx.workspaces.length <= 1}
+								title={workspaceCtx.workspaces.length <= 1
+									? m.workspace_delete_only_workspace()
+									: undefined}
+								onclick={() => requestDestructiveAction({ kind: 'workspace' })}
+							>
+								{m.workspace_delete_confirm()}
+							</Button>
+						</div>
+					{/if}
 				</section>
 
 				<section id="team" class:hidden={activeSettingsTab !== 'members'} class="scroll-mt-24">

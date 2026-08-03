@@ -3,6 +3,7 @@ export const settingsTabIDs = [
 	'security',
 	'developer',
 	'instance',
+	'configuration',
 	'users',
 	'general',
 	'brand',
