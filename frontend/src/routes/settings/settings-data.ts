@@ -141,8 +141,10 @@ export interface SecurityStatus {
 	user: {
 		id: string;
 		email: string;
+		username: string;
 		display_name?: string;
 		avatar_url?: string;
+		public_profile_enabled: boolean;
 		has_password: boolean;
 		is_managed: boolean;
 		managed_organization_name?: string;
@@ -165,6 +167,7 @@ export interface OIDCIdentitySummary {
 export interface OIDCProviderSummary {
 	id: string;
 	name: string;
+	kind: 'oauth' | 'sso';
 	organization?: string;
 	start_url: string;
 }

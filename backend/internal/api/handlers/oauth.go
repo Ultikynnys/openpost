@@ -741,7 +741,7 @@ func (h *OAuthHandler) redirectWithError(msg string) (*huma.StreamResponse, erro
 	if msg == "" {
 		msg = "OAuth connection failed"
 	}
-	location := h.frontendURL + "/accounts?error=" + url.QueryEscape(msg)
+	location := h.frontendURL + "/settings?tab=accounts&error=" + url.QueryEscape(msg)
 	return &huma.StreamResponse{
 		Body: func(ctx huma.Context) {
 			ctx.SetHeader("Location", location)
@@ -868,7 +868,7 @@ func (h *OAuthHandler) saveAccountAndRedirect(ctx context.Context, userID, platf
 		return h.redirectWithError(accountConnectionErrorMessage(err))
 	}
 
-	accountsURL := h.frontendURL + "/accounts"
+	accountsURL := h.frontendURL + "/settings?tab=accounts"
 	log.Printf("[Callback] Account saved successfully: ID=%s, redirecting to %s", account.ID, accountsURL)
 
 	return h.accountConnectionSuccessPage(platformName, accountsURL), nil

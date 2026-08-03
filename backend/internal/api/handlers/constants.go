@@ -14,6 +14,7 @@ const (
 	tagProviderReadiness = "Provider Readiness"
 	tagPublications      = "Publications"
 	tagPrompts           = "Prompts"
+	tagProfiles          = "Profiles"
 	tagStudio            = "Studio"
 	tagVideoStudio       = "Video Studio"
 	tagWorkspaces        = "Workspaces"

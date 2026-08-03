@@ -19,10 +19,15 @@ interface AuthActionResult {
 	purpose?: 'login' | 'reauth' | 'link';
 	action?: string;
 	reauthGrant?: string;
+	requiresEmailVerification?: boolean;
+	emailVerificationID?: string;
+	emailVerificationEmail?: string;
+	emailDeliveryStatus?: 'sent' | 'failed';
 }
 
 interface RegisterInput {
 	email: string;
+	username: string;
 	password: string;
 	acceptedLegal: boolean;
 }
@@ -76,6 +81,10 @@ function createAuthStore() {
 						mfaMethods: data.mfa_methods ?? []
 					};
 				}
+				if (data.requires_email_verification) {
+					set({ user: null, isLoading: false, isAuthenticated: false });
+					return emailVerificationResult(data);
+				}
 				setToken(IS_CAPACITOR ? data.token : null);
 				set({ user: data.user ?? null, isLoading: false, isAuthenticated: true });
 				return { success: true };
@@ -83,15 +92,45 @@ function createAuthStore() {
 				return { success: false, error: (e as Error).message };
 			}
 		},
-		async register({ email, password, acceptedLegal }: RegisterInput) {
+		async register({ email, username, password, acceptedLegal }: RegisterInput) {
 			try {
 				const { data, error } = await client.POST('/auth/register', {
-					body: { email, password, accepted_legal: acceptedLegal }
+					body: { email, username, password, accepted_legal: acceptedLegal }
 				});
 				if (error || !data) throw new Error(error?.detail || 'Registration failed');
+				if (data.requires_email_verification) {
+					set({ user: null, isLoading: false, isAuthenticated: false });
+					return emailVerificationResult(data);
+				}
 				setToken(IS_CAPACITOR ? data.token : null);
 				set({ user: data.user ?? null, isLoading: false, isAuthenticated: true });
 				return { success: true };
+			} catch (e) {
+				return { success: false, error: (e as Error).message };
+			}
+		},
+		async verifyEmail(challengeID: string, code: string): Promise<AuthActionResult> {
+			try {
+				const { data, error } = await client.POST('/auth/email-verification/confirm', {
+					body: { challenge_id: challengeID, code }
+				});
+				if (error || !data?.user) throw new Error(error?.detail ?? 'Email verification failed');
+				setToken(IS_CAPACITOR ? data.token : null);
+				set({ user: data.user, isLoading: false, isAuthenticated: true });
+				return { success: true };
+			} catch (e) {
+				return { success: false, error: (e as Error).message };
+			}
+		},
+		async resendEmailVerification(challengeID: string): Promise<AuthActionResult> {
+			try {
+				const { data, error } = await client.POST('/auth/email-verification/resend', {
+					body: { challenge_id: challengeID }
+				});
+				if (error || !data?.requires_email_verification) {
+					throw new Error(error?.detail ?? 'Unable to send another verification code');
+				}
+				return emailVerificationResult(data);
 			} catch (e) {
 				return { success: false, error: (e as Error).message };
 			}
@@ -183,3 +222,17 @@ function createAuthStore() {
 }
 
 export const auth = createAuthStore();
+
+function emailVerificationResult(data: {
+	email_verification_id?: string;
+	email_verification_email?: string;
+	email_delivery_status?: 'sent' | 'failed';
+}): AuthActionResult {
+	return {
+		success: false,
+		requiresEmailVerification: true,
+		emailVerificationID: data.email_verification_id,
+		emailVerificationEmail: data.email_verification_email,
+		emailDeliveryStatus: data.email_delivery_status
+	};
+}

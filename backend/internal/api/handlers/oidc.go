@@ -42,6 +42,7 @@ func NewOIDCHandler(
 type OIDCProviderSummary struct {
 	ID           string `json:"id"`
 	Name         string `json:"name"`
+	Kind         string `json:"kind" enum:"oauth,sso"`
 	Organization string `json:"organization,omitempty"`
 	StartURL     string `json:"start_url"`
 }
@@ -738,9 +739,14 @@ func withFragmentValue(rawURL, key, value string) string {
 }
 
 func (h *OIDCHandler) providerSummary(provider models.IdentityProvider, organizationName string) OIDCProviderSummary {
+	kind := "sso"
+	if provider.Source == "first_party" {
+		kind = "oauth"
+	}
 	return OIDCProviderSummary{
 		ID:           provider.ID,
 		Name:         provider.Name,
+		Kind:         kind,
 		Organization: organizationName,
 		StartURL:     "/api/v1/auth/oidc/" + url.PathEscape(provider.ID) + "/start",
 	}
@@ -762,6 +768,8 @@ func oidcPublicError(err error) string {
 		return "The identity provider did not return a verified email."
 	case errors.Is(err, identity.ErrIdentityCollision):
 		return "This identity is already linked to another OpenPost account."
+	case errors.Is(err, identity.ErrRegistrationsClosed):
+		return "Registrations are disabled for this OpenPost instance."
 	case errors.Is(err, identity.ErrProviderDisabled), errors.Is(err, identity.ErrProviderNotFound):
 		return "This identity provider is unavailable."
 	case errors.Is(err, identity.ErrBrowserBinding), errors.Is(err, identity.ErrInvalidAuthRequest),

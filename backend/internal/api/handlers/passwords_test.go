@@ -33,6 +33,10 @@ func (s *recordingPasswordSender) SendPasswordReset(_ context.Context, message p
 	return s.err
 }
 
+func (s *recordingPasswordSender) SendEmailVerification(_ context.Context, _ passwordmail.VerificationMessage) error {
+	return s.err
+}
+
 func TestPasswordResetIsNonEnumeratingSingleUseAndRevokesSessions(t *testing.T) {
 	t.Parallel()
 
@@ -190,12 +194,12 @@ func TestRegistrationRequiresAndPersistsCurrentLegalAcceptance(t *testing.T) {
 	handler.Register(api)
 
 	rejected := jsonRequest(t, e, http.MethodPost, "/api/v1/auth/register", map[string]any{
-		"email": "person@example.com", "password": "long-password-123", "accepted_legal": false,
+		"email": "person@example.com", "username": "person", "password": "long-password-123", "accepted_legal": false,
 	}, "")
 	require.Equal(t, http.StatusBadRequest, rejected.Code, rejected.Body.String())
 
 	accepted := jsonRequest(t, e, http.MethodPost, "/api/v1/auth/register", map[string]any{
-		"email": "person@example.com", "password": "long-password-123", "accepted_legal": true,
+		"email": "person@example.com", "username": "person", "password": "long-password-123", "accepted_legal": true,
 	}, "")
 	require.Equal(t, http.StatusOK, accepted.Code, accepted.Body.String())
 	var user models.User

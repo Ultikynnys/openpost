@@ -7,6 +7,123 @@ import {
   routeBrowserRegistration,
 } from "./helpers";
 
+test("email signup confirms a six-digit code before onboarding", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const email = "verify-person@example.com";
+  const user = {
+    id: "user-verified",
+    email,
+    email_verified: true,
+    username: "verify-person",
+    display_name: "verify-person",
+    avatar_url: "",
+    is_admin: false,
+    is_managed: false,
+    managed_organization_name: "",
+    has_password: true,
+    legal_acceptance_required: false,
+    public_profile_enabled: false,
+    created_at: "2026-08-03T12:00:00Z",
+  };
+
+  await page.route("**/api/v1/auth/config", (route) =>
+    route.fulfill({
+      json: {
+        registration_enabled: true,
+        password_reset_enabled: true,
+        email_verification_required: true,
+        legal_acceptance_required: false,
+      },
+    }),
+  );
+  await page.route("**/api/v1/auth/oidc/providers", (route) =>
+    route.fulfill({ json: [] }),
+  );
+  await page.route("**/api/v1/auth/register", async (route) => {
+    expect(route.request().postDataJSON()).toMatchObject({ email });
+    await route.fulfill({
+      json: {
+        requires_email_verification: true,
+        requires_mfa: false,
+        email_verification_id: "challenge-1",
+        email_verification_email: email,
+        email_delivery_status: "sent",
+      },
+    });
+  });
+  let confirmationAttempts = 0;
+  await page.route(
+    "**/api/v1/auth/email-verification/confirm",
+    async (route) => {
+      confirmationAttempts += 1;
+      const body = route.request().postDataJSON();
+      expect(body.challenge_id).toBe("challenge-1");
+      if (body.code !== "654321") {
+        await route.fulfill({
+          status: 400,
+          contentType: "application/problem+json",
+          json: {
+            status: 400,
+            title: "Bad Request",
+            detail: "verification code is incorrect",
+          },
+        });
+        return;
+      }
+      await route.fulfill({
+        json: {
+          requires_email_verification: false,
+          requires_mfa: false,
+          token: "verified-session",
+          user,
+        },
+      });
+    },
+  );
+  await page.route("**/api/v1/workspaces", (route) =>
+    route.fulfill({ json: [] }),
+  );
+
+  await page.goto("/register");
+  await page.getByLabel("Username").fill("verify-person");
+  await page.getByLabel("Email").fill(email);
+  await page.getByLabel("Password", { exact: true }).fill(password);
+  await page.getByLabel("Confirm Password").fill(password);
+  await page.getByRole("button", { name: "Create Account" }).click();
+
+  await expect(page).toHaveURL(/\/verify-email\?/);
+  await expect(
+    page.getByRole("heading", { name: "Check your email" }),
+  ).toBeVisible();
+  await expect(
+    page.getByText(`Enter the 6-digit code sent to ${email}.`),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: /Send a new code in/ }),
+  ).toBeDisabled();
+
+  const verificationCode = page.getByLabel("Verification code");
+  await verificationCode.fill("111111");
+  expect(
+    await verificationCode.evaluate((element: HTMLInputElement) => ({
+      valid: element.checkValidity(),
+      pattern: element.pattern,
+      value: element.value,
+      message: element.validationMessage,
+    })),
+  ).toEqual({ valid: true, pattern: "[0-9]{6}", value: "111111", message: "" });
+  await page.getByRole("button", { name: "Verify email" }).click();
+  await expect.poll(() => confirmationAttempts).toBe(1);
+  await expect(page.getByText("verification code is incorrect")).toBeVisible();
+
+  await page.getByLabel("Verification code").fill("654321");
+  await page.getByRole("button", { name: "Verify email" }).click();
+  await expect(page).toHaveURL(/\/onboarding$/);
+  expect(confirmationAttempts).toBe(2);
+});
+
 test("registration routes first-time users through onboarding", async ({
   page,
   request,
@@ -17,6 +134,7 @@ test("registration routes first-time users through onboarding", async ({
 
   await routeBrowserRegistration(page, email);
   await page.goto("/register");
+  await page.getByLabel("Username").fill(`onboard-${unique}`);
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password", { exact: true }).fill(password);
   await page.getByLabel("Confirm Password").fill(password);
@@ -29,7 +147,7 @@ test("registration routes first-time users through onboarding", async ({
   await page.getByLabel("Workspace name").fill(workspaceName);
   await page.getByRole("button", { name: "Create workspace" }).click();
 
-	await expect(page).toHaveURL(/\/$/);
+  await expect(page).toHaveURL(/\/$/);
 
   expect(
     await page.evaluate(() => window.localStorage.getItem("token")),

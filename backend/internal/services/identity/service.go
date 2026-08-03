@@ -23,12 +23,15 @@ import (
 	"github.com/openpost/backend/internal/models"
 	"github.com/openpost/backend/internal/netguard"
 	servicecrypto "github.com/openpost/backend/internal/services/crypto"
+	"github.com/openpost/backend/internal/usernames"
 	"github.com/uptrace/bun"
+	"github.com/uptrace/bun/dialect"
 	"golang.org/x/oauth2"
 )
 
 const (
 	EnvironmentProviderID = "instance"
+	GoogleProviderID      = "google"
 	AuthRequestTTL        = 10 * time.Minute
 	ReauthGrantTTL        = 5 * time.Minute
 	NativeHandoffTTL      = 2 * time.Minute
@@ -56,9 +59,12 @@ var (
 	ErrBackchannelLogout      = errors.New("invalid oidc back-channel logout request")
 	ErrDomainVerification     = errors.New("identity provider domain verification failed")
 	ErrOrganizationPermission = errors.New("organization administrator access required")
+	ErrRegistrationsClosed    = errors.New("registrations are disabled")
 )
 
 type EnvironmentProviderConfig struct {
+	ID                string
+	Source            string
 	Issuer            string
 	ClientID          string
 	ClientSecret      string
@@ -69,10 +75,12 @@ type EnvironmentProviderConfig struct {
 }
 
 type Config struct {
-	PublicURL           string
-	NativeCallbackURL   string
-	Environment         EnvironmentProviderConfig
-	DefaultAssuranceAge time.Duration
+	PublicURL             string
+	NativeCallbackURL     string
+	Environment           EnvironmentProviderConfig
+	FirstParty            []EnvironmentProviderConfig
+	RegistrationsDisabled bool
+	DefaultAssuranceAge   time.Duration
 }
 
 type Service struct {
@@ -150,12 +158,12 @@ var hostedIssuerPolicy = netguard.URLPolicy{
 func NewService(db *bun.DB, encryptor *servicecrypto.TokenEncryptor, cfg Config) *Service {
 	cfg.PublicURL = strings.TrimRight(strings.TrimSpace(cfg.PublicURL), "/")
 	cfg.NativeCallbackURL = strings.TrimSpace(cfg.NativeCallbackURL)
-	cfg.Environment.Issuer = strings.TrimSpace(cfg.Environment.Issuer)
-	cfg.Environment.ClientID = strings.TrimSpace(cfg.Environment.ClientID)
-	cfg.Environment.Name = strings.TrimSpace(cfg.Environment.Name)
-	cfg.Environment.Scopes = normalizeScopes(cfg.Environment.Scopes)
+	cfg.Environment = normalizeManagedProvider(cfg.Environment, EnvironmentProviderID, "environment", "Single sign-on")
 	if cfg.Environment.Name == "" {
 		cfg.Environment.Name = "Single sign-on"
+	}
+	for index := range cfg.FirstParty {
+		cfg.FirstParty[index] = normalizeManagedProvider(cfg.FirstParty[index], "", "first_party", "Sign in")
 	}
 	if cfg.DefaultAssuranceAge <= 0 {
 		cfg.DefaultAssuranceAge = defaultAssuranceAge
@@ -181,27 +189,46 @@ func (s *Service) SetHTTPClient(providerID string, client *http.Client) {
 }
 
 func (s *Service) SyncEnvironmentProvider(ctx context.Context) error {
-	issuer := s.config.Environment.Issuer
-	clientID := s.config.Environment.ClientID
+	providers := append([]EnvironmentProviderConfig{s.config.Environment}, s.config.FirstParty...)
+	for _, provider := range providers {
+		if err := s.syncManagedProvider(ctx, provider); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *Service) syncManagedProvider(ctx context.Context, config EnvironmentProviderConfig) error {
+	issuer := config.Issuer
+	clientID := config.ClientID
 	if issuer == "" && clientID == "" {
-		return nil
+		_, err := s.db.NewUpdate().
+			Model((*models.IdentityProvider)(nil)).
+			Set("is_active = ?", false).
+			Set("updated_at = ?", s.now()).
+			Where("id = ? AND source = ?", config.ID, config.Source).
+			Exec(ctx)
+		if err == nil {
+			s.invalidateRuntime(config.ID)
+		}
+		return err
 	}
 	if issuer == "" || clientID == "" {
-		return fmt.Errorf("OPENPOST_OIDC_ISSUER and OPENPOST_OIDC_CLIENT_ID must be configured together")
+		return fmt.Errorf("identity provider %q issuer and client ID must be configured together", config.ID)
 	}
 	now := s.now()
 	row := &models.IdentityProvider{
-		ID:                   EnvironmentProviderID,
-		Source:               "environment",
+		ID:                   config.ID,
+		Source:               config.Source,
 		Issuer:               issuer,
-		Name:                 s.config.Environment.Name,
+		Name:                 config.Name,
 		ClientID:             clientID,
-		Scopes:               strings.Join(s.config.Environment.Scopes, " "),
+		Scopes:               strings.Join(config.Scopes, " "),
 		EmailClaim:           "email",
 		NameClaim:            "name",
 		PictureClaim:         "picture",
 		RequireVerifiedEmail: true,
-		JITEnabled:           s.config.Environment.JITEnabled,
+		JITEnabled:           config.JITEnabled,
 		IsActive:             true,
 		HealthStatus:         "unchecked",
 		CreatedAt:            now,
@@ -314,6 +341,9 @@ func (s *Service) Begin(ctx context.Context, input BeginInput) (*BeginResult, er
 	options := []oauth2.AuthCodeOption{
 		oidc.Nonce(nonce),
 		oauth2.S256ChallengeOption(verifier),
+	}
+	if provider.Source == "first_party" && intent != models.OIDCIntentReauth {
+		options = append(options, oauth2.SetAuthURLParam("prompt", "select_account"))
 	}
 	if intent == models.OIDCIntentReauth {
 		options = append(options,
@@ -656,31 +686,62 @@ func (s *Service) createJITUser(
 	provider models.IdentityProvider,
 	verified VerifiedIdentity,
 ) (*models.User, error) {
-	if verified.Email == "" {
-		return nil, ErrVerifiedEmailRequired
+	if err := s.ensureJITEmailAvailable(ctx, verified.Email); err != nil {
+		return nil, err
 	}
-	exists, err := s.db.NewSelect().
-		Model((*models.User)(nil)).
-		Where("LOWER(email) = ?", verified.Email).
-		Exists(ctx)
+	user, linkedIdentity, err := s.newJITIdentity(ctx, provider, verified)
 	if err != nil {
 		return nil, err
 	}
-	if exists {
-		return nil, ErrEmailConflict
+	err = s.db.RunInTx(ctx, &sql.TxOptions{}, func(txCtx context.Context, tx bun.Tx) error {
+		return s.insertJITUser(txCtx, tx, provider, user, linkedIdentity)
+	})
+	if err != nil {
+		return nil, err
 	}
+	return user, nil
+}
 
+func (s *Service) ensureJITEmailAvailable(ctx context.Context, email string) error {
+	if email == "" {
+		return ErrVerifiedEmailRequired
+	}
+	exists, err := s.db.NewSelect().
+		Model((*models.User)(nil)).
+		Where("LOWER(email) = ?", email).
+		Exists(ctx)
+	if err != nil {
+		return err
+	}
+	if exists {
+		return ErrEmailConflict
+	}
+	return nil
+}
+
+func (s *Service) newJITIdentity(
+	ctx context.Context,
+	provider models.IdentityProvider,
+	verified VerifiedIdentity,
+) (*models.User, *models.UserIdentity, error) {
 	now := s.now()
+	userID := uuid.NewString()
+	username, err := s.availableUsername(ctx, usernames.Suggest(verified.Name, verified.Email), userID)
+	if err != nil {
+		return nil, nil, err
+	}
 	user := &models.User{
-		ID:          uuid.NewString(),
-		Email:       verified.Email,
-		DisplayName: verified.Name,
-		AvatarURL:   verified.Picture,
+		ID:              userID,
+		Email:           verified.Email,
+		Username:        username,
+		DisplayName:     verified.Name,
+		AvatarURL:       verified.Picture,
+		EmailVerifiedAt: now,
 		IsAdmin: provider.ID == EnvironmentProviderID && provider.Source == "environment" &&
 			s.bootstrapSubjectAllowed(provider.Issuer, verified.Subject, verified.Email),
 		CreatedAt: now,
 	}
-	identity := &models.UserIdentity{
+	linkedIdentity := &models.UserIdentity{
 		ID:          uuid.NewString(),
 		ProviderID:  provider.ID,
 		Subject:     verified.Subject,
@@ -689,41 +750,76 @@ func (s *Service) createJITUser(
 		CreatedAt:   now,
 		LastLoginAt: now,
 	}
-	err = s.db.RunInTx(ctx, &sql.TxOptions{}, func(txCtx context.Context, tx bun.Tx) error {
-		if _, err := tx.NewInsert().Model(user).Exec(txCtx); err != nil {
-			if strings.Contains(strings.ToLower(err.Error()), "unique") {
-				return ErrEmailConflict
-			}
+	return user, linkedIdentity, nil
+}
+
+func (s *Service) insertJITUser(
+	ctx context.Context,
+	tx bun.Tx,
+	provider models.IdentityProvider,
+	user *models.User,
+	linkedIdentity *models.UserIdentity,
+) error {
+	if s.db.Dialect().Name() == dialect.PG {
+		if _, err := tx.ExecContext(ctx, "SELECT pg_advisory_xact_lock(?)", int64(0x4f50454e504f5354)); err != nil {
 			return err
 		}
-		if _, err := tx.NewInsert().Model(identity).Exec(txCtx); err != nil {
-			return err
-		}
-		if provider.OrganizationID != "" {
-			member := &models.OrganizationMember{
-				OrganizationID: provider.OrganizationID,
-				UserID:         user.ID,
-				Role:           models.OrganizationRoleMember,
-				CreatedAt:      now,
-			}
-			if _, err := tx.NewInsert().
-				Model(member).
-				On("CONFLICT (organization_id, user_id) DO NOTHING").
-				Exec(txCtx); err != nil {
-				return err
-			}
-		}
-		return insertAudit(txCtx, tx, AuditInput{
-			OrganizationID: provider.OrganizationID,
-			ProviderID:     provider.ID,
-			SubjectUserID:  user.ID,
-			Action:         "identity.jit_provisioned",
-		}, now)
-	})
-	if err != nil {
-		return nil, err
 	}
-	return user, nil
+	userCount, err := tx.NewSelect().Model((*models.User)(nil)).Count(ctx)
+	if err != nil {
+		return err
+	}
+	if s.config.RegistrationsDisabled && userCount > 0 {
+		return ErrRegistrationsClosed
+	}
+	if provider.Source == "first_party" && userCount == 0 {
+		user.IsAdmin = true
+	}
+	if _, err := tx.NewInsert().Model(user).Exec(ctx); err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "unique") {
+			return ErrEmailConflict
+		}
+		return err
+	}
+	if _, err := tx.NewInsert().Model(linkedIdentity).Exec(ctx); err != nil {
+		return err
+	}
+	if provider.OrganizationID != "" {
+		member := &models.OrganizationMember{
+			OrganizationID: provider.OrganizationID,
+			UserID:         user.ID,
+			Role:           models.OrganizationRoleMember,
+			CreatedAt:      user.CreatedAt,
+		}
+		if _, err := tx.NewInsert().
+			Model(member).
+			On("CONFLICT (organization_id, user_id) DO NOTHING").
+			Exec(ctx); err != nil {
+			return err
+		}
+	}
+	return insertAudit(ctx, tx, AuditInput{
+		OrganizationID: provider.OrganizationID,
+		ProviderID:     provider.ID,
+		SubjectUserID:  user.ID,
+		Action:         "identity.jit_provisioned",
+	}, user.CreatedAt)
+}
+
+func (s *Service) availableUsername(ctx context.Context, base, stableID string) (string, error) {
+	for attempt := 0; attempt < 100; attempt++ {
+		candidate := usernames.Candidate(base, stableID, attempt)
+		exists, err := s.db.NewSelect().Model((*models.User)(nil)).
+			Where("LOWER(username) = ?", candidate).
+			Exists(ctx)
+		if err != nil {
+			return "", err
+		}
+		if !exists {
+			return candidate, nil
+		}
+	}
+	return "", errors.New("unable to allocate username")
 }
 
 func (s *Service) bootstrapSubjectAllowed(issuer, subject, email string) bool {
@@ -757,7 +853,7 @@ func (s *Service) runtime(ctx context.Context, provider models.IdentityProvider)
 	s.mu.Unlock()
 
 	if client == nil {
-		if provider.Source == "environment" {
+		if provider.Source == "environment" || provider.Source == "first_party" {
 			client = &http.Client{Timeout: 10 * time.Second}
 		} else {
 			issuerURL, err := url.Parse(provider.Issuer)
@@ -805,6 +901,13 @@ func (s *Service) runtime(ctx context.Context, provider models.IdentityProvider)
 func (s *Service) providerSecret(provider models.IdentityProvider) (string, error) {
 	if provider.Source == "environment" && provider.ID == EnvironmentProviderID {
 		return s.config.Environment.ClientSecret, nil
+	}
+	if provider.Source == "first_party" {
+		for _, configured := range s.config.FirstParty {
+			if configured.ID == provider.ID {
+				return configured.ClientSecret, nil
+			}
+		}
 	}
 	return s.encryptor.Decrypt(provider.ClientSecretEnc)
 }
@@ -858,6 +961,30 @@ func normalizeScopes(scopes []string) []string {
 		result = append(result, oidc.ScopeProfile, oidc.ScopeEmail)
 	}
 	return result
+}
+
+func normalizeManagedProvider(
+	config EnvironmentProviderConfig,
+	defaultID string,
+	defaultSource string,
+	defaultName string,
+) EnvironmentProviderConfig {
+	config.ID = strings.TrimSpace(config.ID)
+	if config.ID == "" {
+		config.ID = defaultID
+	}
+	config.Source = strings.TrimSpace(config.Source)
+	if config.Source == "" {
+		config.Source = defaultSource
+	}
+	config.Issuer = strings.TrimSpace(config.Issuer)
+	config.ClientID = strings.TrimSpace(config.ClientID)
+	config.Name = strings.TrimSpace(config.Name)
+	if config.Name == "" {
+		config.Name = defaultName
+	}
+	config.Scopes = normalizeScopes(config.Scopes)
+	return config
 }
 
 func SafeReturnPath(raw string) string {

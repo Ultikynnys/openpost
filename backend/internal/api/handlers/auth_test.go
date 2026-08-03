@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -26,7 +27,7 @@ func TestRegisterUserMakesFirstUserAdminEvenWhenRegistrationsDisabled(t *testing
 	db := createHandlerTestDB(t, (*models.User)(nil))
 	handler := NewAuthHandler(db, auth.NewService("test-secret"), nil, nil, nil, true)
 
-	user, err := handler.registerUserWithPolicy(context.Background(), "admin@example.com", "password123", false)
+	user, err := handler.registerUserWithPolicy(context.Background(), "admin@example.com", "admin-user", "password123", false)
 	require.NoError(t, err)
 	require.True(t, user.IsAdmin)
 }
@@ -37,10 +38,26 @@ func TestRegisterUserRejectsAdditionalUsersWhenRegistrationsDisabled(t *testing.
 	db := createHandlerTestDB(t, (*models.User)(nil))
 	handler := NewAuthHandler(db, auth.NewService("test-secret"), nil, nil, nil, true)
 
-	_, err := handler.registerUserWithPolicy(context.Background(), "admin@example.com", "password123", false)
+	_, err := handler.registerUserWithPolicy(context.Background(), "admin@example.com", "admin-user", "password123", false)
 	require.NoError(t, err)
 
-	_, err = handler.registerUserWithPolicy(context.Background(), "user@example.com", "password123", false)
+	_, err = handler.registerUserWithPolicy(context.Background(), "user@example.com", "normal-user", "password123", false)
+	require.ErrorIs(t, err, errRegistrationsDisabled)
+}
+
+func TestRegisterUserReservesClosedRegistrationBootstrapWhileEmailIsUnverified(t *testing.T) {
+	t.Parallel()
+
+	db := createHandlerTestDB(t, (*models.User)(nil))
+	handler := NewAuthHandler(db, auth.NewService("test-secret"), nil, nil, nil, true)
+	handler.emailVerificationRequired = true
+
+	first, err := handler.registerUserWithPolicy(context.Background(), "admin@example.com", "admin-user", "password123", false)
+	require.NoError(t, err)
+	require.False(t, first.IsAdmin)
+	require.True(t, first.EmailVerifiedAt.IsZero())
+
+	_, err = handler.registerUserWithPolicy(context.Background(), "user@example.com", "normal-user", "password123", false)
 	require.ErrorIs(t, err, errRegistrationsDisabled)
 }
 
@@ -50,13 +67,36 @@ func TestRegisterUserOnlyPromotesTheFirstUser(t *testing.T) {
 	db := createHandlerTestDB(t, (*models.User)(nil))
 	handler := NewAuthHandler(db, auth.NewService("test-secret"), nil, nil, nil, false)
 
-	firstUser, err := handler.registerUserWithPolicy(context.Background(), "admin@example.com", "password123", false)
+	firstUser, err := handler.registerUserWithPolicy(context.Background(), "admin@example.com", "admin-user", "password123", false)
 	require.NoError(t, err)
 	require.True(t, firstUser.IsAdmin)
 
-	secondUser, err := handler.registerUserWithPolicy(context.Background(), "user@example.com", "password123", false)
+	secondUser, err := handler.registerUserWithPolicy(context.Background(), "user@example.com", "normal-user", "password123", false)
 	require.NoError(t, err)
 	require.False(t, secondUser.IsAdmin)
+}
+
+func TestRegisterUserRequiresUniqueUsername(t *testing.T) {
+	t.Parallel()
+
+	db := createHandlerTestDB(t, (*models.User)(nil))
+	handler := NewAuthHandler(db, auth.NewService("test-secret"), nil, nil, nil, false)
+
+	first, err := handler.registerUserWithPolicy(context.Background(), "one@example.com", "Creator-One", "password123", false)
+	require.NoError(t, err)
+	require.Equal(t, "creator-one", first.Username)
+
+	_, err = handler.registerUserWithPolicy(context.Background(), "two@example.com", "creator-one", "password123", false)
+	require.ErrorIs(t, err, errUsernameAlreadyRegistered)
+}
+
+func TestRegistrationInsertErrorClassifiesUniqueConstraintRaces(t *testing.T) {
+	t.Parallel()
+
+	require.ErrorIs(t, registrationInsertError(errors.New("UNIQUE constraint failed: users.username")), errUsernameAlreadyRegistered)
+	require.ErrorIs(t, registrationInsertError(errors.New("duplicate key value violates unique constraint users_email_key")), errEmailAlreadyRegistered)
+	original := errors.New("database unavailable")
+	require.ErrorIs(t, registrationInsertError(original), original)
 }
 
 func TestResolveTOTPSetupSecretDecryptsEncryptedPayload(t *testing.T) {

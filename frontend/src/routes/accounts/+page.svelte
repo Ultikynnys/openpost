@@ -271,14 +271,20 @@
 
 	onMount(() => {
 		if (!embedded) {
-			void goto(resolve('/settings?tab=accounts'), { replaceState: true });
+			const params = new URLSearchParams(window.location.search);
+			params.set('tab', 'accounts');
+			void goto(`${resolve('/settings')}?${params.toString()}`, { replaceState: true });
 			return;
 		}
 		const params = new URLSearchParams(window.location.search);
 		const urlError = params.get('error');
 		if (urlError) {
 			error = urlError;
-			replaceState(resolve(window.location.pathname as '/'), {});
+			params.delete('error');
+			const cleanURL = params.size
+				? `${window.location.pathname}?${params.toString()}`
+				: window.location.pathname;
+			replaceState(cleanURL, {});
 		}
 
 		const unsubscribe = auth.subscribe(async (state) => {

@@ -53,7 +53,7 @@ func TestOAuthCallbackErrorRedirectExposesFinalLocationHeader(t *testing.T) {
 	t.Cleanup(func() { _ = result.Body.Close() })
 
 	require.Equal(t, http.StatusTemporaryRedirect, result.StatusCode)
-	require.Equal(t, "https://app.openpost.test/accounts?error=access_denied%3A+Nope", result.Header.Get("Location"))
+	require.Equal(t, "https://app.openpost.test/settings?tab=accounts&error=access_denied%3A+Nope", result.Header.Get("Location"))
 }
 
 func newOAuthCallbackRedirectTestServer(t *testing.T, providerName string, adapter platform.Adapter, frontendURL string) (*echo.Echo, string) {

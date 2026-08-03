@@ -3,18 +3,27 @@ import { expect } from "@playwright/test";
 
 export const password = "password-1234";
 
-function registrationClientIP(seed: string): string {
+function registrationHash(seed: string): number {
   let hash = 0;
   for (const char of seed) {
     hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
   }
+  return hash;
+}
+
+function registrationClientIP(seed: string): string {
+  const hash = registrationHash(seed);
   return `198.18.${(hash >>> 8) & 255}.${hash & 255 || 1}`;
+}
+
+function registrationUsername(seed: string): string {
+  return `e2e-${registrationHash(seed).toString(36)}`;
 }
 
 export async function registerUser(request: APIRequestContext, email: string) {
   const register = await request.post("/api/v1/auth/register", {
     headers: { "X-Forwarded-For": registrationClientIP(email) },
-    data: { email, password },
+    data: { email, username: registrationUsername(email), password },
   });
   if (!register.ok()) {
     throw new Error(

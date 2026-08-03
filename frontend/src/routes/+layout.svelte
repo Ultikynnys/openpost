@@ -48,9 +48,11 @@
 	let authState = $derived($auth);
 	let currentPath = $derived($page.url.pathname);
 	let isPreviewRoute = $derived(currentPath === '/preview');
+	let isPublicProfileRoute = $derived(currentPath.startsWith('/u/'));
 	const publicRoutes = [
 		'/login',
 		'/register',
+		'/verify-email',
 		'/forgot-password',
 		'/reset-password',
 		'/account-deleted',
@@ -68,6 +70,7 @@
 
 	const standaloneRoutes = [
 		'/onboarding',
+		'/verify-email',
 		'/legal-acceptance',
 		'/preview',
 		'/account-deleted',
@@ -81,6 +84,7 @@
 	];
 	let isStandaloneRoute = $derived(
 		standaloneRoutes.includes(currentPath) ||
+			isPublicProfileRoute ||
 			currentPath === '/studio' ||
 			currentPath.startsWith('/studio/') ||
 			currentPath === '/video-studio' ||
@@ -93,7 +97,8 @@
 		currentPath === '/video-studio' || currentPath.startsWith('/video-studio/')
 	);
 	let isPublicRoute = $derived(
-		isPublicStudioRoute ||
+		isPublicProfileRoute ||
+			isPublicStudioRoute ||
 			isPublicVideoStudioRoute ||
 			publicRoutes.some((route) => currentPath.startsWith(route))
 	);
@@ -139,6 +144,7 @@
 		}
 
 		if (!authState.isAuthenticated) return null;
+		if (isPublicProfileRoute) return null;
 
 		if (authState.user?.legal_acceptance_required) {
 			return currentPath === '/legal-acceptance' ? null : '/legal-acceptance';
@@ -296,6 +302,7 @@
 	}
 
 	$effect(() => {
+		if (isPublicProfileRoute) return;
 		if (
 			authState.isLoading ||
 			!authState.isAuthenticated ||
@@ -329,10 +336,10 @@
 <Toaster position="bottom-center" richColors closeButton />
 {#if isPreviewRoute}
 	{@render children()}
-{:else if instance.isLoading || authState.isLoading || pendingRedirect || ssoChallengeInFlight || (authState.isAuthenticated && !authState.user?.legal_acceptance_required && !onboardingChecked)}
+{:else if instance.isLoading || authState.isLoading || pendingRedirect || ssoChallengeInFlight || (!isPublicProfileRoute && authState.isAuthenticated && !authState.user?.legal_acceptance_required && !onboardingChecked)}
 	<AppLoading label={m.common_loading()} />
 {:else if !authState.isAuthenticated}
-	{#if currentPath !== '/studio' && !currentPath.startsWith('/studio/') && !currentPath.startsWith('/video-studio')}
+	{#if !isPublicProfileRoute && currentPath !== '/studio' && !currentPath.startsWith('/studio/') && !currentPath.startsWith('/video-studio')}
 		<div class="fixed top-4 right-4 z-20">
 			<LanguageSwitcher compact />
 		</div>
@@ -362,7 +369,7 @@
 		{@render children()}
 	{/if}
 {:else if isStandaloneRoute}
-	{#if !currentPath.startsWith('/studio/') && !currentPath.startsWith('/video-studio')}
+	{#if !isPublicProfileRoute && !currentPath.startsWith('/studio/') && !currentPath.startsWith('/video-studio')}
 		<div class="fixed top-4 right-4 z-20">
 			<LanguageSwitcher compact />
 		</div>

@@ -221,6 +221,52 @@ func newIdentityTestService(t *testing.T, fake *fakeOIDCIssuer) (*Service, *bun.
 	return service, db
 }
 
+func TestSyncFirstPartyProviderUsesStableGoogleIdentityConfiguration(t *testing.T) {
+	t.Parallel()
+
+	fake := newFakeOIDCIssuer(t)
+	dsn := fmt.Sprintf("file:first-party-identity-%d?mode=memory&cache=shared", time.Now().UnixNano())
+	db, err := database.InitDBWithDriver("sqlite", dsn)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, db.Close()) })
+	require.NoError(t, database.CreateSchema(db))
+	service := NewService(db, servicecrypto.NewTokenEncryptor("identity-test-key"), Config{
+		PublicURL: "https://openpost.example",
+		FirstParty: []EnvironmentProviderConfig{{
+			ID: GoogleProviderID, Issuer: fake.issuer(), ClientID: "google-client", ClientSecret: "google-secret",
+			Name: "Google", Scopes: []string{"openid", "profile", "email"}, JITEnabled: true,
+		}},
+	})
+	service.SetHTTPClient(GoogleProviderID, fake.server.Client())
+	require.NoError(t, service.SyncEnvironmentProvider(context.Background()))
+
+	provider, err := service.GetProvider(context.Background(), GoogleProviderID)
+	require.NoError(t, err)
+	require.Equal(t, "first_party", provider.Source)
+	require.True(t, provider.JITEnabled)
+
+	begin, err := service.Begin(context.Background(), BeginInput{
+		ProviderID: GoogleProviderID, Intent: models.OIDCIntentLogin,
+	})
+	require.NoError(t, err)
+	authorizationURL, err := url.Parse(begin.AuthorizationURL)
+	require.NoError(t, err)
+	require.Equal(t, "select_account", authorizationURL.Query().Get("prompt"))
+
+	disabled := NewService(db, servicecrypto.NewTokenEncryptor("identity-test-key"), Config{
+		PublicURL: "https://openpost.example",
+		FirstParty: []EnvironmentProviderConfig{{
+			ID: GoogleProviderID, Source: "first_party",
+		}},
+	})
+	require.NoError(t, disabled.SyncEnvironmentProvider(context.Background()))
+	_, err = disabled.GetProvider(context.Background(), GoogleProviderID)
+	require.ErrorIs(t, err, ErrProviderDisabled)
+	providers, err := disabled.ListPublicProviders(context.Background())
+	require.NoError(t, err)
+	require.Empty(t, providers)
+}
+
 func beginTestLogin(t *testing.T, service *Service, fake *fakeOIDCIssuer) (*BeginResult, string) {
 	t.Helper()
 	result, err := service.Begin(context.Background(), BeginInput{
@@ -404,6 +450,32 @@ func TestJITBootstrapAllowlistOnlyAppliesToEnvironmentProvider(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.True(t, environmentUser.IsAdmin)
+}
+
+func TestFirstPartyJITDoesNotBypassReservedClosedRegistrationBootstrap(t *testing.T) {
+	t.Parallel()
+
+	fake := newFakeOIDCIssuer(t)
+	service, db := newIdentityTestService(t, fake)
+	service.config.RegistrationsDisabled = true
+	now := time.Now().UTC()
+	provider := models.IdentityProvider{
+		ID: "google", Source: "first_party", Issuer: fake.issuer(), Name: "Google",
+		ClientID: "google-client", Scopes: "openid profile email", EmailClaim: "email",
+		NameClaim: "name", PictureClaim: "picture", JITEnabled: true, IsActive: true,
+		CreatedAt: now, UpdatedAt: now,
+	}
+	_, err := db.NewInsert().Model(&provider).Exec(context.Background())
+	require.NoError(t, err)
+	_, err = db.NewInsert().Model(&models.User{
+		ID: "pending-bootstrap", Email: "pending@example.com", Username: "pending", CreatedAt: now,
+	}).Exec(context.Background())
+	require.NoError(t, err)
+
+	_, err = service.createJITUser(context.Background(), provider, VerifiedIdentity{
+		Subject: "google-subject", Email: "google@example.com", EmailVerified: true,
+	})
+	require.ErrorIs(t, err, ErrRegistrationsClosed)
 }
 
 func TestOIDCExplicitLinkUsesAuthenticatedOpenPostUser(t *testing.T) {

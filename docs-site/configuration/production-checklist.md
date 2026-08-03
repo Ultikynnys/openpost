@@ -13,6 +13,8 @@ changes live in [Developer Docs](/development/).
 - [ ] Use `<VARIABLE>_FILE` variants for Docker/Podman/Kubernetes/NixOS secrets, and leave the direct variable unset when the file value should win.
 - [ ] Set `OPENPOST_APP_URL` to the public HTTPS app origin.
 - [ ] Set `OPENPOST_PUBLIC_URL` to the same public HTTPS app origin unless you have a specific split-origin reason.
+- [ ] Configure `OPENPOST_EMAIL_PROVIDER`, `OPENPOST_EMAIL_FROM`, and that provider's credentials; verify signup and password-reset delivery without logging codes or secrets.
+- [ ] If Google login is enabled, register the exact `/api/v1/auth/oidc/google/callback` URL and store `OPENPOST_AUTH_GOOGLE_CLIENT_SECRET` through a file-backed secret.
 - [ ] Keep `OPENPOST_EXTRA_CORS_ORIGINS` explicit and do not use `*`.
 - [ ] Configure a reverse proxy with HTTPS before connecting OAuth providers.
 - [ ] Align reverse-proxy and CDN request-body limits with the largest video you accept, and disable request buffering for streamed uploads.
@@ -64,6 +66,8 @@ changes live in [Developer Docs](/development/).
 ## Product Smoke
 
 - [ ] Create the first admin account.
+- [ ] Confirm email-and-password signup cannot create a session until the six-digit code is accepted, and confirm resend invalidates the prior code.
+- [ ] Confirm Google can create a new account, then link and unlink Google from an existing password account without email-based auto-linking.
 - [ ] Decide whether to set `OPENPOST_DISABLE_REGISTRATIONS=true`.
 - [ ] Create a workspace.
 - [ ] Invite a second user, accept the link, and confirm both members appear in **Settings -> Organization**.

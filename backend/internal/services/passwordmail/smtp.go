@@ -16,13 +16,22 @@ import (
 const defaultTimeout = 15 * time.Second
 
 type ResetMessage struct {
-	Recipient string
-	ResetURL  string
-	ExpiresAt time.Time
+	Recipient      string
+	ResetURL       string
+	ExpiresAt      time.Time
+	IdempotencyKey string
+}
+
+type VerificationMessage struct {
+	Recipient      string
+	Code           string
+	ExpiresAt      time.Time
+	IdempotencyKey string
 }
 
 type Sender interface {
 	SendPasswordReset(context.Context, ResetMessage) error
+	SendEmailVerification(context.Context, VerificationMessage) error
 }
 
 type SMTPConfig struct {
@@ -101,7 +110,21 @@ func (s *SMTPSender) SendPasswordReset(ctx context.Context, message ResetMessage
 	if strings.TrimSpace(message.ResetURL) == "" {
 		return errors.New("password reset URL is required")
 	}
+	return s.send(ctx, recipient, buildResetEmail(s.from, recipient, message))
+}
 
+func (s *SMTPSender) SendEmailVerification(ctx context.Context, message VerificationMessage) error {
+	recipient, err := mail.ParseAddress(strings.TrimSpace(message.Recipient))
+	if err != nil {
+		return fmt.Errorf("invalid email verification recipient: %w", err)
+	}
+	if !verificationCodePattern.MatchString(strings.TrimSpace(message.Code)) {
+		return errors.New("email verification code must contain six digits")
+	}
+	return s.send(ctx, recipient, buildVerificationEmail(s.from, recipient, message))
+}
+
+func (s *SMTPSender) send(ctx context.Context, recipient *mail.Address, raw []byte) error {
 	client, conn, err := s.connect(ctx)
 	if err != nil {
 		return err
@@ -128,7 +151,7 @@ func (s *SMTPSender) SendPasswordReset(ctx context.Context, message ResetMessage
 	if err != nil {
 		return fmt.Errorf("start SMTP message: %w", err)
 	}
-	if _, err := w.Write(buildResetEmail(s.from, recipient, message)); err != nil {
+	if _, err := w.Write(raw); err != nil {
 		_ = w.Close()
 		return fmt.Errorf("write SMTP message: %w", err)
 	}
@@ -196,6 +219,21 @@ func buildResetEmail(from, recipient *mail.Address, message ResetMessage) []byte
 
 	return []byte(fmt.Sprintf(
 		"Date: %s\r\nFrom: %s\r\nTo: %s\r\nSubject: Reset your OpenPost password\r\n"+
+			"MIME-Version: 1.0\r\nContent-Type: text/plain; charset=UTF-8\r\n"+
+			"Content-Transfer-Encoding: 8bit\r\n\r\n%s",
+		time.Now().UTC().Format(time.RFC1123Z), from.String(), recipient.String(), body,
+	))
+}
+
+func buildVerificationEmail(from, recipient *mail.Address, message VerificationMessage) []byte {
+	expires := message.ExpiresAt.UTC().Format(time.RFC1123)
+	body := "Use this code to verify your OpenPost email address:\r\n\r\n" +
+		strings.TrimSpace(message.Code) + "\r\n\r\n" +
+		"This code expires at " + expires + ".\r\n" +
+		"If you did not create an OpenPost account, you can ignore this email.\r\n"
+
+	return []byte(fmt.Sprintf(
+		"Date: %s\r\nFrom: %s\r\nTo: %s\r\nSubject: Verify your OpenPost email\r\n"+
 			"MIME-Version: 1.0\r\nContent-Type: text/plain; charset=UTF-8\r\n"+
 			"Content-Transfer-Encoding: 8bit\r\n\r\n%s",
 		time.Now().UTC().Format(time.RFC1123Z), from.String(), recipient.String(), body,

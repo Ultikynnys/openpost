@@ -4,8 +4,16 @@ import { authenticatePage, createWorkspace, registerUser } from "./helpers";
 const oidcProvider = {
   id: "acme-sso",
   name: "Acme SSO",
+  kind: "sso",
   organization: "Acme",
   start_url: "/api/v1/auth/oidc/acme-sso/start",
+};
+
+const googleProvider = {
+  id: "google",
+  name: "Google",
+  kind: "oauth",
+  start_url: "/api/v1/auth/oidc/google/start",
 };
 
 function collectConsoleErrors(page: Page) {
@@ -61,6 +69,27 @@ test("OIDC login preserves a safe relative redirect at phone width", async ({
   );
   expect(startURL.searchParams.has("native")).toBe(false);
   expect(consoleErrors).toEqual([]);
+});
+
+test("Google is offered as first-party login and registration", async ({
+  page,
+}) => {
+  await page.route("**/api/v1/auth/oidc/providers", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: [googleProvider],
+    });
+  });
+
+  await page.goto("/login");
+  await expect(
+    page.getByRole("button", { name: "Continue with Google" }),
+  ).toBeVisible();
+
+  await page.goto("/register");
+  await expect(
+    page.getByRole("button", { name: "Continue with Google" }),
+  ).toBeVisible();
 });
 
 test("verified-domain discovery selects the organization provider", async ({
@@ -158,7 +187,7 @@ test("required SSO sends an unlinked local account to explicit linking", async (
   await page.route("**/api/v1/auth/oidc/link-providers", async (route) => {
     await route.fulfill({
       contentType: "application/json",
-      json: [oidcProvider],
+      json: [googleProvider, oidcProvider],
     });
   });
 
@@ -166,10 +195,14 @@ test("required SSO sends an unlinked local account to explicit linking", async (
 
   await expect(page).toHaveURL(/\/settings\?tab=security$/);
   await expect(page.getByRole("heading", { name: "Security" })).toBeVisible();
+  const googleLinkButton = page.getByRole("button", { name: "Link Google" });
   const linkButton = page.getByRole("button", { name: "Link Acme SSO" });
+  await expect(googleLinkButton).toBeVisible();
   await expect(linkButton).toBeVisible();
+  await expect(googleLinkButton).toBeDisabled();
   await expect(linkButton).toBeDisabled();
   await page.locator("#identity-link-password").fill("password-1234");
+  await expect(googleLinkButton).toBeEnabled();
   await expect(linkButton).toBeEnabled();
   expect(consoleErrors).toEqual([]);
 });

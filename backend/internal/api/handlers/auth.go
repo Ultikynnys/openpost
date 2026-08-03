@@ -18,11 +18,13 @@ import (
 	"github.com/openpost/backend/internal/models"
 	"github.com/openpost/backend/internal/services/auth"
 	"github.com/openpost/backend/internal/services/crypto"
+	"github.com/openpost/backend/internal/services/emailverification"
 	"github.com/openpost/backend/internal/services/identity"
 	"github.com/openpost/backend/internal/services/mfa"
 	"github.com/openpost/backend/internal/services/passwordmail"
 	"github.com/openpost/backend/internal/services/ratelimit"
 	"github.com/openpost/backend/internal/services/sessions"
+	"github.com/openpost/backend/internal/usernames"
 	"github.com/uptrace/bun"
 	"github.com/uptrace/bun/dialect"
 )
@@ -44,18 +46,21 @@ const (
 )
 
 type AuthHandler struct {
-	db                    *bun.DB
-	auth                  *auth.Service
-	authenticator         middleware.Authenticator
-	sessions              *sessions.Service
-	encryptor             *crypto.TokenEncryptor
-	mfa                   *mfa.Service
-	registrationsDisabled bool
-	limiter               *ratelimit.Limiter
-	passwordResetSender   passwordmail.Sender
-	publicURL             string
-	accountPolicy         AccountPolicy
-	identity              *identity.Service
+	db                        *bun.DB
+	auth                      *auth.Service
+	authenticator             middleware.Authenticator
+	sessions                  *sessions.Service
+	encryptor                 *crypto.TokenEncryptor
+	mfa                       *mfa.Service
+	registrationsDisabled     bool
+	limiter                   *ratelimit.Limiter
+	passwordResetSender       passwordmail.Sender
+	emailVerification         *emailverification.Service
+	emailSender               passwordmail.Sender
+	emailVerificationRequired bool
+	publicURL                 string
+	accountPolicy             AccountPolicy
+	identity                  *identity.Service
 }
 
 func NewAuthHandler(
@@ -89,6 +94,16 @@ func (h *AuthHandler) SetPasswordResetSender(sender passwordmail.Sender, publicU
 	h.publicURL = strings.TrimRight(strings.TrimSpace(publicURL), "/")
 }
 
+func (h *AuthHandler) SetEmailVerification(
+	service *emailverification.Service,
+	sender passwordmail.Sender,
+	required bool,
+) {
+	h.emailVerification = service
+	h.emailSender = sender
+	h.emailVerificationRequired = required
+}
+
 func (h *AuthHandler) SetAccountPolicy(policy AccountPolicy) {
 	h.accountPolicy = policy.normalized()
 }
@@ -98,13 +113,15 @@ func (h *AuthHandler) SetIdentityService(service *identity.Service) {
 }
 
 var (
-	errEmailAlreadyRegistered = errors.New("email already registered")
-	errRegistrationsDisabled  = errors.New("registrations are disabled for this instance")
+	errEmailAlreadyRegistered    = errors.New("email already registered")
+	errUsernameAlreadyRegistered = errors.New("username already registered")
+	errRegistrationsDisabled     = errors.New("registrations are disabled for this instance")
 )
 
 type RegisterInput struct {
 	Body struct {
 		Email         string `json:"email" format:"email" doc:"User email address"`
+		Username      string `json:"username" minLength:"3" maxLength:"30" pattern:"^[A-Za-z0-9](?:[A-Za-z0-9_-]*[A-Za-z0-9])?$" doc:"Unique public username"`
 		Password      string `json:"password" minLength:"12" maxLength:"1024" doc:"User password (min 12 characters)"`
 		AcceptedLegal *bool  `json:"accepted_legal,omitempty" doc:"Whether the user accepted the current terms and privacy policy"`
 	}
@@ -198,34 +215,45 @@ type RemovePasskeyInput struct {
 type UserProfile struct {
 	ID                      string    `json:"id" doc:"User ID"`
 	Email                   string    `json:"email" doc:"User email address"`
+	Username                string    `json:"username" doc:"Unique public username"`
 	DisplayName             string    `json:"display_name" doc:"User display name"`
 	AvatarURL               string    `json:"avatar_url" doc:"Profile avatar URL"`
+	PublicProfileEnabled    bool      `json:"public_profile_enabled" doc:"Whether the public activity profile is visible"`
 	IsAdmin                 bool      `json:"is_admin" doc:"Whether this user can manage instance-level settings"`
 	TermsVersion            string    `json:"terms_version,omitempty" doc:"Terms version accepted by the user"`
 	PrivacyVersion          string    `json:"privacy_version,omitempty" doc:"Privacy version acknowledged by the user"`
 	LegalAcceptedAt         time.Time `json:"legal_accepted_at,omitempty" doc:"When the current account policy was accepted"`
 	LegalAcceptanceRequired bool      `json:"legal_acceptance_required" doc:"Whether the current hosted policy still needs acceptance"`
 	CreatedAt               time.Time `json:"created_at" doc:"Account creation time"`
+	EmailVerified           bool      `json:"email_verified" doc:"Whether the account email address is verified"`
 	HasPassword             bool      `json:"has_password" doc:"Whether this account has a local password credential"`
 	IsManaged               bool      `json:"is_managed" doc:"Whether this account was provisioned by an organization identity provider"`
 	ManagedOrganizationName string    `json:"managed_organization_name,omitempty" doc:"Organization managing this account"`
 }
 
+type UpdateProfileInputBody struct {
+	Username             *string `json:"username,omitempty" minLength:"3" maxLength:"30" doc:"Unique public username"`
+	DisplayName          *string `json:"display_name,omitempty" maxLength:"120" doc:"User display name"`
+	AvatarURL            *string `json:"avatar_url,omitempty" maxLength:"1000" doc:"Profile avatar URL"`
+	PublicProfileEnabled *bool   `json:"public_profile_enabled,omitempty" doc:"Whether the public activity profile is visible"`
+}
+
 type UpdateProfileInput struct {
-	Body struct {
-		DisplayName *string `json:"display_name,omitempty" maxLength:"120" doc:"User display name"`
-		AvatarURL   *string `json:"avatar_url,omitempty" maxLength:"1000" doc:"Profile avatar URL"`
-	}
+	Body UpdateProfileInputBody
 }
 
 type AuthOutput struct {
 	SetCookie string `header:"Set-Cookie"`
 	Body      struct {
-		Token       string       `json:"token,omitempty" doc:"JWT authentication token"`
-		User        *UserProfile `json:"user,omitempty"`
-		RequiresMFA bool         `json:"requires_mfa" doc:"Whether the login requires a second factor"`
-		MFAToken    string       `json:"mfa_token,omitempty" doc:"Pending MFA token for follow-up verification"`
-		MFAMethods  []string     `json:"mfa_methods,omitempty" doc:"Enabled MFA methods for this account"`
+		Token                     string       `json:"token,omitempty" doc:"JWT authentication token"`
+		User                      *UserProfile `json:"user,omitempty"`
+		RequiresMFA               bool         `json:"requires_mfa" doc:"Whether the login requires a second factor"`
+		MFAToken                  string       `json:"mfa_token,omitempty" doc:"Pending MFA token for follow-up verification"`
+		MFAMethods                []string     `json:"mfa_methods,omitempty" doc:"Enabled MFA methods for this account"`
+		RequiresEmailVerification bool         `json:"requires_email_verification" doc:"Whether a six-digit email code must be confirmed before sign-in"`
+		EmailVerificationID       string       `json:"email_verification_id,omitempty" doc:"Opaque email verification challenge ID"`
+		EmailVerificationEmail    string       `json:"email_verification_email,omitempty" doc:"Email address receiving the verification code"`
+		EmailDeliveryStatus       string       `json:"email_delivery_status,omitempty" enum:"sent,failed" doc:"Whether the latest verification email delivery request succeeded"`
 	}
 }
 
@@ -328,49 +356,89 @@ func (h *AuthHandler) Register(api huma.API) {
 		Summary:     "Register a new user",
 		Tags:        []string{tagAuth},
 		Middlewares: huma.Middlewares{middleware.RequestMetadataMiddleware()},
-		Errors:      []int{400, 403, 409},
-	}, func(ctx context.Context, input *RegisterInput) (*AuthOutput, error) {
-		if err := validateNewPassword(input.Body.Password); err != nil {
-			return nil, huma.Error400BadRequest(err.Error())
-		}
-		acceptedLegal := input.Body.AcceptedLegal != nil && *input.Body.AcceptedLegal
-		if h.accountPolicy.Required && !acceptedLegal {
-			return nil, huma.Error400BadRequest("accept the Terms of Service and Privacy Policy to continue")
-		}
-		if !h.allowAuthAttempt(clientIP(ctx), "register:ip", 10, time.Hour) {
-			return nil, huma.Error429TooManyRequests("too many registration attempts")
-		}
-		if !h.allowAuthAttempt(strings.TrimSpace(strings.ToLower(input.Body.Email)), "register:email", 5, time.Hour) {
-			return nil, huma.Error429TooManyRequests("too many registration attempts")
-		}
-
-		user, err := h.registerUserWithPolicy(ctx, input.Body.Email, input.Body.Password, acceptedLegal)
-		if errors.Is(err, errEmailAlreadyRegistered) {
-			return nil, huma.Error409Conflict("email already registered")
-		}
-		if errors.Is(err, errRegistrationsDisabled) {
-			return nil, huma.Error403Forbidden("registrations are disabled for this instance")
-		}
-		if err != nil {
-			return nil, huma.Error500InternalServerError("failed to create user")
-		}
-
-		return h.issueAuthResponse(ctx, user)
-	})
+		Errors:      []int{400, 403, 409, 429, 503},
+	}, h.handleRegister)
 }
 
-func (h *AuthHandler) registerUserWithPolicy(ctx context.Context, email, password string, acceptedLegal bool) (*models.User, error) {
+func (h *AuthHandler) handleRegister(ctx context.Context, input *RegisterInput) (*AuthOutput, error) {
+	acceptedLegal, err := h.validateRegistrationRequest(ctx, input)
+	if err != nil {
+		return nil, err
+	}
+	user, err := h.registerUserWithPolicy(
+		ctx,
+		input.Body.Email,
+		input.Body.Username,
+		input.Body.Password,
+		acceptedLegal,
+	)
+	if err != nil {
+		return nil, registrationHTTPError(err)
+	}
+	if h.emailVerificationRequired {
+		return h.beginEmailVerification(ctx, user, true)
+	}
+	return h.issueAuthResponse(ctx, user)
+}
+
+func (h *AuthHandler) validateRegistrationRequest(ctx context.Context, input *RegisterInput) (bool, error) {
+	if h.emailVerificationRequired && (h.emailVerification == nil || h.emailSender == nil) {
+		return false, huma.Error503ServiceUnavailable("email verification is not configured for this instance")
+	}
+	if err := validateNewPassword(input.Body.Password); err != nil {
+		return false, huma.Error400BadRequest(err.Error())
+	}
+	if err := usernames.Validate(usernames.Normalize(input.Body.Username)); err != nil {
+		return false, huma.Error400BadRequest(err.Error())
+	}
+	acceptedLegal := input.Body.AcceptedLegal != nil && *input.Body.AcceptedLegal
+	if h.accountPolicy.Required && !acceptedLegal {
+		return false, huma.Error400BadRequest("accept the Terms of Service and Privacy Policy to continue")
+	}
+	if !h.allowAuthAttempt(clientIP(ctx), "register:ip", 10, time.Hour) {
+		return false, huma.Error429TooManyRequests("too many registration attempts")
+	}
+	normalizedEmail := strings.TrimSpace(strings.ToLower(input.Body.Email))
+	if !h.allowAuthAttempt(normalizedEmail, "register:email", 5, time.Hour) {
+		return false, huma.Error429TooManyRequests("too many registration attempts")
+	}
+	return acceptedLegal, nil
+}
+
+func registrationHTTPError(err error) error {
+	switch {
+	case errors.Is(err, errEmailAlreadyRegistered):
+		return huma.Error409Conflict("email already registered")
+	case errors.Is(err, errUsernameAlreadyRegistered):
+		return huma.Error409Conflict("username already registered")
+	case errors.Is(err, errRegistrationsDisabled):
+		return huma.Error403Forbidden("registrations are disabled for this instance")
+	default:
+		return huma.Error500InternalServerError("failed to create user")
+	}
+}
+
+func (h *AuthHandler) registerUserWithPolicy(ctx context.Context, email, username, password string, acceptedLegal bool) (*models.User, error) {
 	normalizedEmail := strings.TrimSpace(strings.ToLower(email))
+	normalizedUsername := usernames.Normalize(username)
+	if err := usernames.Validate(normalizedUsername); err != nil {
+		return nil, err
+	}
 	passwordHash, err := h.auth.HashPassword(password)
 	if err != nil {
 		return nil, err
 	}
 
+	createdAt := time.Now().UTC()
 	user := &models.User{
 		ID:           uuid.New().String(),
 		Email:        normalizedEmail,
+		Username:     normalizedUsername,
 		PasswordHash: passwordHash,
-		CreatedAt:    time.Now().UTC(),
+		CreatedAt:    createdAt,
+	}
+	if !h.emailVerificationRequired {
+		user.EmailVerifiedAt = createdAt
 	}
 	if h.accountPolicy.Required && acceptedLegal {
 		user.TermsVersion = h.accountPolicy.TermsVersion
@@ -379,40 +447,58 @@ func (h *AuthHandler) registerUserWithPolicy(ctx context.Context, email, passwor
 	}
 
 	err = h.db.RunInTx(ctx, &sql.TxOptions{}, func(txCtx context.Context, tx bun.Tx) error {
-		// PostgreSQL does not lock an empty users table for COUNT. A transaction-
-		// scoped advisory lock serializes only the one-time administrator bootstrap.
-		if h.db.Dialect().Name() == dialect.PG {
-			if _, err := tx.ExecContext(txCtx, "SELECT pg_advisory_xact_lock(?)", int64(0x4f50454e504f5354)); err != nil {
-				return err
-			}
-		}
-		userCount, err := tx.NewSelect().Model((*models.User)(nil)).Count(txCtx)
-		if err != nil {
-			return err
-		}
-		if h.registrationsDisabled && userCount > 0 {
-			return errRegistrationsDisabled
-		}
-
-		exists, err := tx.NewSelect().Model((*models.User)(nil)).
-			Where("email = ?", normalizedEmail).
-			Exists(txCtx)
-		if err != nil {
-			return err
-		}
-		if exists {
-			return errEmailAlreadyRegistered
-		}
-
-		user.IsAdmin = userCount == 0
-		_, err = tx.NewInsert().Model(user).Exec(txCtx)
-		return err
+		return h.insertRegistrationUser(txCtx, tx, user)
 	})
 	if err != nil {
 		return nil, err
 	}
 
 	return user, nil
+}
+
+func (h *AuthHandler) insertRegistrationUser(ctx context.Context, tx bun.Tx, user *models.User) error {
+	// PostgreSQL does not lock an empty users table for COUNT. A transaction-
+	// scoped advisory lock serializes only the one-time administrator bootstrap.
+	if h.db.Dialect().Name() == dialect.PG {
+		if _, err := tx.ExecContext(ctx, "SELECT pg_advisory_xact_lock(?)", int64(0x4f50454e504f5354)); err != nil {
+			return err
+		}
+	}
+	userCount, err := tx.NewSelect().Model((*models.User)(nil)).Count(ctx)
+	if err != nil {
+		return err
+	}
+	if h.registrationsDisabled && userCount > 0 {
+		return errRegistrationsDisabled
+	}
+	if err := ensureRegistrationIdentityAvailable(ctx, tx, user.Email, user.Username); err != nil {
+		return err
+	}
+	user.IsAdmin = userCount == 0 && !h.emailVerificationRequired
+	_, err = tx.NewInsert().Model(user).Exec(ctx)
+	return registrationInsertError(err)
+}
+
+func ensureRegistrationIdentityAvailable(ctx context.Context, tx bun.Tx, email, username string) error {
+	emailExists, err := tx.NewSelect().Model((*models.User)(nil)).
+		Where("email = ?", email).
+		Exists(ctx)
+	if err != nil {
+		return err
+	}
+	if emailExists {
+		return errEmailAlreadyRegistered
+	}
+	usernameExists, err := tx.NewSelect().Model((*models.User)(nil)).
+		Where("LOWER(username) = ?", username).
+		Exists(ctx)
+	if err != nil {
+		return err
+	}
+	if usernameExists {
+		return errUsernameAlreadyRegistered
+	}
+	return nil
 }
 
 func (h *AuthHandler) Login(api huma.API) {
@@ -452,6 +538,9 @@ func (h *AuthHandler) Login(api huma.API) {
 
 		if !h.auth.CheckPassword(input.Body.Password, user.PasswordHash) {
 			return nil, huma.Error401Unauthorized("invalid credentials")
+		}
+		if h.emailVerificationRequired && user.EmailVerifiedAt.IsZero() {
+			return h.beginEmailVerification(ctx, user, false)
 		}
 
 		methods, err := h.enabledMFAMethods(ctx, user)
@@ -861,29 +950,8 @@ func (h *AuthHandler) UpdateProfile(api huma.API) {
 		Errors:      []int{400, 401},
 	}, func(ctx context.Context, input *UpdateProfileInput) (*MeOutput, error) {
 		userID := middleware.GetUserID(ctx)
-
-		update := h.db.NewUpdate().Model((*models.User)(nil)).Where("id = ?", userID)
-		hasChange := false
-		if input.Body.DisplayName != nil {
-			displayName := strings.TrimSpace(*input.Body.DisplayName)
-			if len(displayName) > 120 {
-				return nil, huma.Error400BadRequest("display name must be at most 120 characters")
-			}
-			update = update.Set("display_name = ?", displayName)
-			hasChange = true
-		}
-		if input.Body.AvatarURL != nil {
-			avatarURL := strings.TrimSpace(*input.Body.AvatarURL)
-			if len(avatarURL) > 1000 {
-				return nil, huma.Error400BadRequest("avatar url must be at most 1000 characters")
-			}
-			update = update.Set("avatar_url = ?", avatarURL)
-			hasChange = true
-		}
-		if hasChange {
-			if _, err := update.Exec(ctx); err != nil {
-				return nil, huma.Error500InternalServerError("failed to update profile")
-			}
+		if err := h.updateUserProfile(ctx, userID, input.Body); err != nil {
+			return nil, err
 		}
 
 		user, err := h.getUserByID(ctx, userID)
@@ -892,6 +960,137 @@ func (h *AuthHandler) UpdateProfile(api huma.API) {
 		}
 		return &MeOutput{Body: h.profileForUser(ctx, user)}, nil
 	})
+}
+
+func (h *AuthHandler) updateUserProfile(ctx context.Context, userID string, body UpdateProfileInputBody) error {
+	update := h.db.NewUpdate().Model((*models.User)(nil)).Where("id = ?", userID)
+	hasChange := false
+	for _, apply := range []func() (bool, error){
+		func() (bool, error) { return h.applyUsernameUpdate(ctx, update, userID, body.Username) },
+		func() (bool, error) { return applyDisplayNameUpdate(update, body.DisplayName) },
+		func() (bool, error) { return applyAvatarURLUpdate(update, body.AvatarURL) },
+		func() (bool, error) {
+			return h.applyPublicProfileUpdate(ctx, update, userID, body.Username, body.PublicProfileEnabled)
+		},
+	} {
+		changed, err := apply()
+		if err != nil {
+			return err
+		}
+		hasChange = hasChange || changed
+	}
+	if !hasChange {
+		return nil
+	}
+	if _, err := update.Exec(ctx); err != nil {
+		if isUsernameUniqueConflict(err) {
+			return huma.Error409Conflict("username already registered")
+		}
+		return huma.Error500InternalServerError("failed to update profile")
+	}
+	return nil
+}
+
+func registrationInsertError(err error) error {
+	if err == nil {
+		return nil
+	}
+	lower := strings.ToLower(err.Error())
+	if (strings.Contains(lower, "unique") || strings.Contains(lower, "duplicate")) && strings.Contains(lower, "username") {
+		return errUsernameAlreadyRegistered
+	}
+	if (strings.Contains(lower, "unique") || strings.Contains(lower, "duplicate")) && strings.Contains(lower, "email") {
+		return errEmailAlreadyRegistered
+	}
+	return err
+}
+
+func isUsernameUniqueConflict(err error) bool {
+	return errors.Is(registrationInsertError(err), errUsernameAlreadyRegistered)
+}
+
+func (h *AuthHandler) applyUsernameUpdate(
+	ctx context.Context,
+	update *bun.UpdateQuery,
+	userID string,
+	requested *string,
+) (bool, error) {
+	if requested == nil {
+		return false, nil
+	}
+	username := usernames.Normalize(*requested)
+	if err := usernames.Validate(username); err != nil {
+		return false, huma.Error400BadRequest(err.Error())
+	}
+	exists, err := h.db.NewSelect().Model((*models.User)(nil)).
+		Where("LOWER(username) = ? AND id <> ?", username, userID).
+		Exists(ctx)
+	if err != nil {
+		return false, huma.Error500InternalServerError("failed to validate username")
+	}
+	if exists {
+		return false, huma.Error409Conflict("username already registered")
+	}
+	update.Set("username = ?", username)
+	return true, nil
+}
+
+func applyDisplayNameUpdate(update *bun.UpdateQuery, requested *string) (bool, error) {
+	if requested == nil {
+		return false, nil
+	}
+	displayName := strings.TrimSpace(*requested)
+	if len(displayName) > 120 {
+		return false, huma.Error400BadRequest("display name must be at most 120 characters")
+	}
+	update.Set("display_name = ?", displayName)
+	return true, nil
+}
+
+func applyAvatarURLUpdate(update *bun.UpdateQuery, requested *string) (bool, error) {
+	if requested == nil {
+		return false, nil
+	}
+	avatarURL := strings.TrimSpace(*requested)
+	if len(avatarURL) > 1000 {
+		return false, huma.Error400BadRequest("avatar url must be at most 1000 characters")
+	}
+	update.Set("avatar_url = ?", avatarURL)
+	return true, nil
+}
+
+func (h *AuthHandler) applyPublicProfileUpdate(
+	ctx context.Context,
+	update *bun.UpdateQuery,
+	userID string,
+	requestedUsername *string,
+	enabled *bool,
+) (bool, error) {
+	if enabled == nil {
+		return false, nil
+	}
+	if *enabled {
+		username, err := h.profileUsername(ctx, userID, requestedUsername)
+		if err != nil {
+			return false, err
+		}
+		if username == "" {
+			return false, huma.Error400BadRequest("set a username before making the profile public")
+		}
+	}
+	update.Set("public_profile_enabled = ?", *enabled)
+	return true, nil
+}
+
+func (h *AuthHandler) profileUsername(ctx context.Context, userID string, requested *string) (string, error) {
+	if requested != nil {
+		return usernames.Normalize(*requested), nil
+	}
+	username := ""
+	if err := h.db.NewSelect().Model((*models.User)(nil)).Column("username").Where("id = ?", userID).Scan(ctx, &username); err != nil {
+		return "", huma.Error500InternalServerError("failed to load username")
+	}
+	return username, nil
 }
 
 func (h *AuthHandler) SecurityStatus(api huma.API) {
@@ -1489,15 +1688,18 @@ func (h *AuthHandler) securityStatusResponse(ctx context.Context, userID string)
 
 func (h *AuthHandler) toUserProfile(user *models.User) *UserProfile {
 	return &UserProfile{
-		ID:              user.ID,
-		Email:           user.Email,
-		DisplayName:     user.DisplayName,
-		AvatarURL:       user.AvatarURL,
-		IsAdmin:         user.IsAdmin,
-		HasPassword:     strings.TrimSpace(user.PasswordHash) != "",
-		TermsVersion:    user.TermsVersion,
-		PrivacyVersion:  user.PrivacyVersion,
-		LegalAcceptedAt: user.LegalAcceptedAt,
+		ID:                   user.ID,
+		Email:                user.Email,
+		Username:             user.Username,
+		DisplayName:          user.DisplayName,
+		AvatarURL:            user.AvatarURL,
+		PublicProfileEnabled: user.PublicProfile,
+		IsAdmin:              user.IsAdmin,
+		HasPassword:          strings.TrimSpace(user.PasswordHash) != "",
+		TermsVersion:         user.TermsVersion,
+		PrivacyVersion:       user.PrivacyVersion,
+		LegalAcceptedAt:      user.LegalAcceptedAt,
+		EmailVerified:        !user.EmailVerifiedAt.IsZero(),
 		LegalAcceptanceRequired: h.accountPolicy.Required &&
 			(user.LegalAcceptedAt.IsZero() ||
 				user.TermsVersion != h.accountPolicy.TermsVersion ||

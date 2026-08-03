@@ -16,6 +16,7 @@
 	import { onMount } from 'svelte';
 	import { client, type AuthConfiguration } from '$lib/api/client';
 	import type { OIDCProvider } from '$lib/api/client';
+	import AuthProviderButtons from '$lib/components/auth-provider-buttons.svelte';
 	import { getApiBase } from '$lib/stores/instance.svelte';
 	import { IS_CAPACITOR } from '$lib/env';
 	import BuildingIcon from 'lucide-svelte/icons/building-2';
@@ -33,6 +34,7 @@
 	let ssoLoading = $state('');
 
 	const needsMfa = $derived(mfaToken.length > 0);
+	const visibleProviders = $derived(oidcProviders);
 
 	onMount(async () => {
 		const [configurationResult, providerResult] = await Promise.all([
@@ -63,6 +65,17 @@
 
 		if (result.success) {
 			goto(resolve(loginTarget() as '/'));
+		} else if (result.requiresEmailVerification && result.emailVerificationID) {
+			goto(
+				resolve(
+					emailVerificationPath(
+						result.emailVerificationID,
+						result.emailVerificationEmail ?? email,
+						result.emailDeliveryStatus
+					) as '/'
+				)
+			);
+			return;
 		} else if (result.requiresMfa && result.mfaToken) {
 			mfaToken = result.mfaToken;
 			mfaMethods = result.mfaMethods ?? [];
@@ -72,6 +85,20 @@
 		}
 
 		isLoading = false;
+	}
+
+	function emailVerificationPath(
+		challengeID: string,
+		verificationEmail: string,
+		deliveryStatus: 'sent' | 'failed' | undefined
+	) {
+		const query = new URLSearchParams({
+			challenge: challengeID,
+			email: verificationEmail,
+			redirect: loginTarget(),
+			delivery: deliveryStatus ?? 'sent'
+		});
+		return `/verify-email?${query}`;
 	}
 
 	async function handleVerifyTOTP(e: Event) {
@@ -212,25 +239,13 @@
 			</Button>
 		</div>
 	{:else}
-		{#if oidcProviders.length}
-			<div class="space-y-3">
-				{#each oidcProviders as provider (provider.id)}
-					<Button
-						type="button"
-						variant="outline"
-						class="w-full gap-2"
-						disabled={Boolean(ssoLoading)}
-						onclick={() => void startOIDC(provider)}
-					>
-						{#if ssoLoading === provider.id}
-							<LoaderIcon class="size-4 animate-spin" />
-						{:else}
-							<BuildingIcon class="size-4" />
-						{/if}
-						{m.auth_sso_continue_with({ provider: provider.name })}
-					</Button>
-				{/each}
-			</div>
+		{#if visibleProviders.length}
+			<AuthProviderButtons
+				providers={visibleProviders}
+				returnPath={loginTarget()}
+				disabled={Boolean(ssoLoading)}
+				onerror={(message) => (error = message)}
+			/>
 
 			<div class="my-5 flex items-center gap-3" aria-hidden="true">
 				<div class="h-px flex-1 bg-border"></div>

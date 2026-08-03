@@ -45,14 +45,15 @@ func (p AccountPolicy) normalized() AccountPolicy {
 
 type AuthConfigurationOutput struct {
 	Body struct {
-		RegistrationEnabled     bool   `json:"registration_enabled"`
-		PasswordResetEnabled    bool   `json:"password_reset_enabled"`
-		LegalAcceptanceRequired bool   `json:"legal_acceptance_required"`
-		TermsURL                string `json:"terms_url,omitempty"`
-		PrivacyURL              string `json:"privacy_url,omitempty"`
-		TermsVersion            string `json:"terms_version,omitempty"`
-		PrivacyVersion          string `json:"privacy_version,omitempty"`
-		SupportEmail            string `json:"support_email,omitempty"`
+		RegistrationEnabled       bool   `json:"registration_enabled"`
+		PasswordResetEnabled      bool   `json:"password_reset_enabled"`
+		EmailVerificationRequired bool   `json:"email_verification_required"`
+		LegalAcceptanceRequired   bool   `json:"legal_acceptance_required"`
+		TermsURL                  string `json:"terms_url,omitempty"`
+		PrivacyURL                string `json:"privacy_url,omitempty"`
+		TermsVersion              string `json:"terms_version,omitempty"`
+		PrivacyVersion            string `json:"privacy_version,omitempty"`
+		SupportEmail              string `json:"support_email,omitempty"`
 	}
 }
 
@@ -114,6 +115,7 @@ func (h *AuthHandler) Configuration(api huma.API) {
 		out := &AuthConfigurationOutput{}
 		out.Body.RegistrationEnabled = !h.registrationsDisabled
 		out.Body.PasswordResetEnabled = h.passwordResetSender != nil
+		out.Body.EmailVerificationRequired = h.emailVerificationRequired
 		out.Body.LegalAcceptanceRequired = h.accountPolicy.Required
 		out.Body.TermsURL = h.accountPolicy.TermsURL
 		out.Body.PrivacyURL = h.accountPolicy.PrivacyURL
@@ -221,9 +223,10 @@ func (h *AuthHandler) RequestPasswordReset(api huma.API) {
 
 		resetURL := h.publicURL + "/reset-password#token=" + url.QueryEscape(rawToken)
 		if err := h.passwordResetSender.SendPasswordReset(ctx, passwordmail.ResetMessage{
-			Recipient: user.Email,
-			ResetURL:  resetURL,
-			ExpiresAt: reset.ExpiresAt,
+			Recipient:      user.Email,
+			ResetURL:       resetURL,
+			ExpiresAt:      reset.ExpiresAt,
+			IdempotencyKey: "password-reset-" + reset.ID,
 		}); err != nil {
 			_, _ = h.db.NewDelete().Model((*models.PasswordResetToken)(nil)).Where("id = ?", reset.ID).Exec(ctx)
 			log.Printf("password reset delivery failed for user %s: %v", user.ID, err)
