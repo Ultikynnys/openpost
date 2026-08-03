@@ -192,12 +192,12 @@ export async function generateWaveformPeaks(
 
 async function indexKeyframes(sink: EncodedPacketSink, signal?: AbortSignal): Promise<number[]> {
 	const timestamps: number[] = [];
-	let packet = await sink.getFirstKeyPacket({ metadataOnly: true, verifyKeyPackets: true });
+	// Verification needs packet data; Mediabunny rejects combining it with metadataOnly.
+	let packet = await sink.getFirstKeyPacket({ verifyKeyPackets: true });
 	while (packet && timestamps.length < MAX_KEYFRAMES) {
 		signal?.throwIfAborted();
 		timestamps.push(Math.max(0, packet.microsecondTimestamp));
 		packet = await sink.getNextKeyPacket(packet, {
-			metadataOnly: true,
 			verifyKeyPackets: true
 		});
 	}

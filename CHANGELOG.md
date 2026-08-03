@@ -4,6 +4,10 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- Fixed Quick Cut source analysis failing before keyframes could be indexed, which left Fast export disabled, and suppressed secondary writable-stream cleanup errors during background artifact generation.
+
 ## [1.49.0] - 2026-08-02
 
 ### Added

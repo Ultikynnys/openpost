@@ -69,7 +69,12 @@ function outputTargetFromWritable(
 	const writable = new WritableStream<StreamTargetChunk>({
 		async write(chunk) {
 			signal?.throwIfAborted();
-			await fileWritable.write({ type: 'write', position: chunk.position, data: chunk.data });
+			try {
+				await fileWritable.write({ type: 'write', position: chunk.position, data: chunk.data });
+			} catch (cause) {
+				failed ??= cause;
+				throw cause;
+			}
 		},
 		async close() {
 			try {
@@ -77,13 +82,15 @@ function outputTargetFromWritable(
 				closed = true;
 				resolveClosed();
 			} catch (cause) {
-				failed = cause;
+				failed ??= cause;
 				resolveClosed();
-				throw cause;
+				// Mediabunny may close a target while its writable is already errored.
+				// Keep the original failure available through file(), but do not turn
+				// cancellation cleanup into an unhandled rejection.
 			}
 		},
 		async abort(reason) {
-			failed = reason;
+			failed ??= reason;
 			try {
 				await fileWritable.abort(reason);
 			} finally {
