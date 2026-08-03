@@ -142,6 +142,9 @@ func TestCreateWorkspaceAllowsSelfHostedDefault(t *testing.T) {
 	var count int
 	require.NoError(t, srv.db.NewSelect().ColumnExpr("COUNT(*)").TableExpr("workspaces").Scan(context.Background(), &count))
 	require.Equal(t, 1, count)
+	var workspace models.Workspace
+	require.NoError(t, srv.db.NewSelect().Model(&workspace).Limit(1).Scan(context.Background()))
+	require.Equal(t, 1, workspace.WeekStart)
 }
 
 func TestCreateWorkspaceCloudBootstrapAllowsFirstWorkspaceOnly(t *testing.T) {

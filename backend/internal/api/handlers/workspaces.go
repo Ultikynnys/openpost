@@ -239,6 +239,7 @@ func (h *WorkspaceHandler) CreateWorkspace(api huma.API) {
 			ID:             uuid.New().String(),
 			OrganizationID: organizationID,
 			Name:           input.Body.Name,
+			WeekStart:      1,
 			CreatedAt:      now,
 		}
 

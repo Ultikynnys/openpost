@@ -7,6 +7,7 @@ All notable changes to this project are documented in this file.
 ### Fixed
 
 - Fixed Quick Cut source analysis failing before keyframes could be indexed, which left Fast export disabled, and suppressed secondary writable-stream cleanup errors during background artifact generation.
+- Fixed new workspaces using Sunday instead of the declared Monday calendar default and made rolling calendar coverage stable on week-start boundary days.
 
 ## [1.49.0] - 2026-08-02
 

@@ -305,9 +305,15 @@ test("desktop planning sidebar resumes drafts and stays out of mobile navigation
     "aria-current",
     "date",
   );
+  const pastDaysInWeek = await today.evaluate((element) => {
+    const cell = element.closest('[role="gridcell"]');
+    return cell?.parentElement
+      ? Array.from(cell.parentElement.children).indexOf(cell)
+      : 0;
+  });
   await expect(
     rollingCalendar.getByRole("button", { disabled: true }),
-  ).not.toHaveCount(0);
+  ).toHaveCount(pastDaysInWeek);
   const initialCalendarRows = await rollingCalendar
     .locator('[role="row"]')
     .count();
