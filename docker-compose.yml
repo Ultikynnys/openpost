@@ -1,6 +1,6 @@
 services:
   openpost:
-    image: ghcr.io/rodrgds/openpost:latest
+    image: openpost-patched:latest
     container_name: openpost
     restart: unless-stopped
 
