@@ -4,6 +4,12 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [1.50.1] - 2026-08-03
+
+### Fixed
+
+- Fixed the sidebar Accounts active state comparison failing type checks in the shared marketing component tree.
+
 ## [1.50.0] - 2026-08-03
 
 ### Added

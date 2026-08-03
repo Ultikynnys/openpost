@@ -276,7 +276,8 @@
 				<Sidebar.MenuButton
 					class="h-10 text-sm"
 					tooltipContent={m.sidebar_accounts()}
-					isActive={currentPath === '/settings' && page.url.searchParams.get('tab') === 'accounts'}
+					isActive={currentPath.startsWith('/settings') &&
+						page.url.searchParams.get('tab') === 'accounts'}
 					onclick={() => navigate('/settings?tab=accounts')}
 				>
 					<AccountsIcon class="size-4" />
