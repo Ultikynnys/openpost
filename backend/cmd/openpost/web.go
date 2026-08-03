@@ -1,22 +1,30 @@
 package main
 
 import (
+	"context"
+	"database/sql"
 	"embed"
+	"errors"
+	"html"
 	"io/fs"
 	"mime"
 	"net/http"
+	"net/url"
 	"os"
 	"path"
 	"strconv"
 	"strings"
 
 	"github.com/labstack/echo/v4"
+	"github.com/openpost/backend/internal/models"
+	"github.com/openpost/backend/internal/usernames"
+	"github.com/uptrace/bun"
 )
 
 //go:embed all:public
 var embeddedWeb embed.FS
 
-func RegisterSpaRoutes(e *echo.Echo) {
+func RegisterSpaRoutes(e *echo.Echo, db *bun.DB, publicURL string) {
 	webFS, err := fs.Sub(embeddedWeb, "public")
 	if err != nil {
 		panic(err)
@@ -28,10 +36,20 @@ func RegisterSpaRoutes(e *echo.Echo) {
 		panic("openpost: embedded frontend is missing or empty (backend/cmd/openpost/public/index.html). " +
 			"Run the frontend build first: `cd frontend && pnpm build` (or use `devenv shell -- build`).")
 	}
-	registerSpaRoutes(e, webFS)
+	registerSpaRoutesWithProfileMetadata(e, webFS, db, publicURL)
 }
 
 func registerSpaRoutes(e *echo.Echo, webFS fs.FS) {
+	registerSpaRoutesWithProfileMetadata(e, webFS, nil, "")
+}
+
+type publicProfilePageMetadata struct {
+	Username    string
+	DisplayName string
+	AvatarURL   string
+}
+
+func registerSpaRoutesWithProfileMetadata(e *echo.Echo, webFS fs.FS, db *bun.DB, publicURL string) {
 	writeHTML := func(c echo.Context, data []byte) error {
 		c.Response().Header().Set("Content-Type", "text/html")
 		c.Response().Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
@@ -40,6 +58,18 @@ func registerSpaRoutes(e *echo.Echo, webFS fs.FS) {
 		_, err := c.Response().Write(data)
 		return err
 	}
+
+	e.GET("/u/:username", func(c echo.Context) error {
+		indexData, _ := fs.ReadFile(webFS, "index.html")
+		metadata, found, err := loadPublicProfilePageMetadata(c.Request().Context(), db, c.Param("username"))
+		if err != nil {
+			return echo.NewHTTPError(http.StatusInternalServerError, "failed to load public profile")
+		}
+		if !found {
+			return writeHTML(c, renderPublicProfileHTML(indexData, nil, publicURL))
+		}
+		return writeHTML(c, renderPublicProfileHTML(indexData, &metadata, publicURL))
+	})
 
 	e.GET("/*", func(c echo.Context) error {
 		reqPath := c.Request().URL.Path
@@ -96,6 +126,78 @@ func registerSpaRoutes(e *echo.Echo, webFS fs.FS) {
 
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 	})
+}
+
+func loadPublicProfilePageMetadata(ctx context.Context, db *bun.DB, requestedUsername string) (publicProfilePageMetadata, bool, error) {
+	if db == nil {
+		return publicProfilePageMetadata{}, false, nil
+	}
+	username := usernames.Normalize(requestedUsername)
+	if usernames.Validate(username) != nil {
+		return publicProfilePageMetadata{}, false, nil
+	}
+	var user models.User
+	if err := db.NewSelect().Model(&user).
+		Column("username", "display_name", "avatar_url").
+		Where("LOWER(username) = ?", username).
+		Where("public_profile_enabled = ?", true).
+		Scan(ctx); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return publicProfilePageMetadata{}, false, nil
+		}
+		return publicProfilePageMetadata{}, false, err
+	}
+	return publicProfilePageMetadata{
+		Username:    user.Username,
+		DisplayName: strings.TrimSpace(user.DisplayName),
+		AvatarURL:   strings.TrimSpace(user.AvatarURL),
+	}, true, nil
+}
+
+func renderPublicProfileHTML(indexData []byte, metadata *publicProfilePageMetadata, publicURL string) []byte {
+	head := `<title data-openpost-profile-meta>Public profile - OpenPost</title>
+		<meta data-openpost-profile-meta name="description" content="Public OpenPost publishing profile.">
+		<meta data-openpost-profile-meta name="robots" content="noindex">`
+	if metadata != nil {
+		displayName := metadata.DisplayName
+		if displayName == "" {
+			displayName = "@" + metadata.Username
+		}
+		title := displayName + " (@" + metadata.Username + ") - OpenPost"
+		description := "See " + displayName + "'s public publishing activity on OpenPost."
+		canonicalURL := strings.TrimRight(publicURL, "/") + "/u/" + url.PathEscape(metadata.Username)
+		head = profileMetadataTags(title, description, canonicalURL, metadata.AvatarURL)
+	}
+	htmlDocument := string(indexData)
+	if !strings.Contains(htmlDocument, "<head>") {
+		return indexData
+	}
+	return []byte(strings.Replace(htmlDocument, "<head>", "<head>\n\t\t"+head, 1))
+}
+
+func profileMetadataTags(title, description, canonicalURL, avatarURL string) string {
+	escapedTitle := html.EscapeString(title)
+	escapedDescription := html.EscapeString(description)
+	escapedURL := html.EscapeString(canonicalURL)
+	tags := `<title data-openpost-profile-meta>` + escapedTitle + `</title>
+		<meta data-openpost-profile-meta name="description" content="` + escapedDescription + `">
+		<meta data-openpost-profile-meta name="robots" content="index, follow">
+		<link data-openpost-profile-meta rel="canonical" href="` + escapedURL + `">
+		<meta data-openpost-profile-meta property="og:type" content="profile">
+		<meta data-openpost-profile-meta property="og:title" content="` + escapedTitle + `">
+		<meta data-openpost-profile-meta property="og:description" content="` + escapedDescription + `">
+		<meta data-openpost-profile-meta property="og:url" content="` + escapedURL + `">
+		<meta data-openpost-profile-meta name="twitter:card" content="summary">`
+	if isPublicHTTPURL(avatarURL) {
+		tags += `
+		<meta data-openpost-profile-meta property="og:image" content="` + html.EscapeString(avatarURL) + `">`
+	}
+	return tags
+}
+
+func isPublicHTTPURL(value string) bool {
+	parsed, err := url.Parse(value)
+	return err == nil && parsed.Host != "" && (parsed.Scheme == "http" || parsed.Scheme == "https")
 }
 
 func serveStaticAsset(c echo.Context, webFS fs.FS, relPath string, originalInfo fs.FileInfo) error {

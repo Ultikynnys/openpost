@@ -14,6 +14,7 @@ export type AuthResponse = components['schemas']['AuthOutputBody'];
 export type AuthConfiguration = components['schemas']['AuthConfigurationOutputBody'];
 export type AccountDeletionImpact = components['schemas']['AccountDeletionImpact'];
 export type OIDCProvider = components['schemas']['OIDCProviderSummary'];
+export type PublicProfile = components['schemas']['PublicProfileOutputBody'];
 
 let token: string | null = null;
 

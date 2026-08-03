@@ -121,3 +121,30 @@ func TestSpaHTMLRemainsUncached(t *testing.T) {
 	require.Equal(t, "no-cache, no-store, must-revalidate", rec.Header().Get("Cache-Control"))
 	require.Equal(t, "<html>login</html>", rec.Body.String())
 }
+
+func TestRenderPublicProfileHTMLAddsEscapedShareMetadata(t *testing.T) {
+	t.Parallel()
+
+	rendered := renderPublicProfileHTML(
+		[]byte("<html><head></head><body>app</body></html>"),
+		&publicProfilePageMetadata{
+			Username:    "rodrgds",
+			DisplayName: "R&D <team>",
+			AvatarURL:   "https://cdn.example/avatar?a=1&b=2",
+		},
+		"https://app.openpost.social/",
+	)
+
+	html := string(rendered)
+	require.Contains(t, html, "R&amp;D &lt;team&gt; (@rodrgds) - OpenPost")
+	require.Contains(t, html, `property="og:type" content="profile"`)
+	require.Contains(t, html, `rel="canonical" href="https://app.openpost.social/u/rodrgds"`)
+	require.Contains(t, html, `property="og:image" content="https://cdn.example/avatar?a=1&amp;b=2"`)
+}
+
+func TestRenderUnavailablePublicProfileHTMLIsNotIndexed(t *testing.T) {
+	t.Parallel()
+
+	rendered := renderPublicProfileHTML([]byte("<html><head></head><body>app</body></html>"), nil, "")
+	require.Contains(t, string(rendered), `name="robots" content="noindex"`)
+}
