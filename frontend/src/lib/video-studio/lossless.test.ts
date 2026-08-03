@@ -7,7 +7,12 @@ import {
 	type PrimarySequenceClip,
 	type VideoProjectDocumentV1
 } from '@openpost/video-project';
-import { isKeyframeAligned, nearestKeyframeUS, quickCutCompatibility } from './lossless';
+import {
+	isKeyframeAligned,
+	nearestKeyframeUS,
+	quickCutCompatibility,
+	resolveKeyframeAlignment
+} from './lossless';
 
 function quickProject() {
 	const project = createBlankVideoProject('Fast cut', 'quick-cut');
@@ -75,11 +80,32 @@ describe('quick-cut stream-copy eligibility', () => {
 		});
 	});
 
+	it('falls back when source ranges overlap or run out of source order', () => {
+		const project = quickProject();
+		const clip = firstClip(project);
+		clip.source_out_us = 7_000_000;
+		project.primary_sequence.push({
+			...structuredClone(clip),
+			id: 'clip-2',
+			source_in_us: 4_000_000,
+			source_out_us: 10_000_000
+		});
+		expect(quickCutCompatibility(project)).toMatchObject({
+			compatible: false,
+			reason: 'clip-edits'
+		});
+	});
+
 	it('finds and verifies the nearest indexed keyframe', () => {
 		const keyframes = [0, 2_000_000, 4_000_000];
 		expect(nearestKeyframeUS(keyframes, 2_800_000)).toBe(2_000_000);
 		expect(nearestKeyframeUS(keyframes, 3_200_000)).toBe(4_000_000);
 		expect(isKeyframeAligned(keyframes, 2_001_000)).toBe(true);
 		expect(isKeyframeAligned(keyframes, 2_010_000)).toBe(false);
+		expect(resolveKeyframeAlignment(keyframes, 2_001_000)).toEqual({
+			timestamp_us: 2_000_000,
+			delta_us: -1_000
+		});
+		expect(resolveKeyframeAlignment(keyframes, 2_010_000)).toBeNull();
 	});
 });

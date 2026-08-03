@@ -1,5 +1,4 @@
 import type { VideoSource } from '@openpost/video-project';
-import { getAuthenticatedMediaByID } from '$lib/media-url';
 import {
 	estimateStorageBudget,
 	indexProjectAsset,
@@ -43,6 +42,10 @@ export async function openVideoProjectSource(
 			`There is not enough local space to cache ${source.original_name}. Free local space and try again.`
 		);
 	}
+	// Keep the lossless-export worker free of Svelte runtime stores. Remote
+	// sources are normally cached before export; only load the authenticated
+	// media helper when this main-thread fallback actually needs the network.
+	const { getAuthenticatedMediaByID } = await import('$lib/media-url');
 	const response = await fetch(getAuthenticatedMediaByID(source.locator.media_id), { signal });
 	if (!response.ok || !response.body) {
 		throw new Error(`${source.original_name} could not be read from OpenPost Media.`);

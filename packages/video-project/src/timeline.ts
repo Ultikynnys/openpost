@@ -1,6 +1,7 @@
 import {
   VIDEO_PROJECT_LIMITS,
   VIDEO_TICKS_PER_SECOND,
+  type AudioTrackItem,
   type CaptionCue,
   type DerivedPrimaryClip,
   type EasingName,
@@ -10,7 +11,9 @@ import {
   type PrimarySequenceItem,
   type VariantID,
   type VideoPresentationOverride,
+  type VideoPresentation,
   type VideoProjectDocumentV1,
+  type VisualTrackItem,
 } from "./types.js";
 
 export function cloneVideoProject(
@@ -218,6 +221,54 @@ export function trimPrimaryClip(
   return next;
 }
 
+/**
+ * Sets an exact source boundary without quantizing it to the project frame rate.
+ *
+ * Full Studio trims are timeline operations and intentionally snap to the project
+ * timebase. Quick Cut, however, works on encoded packet boundaries. Reusing the
+ * timeline trim operation for packet timestamps can move a verified keyframe by
+ * a fraction of a frame and make an otherwise lossless cut impossible.
+ */
+export function setPrimaryClipSourceBoundary(
+  project: VideoProjectDocumentV1,
+  clipID: string,
+  edge: "start" | "end",
+  sourceTimestampUS: number,
+): VideoProjectDocumentV1 {
+  if (!Number.isFinite(sourceTimestampUS)) {
+    throw new Error("Source boundary must be a finite number.");
+  }
+  const next = cloneVideoProject(project);
+  const index = next.primary_sequence.findIndex((item) => item.id === clipID);
+  if (index < 0) throw new Error("The selected clip no longer exists.");
+  const clip = next.primary_sequence[index]!;
+  if (isPrimarySequenceGap(clip) || clip.mode !== "source") {
+    throw new Error("Exact source boundaries require a source clip.");
+  }
+  const source = next.sources[clip.source_id];
+  const boundedTimestampUS = Math.round(
+    Math.max(
+      0,
+      Math.min(source?.duration_us ?? clip.source_out_us, sourceTimestampUS),
+    ),
+  );
+  const minimumDurationUS = 1;
+  if (edge === "start") {
+    clip.source_in_us = Math.min(
+      clip.source_out_us - minimumDurationUS,
+      boundedTimestampUS,
+    );
+  } else {
+    clip.source_out_us = Math.max(
+      clip.source_in_us + minimumDurationUS,
+      boundedTimestampUS,
+    );
+  }
+  clampTransitionBoundary(next.primary_sequence[index - 1], clip);
+  clampTransitionBoundary(clip, next.primary_sequence[index + 1]);
+  return next;
+}
+
 function clampTransitionBoundary(
   left: PrimarySequenceItem | undefined,
   right: PrimarySequenceItem | undefined,
@@ -351,22 +402,274 @@ export function rippleDeleteCaptionWords(
   ).filter((range) => range.end_us > range.start_us);
   if (!ranges.length) return cloneVideoProject(project);
 
-  const next = removePrimaryRanges(project, ranges, createID);
+  return rippleDeleteTimelineRanges(project, ranges, createID);
+}
+
+interface TimelineRange {
+  start_us: number;
+  end_us: number;
+}
+
+function keptTimelineSegments(
+  startUS: number,
+  durationUS: number,
+  ranges: TimelineRange[],
+): TimelineRange[] {
+  const endUS = startUS + durationUS;
+  const segments: TimelineRange[] = [];
+  let cursorUS = startUS;
+  for (const range of ranges) {
+    if (range.end_us <= cursorUS) continue;
+    if (range.start_us >= endUS) break;
+    if (range.start_us > cursorUS) {
+      segments.push({
+        start_us: cursorUS,
+        end_us: Math.min(endUS, range.start_us),
+      });
+    }
+    cursorUS = Math.max(cursorUS, range.end_us);
+    if (cursorUS >= endUS) break;
+  }
+  if (cursorUS < endUS) segments.push({ start_us: cursorUS, end_us: endUS });
+  return segments.filter((segment) => segment.end_us > segment.start_us);
+}
+
+function timestampIsRemoved(
+  timestampUS: number,
+  ranges: TimelineRange[],
+): boolean {
+  return ranges.some(
+    (range) => timestampUS >= range.start_us && timestampUS < range.end_us,
+  );
+}
+
+function retimeKeyframes(
+  keyframes: NumericKeyframe[],
+  itemStartUS: number,
+  segments: TimelineRange[],
+  ranges: TimelineRange[],
+  nextStartUS: number,
+): NumericKeyframe[] {
+  if (!keyframes.length || !segments.length) return [];
+  const byTime = new Map<number, NumericKeyframe>();
+  for (const segment of segments) {
+    const localStartUS = segment.start_us - itemStartUS;
+    const localEndUS = segment.end_us - itemStartUS;
+    const candidates = [
+      {
+        time_us: localStartUS,
+        value: interpolateKeyframes(keyframes, localStartUS),
+        easing:
+          keyframes.find((keyframe) => keyframe.time_us >= localStartUS)
+            ?.easing ?? keyframes.at(-1)!.easing,
+      },
+      ...keyframes.filter(
+        (keyframe) =>
+          keyframe.time_us > localStartUS &&
+          keyframe.time_us < localEndUS &&
+          !timestampIsRemoved(itemStartUS + keyframe.time_us, ranges),
+      ),
+      {
+        time_us: localEndUS,
+        value: interpolateKeyframes(keyframes, localEndUS),
+        easing:
+          keyframes.find((keyframe) => keyframe.time_us >= localEndUS)
+            ?.easing ?? keyframes.at(-1)!.easing,
+      },
+    ];
+    for (const keyframe of candidates) {
+      const timeUS =
+        retimeAfterRemovedRanges(itemStartUS + keyframe.time_us, ranges) -
+        nextStartUS;
+      byTime.set(Math.max(0, timeUS), {
+        ...keyframe,
+        time_us: Math.max(0, timeUS),
+      });
+    }
+  }
+  return [...byTime.values()].sort(
+    (left, right) => left.time_us - right.time_us,
+  );
+}
+
+function retimePresentationKeyframes<
+  T extends VideoPresentation | VideoPresentationOverride,
+>(
+  presentation: T,
+  itemStartUS: number,
+  segments: TimelineRange[],
+  ranges: TimelineRange[],
+  nextStartUS: number,
+): T {
+  const next = structuredClone(presentation);
+  if (!next.keyframes) return next;
+  next.keyframes = Object.fromEntries(
+    Object.entries(next.keyframes).flatMap(([property, keyframes]) =>
+      keyframes
+        ? [
+            [
+              property,
+              retimeKeyframes(
+                keyframes,
+                itemStartUS,
+                segments,
+                ranges,
+                nextStartUS,
+              ),
+            ],
+          ]
+        : [],
+    ),
+  ) as T["keyframes"];
+  return next;
+}
+
+function retimeVisualItemAnimations(
+  item: VisualTrackItem,
+  originalStartUS: number,
+  segments: TimelineRange[],
+  ranges: TimelineRange[],
+): void {
+  item.presentation = retimePresentationKeyframes(
+    item.presentation,
+    originalStartUS,
+    segments,
+    ranges,
+    item.timeline_start_us,
+  );
+  for (const override of Object.values(item.variant_overrides ?? {})) {
+    if (override?.presentation) {
+      override.presentation = retimePresentationKeyframes(
+        override.presentation,
+        originalStartUS,
+        segments,
+        ranges,
+        item.timeline_start_us,
+      );
+    }
+  }
+}
+
+function rippleVisualItem(
+  item: VisualTrackItem,
+  ranges: TimelineRange[],
+  createID: () => string,
+): VisualTrackItem[] {
+  const segments = keptTimelineSegments(
+    item.timeline_start_us,
+    item.duration_us,
+    ranges,
+  );
+  if (!segments.length) return [];
+  const originalStartUS = item.timeline_start_us;
+  if (item.type !== "media" && item.type !== "camera") {
+    const next = structuredClone(item);
+    next.timeline_start_us = retimeAfterRemovedRanges(
+      segments[0]!.start_us,
+      ranges,
+    );
+    next.duration_us = segments.reduce(
+      (durationUS, segment) => durationUS + segment.end_us - segment.start_us,
+      0,
+    );
+    retimeVisualItemAnimations(next, originalStartUS, segments, ranges);
+    return [next];
+  }
+  return segments.map((segment, index) => {
+    const next = structuredClone(item);
+    next.id = index === 0 ? item.id : createID();
+    next.timeline_start_us = retimeAfterRemovedRanges(segment.start_us, ranges);
+    next.duration_us = segment.end_us - segment.start_us;
+    next.source_in_us = Math.round(
+      item.source_in_us + (segment.start_us - originalStartUS) * item.speed,
+    );
+    retimeVisualItemAnimations(next, originalStartUS, [segment], ranges);
+    return next;
+  });
+}
+
+function rippleAudioItem(
+  item: AudioTrackItem,
+  ranges: TimelineRange[],
+  createID: () => string,
+): AudioTrackItem[] {
+  const originalStartUS = item.timeline_start_us;
+  const originalEndUS = item.timeline_start_us + item.duration_us;
+  const segments = keptTimelineSegments(
+    originalStartUS,
+    item.duration_us,
+    ranges,
+  );
+  return segments.map((segment, index) => {
+    const next = structuredClone(item);
+    next.id = index === 0 ? item.id : createID();
+    next.timeline_start_us = retimeAfterRemovedRanges(segment.start_us, ranges);
+    next.duration_us = segment.end_us - segment.start_us;
+    next.source_in_us = Math.round(
+      item.source_in_us + (segment.start_us - originalStartUS) * item.speed,
+    );
+    next.fade_in_us = Math.min(
+      next.duration_us,
+      Math.max(0, item.fade_in_us - (segment.start_us - originalStartUS)),
+    );
+    next.fade_out_us = Math.min(
+      next.duration_us,
+      Math.max(0, item.fade_out_us - (originalEndUS - segment.end_us)),
+    );
+    if (item.gain_db_keyframes) {
+      next.gain_db_keyframes = retimeKeyframes(
+        item.gain_db_keyframes,
+        originalStartUS,
+        [segment],
+        ranges,
+        next.timeline_start_us,
+      );
+    }
+    return next;
+  });
+}
+
+export function rippleDeleteTimelineRanges(
+  project: VideoProjectDocumentV1,
+  ranges: TimelineRange[],
+  createID: () => string = () => crypto.randomUUID(),
+): VideoProjectDocumentV1 {
+  const normalized = mergeTimeRanges(
+    ranges.map((range) => ({
+      start_us: Math.max(0, range.start_us),
+      end_us: Math.max(0, range.end_us),
+    })),
+  );
+  if (!normalized.length) return cloneVideoProject(project);
+
+  const next = removePrimaryRanges(project, normalized, createID);
+  next.visual_tracks = project.visual_tracks.map((track) => ({
+    ...structuredClone(track),
+    items: track.items.flatMap((item) =>
+      rippleVisualItem(item, normalized, createID),
+    ),
+  }));
+  next.audio_tracks = project.audio_tracks.map((track) => ({
+    ...structuredClone(track),
+    items: track.items.flatMap((item) =>
+      rippleAudioItem(item, normalized, createID),
+    ),
+  }));
   next.caption_tracks = project.caption_tracks.map((track) => ({
     ...structuredClone(track),
     cues: track.cues.flatMap((cue) => {
       const words = cue.words
         .filter(
           (word) =>
-            !ranges.some(
+            !normalized.some(
               (range) =>
                 word.end_us > range.start_us && word.start_us < range.end_us,
             ),
         )
         .map((word) => ({
           ...word,
-          start_us: retimeAfterRemovedRanges(word.start_us, ranges),
-          end_us: retimeAfterRemovedRanges(word.end_us, ranges),
+          start_us: retimeAfterRemovedRanges(word.start_us, normalized),
+          end_us: retimeAfterRemovedRanges(word.end_us, normalized),
         }))
         .filter((word) => word.end_us > word.start_us);
       if (cue.words.length > 0) {
@@ -381,13 +684,19 @@ export function rippleDeleteCaptionWords(
           },
         ];
       }
-      const startUS = retimeAfterRemovedRanges(cue.start_us, ranges);
-      const endUS = retimeAfterRemovedRanges(cue.end_us, ranges);
+      const startUS = retimeAfterRemovedRanges(cue.start_us, normalized);
+      const endUS = retimeAfterRemovedRanges(cue.end_us, normalized);
       return endUS > startUS
         ? [{ ...structuredClone(cue), start_us: startUS, end_us: endUS }]
         : [];
     }),
   }));
+  next.markers = project.markers
+    .filter((marker) => !timestampIsRemoved(marker.time_us, normalized))
+    .map((marker) => ({
+      ...structuredClone(marker),
+      time_us: retimeAfterRemovedRanges(marker.time_us, normalized),
+    }));
   return next;
 }
 
@@ -716,6 +1025,86 @@ export function applyEasing(progress: number, easing: EasingName): number {
     default:
       return value;
   }
+}
+
+export interface FocusZoomOptions {
+  preset: "in" | "out" | "punch";
+  local_time_us: number;
+  duration_us: number;
+  scale_multiplier: number;
+  focus_x: number;
+  focus_y: number;
+  easing: EasingName;
+}
+
+export function buildFocusZoomKeyframes(
+  presentation: VideoPresentation,
+  clipDurationUS: number,
+  options: FocusZoomOptions,
+): NonNullable<VideoPresentation["keyframes"]> {
+  const clipDuration = Math.max(1, Math.round(clipDurationUS));
+  const duration = Math.max(
+    100_000,
+    Math.min(clipDuration, Math.round(options.duration_us)),
+  );
+  const localTime = Math.max(
+    0,
+    Math.min(clipDuration, Math.round(options.local_time_us)),
+  );
+  const start = Math.max(
+    0,
+    Math.min(clipDuration - duration, localTime - Math.round(duration * 0.3)),
+  );
+  const end = Math.min(clipDuration, start + duration);
+  const peak =
+    options.preset === "punch"
+      ? Math.min(end, start + Math.round(duration * 0.38))
+      : end;
+  const baseScale = presentation.scale;
+  const focusScale = Math.max(
+    0.05,
+    Math.min(4, baseScale * Math.max(1.01, options.scale_multiplier)),
+  );
+  const focusX = Math.max(0, Math.min(1, options.focus_x));
+  const focusY = Math.max(0, Math.min(1, options.focus_y));
+  const focusPositionX = Math.max(
+    0,
+    Math.min(
+      1,
+      presentation.position_x + (0.5 - focusX) * (focusScale - baseScale),
+    ),
+  );
+  const focusPositionY = Math.max(
+    0,
+    Math.min(
+      1,
+      presentation.position_y + (0.5 - focusY) * (focusScale - baseScale),
+    ),
+  );
+  const pair = (baseValue: number, focusValue: number): NumericKeyframe[] => {
+    if (options.preset === "in") {
+      return [
+        { time_us: start, value: baseValue, easing: options.easing },
+        { time_us: end, value: focusValue, easing: "ease-out" },
+      ];
+    }
+    if (options.preset === "out") {
+      return [
+        { time_us: start, value: focusValue, easing: options.easing },
+        { time_us: end, value: baseValue, easing: "ease-out" },
+      ];
+    }
+    return [
+      { time_us: start, value: baseValue, easing: options.easing },
+      { time_us: peak, value: focusValue, easing: options.easing },
+      { time_us: end, value: baseValue, easing: "ease-out" },
+    ];
+  };
+  return {
+    scale: pair(baseScale, focusScale),
+    position_x: pair(presentation.position_x, focusPositionX),
+    position_y: pair(presentation.position_y, focusPositionY),
+  };
 }
 
 export function reflowCaptionText(

@@ -123,7 +123,12 @@ export async function addFileToProject(
 	});
 	if (typeof window !== 'undefined') {
 		void import('./artifacts')
-			.then(({ ensureSourceArtifacts }) => ensureSourceArtifacts(project.id, source, signal))
+			.then(({ ensureSourceArtifacts }) =>
+				ensureSourceArtifacts(project.id, source, {
+					profile: 'index',
+					signal
+				})
+			)
 			.catch(() => undefined);
 	}
 	return source;
@@ -209,7 +214,7 @@ export async function addRecordingToProject(
 	}
 }
 
-function recordingCameraPresentation(
+export function recordingCameraPresentation(
 	layout: 'circle' | 'rounded' | 'portrait' | 'side-by-side' | 'full'
 ): ReturnType<typeof defaultVideoPresentation> {
 	const base = defaultVideoPresentation();

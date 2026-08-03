@@ -69,13 +69,25 @@ describe('SequentialVideoSampler', () => {
 		const sampler = new SequentialVideoSampler(sink);
 
 		await sampler.sample(0);
-		await sampler.sample(2);
+		await sampler.sample(4);
 		await sampler.sample(0.5);
 		expect(sampler.diagnostics.discontinuity_count).toBe(2);
-		expect(sink.starts).toEqual([0, 2, 0.5]);
+		expect(sink.starts).toEqual([0, 4, 0.5]);
 
 		await sampler.dispose();
 		expect(sink.returned).toBe(true);
 		await expect(sampler.sample(3)).rejects.toThrow('disposed');
+	});
+
+	it('keeps the current iterator when a slow frame creates a modest forward gap', async () => {
+		const sink = new FakeSink();
+		const sampler = new SequentialVideoSampler(sink);
+
+		await sampler.sample(0);
+		await sampler.sample(1.25);
+
+		expect(sink.starts).toEqual([0]);
+		expect(sampler.diagnostics.discontinuity_count).toBe(0);
+		await sampler.dispose();
 	});
 });

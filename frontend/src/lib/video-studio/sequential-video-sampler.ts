@@ -8,6 +8,12 @@ export interface SequentialVideoSampleSink<Sample extends ClosableVideoSample> {
 	samples(startTimestamp?: number, endTimestamp?: number): AsyncGenerator<Sample, void, unknown>;
 }
 
+// A slow first decode can move the UI clock by more than 500 ms before the
+// next request reaches the worker. Keep walking the active GOP for modest
+// forward gaps so playback can recover instead of repeatedly reopening the
+// decoder at a keyframe. Larger jumps and every backward seek still restart.
+const MAX_SEQUENTIAL_FORWARD_GAP_SECONDS = 2;
+
 /**
  * Keeps one Mediabunny/WebCodecs decode iterator alive during sequential
  * playback and export.
@@ -49,7 +55,8 @@ export class SequentialVideoSampler<Sample extends ClosableVideoSample> {
 			if (this.disposed) throw new Error('The video sampler has been disposed.');
 			const discontinuous =
 				Number.isFinite(this.lastTimestamp) &&
-				(timestamp < this.lastTimestamp || timestamp - this.lastTimestamp > 0.5);
+				(timestamp < this.lastTimestamp ||
+					timestamp - this.lastTimestamp > MAX_SEQUENTIAL_FORWARD_GAP_SECONDS);
 			if (discontinuous) {
 				this.discontinuityCount += 1;
 				await this.restart(timestamp);

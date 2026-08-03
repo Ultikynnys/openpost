@@ -280,22 +280,42 @@ export async function writeProjectFile(
 	const safeName = safePathSegment(name);
 	const projectDirectory = await projectAreaDirectory(projectID, area, true);
 	if (!projectDirectory) throw new Error('Origin-private file storage is unavailable.');
-	const temporaryName = `${safeName}.partial-${crypto.randomUUID()}`;
-	const temporary = await projectDirectory.getFileHandle(temporaryName, { create: true });
+	let existed = true;
+	let handle: FileSystemFileHandle;
 	try {
-		const writable = await temporary.createWritable();
+		handle = await projectDirectory.getFileHandle(safeName);
+	} catch (cause) {
+		if (!(cause instanceof DOMException && cause.name === 'NotFoundError')) throw cause;
+		existed = false;
+		handle = await projectDirectory.getFileHandle(safeName, { create: true });
+	}
+	try {
+		// createWritable stages the replacement and commits it atomically on close.
+		// Writing through a second OPFS temporary file doubles import I/O for no
+		// additional recovery guarantee.
+		const writable = await handle.createWritable();
 		await writable.write(data);
 		await writable.close();
-		const file = await temporary.getFile();
-		const finalHandle = await projectDirectory.getFileHandle(safeName, { create: true });
-		const finalWritable = await finalHandle.createWritable();
-		await file.stream().pipeTo(finalWritable);
-		await projectDirectory.removeEntry(temporaryName);
+		const file = await handle.getFile();
 		return { path: projectPath(projectID, area, safeName), size: file.size };
 	} catch (cause) {
-		await projectDirectory.removeEntry(temporaryName).catch(() => undefined);
+		if (!existed) await projectDirectory.removeEntry(safeName).catch(() => undefined);
 		throw cause;
 	}
+}
+
+export async function projectFileHandle(
+	projectID: string,
+	area: ProjectArea,
+	name: string
+): Promise<{ path: string; handle: FileSystemFileHandle }> {
+	const safeName = safePathSegment(name);
+	const target = await projectAreaDirectory(projectID, area, true);
+	if (!target) throw new Error('Origin-private file storage is unavailable.');
+	return {
+		path: projectPath(projectID, area, safeName),
+		handle: await target.getFileHandle(safeName, { create: true })
+	};
 }
 
 export async function writeProjectStream(
@@ -428,6 +448,30 @@ export async function listProjectAssets(
 				asset.project_id === projectID && (sourceID === undefined || asset.source_id === sourceID)
 		)
 		.sort((left, right) => right.updated_at.localeCompare(left.updated_at));
+}
+
+export async function removeDisposableProjectAssets(
+	projectID: string,
+	options: {
+		sourceID?: string;
+		kinds?: LocalAssetIndex['kind'][];
+	} = {}
+): Promise<{ removed_count: number; removed_bytes: number }> {
+	const kinds = options.kinds ? new Set(options.kinds) : undefined;
+	const assets = (await getAll<LocalAssetIndex>('asset-index')).filter(
+		(asset) =>
+			asset.project_id === projectID &&
+			asset.disposable &&
+			(options.sourceID === undefined || asset.source_id === options.sourceID) &&
+			(!kinds || kinds.has(asset.kind))
+	);
+	let removedBytes = 0;
+	for (const asset of assets) {
+		await removeProjectFile(asset.path);
+		await deleteOne('asset-index', asset.id);
+		removedBytes += asset.size_bytes;
+	}
+	return { removed_count: assets.length, removed_bytes: removedBytes };
 }
 
 export async function saveRecordingManifest(manifest: RecordingManifest): Promise<void> {

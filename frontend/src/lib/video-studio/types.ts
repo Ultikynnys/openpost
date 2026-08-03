@@ -109,7 +109,14 @@ export interface RecordingTrackSegmentManifest {
 }
 
 export interface RecordingSessionEvent {
-	type: 'pause' | 'resume' | 'sleep-gap' | 'device-switch' | 'device-loss' | 'external-stop';
+	type:
+		| 'pause'
+		| 'resume'
+		| 'sleep-gap'
+		| 'device-switch'
+		| 'device-loss'
+		| 'external-stop'
+		| 'storage-stop';
 	session_time_us: number;
 	track_id?: string;
 	duration_us?: number;

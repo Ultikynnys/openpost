@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   VideoProjectHistory,
+  buildFocusZoomKeyframes,
   captionDisplayText,
   captionCutRange,
   createBlankVideoProject,
@@ -20,11 +21,13 @@ import {
   removePrimaryRanges,
   reorderPrimaryClip,
   rippleDeleteCaptionWords,
+  rippleDeleteTimelineRanges,
   referencedSourceIDs,
   captionsToSRT,
   captionsToWebVTT,
   setClipSpeed,
   setCaptionCueText,
+  setPrimaryClipSourceBoundary,
   setVariantPresentationOverride,
   silenceSuggestions,
   splitPrimaryClip,
@@ -219,6 +222,19 @@ describe("derived sequence operations", () => {
     );
   });
 
+  it("sets an exact packet boundary without project-frame quantization", () => {
+    const project = projectWithClips();
+    const exactKeyframeUS = 1_000_123;
+    const trimmed = setPrimaryClipSourceBoundary(
+      project,
+      "a",
+      "start",
+      exactKeyframeUS,
+    );
+    expect(clipAt(trimmed, 0).source_in_us).toBe(exactKeyframeUS);
+    expect(projectDurationUS(trimmed)).toBe(10_000_000 - exactKeyframeUS);
+  });
+
   it("keeps adjoining transition durations valid while trimming", () => {
     const project = projectWithClips();
     const frameUS = Math.round(
@@ -346,6 +362,27 @@ describe("time, keyframes, captions, and suggestions", () => {
     ).toBe(0);
   });
 
+  it("builds a bounded focus zoom with editable timing and focus", () => {
+    const keyframes = buildFocusZoomKeyframes(
+      defaultVideoPresentation(),
+      2_000_000,
+      {
+        preset: "punch",
+        local_time_us: 1_000_000,
+        duration_us: 1_200_000,
+        scale_multiplier: 1.5,
+        focus_x: 0.8,
+        focus_y: 0.2,
+        easing: "focus-spring",
+      },
+    );
+    expect(keyframes.scale).toHaveLength(3);
+    expect(keyframes.scale?.[1]?.value).toBe(1.5);
+    expect(keyframes.position_x?.[1]?.value).toBeLessThan(0.5);
+    expect(keyframes.position_y?.[1]?.value).toBeGreaterThan(0.5);
+    expect(keyframes.scale?.at(-1)?.time_us).toBeLessThanOrEqual(2_000_000);
+  });
+
   it("reflows captions and links timed transcript selection to a padded cut", () => {
     expect(
       reflowCaptionText(
@@ -374,10 +411,98 @@ describe("time, keyframes, captions, and suggestions", () => {
 
   it("ripple deletes a transcript word and keeps caption time aligned", () => {
     const project = projectWithClips();
+    project.visual_tracks = [
+      {
+        id: "visual",
+        name: "Visual",
+        locked: false,
+        hidden: false,
+        items: [
+          {
+            id: "overlay-video",
+            type: "media",
+            source_id: "source",
+            source_in_us: 1_000_000,
+            speed: 1,
+            timeline_start_us: 1_000_000,
+            duration_us: 3_000_000,
+            visible: true,
+            presentation: defaultVideoPresentation(),
+          },
+          {
+            id: "title",
+            type: "text",
+            text: "Keep this title aligned",
+            style: {
+              font_family: "Inter",
+              font_size: 64,
+              font_weight: 700,
+              color: "#ffffff",
+              align: "center",
+              background_color: "#00000000",
+              outline_color: "#000000",
+              outline_width: 0,
+              shadow_blur: 0,
+              animation: "none",
+            },
+            timeline_start_us: 500_000,
+            duration_us: 3_500_000,
+            visible: true,
+            presentation: {
+              ...defaultVideoPresentation(),
+              keyframes: {
+                opacity: [
+                  { time_us: 0, value: 0, easing: "linear" },
+                  { time_us: 1_500_000, value: 0.4, easing: "linear" },
+                  { time_us: 2_500_000, value: 0.8, easing: "linear" },
+                  { time_us: 3_500_000, value: 1, easing: "linear" },
+                ],
+              },
+            },
+          },
+        ],
+      },
+    ];
+    project.audio_tracks = [
+      {
+        id: "music",
+        name: "Music",
+        role: "music",
+        muted: false,
+        items: [
+          {
+            id: "music-bed",
+            source_id: "source",
+            source_in_us: 1_000_000,
+            timeline_start_us: 1_000_000,
+            duration_us: 3_000_000,
+            speed: 1,
+            gain_db: -6,
+            gain_db_keyframes: [
+              { time_us: 0, value: -12, easing: "linear" },
+              { time_us: 1_000_000, value: -6, easing: "linear" },
+              { time_us: 2_000_000, value: -3, easing: "linear" },
+              { time_us: 3_000_000, value: 0, easing: "linear" },
+            ],
+            fade_in_us: 250_000,
+            fade_out_us: 250_000,
+            muted: false,
+            duck_others: false,
+          },
+        ],
+      },
+    ];
+    project.markers = [
+      { id: "before", time_us: 1_500_000, label: "Before", color: "#ffffff" },
+      { id: "inside", time_us: 2_500_000, label: "Inside", color: "#ffffff" },
+      { id: "after", time_us: 4_000_000, label: "After", color: "#ffffff" },
+    ];
     project.caption_tracks = [
       {
         id: "captions",
         name: "Captions",
+        language: "en",
+        visible: true,
         cues: [],
         style: defaultCaptionStyle(),
       },
@@ -396,10 +521,11 @@ describe("time, keyframes, captions, and suggestions", () => {
       },
     ];
 
+    let nextID = 0;
     const next = rippleDeleteCaptionWords(
       project,
       [{ cue_id: "cue", word_index: 1 }],
-      () => "split",
+      () => `split-${++nextID}`,
     );
 
     expect(projectDurationUS(next)).toBe(9_000_000);
@@ -412,6 +538,67 @@ describe("time, keyframes, captions, and suggestions", () => {
         { text: "three", start_us: 2_000_000, end_us: 3_000_000 },
       ],
     });
+    expect(next.visual_tracks[0]!.items).toMatchObject([
+      {
+        id: "overlay-video",
+        timeline_start_us: 1_000_000,
+        duration_us: 1_000_000,
+        source_in_us: 1_000_000,
+      },
+      {
+        id: "split-2",
+        timeline_start_us: 2_000_000,
+        duration_us: 1_000_000,
+        source_in_us: 3_000_000,
+      },
+      {
+        id: "title",
+        timeline_start_us: 500_000,
+        duration_us: 2_500_000,
+      },
+    ]);
+    expect(next.audio_tracks[0]!.items).toMatchObject([
+      {
+        id: "music-bed",
+        timeline_start_us: 1_000_000,
+        duration_us: 1_000_000,
+        source_in_us: 1_000_000,
+      },
+      {
+        id: "split-3",
+        timeline_start_us: 2_000_000,
+        duration_us: 1_000_000,
+        source_in_us: 3_000_000,
+      },
+    ]);
+    expect(
+      next.visual_tracks[0]!.items[2]!.presentation.keyframes?.opacity,
+    ).toMatchObject([
+      { time_us: 0, value: 0 },
+      { time_us: 1_500_000, value: 0.8 },
+      { time_us: 2_500_000, value: 1 },
+    ]);
+    expect(next.audio_tracks[0]!.items[1]!.gain_db_keyframes).toMatchObject([
+      { time_us: 0, value: -3 },
+      { time_us: 1_000_000, value: 0 },
+    ]);
+    expect(next.markers).toEqual([
+      { id: "before", time_us: 1_500_000, label: "Before", color: "#ffffff" },
+      { id: "after", time_us: 3_000_000, label: "After", color: "#ffffff" },
+    ]);
+    expect(validateVideoProject(next)).toEqual({
+      valid: true,
+      issues: [],
+      document: next,
+    });
+  });
+
+  it("ripple deletes explicit ranges through the shared timeline operation", () => {
+    const project = projectWithClips();
+    const next = rippleDeleteTimelineRanges(project, [
+      { start_us: 4_000_000, end_us: 5_000_000 },
+    ]);
+    expect(projectDurationUS(next)).toBe(9_000_000);
   });
 
   it("keeps corrected caption text canonical and retimes word emphasis safely", () => {

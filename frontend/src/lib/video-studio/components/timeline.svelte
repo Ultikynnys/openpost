@@ -10,6 +10,7 @@
 	import { Slider } from '$lib/components/ui/slider';
 	import { m } from '$lib/paraglide/messages';
 	import { listProjectAssets, readProjectFile } from '../storage';
+	import { subscribeToSourceArtifacts } from '../artifacts';
 	import { onMount } from 'svelte';
 	import MapPinIcon from 'lucide-svelte/icons/map-pin';
 	import PlusIcon from 'lucide-svelte/icons/plus';
@@ -105,6 +106,7 @@
 
 	onMount(() => {
 		let stopped = false;
+		let artifactSignature = '';
 		const refresh = async () => {
 			if (!projectID) return;
 			const assets = await listProjectAssets(projectID);
@@ -131,18 +133,31 @@
 			waveformPeaks = nextWaveforms;
 		};
 		void refresh();
-		const delayedRefresh = window.setTimeout(() => void refresh(), 3_000);
+		const unsubscribe = subscribeToSourceArtifacts((progress) => {
+			if (progress.project_id !== projectID) return;
+			const signature = `${progress.source_id}:${progress.artifact.thumbnail_complete}:${progress.artifact.waveform_complete}`;
+			if (signature === artifactSignature) return;
+			artifactSignature = signature;
+			void refresh();
+		});
 		return () => {
 			stopped = true;
 			cancelAnimationFrame(trimFrame);
 			cancelAnimationFrame(timingFrame);
-			window.clearTimeout(delayedRefresh);
+			unsubscribe();
 			for (const url of Object.values(thumbnailURLs)) URL.revokeObjectURL(url);
 		};
 	});
 
 	function clipWidth(duration: number): number {
 		return Math.max(48, (duration / durationUS) * widthPX);
+	}
+
+	function trimHandlesFit(duration: number): boolean {
+		// Two 44 px touch targets need room for a usable clip-selection target in
+		// the middle. Very short clips remain selectable; zooming the timeline
+		// reveals their trim handles once there is enough room.
+		return clipWidth(duration) >= 96;
 	}
 
 	function clipOffset(start: number): number {
@@ -408,8 +423,10 @@
 	class="flex h-full min-h-0 flex-col border-t bg-background"
 	aria-labelledby="timeline-title"
 >
-	<div class="flex min-h-12 flex-wrap items-center gap-1 border-b px-2 sm:px-3">
-		<h2 id="timeline-title" class="mr-2 text-sm font-medium">{m.video_studio_timeline()}</h2>
+	<div class="flex min-h-12 flex-nowrap items-center gap-1 overflow-x-auto border-b px-2 sm:px-3">
+		<h2 id="timeline-title" class="mr-2 shrink-0 text-sm font-medium">
+			{m.video_studio_timeline()}
+		</h2>
 		<Button
 			variant="ghost"
 			size="sm"
@@ -487,7 +504,7 @@
 				</Button>
 			</div>
 		{/if}
-		<div class="ml-auto flex w-40 items-center gap-2">
+		<div class="ml-auto flex w-32 shrink-0 items-center gap-2 sm:w-40">
 			<ZoomInIcon class="size-4 text-muted-foreground" />
 			<Slider
 				bind:value={zoom}
@@ -539,8 +556,8 @@
 							'absolute top-2 h-14 min-w-12 overflow-hidden rounded-md border text-xs',
 							isPrimarySequenceClip(clip) ? '' : 'border-dashed bg-muted/50',
 							selectedClipID === clip.id
-								? 'border-primary bg-primary/15 text-foreground'
-								: 'border-border bg-card hover:bg-muted'
+								? 'z-20 border-primary bg-primary/15 text-foreground'
+								: 'z-0 border-border bg-card hover:bg-muted'
 						]}
 						style:left={`${clipOffset(item.timeline_start_us)}px`}
 						style:width={`${clipWidth(item.duration_us)}px`}
@@ -568,7 +585,8 @@
 					>
 						<button
 							type="button"
-							class="flex size-full items-center px-3 text-left focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
+							data-video-studio-clip-select
+							class="absolute inset-0 flex items-center px-3 text-left focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
 							aria-pressed={selectedClipID === clip.id}
 							onclick={() => onSelectClip(clip.id)}
 						>
@@ -578,10 +596,10 @@
 									: m.video_studio_gap()}</span
 							>
 						</button>
-						{#if isPrimarySequenceClip(clip)}
+						{#if isPrimarySequenceClip(clip) && trimHandlesFit(item.duration_us)}
 							<button
 								type="button"
-								class="absolute inset-y-0 left-0 z-10 w-5 cursor-ew-resize border-r border-primary/60 bg-primary/20 opacity-80 hover:bg-primary/40 focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
+								class="absolute inset-y-0 left-0 z-10 w-2 cursor-ew-resize touch-none border-r border-primary/60 bg-primary/20 opacity-80 after:absolute after:-inset-x-[18px] after:inset-y-0 hover:bg-primary/40 focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none sm:after:hidden"
 								aria-label={m.video_studio_trim_start()}
 								title={m.video_studio_trim_keyboard()}
 								onpointerdown={(event) => beginTrim(event, clip.id, 'start')}
@@ -592,7 +610,7 @@
 							></button>
 							<button
 								type="button"
-								class="absolute inset-y-0 right-0 z-10 w-5 cursor-ew-resize border-l border-primary/60 bg-primary/20 opacity-80 hover:bg-primary/40 focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
+								class="absolute inset-y-0 right-0 z-10 w-2 cursor-ew-resize touch-none border-l border-primary/60 bg-primary/20 opacity-80 after:absolute after:-inset-x-[18px] after:inset-y-0 hover:bg-primary/40 focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none sm:after:hidden"
 								aria-label={m.video_studio_trim_end()}
 								title={m.video_studio_trim_keyboard()}
 								onpointerdown={(event) => beginTrim(event, clip.id, 'end')}
@@ -621,7 +639,7 @@
 					<button
 						type="button"
 						class={[
-							'absolute top-1 flex h-8 min-w-8 -translate-x-1/2 cursor-ew-resize items-center justify-center rounded-md border px-2 focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none',
+							'absolute top-1 flex h-8 min-w-11 -translate-x-1/2 cursor-ew-resize touch-none items-center justify-center rounded-md border px-2 focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none sm:min-w-8',
 							selectedMarkerID === marker.id
 								? 'border-primary bg-primary text-primary-foreground'
 								: 'border-orange-500/40 bg-orange-500/10 text-orange-800 dark:text-orange-200'
@@ -679,7 +697,7 @@
 					>
 						<button
 							type="button"
-							class="size-full cursor-grab truncate px-3 py-1 text-left focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none active:cursor-grabbing"
+							class="size-full cursor-grab touch-none truncate px-3 py-1 text-left focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none active:cursor-grabbing"
 							aria-pressed={selectedVisualItemID === item.id}
 							title={m.video_studio_timing_keyboard()}
 							onclick={() => onSelectVisualItem(item.id)}
@@ -707,7 +725,7 @@
 						</button>
 						<button
 							type="button"
-							class="absolute inset-y-0 left-0 z-10 w-5 cursor-ew-resize border-r border-violet-600/60 bg-violet-500/20 focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
+							class="absolute inset-y-0 left-0 z-10 w-2 cursor-ew-resize touch-none border-r border-violet-600/60 bg-violet-500/20 after:absolute after:-inset-x-[18px] after:inset-y-0 focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none sm:after:hidden"
 							aria-label={m.video_studio_adjust_item_start()}
 							title={m.video_studio_timing_keyboard()}
 							onpointerdown={(event) =>
@@ -732,7 +750,7 @@
 						></button>
 						<button
 							type="button"
-							class="absolute inset-y-0 right-0 z-10 w-5 cursor-ew-resize border-l border-violet-600/60 bg-violet-500/20 focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
+							class="absolute inset-y-0 right-0 z-10 w-2 cursor-ew-resize touch-none border-l border-violet-600/60 bg-violet-500/20 after:absolute after:-inset-x-[18px] after:inset-y-0 focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none sm:after:hidden"
 							aria-label={m.video_studio_adjust_item_end()}
 							title={m.video_studio_timing_keyboard()}
 							onpointerdown={(event) =>
@@ -793,7 +811,7 @@
 						{/if}
 						<button
 							type="button"
-							class="relative z-[1] flex size-full cursor-grab items-center px-3 text-left focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none active:cursor-grabbing"
+							class="relative z-[1] flex size-full cursor-grab touch-none items-center px-3 text-left focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none active:cursor-grabbing"
 							aria-pressed={selectedAudioItemID === item.id}
 							title={m.video_studio_timing_keyboard()}
 							onclick={() => onSelectAudioItem(item.id)}
@@ -821,7 +839,7 @@
 						</button>
 						<button
 							type="button"
-							class="absolute inset-y-0 left-0 z-10 w-5 cursor-ew-resize border-r border-emerald-600/60 bg-emerald-500/20 focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
+							class="absolute inset-y-0 left-0 z-10 w-2 cursor-ew-resize touch-none border-r border-emerald-600/60 bg-emerald-500/20 after:absolute after:-inset-x-[18px] after:inset-y-0 focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none sm:after:hidden"
 							aria-label={m.video_studio_adjust_item_start()}
 							title={m.video_studio_timing_keyboard()}
 							onpointerdown={(event) =>
@@ -846,7 +864,7 @@
 						></button>
 						<button
 							type="button"
-							class="absolute inset-y-0 right-0 z-10 w-5 cursor-ew-resize border-l border-emerald-600/60 bg-emerald-500/20 focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
+							class="absolute inset-y-0 right-0 z-10 w-2 cursor-ew-resize touch-none border-l border-emerald-600/60 bg-emerald-500/20 after:absolute after:-inset-x-[18px] after:inset-y-0 focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none sm:after:hidden"
 							aria-label={m.video_studio_adjust_item_end()}
 							title={m.video_studio_timing_keyboard()}
 							onpointerdown={(event) =>
@@ -894,7 +912,7 @@
 					>
 						<button
 							type="button"
-							class="size-full cursor-grab truncate px-3 py-1 text-left focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none active:cursor-grabbing"
+							class="size-full cursor-grab touch-none truncate px-3 py-1 text-left focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none active:cursor-grabbing"
 							aria-pressed={selectedCaptionCueID === cue.id}
 							title={m.video_studio_timing_keyboard()}
 							onclick={() => onSelectCaptionCue(cue.id)}
@@ -922,7 +940,7 @@
 						</button>
 						<button
 							type="button"
-							class="absolute inset-y-0 left-0 z-10 w-5 cursor-ew-resize border-r border-sky-600/60 bg-sky-500/20 focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
+							class="absolute inset-y-0 left-0 z-10 w-2 cursor-ew-resize touch-none border-r border-sky-600/60 bg-sky-500/20 after:absolute after:-inset-x-[18px] after:inset-y-0 focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none sm:after:hidden"
 							aria-label={m.video_studio_adjust_caption_start()}
 							title={m.video_studio_timing_keyboard()}
 							onpointerdown={(event) =>
@@ -947,7 +965,7 @@
 						></button>
 						<button
 							type="button"
-							class="absolute inset-y-0 right-0 z-10 w-5 cursor-ew-resize border-l border-sky-600/60 bg-sky-500/20 focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
+							class="absolute inset-y-0 right-0 z-10 w-2 cursor-ew-resize touch-none border-l border-sky-600/60 bg-sky-500/20 after:absolute after:-inset-x-[18px] after:inset-y-0 focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none sm:after:hidden"
 							aria-label={m.video_studio_adjust_caption_end()}
 							title={m.video_studio_timing_keyboard()}
 							onpointerdown={(event) =>

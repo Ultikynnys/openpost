@@ -16,18 +16,16 @@ export async function detectVideoStudioCapabilities(): Promise<VideoStudioCapabi
 	const webgl2 = canCreateWebGL2Context();
 	const h264Encoder = videoEncoder ? (await firstPlatformVideoCodec(640, 360)) === 'avc' : false;
 	const aacEncoder = await canEncodeAAC();
-	const precisePointer = matchMedia('(any-pointer: fine)').matches;
 	const touchOnlyPhone =
 		navigator.maxTouchPoints > 0 &&
 		matchMedia('(pointer: coarse) and (hover: none)').matches &&
-		!precisePointer &&
 		window.innerWidth < 768;
 	const editorMode: VideoStudioCapabilities['editorMode'] = touchOnlyPhone
-		? 'preview'
+		? 'compact'
 		: matchMedia('(min-width: 80rem)').matches
 			? 'full'
 			: 'compact';
-	const desktopTimeline = editorMode !== 'preview';
+	const desktopTimeline = true;
 	const reasons: string[] = [];
 
 	if (!webCodecs) reasons.push('This browser does not provide the WebCodecs video engine.');

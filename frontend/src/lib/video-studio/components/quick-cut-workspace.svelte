@@ -16,11 +16,22 @@ FORM: LosslessCut-style focused operate surface; no asset library, effects brows
 	import { Button } from '$lib/components/ui/button';
 	import { Slider } from '$lib/components/ui/slider';
 	import { m } from '$lib/paraglide/messages';
+	import {
+		ensureSourceArtifacts,
+		getSourceArtifactIndex,
+		subscribeToSourceArtifacts,
+		type SourceArtifactIndex
+	} from '../artifacts';
 	import { listProjectAssets, readProjectFile } from '../storage';
 	import { localVideoSourceURL } from '../source-url';
-	import { isKeyframeAligned, nearestKeyframeUS, quickCutCompatibility } from '../lossless';
-	import type { SourceArtifactIndex } from '../artifacts';
+	import {
+		isKeyframeAligned,
+		nearestKeyframeUS,
+		quickCutCompatibility,
+		resolveKeyframeAlignment
+	} from '../lossless';
 	import CheckIcon from 'lucide-svelte/icons/check';
+	import DownloadIcon from 'lucide-svelte/icons/download';
 	import FilmIcon from 'lucide-svelte/icons/film';
 	import LoaderIcon from 'lucide-svelte/icons/loader-2';
 	import PauseIcon from 'lucide-svelte/icons/pause';
@@ -43,7 +54,10 @@ FORM: LosslessCut-style focused operate surface; no asset library, effects brows
 		onSplit: () => void;
 		onDelete: () => void;
 		onTrim: (clipID: string, edge: 'start' | 'end', deltaUS: number) => void;
+		onSetSourceBoundary: (clipID: string, edge: 'start' | 'end', sourceTimestampUS: number) => void;
 		onFastExport: () => void;
+		onExportSegment: (clipID: string) => void;
+		onPreciseExport: () => void;
 		onOpenStudio: () => void;
 	}
 
@@ -61,7 +75,10 @@ FORM: LosslessCut-style focused operate surface; no asset library, effects brows
 		onSplit,
 		onDelete,
 		onTrim,
+		onSetSourceBoundary,
 		onFastExport,
+		onExportSegment,
+		onPreciseExport,
 		onOpenStudio
 	}: Props = $props();
 	let videoElement = $state<HTMLVideoElement>();
@@ -69,6 +86,8 @@ FORM: LosslessCut-style focused operate surface; no asset library, effects brows
 	let keyframesUS = $state.raw<number[]>([]);
 	let waveformPeaks = $state.raw<number[]>([]);
 	let thumbnailURL = $state('');
+	let artifact = $state.raw<SourceArtifactIndex | null>(null);
+	let artifactError = $state('');
 	const compatibility = $derived(quickCutCompatibility(project));
 	const source = $derived(project.sources[compatibility.segments[0]?.source_id ?? '']);
 	const sourceDurationUS = $derived(Math.max(1, source?.duration_us ?? 1));
@@ -94,32 +113,51 @@ FORM: LosslessCut-style focused operate surface; no asset library, effects brows
 	);
 	const keyframeSafe = $derived(isKeyframeAligned(keyframesUS, activeClip?.source_in_us ?? 0));
 	const allKeyframesSafe = $derived(
-		keyframesUS.length > 0 &&
+		artifact?.index_complete === true &&
+			keyframesUS.length > 0 &&
 			compatibility.segments.every((segment) =>
-				isKeyframeAligned(keyframesUS, segment.source_start_us)
+				resolveKeyframeAlignment(keyframesUS, segment.source_start_us)
 			)
 	);
 
 	onMount(() => {
 		let stopped = false;
-		void loadArtifacts().catch(() => undefined);
-		const refreshTimers = [1_500, 5_000, 15_000].map((delay) =>
-			window.setTimeout(() => void loadArtifacts().catch(() => undefined), delay)
-		);
+		const controller = new AbortController();
+		const unsubscribe = subscribeToSourceArtifacts((progress) => {
+			if (progress.project_id !== projectID || progress.source_id !== source?.id || stopped) return;
+			artifact = progress.artifact;
+			keyframesUS = progress.artifact.keyframes_us;
+			waveformPeaks = progress.artifact.waveform_peaks;
+			void refreshVisualAssets().catch(() => undefined);
+		});
+		void loadArtifacts();
 		async function loadArtifacts() {
 			if (!source) return;
-			sourceURL = await localVideoSourceURL(source, projectID, true);
-			const assets = await listProjectAssets(projectID, source.id);
-			const analysis = assets.find((item) => item.kind === 'analysis');
-			const waveform = assets.find((item) => item.kind === 'waveform');
-			const thumbnail = assets.find((item) => item.kind === 'thumbnail');
-			if (analysis) {
-				const file = await readProjectFile(analysis.path);
-				if (file) {
-					const artifact = JSON.parse(await file.text()) as SourceArtifactIndex;
-					if (!stopped) keyframesUS = artifact.keyframes_us;
+			try {
+				sourceURL = await localVideoSourceURL(source, projectID, false);
+				artifact = await getSourceArtifactIndex(projectID, source.id);
+				if (artifact) {
+					keyframesUS = artifact.keyframes_us;
+					waveformPeaks = artifact.waveform_peaks;
+				}
+				await refreshVisualAssets();
+				artifact = await ensureSourceArtifacts(projectID, source, {
+					profile: 'index',
+					signal: controller.signal
+				});
+				if (artifact) keyframesUS = artifact.keyframes_us;
+			} catch (cause) {
+				if (!controller.signal.aborted) {
+					artifactError =
+						cause instanceof Error ? cause.message : m.video_studio_quick_index_failed();
 				}
 			}
+		}
+		async function refreshVisualAssets() {
+			if (!source) return;
+			const assets = await listProjectAssets(projectID, source.id);
+			const waveform = assets.find((item) => item.kind === 'waveform');
+			const thumbnail = assets.find((item) => item.kind === 'thumbnail');
 			if (waveform) {
 				const file = await readProjectFile(waveform.path);
 				if (file && !stopped) waveformPeaks = JSON.parse(await file.text()) as number[];
@@ -134,7 +172,8 @@ FORM: LosslessCut-style focused operate surface; no asset library, effects brows
 		}
 		return () => {
 			stopped = true;
-			for (const timer of refreshTimers) window.clearTimeout(timer);
+			controller.abort();
+			unsubscribe();
 			if (thumbnailURL) URL.revokeObjectURL(thumbnailURL);
 		};
 	});
@@ -167,7 +206,7 @@ FORM: LosslessCut-style focused operate surface; no asset library, effects brows
 		if (!activeClip || !activeTiming) return;
 		const nearest = nearestKeyframeUS(keyframesUS, activeClip.source_in_us);
 		if (nearest === null) return;
-		onTrim(activeClip.id, 'start', nearest - activeClip.source_in_us);
+		onSetSourceBoundary(activeClip.id, 'start', nearest);
 		onSeek(activeTiming.timeline_start_us);
 	}
 
@@ -360,33 +399,68 @@ FORM: LosslessCut-style focused operate surface; no asset library, effects brows
 		</p>
 		<div class="mt-4 space-y-1.5">
 			{#each compatibility.segments as segment, index (segment.clip_id)}
-				<button
-					type="button"
+				<div
 					class={[
-						'flex min-h-12 w-full items-center gap-3 rounded-md px-3 text-left text-sm transition-colors focus-visible:ring-2 focus-visible:ring-orange-400 focus-visible:outline-none',
+						'flex min-h-12 w-full items-center rounded-md text-sm transition-colors',
 						segment.clip_id === selectedClipID
 							? 'bg-orange-400/16 text-orange-100'
-							: 'bg-white/[0.035] text-zinc-300 hover:bg-white/[0.07]'
+							: 'bg-white/[0.035] text-zinc-300'
 					]}
-					onclick={() => {
-						onSelectClip(segment.clip_id);
-						onSeek(segment.timeline_start_us);
-					}}
 				>
-					<span class="font-mono text-xs text-zinc-500">{String(index + 1).padStart(2, '0')}</span>
-					<span class="min-w-0 flex-1">
-						<span class="block font-medium"
-							>{m.video_studio_quick_section({ number: index + 1 })}</span
+					<button
+						type="button"
+						class="flex min-h-12 min-w-0 flex-1 items-center gap-3 rounded-l-md px-3 text-left hover:bg-white/[0.04] focus-visible:ring-2 focus-visible:ring-orange-400 focus-visible:outline-none"
+						onclick={() => {
+							onSelectClip(segment.clip_id);
+							onSeek(segment.timeline_start_us);
+						}}
+					>
+						<span class="font-mono text-xs text-zinc-500">{String(index + 1).padStart(2, '0')}</span
 						>
-						<span class="block truncate text-[11px] text-zinc-500"
-							>{formatTime(segment.source_start_us)} → {formatTime(segment.source_end_us)}</span
-						>
-					</span>
-				</button>
+						<span class="min-w-0 flex-1">
+							<span class="block font-medium"
+								>{m.video_studio_quick_section({ number: index + 1 })}</span
+							>
+							<span class="block truncate text-[11px] text-zinc-500"
+								>{formatTime(segment.source_start_us)} → {formatTime(segment.source_end_us)}</span
+							>
+						</span>
+					</button>
+					<Button
+						variant="ghost"
+						size="icon-sm"
+						class="mr-1 shrink-0"
+						disabled={fastExportBusy ||
+							!artifact?.index_complete ||
+							!isKeyframeAligned(keyframesUS, segment.source_start_us)}
+						onclick={() => onExportSegment(segment.clip_id)}
+						aria-label={m.video_studio_quick_export_section({ number: index + 1 })}
+						title={m.video_studio_quick_export_section({ number: index + 1 })}
+					>
+						<DownloadIcon class="size-4" />
+					</Button>
+				</div>
 			{/each}
 		</div>
 
 		<div class="mt-5 border-t border-white/10 pt-4">
+			{#if artifact && !artifact.index_complete}
+				<div class="mb-4" aria-live="polite">
+					<div class="flex items-center justify-between gap-3 text-xs text-zinc-400">
+						<span>{m.video_studio_quick_indexing()}</span>
+						<span class="font-mono tabular-nums">{Math.round(artifact.progress * 100)}%</span>
+					</div>
+					<div class="mt-2 h-1.5 overflow-hidden rounded-full bg-white/10">
+						<div
+							class="h-full bg-orange-400 transition-[width] duration-150"
+							style:width={`${Math.round(artifact.progress * 100)}%`}
+						></div>
+					</div>
+				</div>
+			{/if}
+			{#if artifactError}
+				<p class="mb-4 text-xs leading-5 text-red-300" role="alert">{artifactError}</p>
+			{/if}
 			{#if compatibility.compatible}
 				<p class="flex gap-2 text-xs leading-5 text-zinc-400">
 					<CheckIcon
@@ -424,7 +498,10 @@ FORM: LosslessCut-style focused operate surface; no asset library, effects brows
 			{/if}
 			<Button
 				class="mt-4 w-full"
-				disabled={!compatibility.compatible || !allKeyframesSafe || fastExportBusy}
+				disabled={!compatibility.compatible ||
+					!artifact?.index_complete ||
+					!allKeyframesSafe ||
+					fastExportBusy}
 				onclick={onFastExport}
 			>
 				{#if fastExportBusy}<LoaderIcon class="size-4 animate-spin" />{:else}<SparklesIcon
@@ -432,6 +509,14 @@ FORM: LosslessCut-style focused operate surface; no asset library, effects brows
 					/>{/if}
 				{m.video_studio_quick_fast_export()}
 			</Button>
+			{#if compatibility.compatible && artifact?.index_complete && !allKeyframesSafe}
+				<p class="mt-3 text-xs leading-5 text-zinc-400">
+					{m.video_studio_quick_precise_description()}
+				</p>
+				<Button class="mt-2 w-full" variant="outline" onclick={onPreciseExport}>
+					{m.video_studio_quick_precise_export()}
+				</Button>
+			{/if}
 			<Button class="mt-2 w-full" variant="outline" onclick={onOpenStudio}
 				>{m.video_studio_quick_open_full()}</Button
 			>

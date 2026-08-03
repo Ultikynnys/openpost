@@ -11,6 +11,7 @@
 	} from '@openpost/video-project';
 	import { evaluateAudio, evaluateFrame, type EvaluatedPrimaryLayer } from '../render-graph';
 	import { localVideoSourceURL } from '../source-url';
+	import { subscribeToSourceArtifacts } from '../artifacts';
 	import { VideoStudioPreviewEngine, type PreviewEngineDiagnostics } from '../preview-engine';
 	import { m } from '$lib/paraglide/messages';
 	import PlayIcon from 'lucide-svelte/icons/play';
@@ -51,6 +52,8 @@
 	let previewWorkerReady = $state(false);
 	let previewWorkerError = $state('');
 	let previewDiagnostics = $state<PreviewEngineDiagnostics | undefined>();
+	let previewRenderedTimestampUS = $state(0);
+	let artifactRevision = $state(0);
 	let dragging = $state<{
 		kind: 'clip' | 'visual';
 		id: string;
@@ -63,6 +66,22 @@
 	const frame = $derived(evaluateFrame(project, variantID, playheadUS));
 	const audioFrame = $derived(evaluateAudio(project, playheadUS, playheadUS + 100_000));
 	const primary = $derived(frame.primary_layers.at(-1));
+	const activeVideoSourceCount = $derived.by(() => {
+		const sourceIDs = new Set<string>();
+		for (const layer of frame.primary_layers) {
+			const source = project.sources[layer.source_id];
+			if (source && source.kind !== 'image') sourceIDs.add(source.id);
+		}
+		for (const layer of frame.visual_layers) {
+			if (layer.item.type !== 'media' && layer.item.type !== 'camera') continue;
+			const source = project.sources[layer.item.source_id];
+			if (source && source.kind !== 'image') sourceIDs.add(source.id);
+		}
+		return sourceIDs.size;
+	});
+	const nativePlayback = $derived(
+		playing && activeVideoSourceCount > 0 && activeVideoSourceCount <= 3
+	);
 	const dipTransition = $derived(
 		frame.primary_layers.find(
 			(layer) => layer.transition?.type === 'dip-black' || layer.transition?.type === 'dip-white'
@@ -71,12 +90,26 @@
 	const variant = $derived(project.variants.find((item) => item.id === variantID)!);
 
 	onMount(() => {
+		const proxyStates = new Map<string, string>();
+		const unsubscribeArtifacts = subscribeToSourceArtifacts((progress) => {
+			if (progress.project_id !== projectID || !project.sources[progress.source_id]) return;
+			const previous = proxyStates.get(progress.source_id);
+			const next = progress.artifact.proxy_state;
+			proxyStates.set(progress.source_id, next);
+			if (previous === next || (next !== 'ready' && next !== 'pending' && next !== 'not-needed')) {
+				return;
+			}
+			loadedSourceID = '';
+			overlaySourceURLs = {};
+			artifactRevision += 1;
+		});
 		try {
 			previewEngine = new VideoStudioPreviewEngine(
 				previewCanvas,
 				projectID || undefined,
 				(state) => {
 					previewWorkerReady = state.ready;
+					previewRenderedTimestampUS = state.rendered_timestamp_us;
 					previewWorkerError = state.error ?? '';
 					previewDiagnostics = state.diagnostics;
 				}
@@ -85,6 +118,7 @@
 			previewWorkerError =
 				cause instanceof Error ? cause.message : 'The bounded preview renderer is unavailable.';
 		}
+		return unsubscribeArtifacts;
 	});
 
 	onDestroy(() => previewEngine?.dispose());
@@ -92,6 +126,7 @@
 	$effect(() => {
 		const engine = previewEngine;
 		const document = project;
+		void artifactRevision;
 		if (!engine) return;
 		void engine.configure(document).catch((cause) => {
 			if (cause instanceof DOMException && cause.name === 'AbortError') return;
@@ -102,11 +137,12 @@
 	});
 
 	$effect(() => {
-		previewEngine?.render(variantID, playheadUS, playing);
+		if (!nativePlayback) previewEngine?.render(variantID, playheadUS, playing);
 	});
 
 	$effect(() => {
 		const layer = primary;
+		void artifactRevision;
 		const source = layer ? project.sources[layer.source_id] : undefined;
 		if (!source) {
 			sourceURL = '';
@@ -127,6 +163,7 @@
 	});
 
 	$effect(() => {
+		void artifactRevision;
 		const sources = [
 			...frame.primary_layers.map((layer) => project.sources[layer.source_id]),
 			...frame.visual_layers.flatMap((layer) =>
@@ -153,7 +190,7 @@
 			);
 			if (!element) continue;
 			const expected = audio.source_time_us / 1_000_000;
-			if (Math.abs(element.currentTime - expected) > (playing ? 0.18 : 0.025)) {
+			if (Math.abs(element.currentTime - expected) > (playing ? 1 : 0.025)) {
 				element.currentTime = expected;
 			}
 			element.playbackRate = audio.playback_rate;
@@ -169,25 +206,28 @@
 	});
 
 	$effect(() => {
-		if (previewWorkerReady) return;
 		for (const layer of frame.primary_layers) {
 			const video = document.querySelector<HTMLVideoElement>(
 				`[data-video-studio-primary="${layer.clip_id}"]`
 			);
 			if (!video) continue;
 			const expected = layer.source_time_us / 1_000_000;
-			if (Math.abs(video.currentTime - expected) > (playing ? 0.18 : 0.025)) {
+			const enteringNativePlayback = video.dataset.nativePlayback !== 'true';
+			if (
+				(!nativePlayback || enteringNativePlayback) &&
+				Math.abs(video.currentTime - expected) > 0.025
+			) {
 				video.currentTime = expected;
 			}
+			video.dataset.nativePlayback = nativePlayback ? 'true' : 'false';
 			const clip = project.primary_sequence.find((candidate) => candidate.id === layer.clip_id);
 			video.playbackRate = clip && isPrimarySequenceClip(clip) ? clip.speed : 1;
-			if (playing) void video.play().catch(() => undefined);
+			if (nativePlayback) void video.play().catch(() => undefined);
 			else video.pause();
 		}
 	});
 
 	$effect(() => {
-		if (previewWorkerReady) return;
 		for (const layer of frame.visual_layers) {
 			if (layer.item.type !== 'media' && layer.item.type !== 'camera') continue;
 			const element = document.querySelector<HTMLVideoElement>(
@@ -196,11 +236,16 @@
 			if (!element) continue;
 			const expected =
 				(layer.item.source_in_us + layer.local_time_us * layer.item.speed) / 1_000_000;
-			if (Math.abs(element.currentTime - expected) > (playing ? 0.18 : 0.025)) {
+			const enteringNativePlayback = element.dataset.nativePlayback !== 'true';
+			if (
+				(!nativePlayback || enteringNativePlayback) &&
+				Math.abs(element.currentTime - expected) > 0.025
+			) {
 				element.currentTime = expected;
 			}
+			element.dataset.nativePlayback = nativePlayback ? 'true' : 'false';
 			element.playbackRate = layer.item.speed;
-			if (playing) void element.play().catch(() => undefined);
+			if (nativePlayback) void element.play().catch(() => undefined);
 			else element.pause();
 		}
 	});
@@ -382,9 +427,16 @@
 	data-preview-active-decoders={previewDiagnostics?.active_video_decoders ?? 0}
 	data-preview-peak-decoders={previewDiagnostics?.peak_video_decoders ?? 0}
 	data-preview-proxy-sources={previewDiagnostics?.proxy_source_count ?? 0}
-	data-preview-quality={previewDiagnostics?.quality ?? 'unavailable'}
+	data-preview-quality={nativePlayback
+		? 'adaptive'
+		: (previewDiagnostics?.quality ?? 'unavailable')}
 	data-preview-dropped-requests={previewDiagnostics?.dropped_render_requests ?? 0}
+	data-preview-render-ms={previewDiagnostics?.render_ms ?? 0}
+	data-preview-rendered-timestamp-us={previewRenderedTimestampUS}
+	data-preview-sample-requests={previewDiagnostics?.sample_requests ?? 0}
+	data-preview-discontinuity-seeks={previewDiagnostics?.discontinuity_seeks ?? 0}
 	data-preview-error={previewWorkerError}
+	data-preview-render-mode={nativePlayback ? 'native' : 'worker'}
 >
 	<div
 		class="relative max-h-full max-w-full overflow-hidden bg-black shadow-2xl"
@@ -396,7 +448,7 @@
 		<canvas
 			bind:this={previewCanvas}
 			class="pointer-events-none absolute inset-0 size-full object-contain"
-			class:hidden={!previewWorkerReady}
+			class:hidden={!previewWorkerReady || nativePlayback}
 			aria-hidden="true"
 		></canvas>
 		{#if primary && sourceURL}
@@ -420,7 +472,7 @@
 						data-video-studio-primary={layer.clip_id}
 						src={layerURL}
 						class="absolute max-w-none object-cover"
-						class:hidden={previewWorkerReady}
+						class:hidden={previewWorkerReady && !nativePlayback}
 						style={presentationStyle(layer)}
 						muted
 						playsinline
@@ -431,7 +483,7 @@
 			{#if dipTransition}
 				<div
 					class="pointer-events-none absolute inset-0 z-[4]"
-					class:hidden={previewWorkerReady}
+					class:hidden={previewWorkerReady && !nativePlayback}
 					style:background={dipTransition.type === 'dip-white' ? '#ffffff' : '#000000'}
 					style:opacity={dipTransition.role === 'outgoing'
 						? dipTransition.progress
@@ -442,12 +494,12 @@
 			{#if vignetteOpacity() > 0}
 				<div
 					class="pointer-events-none absolute inset-0 z-[5]"
-					class:hidden={previewWorkerReady}
+					class:hidden={previewWorkerReady && !nativePlayback}
 					style:background={`radial-gradient(circle at center, transparent 25%, rgb(0 0 0 / ${vignetteOpacity()}) 100%)`}
 					aria-hidden="true"
 				></div>
 			{/if}
-		{:else if !previewWorkerReady}
+		{:else if !previewWorkerReady || nativePlayback}
 			<div class="absolute inset-0 flex flex-col items-center justify-center gap-3 text-zinc-500">
 				<PlayIcon class="size-7" />
 				<p class="text-sm">
@@ -456,7 +508,7 @@
 			</div>
 		{/if}
 
-		{#if !previewWorkerReady}
+		{#if !previewWorkerReady || nativePlayback}
 			{#each frame.visual_layers as layer (layer.item.id)}
 				{#if layer.item.type === 'text'}
 					<div
@@ -559,7 +611,7 @@
 			</button>
 		{/each}
 
-		{#if !previewWorkerReady}
+		{#if !previewWorkerReady || nativePlayback}
 			{#each frame.captions as caption (caption.cue.id)}
 				{@const displayText = captionDisplayText(caption.cue)}
 				{@const timedText = caption.cue.words

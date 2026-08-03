@@ -12,6 +12,7 @@ FORM: Operate surface; no floating-card dashboard, unlimited NLE chrome, hidden 
 	import { resolve } from '$app/paths';
 	import {
 		VideoProjectHistory,
+		buildFocusZoomKeyframes,
 		captionsToSRT,
 		captionsToWebVTT,
 		cloneVideoProject,
@@ -25,17 +26,19 @@ FORM: Operate surface; no floating-card dashboard, unlimited NLE chrome, hidden 
 		isPrimarySequenceGap,
 		isPrimarySequenceClip,
 		projectDurationUS,
-		removePrimaryRanges,
 		reorderPrimaryClip,
 		rippleDeleteCaptionWords,
+		rippleDeleteTimelineRanges,
 		resizePrimaryGap,
 		setCaptionCueText,
 		setClipSpeed,
+		setPrimaryClipSourceBoundary,
 		setVariantPresentationOverride,
 		splitPrimaryClip,
 		trimPrimaryClip,
 		validateVideoProject,
 		type TransitionKind,
+		type EasingName,
 		type CaptionCue,
 		type ShapeStyle,
 		type PrimarySequenceClip,
@@ -85,7 +88,12 @@ FORM: Operate surface; no floating-card dashboard, unlimited NLE chrome, hidden 
 	import { analyzeSmartFraming, type SmartFramingResult } from '$lib/video-studio/smart-framing';
 	import { detectVideoStudioCapabilities } from '$lib/video-studio/capabilities';
 	import { m } from '$lib/paraglide/messages';
-	import { addFileToProject, addRecordingToProject, formatBytes } from '$lib/video-studio/project';
+	import {
+		addFileToProject,
+		addRecordingToProject,
+		formatBytes,
+		recordingCameraPresentation
+	} from '$lib/video-studio/project';
 	import { exportVideoProject, preflightVideoProjectExport } from '$lib/video-studio/exporter';
 	import {
 		BUNDLED_AUDIO_ITEMS,
@@ -109,6 +117,15 @@ FORM: Operate surface; no floating-card dashboard, unlimited NLE chrome, hidden 
 		writeProjectFile
 	} from '$lib/video-studio/storage';
 	import { VideoRecordingSession, type RecordingSessionState } from '$lib/video-studio/recorder';
+	import {
+		cancelSourceArtifactGeneration,
+		ensureSourceArtifacts,
+		getSourceArtifactIndex,
+		removeSourcePreviewProxy,
+		resetSourceArtifacts,
+		subscribeToSourceArtifacts,
+		type SourceArtifactIndex
+	} from '$lib/video-studio/artifacts';
 	import { recoverVerifiedRecording } from '$lib/video-studio/recording-recovery';
 	import {
 		classifyVideoStudioFailure,
@@ -123,7 +140,7 @@ FORM: Operate surface; no floating-card dashboard, unlimited NLE chrome, hidden 
 	import VideoPreview from '$lib/video-studio/components/video-preview.svelte';
 	import QuickCutWorkspace from '$lib/video-studio/components/quick-cut-workspace.svelte';
 	import ExportDialog from '$lib/video-studio/components/export-dialog.svelte';
-	import { quickCutCompatibility } from '$lib/video-studio/lossless';
+	import { quickCutCompatibility, quickCutOutputPreference } from '$lib/video-studio/lossless';
 	import ArrowLeftIcon from 'lucide-svelte/icons/arrow-left';
 	import CameraIcon from 'lucide-svelte/icons/camera';
 	import CaptionsIcon from 'lucide-svelte/icons/captions';
@@ -162,6 +179,17 @@ FORM: Operate surface; no floating-card dashboard, unlimited NLE chrome, hidden 
 		| 'transitions'
 		| 'brand'
 		| 'smart';
+	type EffectPresetID =
+		| 'clean'
+		| 'vivid'
+		| 'warm'
+		| 'cool'
+		| 'mono'
+		| 'soft'
+		| 'cinematic'
+		| 'golden'
+		| 'teal'
+		| 'matte';
 	type TextOverlay = Extract<VisualTrackItem, { type: 'text' }>;
 	interface LocalVideoTextStyle {
 		id: string;
@@ -181,6 +209,58 @@ FORM: Operate surface; no floating-card dashboard, unlimited NLE chrome, hidden 
 		{ id: 'brand', label: () => m.video_studio_tool_brand(), icon: PaletteIcon },
 		{ id: 'smart', label: () => m.video_studio_tool_smart(), icon: WandIcon }
 	] satisfies Array<{ id: ToolID; label: () => string; icon: typeof FilmIcon }>;
+	const effectLooks = [
+		{
+			id: 'clean',
+			label: () => m.video_studio_effect_clean(),
+			preview: 'from-slate-300 via-white to-slate-400'
+		},
+		{
+			id: 'vivid',
+			label: () => m.video_studio_effect_vivid(),
+			preview: 'from-fuchsia-500 via-orange-400 to-cyan-400'
+		},
+		{
+			id: 'warm',
+			label: () => m.video_studio_effect_warm(),
+			preview: 'from-amber-700 via-orange-300 to-yellow-100'
+		},
+		{
+			id: 'cool',
+			label: () => m.video_studio_effect_cool(),
+			preview: 'from-blue-800 via-cyan-400 to-slate-100'
+		},
+		{
+			id: 'mono',
+			label: () => m.video_studio_effect_mono(),
+			preview: 'from-black via-zinc-500 to-white'
+		},
+		{
+			id: 'soft',
+			label: () => m.video_studio_effect_soft(),
+			preview: 'from-rose-100 via-violet-200 to-sky-100'
+		},
+		{
+			id: 'cinematic',
+			label: () => m.video_studio_effect_cinematic(),
+			preview: 'from-zinc-950 via-amber-900 to-slate-400'
+		},
+		{
+			id: 'golden',
+			label: () => m.video_studio_effect_golden(),
+			preview: 'from-amber-800 via-yellow-400 to-orange-100'
+		},
+		{
+			id: 'teal',
+			label: () => m.video_studio_effect_teal(),
+			preview: 'from-teal-950 via-cyan-600 to-orange-300'
+		},
+		{
+			id: 'matte',
+			label: () => m.video_studio_effect_matte(),
+			preview: 'from-stone-700 via-stone-400 to-stone-200'
+		}
+	] satisfies Array<{ id: EffectPresetID; label: () => string; preview: string }>;
 
 	const variantOptions = [
 		{ value: 'portrait', label: m.video_studio_variant_portrait() },
@@ -202,6 +282,7 @@ FORM: Operate surface; no floating-card dashboard, unlimited NLE chrome, hidden 
 		{ type: 'contrast', label: m.video_studio_contrast(), min: -1, max: 1, step: 0.05 },
 		{ type: 'saturation', label: m.video_studio_saturation(), min: -1, max: 1, step: 0.05 },
 		{ type: 'temperature', label: m.video_studio_temperature(), min: -1, max: 1, step: 0.05 },
+		{ type: 'tint', label: m.video_studio_tint(), min: -1, max: 1, step: 0.05 },
 		{ type: 'blur', label: m.video_studio_blur(), min: 0, max: 20, step: 0.5 },
 		{ type: 'vignette', label: m.video_studio_vignette(), min: 0, max: 1, step: 0.05 }
 	] satisfies Array<{
@@ -222,9 +303,11 @@ FORM: Operate surface; no floating-card dashboard, unlimited NLE chrome, hidden 
 	let selectedVisualItemID = $state('');
 	let selectedAudioItemID = $state('');
 	let selectedCaptionCueID = $state('');
-	let fullEditor = $state(false);
 	let compactToolOpen = $state(false);
 	let compactInspectorOpen = $state(false);
+	let sourceArtifacts = $state<Record<string, SourceArtifactIndex>>({});
+	let sourceArtifactBusy = $state<Record<string, boolean>>({});
+	let sourceArtifactMessage = $state<Record<string, string>>({});
 	let persistedExports = $state<
 		Array<{ id: string; path: string; name: string; size_bytes: number; variant_id: string }>
 	>([]);
@@ -277,6 +360,7 @@ FORM: Operate surface; no floating-card dashboard, unlimited NLE chrome, hidden 
 	let silenceAnalysis = $state<SilenceAnalysis | null>(null);
 	let selectedSilences = $state<string[]>([]);
 	let selectedFillers = $state<string[]>([]);
+	let selectedTranscriptWords = $state<string[]>([]);
 	let creditsCopied = $state(false);
 	let captionSearch = $state('');
 	let captionReplacement = $state('');
@@ -284,9 +368,17 @@ FORM: Operate surface; no floating-card dashboard, unlimited NLE chrome, hidden 
 	let smartProgress = $state(0);
 	let smartResult = $state<SmartFramingResult | null>(null);
 	let selectedFocusZooms = $state<string[]>([]);
+	let zoomDurationSeconds = $state(1.4);
+	let zoomScaleMultiplier = $state(1.25);
+	let zoomFocusX = $state(0.5);
+	let zoomFocusY = $state(0.5);
+	let zoomEasing = $state<EasingName>('focus-spring');
 	let recordCamera = $state(true);
 	let recordMicrophone = $state(true);
 	let recordSystemAudio = $state(true);
+	let recordCameraLayout = $state<'circle' | 'rounded' | 'portrait' | 'side-by-side' | 'full'>(
+		'circle'
+	);
 	let cameraPresetVariantOnly = $state(true);
 	let recordingSession = $state<VideoRecordingSession | null>(null);
 	let recordingKind = $state<'screen' | 'voiceover' | null>(null);
@@ -309,6 +401,7 @@ FORM: Operate surface; no floating-card dashboard, unlimited NLE chrome, hidden 
 	let saveInFlight = false;
 	let saveQueued = false;
 	const history = new VideoProjectHistory(200);
+	let unsubscribeArtifacts: (() => void) | undefined;
 
 	const project = $derived(localProject?.document);
 	const quickCutMode = $derived(project?.editing_mode === 'quick-cut');
@@ -423,25 +516,20 @@ FORM: Operate surface; no floating-card dashboard, unlimited NLE chrome, hidden 
 
 	onMount(() => {
 		void initialize();
-		const precisePointerQuery = window.matchMedia('(any-pointer: fine)');
-		const touchPhoneQuery = window.matchMedia('(pointer: coarse) and (hover: none)');
-		const updateEditorMode = () => {
-			fullEditor =
-				precisePointerQuery.matches ||
-				navigator.maxTouchPoints === 0 ||
-				!touchPhoneQuery.matches ||
-				window.innerWidth >= 768;
-		};
-		updateEditorMode();
-		precisePointerQuery.addEventListener('change', updateEditorMode);
-		touchPhoneQuery.addEventListener('change', updateEditorMode);
-		window.addEventListener('resize', updateEditorMode);
+		if (window.innerWidth < 640) timelineHeight = 208;
 		window.addEventListener('keydown', handleKeyboard);
+		const handleDeviceChange = () => {
+			if (recordingSession) void refreshRecordingDevices();
+		};
+		navigator.mediaDevices?.addEventListener('devicechange', handleDeviceChange);
+		unsubscribeArtifacts = subscribeToSourceArtifacts((progress) => {
+			if (progress.project_id !== localProject?.id) return;
+			sourceArtifacts = { ...sourceArtifacts, [progress.source_id]: progress.artifact };
+		});
 		return () => {
-			precisePointerQuery.removeEventListener('change', updateEditorMode);
-			touchPhoneQuery.removeEventListener('change', updateEditorMode);
-			window.removeEventListener('resize', updateEditorMode);
 			window.removeEventListener('keydown', handleKeyboard);
+			navigator.mediaDevices?.removeEventListener('devicechange', handleDeviceChange);
+			unsubscribeArtifacts?.();
 		};
 	});
 
@@ -451,6 +539,11 @@ FORM: Operate surface; no floating-card dashboard, unlimited NLE chrome, hidden 
 		exportController?.abort();
 		fastExportController?.abort();
 		analysisController?.abort();
+		if (localProject) {
+			for (const sourceID of Object.keys(sourceArtifactBusy)) {
+				cancelSourceArtifactGeneration(localProject.id, sourceID);
+			}
+		}
 		if (recordingSession) void recordingSession.cancel();
 		revokeExportURLs();
 		if (saveState !== 'saved') void flushAutosave();
@@ -484,6 +577,29 @@ FORM: Operate surface; no floating-card dashboard, unlimited NLE chrome, hidden 
 	}
 
 	async function saveExportFile(file: File): Promise<void> {
+		const handle = await chooseExportDestination(file.name, file.type);
+		if (handle === null) return;
+		if (handle) {
+			const writable = await handle.createWritable();
+			await writable.write(file);
+			await writable.close();
+			return;
+		}
+		const url = URL.createObjectURL(file);
+		const anchor = document.createElement('a');
+		anchor.href = url;
+		anchor.download = file.name;
+		anchor.click();
+		// Chromium may not start reading a large object URL until after the click
+		// task completes. Keep it alive long enough for the browser download
+		// manager to take ownership, then release it automatically.
+		setTimeout(() => URL.revokeObjectURL(url), 60_000);
+	}
+
+	async function chooseExportDestination(
+		fileName: string,
+		mimeType: string
+	): Promise<FileSystemFileHandle | null | undefined> {
 		const picker = (
 			window as Window & {
 				showSaveFilePicker?: (options: {
@@ -492,34 +608,21 @@ FORM: Operate surface; no floating-card dashboard, unlimited NLE chrome, hidden 
 				}) => Promise<FileSystemFileHandle>;
 			}
 		).showSaveFilePicker;
-		if (picker) {
-			try {
-				const handle = await picker({
-					suggestedName: file.name,
-					types: [
-						{
-							description: file.type === 'video/mp4' ? 'MP4 video' : 'WebM video',
-							accept: {
-								[file.type]: [file.type === 'video/mp4' ? '.mp4' : '.webm']
-							}
-						}
-					]
-				});
-				const writable = await handle.createWritable();
-				await writable.write(file);
-				await writable.close();
-				return;
-			} catch (cause) {
-				if (cause instanceof DOMException && cause.name === 'AbortError') return;
-				throw cause;
-			}
+		if (!picker) return undefined;
+		try {
+			return await picker.call(window, {
+				suggestedName: fileName,
+				types: [
+					{
+						description: mimeType === 'video/mp4' ? 'MP4 video' : 'WebM video',
+						accept: { [mimeType]: [mimeType === 'video/mp4' ? '.mp4' : '.webm'] }
+					}
+				]
+			});
+		} catch (cause) {
+			if (cause instanceof DOMException && cause.name === 'AbortError') return null;
+			throw cause;
 		}
-		const url = URL.createObjectURL(file);
-		const anchor = document.createElement('a');
-		anchor.href = url;
-		anchor.download = file.name;
-		anchor.click();
-		setTimeout(() => URL.revokeObjectURL(url), 0);
 	}
 
 	function switchEditingMode(mode: 'quick-cut' | 'studio'): void {
@@ -536,22 +639,103 @@ FORM: Operate surface; no floating-card dashboard, unlimited NLE chrome, hidden 
 				return document;
 			}
 		);
+		if (mode === 'studio' && project) void prepareStudioArtifacts(project);
 	}
 
-	async function startFastExport(): Promise<void> {
+	async function refreshSourceArtifact(source: VideoSource): Promise<void> {
+		if (!localProject || source.kind === 'image') return;
+		const artifact = await getSourceArtifactIndex(localProject.id, source.id);
+		if (artifact) sourceArtifacts = { ...sourceArtifacts, [source.id]: artifact };
+	}
+
+	async function prepareStudioSource(source: VideoSource): Promise<void> {
+		if (
+			!localProject ||
+			source.locator.type !== 'local-opfs' ||
+			source.kind === 'image' ||
+			sourceArtifactBusy[source.id]
+		) {
+			return;
+		}
+		sourceArtifactBusy = { ...sourceArtifactBusy, [source.id]: true };
+		sourceArtifactMessage = { ...sourceArtifactMessage, [source.id]: '' };
+		try {
+			const artifact = await ensureSourceArtifacts(localProject.id, source, { profile: 'studio' });
+			if (artifact) sourceArtifacts = { ...sourceArtifacts, [source.id]: artifact };
+		} catch (cause) {
+			if (!(cause instanceof DOMException && cause.name === 'AbortError')) {
+				sourceArtifactMessage = {
+					...sourceArtifactMessage,
+					[source.id]: cause instanceof Error ? cause.message : m.video_studio_proxy_failed()
+				};
+			}
+		} finally {
+			sourceArtifactBusy = { ...sourceArtifactBusy, [source.id]: false };
+		}
+	}
+
+	async function prepareStudioArtifacts(document: VideoProjectDocumentV1): Promise<void> {
+		for (const source of Object.values(document.sources)) {
+			await refreshSourceArtifact(source);
+			void prepareStudioSource(source);
+		}
+	}
+
+	function cancelStudioSource(sourceID: string): void {
+		if (!localProject) return;
+		cancelSourceArtifactGeneration(localProject.id, sourceID);
+	}
+
+	async function removeStudioProxy(source: VideoSource): Promise<void> {
+		if (!localProject) return;
+		try {
+			const bytes = await removeSourcePreviewProxy(localProject.id, source);
+			sourceArtifactMessage = {
+				...sourceArtifactMessage,
+				[source.id]: m.video_studio_proxy_removed({ size: formatBytes(bytes) })
+			};
+			await refreshSourceArtifact(source);
+		} catch (cause) {
+			sourceArtifactMessage = {
+				...sourceArtifactMessage,
+				[source.id]: cause instanceof Error ? cause.message : m.video_studio_proxy_failed()
+			};
+		}
+	}
+
+	async function rebuildStudioArtifacts(source: VideoSource): Promise<void> {
+		if (!localProject) return;
+		await resetSourceArtifacts(localProject.id, source);
+		await prepareStudioSource(source);
+	}
+
+	async function startFastExport(clipID = ''): Promise<void> {
 		if (!project || !localProject || fastExportBusy) return;
+		const exportProject = cloneVideoProject(project);
+		if (clipID) {
+			const sectionIndex = exportProject.primary_sequence.findIndex((item) => item.id === clipID);
+			const section = exportProject.primary_sequence[sectionIndex];
+			if (!section || !isPrimarySequenceClip(section)) return;
+			exportProject.primary_sequence = [section];
+			exportProject.title = `${exportProject.title} section ${sectionIndex + 1}`;
+		}
+		const preference = quickCutOutputPreference(exportProject);
+		const destination = await chooseExportDestination(preference.fileName, preference.mimeType);
+		if (destination === null) return;
 		fastExportBusy = true;
 		fastExportProgress = 0;
 		error = '';
 		fastExportController = new AbortController();
 		try {
-			const { exportQuickCutLosslessly } = await import('$lib/video-studio/lossless-exporter');
-			const file = await exportQuickCutLosslessly(cloneVideoProject(project), {
+			const { exportQuickCut } = await import('$lib/video-studio/lossless-export-client');
+			const file = await exportQuickCut(exportProject, {
 				projectID: localProject.id,
 				signal: fastExportController.signal,
+				format: preference.format,
+				outputFileHandle: destination,
 				onProgress: (fraction) => (fastExportProgress = fraction)
 			});
-			await saveExportFile(file);
+			if (!destination) await saveExportFile(file);
 		} catch (cause) {
 			if (!(cause instanceof DOMException && cause.name === 'AbortError')) {
 				recordFailure(cause, 'export.quick-cut');
@@ -594,6 +778,10 @@ FORM: Operate surface; no floating-card dashboard, unlimited NLE chrome, hidden 
 				loaded.document.editing_mode = 'studio';
 			}
 			localProject = loaded;
+			for (const source of Object.values(loaded.document.sources)) {
+				void refreshSourceArtifact(source);
+			}
+			if (loaded.document.editing_mode === 'studio') void prepareStudioArtifacts(loaded.document);
 			await refreshPersistedExports(loaded.id);
 			selectedExportVariants = [variantID];
 			selectedClipID = loaded.document.primary_sequence[0]?.id ?? '';
@@ -742,6 +930,7 @@ FORM: Operate surface; no floating-card dashboard, unlimited NLE chrome, hidden 
 		selectedVisualItemID = '';
 		selectedAudioItemID = '';
 		selectedCaptionCueID = '';
+		compactToolOpen = false;
 		compactInspectorOpen = true;
 	}
 
@@ -750,6 +939,7 @@ FORM: Operate surface; no floating-card dashboard, unlimited NLE chrome, hidden 
 		selectedVisualItemID = itemID;
 		selectedAudioItemID = '';
 		selectedCaptionCueID = '';
+		compactToolOpen = false;
 		compactInspectorOpen = true;
 	}
 
@@ -758,6 +948,7 @@ FORM: Operate surface; no floating-card dashboard, unlimited NLE chrome, hidden 
 		selectedVisualItemID = '';
 		selectedAudioItemID = itemID;
 		selectedCaptionCueID = '';
+		compactToolOpen = false;
 		compactInspectorOpen = true;
 	}
 
@@ -766,6 +957,7 @@ FORM: Operate surface; no floating-card dashboard, unlimited NLE chrome, hidden 
 		selectedVisualItemID = '';
 		selectedAudioItemID = '';
 		selectedCaptionCueID = cueID;
+		compactToolOpen = false;
 		compactInspectorOpen = true;
 	}
 
@@ -801,6 +993,18 @@ FORM: Operate surface; no floating-card dashboard, unlimited NLE chrome, hidden 
 		);
 	}
 
+	function setQuickCutSourceBoundary(
+		clipID: string,
+		edge: 'start' | 'end',
+		sourceTimestampUS: number
+	): void {
+		mutate(
+			edge === 'start' ? m.video_studio_trim_start() : m.video_studio_trim_end(),
+			(document) => setPrimaryClipSourceBoundary(document, clipID, edge, sourceTimestampUS),
+			`quick-trim:${clipID}:${edge}`
+		);
+	}
+
 	function splitSelected(): void {
 		if (!selectedClipID) return;
 		try {
@@ -816,7 +1020,7 @@ FORM: Operate surface; no floating-card dashboard, unlimited NLE chrome, hidden 
 		if (!selectedDerived) return;
 		const deletedID = selectedClipID;
 		mutate(m.video_studio_ripple_delete(), (document) =>
-			removePrimaryRanges(document, [
+			rippleDeleteTimelineRanges(document, [
 				{ start_us: selectedDerived.timeline_start_us, end_us: selectedDerived.timeline_end_us }
 			])
 		);
@@ -1014,6 +1218,17 @@ FORM: Operate surface; no floating-card dashboard, unlimited NLE chrome, hidden 
 			},
 			m.video_studio_inspector_position()
 		);
+	}
+
+	function updateVisualCrop(property: 'x' | 'y' | 'width' | 'height', value: number): void {
+		if (!selectedVisualItemID || !selectedVisualPresentation) return;
+		const crop = { ...selectedVisualPresentation.crop };
+		const bounded = Math.max(0, Math.min(1, value));
+		if (property === 'x') crop.x = Math.min(bounded, 1 - crop.width);
+		else if (property === 'y') crop.y = Math.min(bounded, 1 - crop.height);
+		else if (property === 'width') crop.width = Math.max(0.05, Math.min(bounded, 1 - crop.x));
+		else crop.height = Math.max(0.05, Math.min(bounded, 1 - crop.y));
+		updateVisualPresentation(selectedVisualItemID, { crop }, m.video_studio_crop());
 	}
 
 	function updateVisualTiming(
@@ -1319,33 +1534,22 @@ FORM: Operate surface; no floating-card dashboard, unlimited NLE chrome, hidden 
 			0,
 			Math.min(selectedDerived.duration_us, playheadUS - selectedDerived.timeline_start_us)
 		);
-		const startUS = Math.max(0, localTimeUS - 400_000);
-		const endUS = Math.min(selectedDerived.duration_us, localTimeUS + 1_000_000);
-		const baseScale = selectedPresentation.scale;
-		const focusScale = Math.min(4, baseScale * 1.22);
-		const scale =
-			preset === 'in'
-				? [
-						{ time_us: startUS, value: baseScale, easing: 'focus-spring' as const },
-						{ time_us: endUS, value: focusScale, easing: 'ease-out' as const }
-					]
-				: preset === 'out'
-					? [
-							{ time_us: startUS, value: focusScale, easing: 'focus-spring' as const },
-							{ time_us: endUS, value: baseScale, easing: 'ease-out' as const }
-						]
-					: [
-							{ time_us: startUS, value: baseScale, easing: 'focus-spring' as const },
-							{
-								time_us: Math.min(endUS, startUS + 320_000),
-								value: focusScale,
-								easing: 'focus-spring' as const
-							},
-							{ time_us: endUS, value: baseScale, easing: 'ease-out' as const }
-						];
+		const focusKeyframes = buildFocusZoomKeyframes(
+			selectedPresentation,
+			selectedDerived.duration_us,
+			{
+				preset,
+				local_time_us: localTimeUS,
+				duration_us: Math.round(zoomDurationSeconds * 1_000_000),
+				scale_multiplier: zoomScaleMultiplier,
+				focus_x: zoomFocusX,
+				focus_y: zoomFocusY,
+				easing: zoomEasing
+			}
+		);
 		const keyframes = {
 			...(selectedPresentation.keyframes ?? {}),
-			scale
+			...focusKeyframes
 		};
 		mutate(m.video_studio_smooth_zoom(), (document) => {
 			const clip = primaryClipByID(document, selectedClipID);
@@ -1411,6 +1615,70 @@ FORM: Operate surface; no floating-card dashboard, unlimited NLE chrome, hidden 
 		);
 	}
 
+	function applyEffectPreset(preset: EffectPresetID | 'reset'): void {
+		const presets: Record<EffectPresetID, VideoEffect[]> = {
+			clean: [
+				{ type: 'exposure', value: 0.04 },
+				{ type: 'contrast', value: 0.08 },
+				{ type: 'saturation', value: 0.04 }
+			],
+			vivid: [
+				{ type: 'contrast', value: 0.18 },
+				{ type: 'saturation', value: 0.28 },
+				{ type: 'vignette', value: 0.1 }
+			],
+			warm: [
+				{ type: 'temperature', value: 0.42 },
+				{ type: 'tint', value: 0.08 },
+				{ type: 'saturation', value: 0.08 }
+			],
+			cool: [
+				{ type: 'temperature', value: -0.38 },
+				{ type: 'contrast', value: 0.08 },
+				{ type: 'tint', value: -0.06 }
+			],
+			mono: [
+				{ type: 'saturation', value: -1 },
+				{ type: 'contrast', value: 0.16 },
+				{ type: 'vignette', value: 0.12 }
+			],
+			soft: [
+				{ type: 'exposure', value: 0.08 },
+				{ type: 'contrast', value: -0.12 },
+				{ type: 'saturation', value: -0.08 },
+				{ type: 'blur', value: 0.5 }
+			],
+			cinematic: [
+				{ type: 'contrast', value: 0.22 },
+				{ type: 'saturation', value: -0.08 },
+				{ type: 'temperature', value: 0.08 },
+				{ type: 'vignette', value: 0.28 }
+			],
+			golden: [
+				{ type: 'exposure', value: 0.06 },
+				{ type: 'temperature', value: 0.62 },
+				{ type: 'saturation', value: 0.15 }
+			],
+			teal: [
+				{ type: 'contrast', value: 0.16 },
+				{ type: 'temperature', value: -0.22 },
+				{ type: 'tint', value: 0.3 },
+				{ type: 'saturation', value: 0.06 }
+			],
+			matte: [
+				{ type: 'exposure', value: 0.04 },
+				{ type: 'contrast', value: -0.18 },
+				{ type: 'saturation', value: -0.12 },
+				{ type: 'vignette', value: 0.1 }
+			]
+		};
+		mutate(m.video_studio_effect_preset(), (document) => {
+			const clip = primaryClipByID(document, selectedClipID);
+			if (clip) clip.effects = preset === 'reset' ? [] : structuredClone(presets[preset]);
+			return document;
+		});
+	}
+
 	function setTransition(value: string): void {
 		mutate(m.video_studio_transition(), (document) => {
 			const index = document.primary_sequence.findIndex((clip) => clip.id === selectedClipID);
@@ -1454,6 +1722,7 @@ FORM: Operate surface; no floating-card dashboard, unlimited NLE chrome, hidden 
 				}
 			}
 			localProject = draft;
+			if (draft.document.editing_mode === 'studio') void prepareStudioArtifacts(draft.document);
 			selectedClipID ||= draft.document.primary_sequence[0]?.id ?? '';
 			mutationVersion += 1;
 			await flushAutosave();
@@ -1580,38 +1849,7 @@ FORM: Operate surface; no floating-card dashboard, unlimited NLE chrome, hidden 
 	function applyCameraPreset(
 		preset: 'circle' | 'rounded' | 'portrait' | 'side-by-side' | 'full'
 	): void {
-		const values = {
-			circle: {
-				position_x: 0.82,
-				position_y: 0.78,
-				scale: 0.24,
-				corner_radius: 0.5
-			},
-			rounded: {
-				position_x: 0.8,
-				position_y: 0.76,
-				scale: 0.3,
-				corner_radius: 0.08
-			},
-			portrait: {
-				position_x: 0.78,
-				position_y: 0.5,
-				scale: 0.36,
-				corner_radius: 0.06
-			},
-			'side-by-side': {
-				position_x: 0.74,
-				position_y: 0.5,
-				scale: 0.48,
-				corner_radius: 0.03
-			},
-			full: {
-				position_x: 0.5,
-				position_y: 0.5,
-				scale: 1,
-				corner_radius: 0
-			}
-		}[preset];
+		const values = recordingCameraPresentation(preset);
 		mutate(m.video_studio_camera_layout(), (document) => {
 			for (const track of document.visual_tracks) {
 				for (const item of track.items) {
@@ -1925,6 +2163,7 @@ FORM: Operate surface; no floating-card dashboard, unlimited NLE chrome, hidden 
 			};
 			return document;
 		});
+		selectedTranscriptWords = [];
 	}
 
 	function updateCaptionCue(cueID: string, value: string): void {
@@ -1939,6 +2178,7 @@ FORM: Operate surface; no floating-card dashboard, unlimited NLE chrome, hidden 
 			},
 			`caption:${cueID}`
 		);
+		selectedTranscriptWords = selectedTranscriptWords.filter((key) => !key.startsWith(`${cueID}:`));
 	}
 
 	function replaceCaptionText(): void {
@@ -1950,6 +2190,7 @@ FORM: Operate surface; no floating-card dashboard, unlimited NLE chrome, hidden 
 			}
 			return document;
 		});
+		selectedTranscriptWords = [];
 	}
 
 	function downloadCaptions(format: 'srt' | 'vtt'): void {
@@ -1975,7 +2216,7 @@ FORM: Operate surface; no floating-card dashboard, unlimited NLE chrome, hidden 
 
 	function rippleDeleteCue(cue: CaptionCue): void {
 		mutate(m.video_studio_ripple_caption(), (document) =>
-			removePrimaryRanges(document, [
+			rippleDeleteTimelineRanges(document, [
 				{
 					start_us: Math.max(0, cue.start_us - 80_000),
 					end_us: Math.min(projectDurationUS(document), cue.end_us + 80_000)
@@ -1984,17 +2225,38 @@ FORM: Operate surface; no floating-card dashboard, unlimited NLE chrome, hidden 
 		);
 	}
 
-	function rippleDeleteTranscriptWord(cue: CaptionCue, wordIndex: number): void {
-		const word = cue.words[wordIndex];
-		if (!word) return;
-		mutate(m.video_studio_delete_transcript_word({ word: word.text }), (document) =>
+	function transcriptWordKey(cueID: string, wordIndex: number): string {
+		return `${cueID}:${wordIndex}`;
+	}
+
+	function toggleTranscriptWord(cueID: string, wordIndex: number): void {
+		const key = transcriptWordKey(cueID, wordIndex);
+		selectedTranscriptWords = selectedTranscriptWords.includes(key)
+			? selectedTranscriptWords.filter((item) => item !== key)
+			: [...selectedTranscriptWords, key];
+	}
+
+	function rippleDeleteSelectedTranscriptWords(): void {
+		if (!project || selectedTranscriptWords.length === 0) return;
+		const selections = project.caption_tracks
+			.flatMap((track) => track.cues)
+			.flatMap((cue) =>
+				cue.words.flatMap((word, wordIndex) =>
+					selectedTranscriptWords.includes(transcriptWordKey(cue.id, wordIndex))
+						? [{ cue_id: cue.id, word_index: wordIndex, start_us: word.start_us }]
+						: []
+				)
+			);
+		if (selections.length === 0) return;
+		mutate(m.video_studio_delete_transcript_words({ count: selections.length }), (document) =>
 			rippleDeleteCaptionWords(
 				document,
-				[{ cue_id: cue.id, word_index: wordIndex }],
+				selections.map(({ cue_id, word_index }) => ({ cue_id, word_index })),
 				() => `clip_${crypto.randomUUID()}`
 			)
 		);
-		playheadUS = Math.min(word.start_us, durationUS);
+		playheadUS = Math.min(...selections.map((selection) => selection.start_us), durationUS);
+		selectedTranscriptWords = [];
 		transcriptAnalysis = null;
 	}
 
@@ -2005,7 +2267,7 @@ FORM: Operate surface; no floating-card dashboard, unlimited NLE chrome, hidden 
 		);
 		if (ranges.length === 0) return;
 		mutate(m.video_studio_apply_silences(), (document) =>
-			removePrimaryRanges(
+			rippleDeleteTimelineRanges(
 				document,
 				ranges.map((range) => ({ start_us: range.start_us, end_us: range.end_us }))
 			)
@@ -2021,7 +2283,7 @@ FORM: Operate surface; no floating-card dashboard, unlimited NLE chrome, hidden 
 		);
 		if (ranges.length === 0) return;
 		mutate(m.video_studio_apply_fillers(), (document) =>
-			removePrimaryRanges(
+			rippleDeleteTimelineRanges(
 				document,
 				ranges.map((range) => ({
 					start_us: Math.max(0, range.start_us - 80_000),
@@ -2224,7 +2486,7 @@ FORM: Operate surface; no floating-card dashboard, unlimited NLE chrome, hidden 
 		try {
 			const manifest = await recordingSession.stop();
 			const draft = { ...localProject, document: cloneVideoProject(localProject.document) };
-			await addRecordingToProject(draft, manifest);
+			await addRecordingToProject(draft, manifest, { cameraLayout: recordCameraLayout });
 			localProject = draft;
 			selectedClipID ||= draft.document.primary_sequence.at(-1)?.id ?? '';
 			mutationVersion += 1;
@@ -2285,7 +2547,26 @@ FORM: Operate surface; no floating-card dashboard, unlimited NLE chrome, hidden 
 
 	function handleKeyboard(event: KeyboardEvent): void {
 		const target = event.target as HTMLElement | null;
-		if (target?.matches('input, textarea, [contenteditable="true"]')) return;
+		if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'z') {
+			if (target?.closest('input, textarea, [contenteditable="true"]')) return;
+			event.preventDefault();
+			if (event.shiftKey) redo();
+			else undo();
+			return;
+		}
+		if (event.key === 'Delete' && target?.closest('[data-video-studio-clip-select]')) {
+			event.preventDefault();
+			if (event.shiftKey) rippleDeleteSelected();
+			else leaveGapSelected();
+			return;
+		}
+		if (
+			target?.closest(
+				'input, textarea, select, button, [contenteditable="true"], [role="slider"], [role="spinbutton"], [role="combobox"]'
+			)
+		) {
+			return;
+		}
 		if (event.key === ' ' && !event.metaKey && !event.ctrlKey) {
 			event.preventDefault();
 			togglePlayback();
@@ -2306,10 +2587,6 @@ FORM: Operate surface; no floating-card dashboard, unlimited NLE chrome, hidden 
 				else if (selectedAudioItemID) deleteSelectedAudio();
 				else deleteSelectedCaption();
 			}
-		} else if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'z') {
-			event.preventDefault();
-			if (event.shiftKey) redo();
-			else undo();
 		} else if (
 			['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key) &&
 			(event.metaKey || event.ctrlKey) &&
@@ -3020,18 +3297,10 @@ FORM: Operate surface; no floating-card dashboard, unlimited NLE chrome, hidden 
 			</Button>
 			<Button
 				size="sm"
-				disabled={fastExportBusy || (!quickCutMode && !fullEditor)}
-				aria-label={quickCutMode
-					? m.video_studio_quick_fast_export()
-					: fullEditor
-						? m.video_studio_export()
-						: m.video_studio_mobile_export_disabled()}
-				title={quickCutMode
-					? m.video_studio_quick_fast_export()
-					: fullEditor
-						? m.video_studio_export()
-						: m.video_studio_mobile_export_disabled()}
-				onclick={quickCutMode ? startFastExport : openExportDialog}
+				disabled={fastExportBusy}
+				aria-label={quickCutMode ? m.video_studio_quick_fast_export() : m.video_studio_export()}
+				title={quickCutMode ? m.video_studio_quick_fast_export() : m.video_studio_export()}
+				onclick={quickCutMode ? () => startFastExport() : openExportDialog}
 			>
 				{#if fastExportBusy}<LoaderIcon class="size-4 animate-spin" />{:else}<DownloadIcon
 						class="size-4"
@@ -3081,15 +3350,18 @@ FORM: Operate surface; no floating-card dashboard, unlimited NLE chrome, hidden 
 				onSplit={splitSelected}
 				onDelete={rippleDeleteSelected}
 				onTrim={trimClip}
+				onSetSourceBoundary={setQuickCutSourceBoundary}
 				onFastExport={() => void startFastExport()}
+				onExportSegment={(clipID) => void startFastExport(clipID)}
+				onPreciseExport={openExportDialog}
 				onOpenStudio={() => switchEditingMode('studio')}
 			/>
-		{:else if fullEditor}
+		{:else}
 			<div
-				class="relative grid min-h-0 flex-1 grid-cols-[3.75rem_minmax(0,1fr)] min-[56rem]:grid-cols-[3.75rem_13rem_minmax(18rem,1fr)_15rem] xl:grid-cols-[4.5rem_17rem_minmax(20rem,1fr)_18rem]"
+				class="relative grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)] grid-rows-[minmax(0,1fr)_4rem] sm:grid-cols-[3.75rem_minmax(0,1fr)] sm:grid-rows-1 min-[56rem]:grid-cols-[3.75rem_13rem_minmax(18rem,1fr)_15rem] xl:grid-cols-[4.5rem_17rem_minmax(20rem,1fr)_18rem]"
 			>
 				<nav
-					class="flex min-h-0 flex-col items-center gap-1 overflow-y-auto border-r py-2"
+					class="hidden min-h-0 flex-col items-center gap-1 overflow-y-auto border-r py-2 sm:flex"
 					aria-label={m.video_studio_title()}
 				>
 					{#each tools as tool (tool.id)}
@@ -3116,7 +3388,7 @@ FORM: Operate surface; no floating-card dashboard, unlimited NLE chrome, hidden 
 
 				<aside
 					class={[
-						'absolute inset-y-0 left-[3.75rem] z-30 w-[min(18rem,calc(100%-3.75rem))] overflow-y-auto border-r bg-background p-3 shadow-xl min-[56rem]:static min-[56rem]:z-auto min-[56rem]:w-auto min-[56rem]:bg-muted/15 min-[56rem]:shadow-none',
+						'fixed inset-x-0 bottom-16 z-30 max-h-[min(72dvh,40rem)] w-full overflow-y-auto border-t bg-background p-3 shadow-xl sm:inset-y-0 sm:right-auto sm:bottom-auto sm:left-[3.75rem] sm:max-h-none sm:w-[min(18rem,calc(100%-3.75rem))] sm:border-t-0 sm:border-r min-[56rem]:static min-[56rem]:z-auto min-[56rem]:w-auto min-[56rem]:bg-muted/15 min-[56rem]:shadow-none',
 						!compactToolOpen && 'max-[55.999rem]:hidden'
 					]}
 					aria-label={tools.find((tool) => tool.id === activeTool)?.label()}
@@ -3152,6 +3424,7 @@ FORM: Operate surface; no floating-card dashboard, unlimited NLE chrome, hidden 
 							</p>
 							<div class="grid gap-2">
 								{#each Object.values(project.sources) as source (source.id)}
+									{@const sourceArtifact = sourceArtifacts[source.id]}
 									<div class="min-w-0 rounded-md border bg-background p-2">
 										<p class="truncate text-xs font-medium">{source.original_name}</p>
 										<p class="mt-1 text-[11px] text-muted-foreground">
@@ -3169,6 +3442,73 @@ FORM: Operate surface; no floating-card dashboard, unlimited NLE chrome, hidden 
 											<PlusIcon class="size-3" />
 											{m.video_studio_add_to_timeline()}
 										</Button>
+										{#if source.kind !== 'image' && source.locator.type === 'local-opfs'}
+											<div class="mt-2 border-t pt-2">
+												<div class="flex items-center justify-between gap-2 text-[11px]">
+													<span class="min-w-0 truncate text-muted-foreground">
+														{#if sourceArtifactBusy[source.id]}
+															{m.video_studio_proxy_preparing()}
+														{:else if sourceArtifact?.proxy_state === 'ready'}
+															{m.video_studio_proxy_ready()}
+														{:else if sourceArtifact?.proxy_state === 'not-needed'}
+															{m.video_studio_proxy_not_needed()}
+														{:else if sourceArtifact?.error}
+															{sourceArtifact.error}
+														{:else}
+															{m.video_studio_proxy_pending()}
+														{/if}
+													</span>
+													{#if sourceArtifactBusy[source.id] || sourceArtifact?.phase === 'proxy'}
+														<span class="shrink-0 font-mono text-muted-foreground tabular-nums">
+															{Math.round((sourceArtifact?.progress ?? 0) * 100)}%
+														</span>
+													{/if}
+												</div>
+												{#if sourceArtifactBusy[source.id]}
+													<div class="mt-1.5 h-1 overflow-hidden rounded-full bg-muted">
+														<div
+															class="h-full bg-primary transition-[width] duration-150"
+															style:width={`${Math.round((sourceArtifact?.progress ?? 0) * 100)}%`}
+														></div>
+													</div>
+												{/if}
+												{#if sourceArtifactMessage[source.id]}
+													<p
+														class="mt-1.5 text-[11px] leading-4 text-muted-foreground"
+														aria-live="polite"
+													>
+														{sourceArtifactMessage[source.id]}
+													</p>
+												{/if}
+												<div class="mt-1.5 flex flex-wrap gap-1">
+													{#if sourceArtifactBusy[source.id]}
+														<Button
+															variant="ghost"
+															size="xs"
+															onclick={() => cancelStudioSource(source.id)}
+														>
+															{m.common_cancel()}
+														</Button>
+													{:else if sourceArtifact?.proxy_state === 'ready'}
+														<Button
+															variant="ghost"
+															size="xs"
+															onclick={() => void removeStudioProxy(source)}
+														>
+															{m.video_studio_proxy_remove()}
+														</Button>
+													{:else if sourceArtifact?.proxy_state === 'failed' || sourceArtifact?.proxy_state === 'blocked-storage' || sourceArtifact?.proxy_state === 'cancelled'}
+														<Button
+															variant="ghost"
+															size="xs"
+															onclick={() => void rebuildStudioArtifacts(source)}
+														>
+															{m.common_retry()}
+														</Button>
+													{/if}
+												</div>
+											</div>
+										{/if}
 									</div>
 								{:else}
 									<p
@@ -3406,6 +3746,24 @@ FORM: Operate surface; no floating-card dashboard, unlimited NLE chrome, hidden 
 											{m.video_studio_replace()}
 										</Button>
 									</div>
+									{#if selectedTranscriptWords.length > 0}
+										<div
+											class="flex items-center gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-2"
+										>
+											<p class="min-w-0 flex-1 text-xs">
+												{m.video_studio_transcript_words_selected({
+													count: selectedTranscriptWords.length
+												})}
+											</p>
+											<Button
+												size="sm"
+												variant="destructive"
+												onclick={rippleDeleteSelectedTranscriptWords}
+											>
+												{m.video_studio_delete_selected_words()}
+											</Button>
+										</div>
+									{/if}
 									{#each project.caption_tracks[0].cues as cue (cue.id)}
 										<div class="space-y-1.5 rounded-md border p-2">
 											<p class="text-[11px] text-muted-foreground">
@@ -3417,11 +3775,20 @@ FORM: Operate surface; no floating-card dashboard, unlimited NLE chrome, hidden 
 													aria-label={m.video_studio_edit_by_transcript()}
 												>
 													{#each cue.words as word, wordIndex (`${cue.id}:${wordIndex}:${word.start_us}`)}
+														{@const selected = selectedTranscriptWords.includes(
+															transcriptWordKey(cue.id, wordIndex)
+														)}
 														<button
 															type="button"
-															class="min-h-8 rounded bg-muted px-2 text-xs transition-colors hover:bg-destructive hover:text-destructive-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+															class={[
+																'min-h-11 rounded px-2 text-xs transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
+																selected
+																	? 'bg-destructive text-destructive-foreground'
+																	: 'bg-muted hover:bg-muted/70'
+															]}
+															aria-pressed={selected}
 															title={m.video_studio_delete_transcript_word({ word: word.text })}
-															onclick={() => rippleDeleteTranscriptWord(cue, wordIndex)}
+															onclick={() => toggleTranscriptWord(cue.id, wordIndex)}
 														>
 															{word.text}
 														</button>
@@ -3740,6 +4107,17 @@ FORM: Operate surface; no floating-card dashboard, unlimited NLE chrome, hidden 
 											· {m.video_studio_recording_backpressure()}
 										{/if}
 									</p>
+									{#if recordingState?.storage_status === 'low'}
+										<p class="text-xs leading-5 text-amber-700 dark:text-amber-300" role="status">
+											{m.video_studio_recording_space_low({
+												available: formatBytes(recordingState.storage_available_bytes)
+											})}
+										</p>
+									{:else if recordingState?.storage_status === 'stopping'}
+										<p class="text-xs leading-5 text-destructive" role="alert">
+											{m.video_studio_recording_storage_stopped()}
+										</p>
+									{/if}
 									{#if recordingState?.camera_active}
 										<label class="grid gap-1 text-xs">
 											<span class="font-medium">{m.video_studio_switch_camera()}</span>
@@ -3807,6 +4185,23 @@ FORM: Operate surface; no floating-card dashboard, unlimited NLE chrome, hidden 
 										<VolumeIcon class="size-4" />
 										{m.video_studio_system_audio()}
 									</label>
+									{#if recordCamera}
+										<label class="grid gap-1.5 border-t pt-3 text-xs font-medium">
+											<span>{m.video_studio_camera_layout()}</span>
+											<AppSelect
+												value={recordCameraLayout}
+												options={[
+													{ value: 'circle', label: m.video_studio_camera_circle() },
+													{ value: 'rounded', label: m.video_studio_camera_rounded() },
+													{ value: 'portrait', label: m.video_studio_camera_portrait() },
+													{ value: 'side-by-side', label: m.video_studio_camera_side_by_side() },
+													{ value: 'full', label: m.video_studio_camera_full() }
+												]}
+												onValueChange={(value) =>
+													(recordCameraLayout = value as typeof recordCameraLayout)}
+											/>
+										</label>
+									{/if}
 								</div>
 								<Button
 									class="w-full"
@@ -3939,7 +4334,7 @@ FORM: Operate surface; no floating-card dashboard, unlimited NLE chrome, hidden 
 				</aside>
 
 				<main
-					class="col-start-2 grid min-h-0 grid-rows-[minmax(0,1fr)_3.25rem] bg-[#121214] min-[56rem]:col-auto"
+					class="col-start-1 row-start-1 grid min-h-0 grid-rows-[minmax(0,1fr)_3.25rem] bg-[#121214] sm:col-start-2 sm:row-auto min-[56rem]:col-auto"
 				>
 					<VideoPreview
 						{project}
@@ -3980,7 +4375,7 @@ FORM: Operate surface; no floating-card dashboard, unlimited NLE chrome, hidden 
 
 				<aside
 					class={[
-						'absolute inset-y-0 right-0 z-30 w-[min(18rem,calc(100%-3.75rem))] overflow-y-auto border-l bg-background p-3 shadow-xl min-[56rem]:static min-[56rem]:z-auto min-[56rem]:w-auto min-[56rem]:shadow-none',
+						'fixed inset-x-0 bottom-16 z-30 max-h-[min(72dvh,40rem)] w-full overflow-y-auto border-t bg-background p-3 shadow-xl sm:inset-y-0 sm:bottom-auto sm:left-auto sm:max-h-none sm:w-[min(18rem,calc(100%-3.75rem))] sm:border-t-0 sm:border-l min-[56rem]:static min-[56rem]:z-auto min-[56rem]:w-auto min-[56rem]:shadow-none',
 						!compactInspectorOpen && 'max-[55.999rem]:hidden'
 					]}
 					aria-label={m.video_studio_inspector()}
@@ -4201,6 +4596,58 @@ FORM: Operate surface; no floating-card dashboard, unlimited NLE chrome, hidden 
 									</label>
 								{/each}
 							</div>
+							{#if selectedVisualItem.type === 'camera' || selectedVisualItem.type === 'media'}
+								<details class="border-t pt-3 text-xs" open={selectedVisualItem.type === 'camera'}>
+									<summary class="min-h-11 cursor-pointer py-3 font-medium">
+										{m.video_studio_crop_and_shape()}
+									</summary>
+									<div class="space-y-3 pb-2">
+										{#each [{ property: 'x', label: m.video_studio_crop_x(), value: selectedVisualPresentation?.crop.x ?? 0, max: 1 - (selectedVisualPresentation?.crop.width ?? 1) }, { property: 'y', label: m.video_studio_crop_y(), value: selectedVisualPresentation?.crop.y ?? 0, max: 1 - (selectedVisualPresentation?.crop.height ?? 1) }, { property: 'width', label: m.video_studio_crop_width(), value: selectedVisualPresentation?.crop.width ?? 1, max: 1 - (selectedVisualPresentation?.crop.x ?? 0) }, { property: 'height', label: m.video_studio_crop_height(), value: selectedVisualPresentation?.crop.height ?? 1, max: 1 - (selectedVisualPresentation?.crop.y ?? 0) }] as control (control.property)}
+											<label class="grid gap-1.5">
+												<span class="flex justify-between gap-2">
+													<span>{control.label}</span>
+													<span class="font-mono tabular-nums"
+														>{Math.round(control.value * 100)}%</span
+													>
+												</span>
+												<Slider
+													value={control.value}
+													min={control.property === 'width' || control.property === 'height'
+														? 0.05
+														: 0}
+													max={Math.max(0.05, control.max)}
+													step={0.01}
+													onValueChange={(value) =>
+														updateVisualCrop(
+															control.property as 'x' | 'y' | 'width' | 'height',
+															value
+														)}
+													ariaLabel={control.label}
+												/>
+											</label>
+										{/each}
+										<label class="grid gap-1.5">
+											<span class="flex justify-between gap-2">
+												<span>{m.video_studio_corner_radius()}</span>
+												<span class="font-mono tabular-nums"
+													>{Math.round(
+														(selectedVisualPresentation?.corner_radius ?? 0) * 100
+													)}%</span
+												>
+											</span>
+											<Slider
+												value={selectedVisualPresentation?.corner_radius ?? 0}
+												min={0}
+												max={0.5}
+												step={0.01}
+												onValueChange={(value) =>
+													updateVisualPresentation(selectedVisualItem.id, { corner_radius: value })}
+												ariaLabel={m.video_studio_corner_radius()}
+											/>
+										</label>
+									</div>
+								</details>
+							{/if}
 							<label class="flex min-h-10 items-center gap-2 text-xs font-medium">
 								<Checkbox
 									checked={selectedVisualVisible}
@@ -4502,6 +4949,26 @@ FORM: Operate surface; no floating-card dashboard, unlimited NLE chrome, hidden 
 									{m.video_studio_adjustments()}
 								</summary>
 								<div class="space-y-3 pb-3">
+									<div class="grid grid-cols-2 gap-2">
+										{#each effectLooks as look (look.id)}
+											<button
+												type="button"
+												class="min-h-14 overflow-hidden rounded-md border bg-background text-left transition hover:border-primary/50 focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
+												onclick={() => applyEffectPreset(look.id)}
+											>
+												<span class={`block h-7 bg-gradient-to-r ${look.preview}`}></span>
+												<span class="block px-2 py-1.5 font-medium">{look.label()}</span>
+											</button>
+										{/each}
+									</div>
+									<Button
+										class="w-full"
+										variant="ghost"
+										size="xs"
+										onclick={() => applyEffectPreset('reset')}
+									>
+										{m.video_studio_effect_reset()}
+									</Button>
 									{#each adjustmentOptions as adjustment (adjustment.type)}
 										<label class="grid gap-2">
 											<span class="flex justify-between">
@@ -4528,6 +4995,43 @@ FORM: Operate surface; no floating-card dashboard, unlimited NLE chrome, hidden 
 									<p class="leading-5 text-muted-foreground">
 										{m.video_studio_keyframe_description()}
 									</p>
+									<label class="grid gap-1.5">
+										<span class="flex items-center justify-between gap-2">
+											<span>{m.video_studio_zoom_amount()}</span>
+											<span class="font-mono tabular-nums">{zoomScaleMultiplier.toFixed(2)}×</span>
+										</span>
+										<Slider bind:value={zoomScaleMultiplier} min={1.05} max={3} step={0.05} />
+									</label>
+									<label class="grid gap-1.5">
+										<span class="flex items-center justify-between gap-2">
+											<span>{m.video_studio_zoom_duration()}</span>
+											<span class="font-mono tabular-nums">{zoomDurationSeconds.toFixed(1)}s</span>
+										</span>
+										<Slider bind:value={zoomDurationSeconds} min={0.2} max={5} step={0.1} />
+									</label>
+									<div class="grid grid-cols-2 gap-3">
+										<label class="grid gap-1.5">
+											<span>{m.video_studio_zoom_focus_x()}</span>
+											<Slider bind:value={zoomFocusX} min={0} max={1} step={0.01} />
+										</label>
+										<label class="grid gap-1.5">
+											<span>{m.video_studio_zoom_focus_y()}</span>
+											<Slider bind:value={zoomFocusY} min={0} max={1} step={0.01} />
+										</label>
+									</div>
+									<label class="grid gap-1.5">
+										<span>{m.video_studio_zoom_curve()}</span>
+										<AppSelect
+											value={zoomEasing}
+											options={[
+												{ value: 'focus-spring', label: m.video_studio_zoom_curve_spring() },
+												{ value: 'ease-in-out', label: m.video_studio_zoom_curve_smooth() },
+												{ value: 'ease-out', label: m.video_studio_zoom_curve_soft() },
+												{ value: 'linear', label: m.video_studio_zoom_curve_linear() }
+											]}
+											onValueChange={(value) => (zoomEasing = value as EasingName)}
+										/>
+									</label>
 									<div class="grid grid-cols-3 gap-1.5">
 										<Button variant="outline" size="sm" onclick={() => applySmoothZoom('in')}>
 											{m.video_studio_smooth_zoom_in()}
@@ -4578,6 +5082,33 @@ FORM: Operate surface; no floating-card dashboard, unlimited NLE chrome, hidden 
 						</p>
 					{/if}
 				</aside>
+
+				<nav
+					class="col-start-1 row-start-2 flex min-w-0 items-stretch overflow-x-auto border-t bg-background/98 px-1 pb-[max(0.25rem,env(safe-area-inset-bottom))] sm:hidden"
+					aria-label={m.video_studio_mobile_tools()}
+				>
+					{#each tools as tool (tool.id)}
+						<button
+							type="button"
+							class={[
+								'flex min-h-14 min-w-[4.25rem] flex-1 flex-col items-center justify-center gap-1 rounded-md px-1 text-[11px] leading-tight focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none',
+								activeTool === tool.id && compactToolOpen
+									? 'bg-primary/12 text-primary'
+									: 'text-muted-foreground active:bg-muted active:text-foreground'
+							]}
+							aria-current={activeTool === tool.id && compactToolOpen ? 'page' : undefined}
+							onclick={() => {
+								const sameTool = activeTool === tool.id;
+								activeTool = tool.id;
+								compactInspectorOpen = false;
+								compactToolOpen = sameTool ? !compactToolOpen : true;
+							}}
+						>
+							<tool.icon class="size-4.5" />
+							<span>{tool.label()}</span>
+						</button>
+					{/each}
+				</nav>
 			</div>
 
 			<div class="relative min-h-52 shrink-0" style:height={`${timelineHeight}px`}>
@@ -4617,88 +5148,6 @@ FORM: Operate surface; no floating-card dashboard, unlimited NLE chrome, hidden 
 					onDeleteMarker={deleteTimelineMarker}
 				/>
 			</div>
-		{:else}
-			<main class="flex min-h-0 flex-1 flex-col">
-				<div class="min-h-0 flex-1">
-					<VideoPreview
-						{project}
-						projectID={localProject?.id ?? ''}
-						{variantID}
-						{playheadUS}
-						{playing}
-						{selectedClipID}
-						{selectedVisualItemID}
-						onSelectClip={selectClip}
-						onSelectVisualItem={selectVisualItem}
-					/>
-				</div>
-				<div class="space-y-3 border-t p-4">
-					<div class="flex items-center justify-center gap-3">
-						<Button
-							variant="outline"
-							size="icon"
-							onclick={togglePlayback}
-							aria-label={playing ? m.video_studio_pause() : m.video_studio_play()}
-						>
-							{#if playing}<PauseIcon class="size-5" />{:else}<PlayIcon class="size-5" />{/if}
-						</Button>
-						<span class="font-mono text-xs text-muted-foreground">
-							{m.video_studio_playback_time({
-								current: formatTime(playheadUS),
-								total: formatTime(durationUS)
-							})}
-						</span>
-					</div>
-					<AppSelect
-						value={variantID}
-						onValueChange={(value) => (variantID = value as VariantID)}
-						options={variantOptions}
-						ariaLabel={m.video_studio_variant()}
-					/>
-					<h2 class="font-medium">{m.video_studio_mobile_preview()}</h2>
-					<p class="text-sm leading-6 text-muted-foreground">
-						{m.video_studio_mobile_preview_description()}
-					</p>
-					{#if persistedExports.length > 0}
-						<section class="space-y-2" aria-labelledby="mobile-exports-title">
-							<h3 id="mobile-exports-title" class="text-sm font-medium">
-								{m.video_studio_saved_exports()}
-							</h3>
-							{#each persistedExports as savedExport (savedExport.id)}
-								<div class="flex min-h-11 items-center gap-3 rounded-md border px-3">
-									<span class="min-w-0 flex-1">
-										<span class="block truncate text-sm font-medium">
-											{variantOptions.find((item) => item.value === savedExport.variant_id)
-												?.label ?? savedExport.variant_id}
-										</span>
-										<span class="block text-xs text-muted-foreground">
-											{formatBytes(savedExport.size_bytes)}
-										</span>
-									</span>
-									<Button
-										variant="outline"
-										size="sm"
-										onclick={() => void downloadPersistedExport(savedExport.path, savedExport.name)}
-									>
-										<DownloadIcon class="size-4" />
-										{m.video_studio_export_download()}
-									</Button>
-								</div>
-							{/each}
-							{#if returnToken}
-								<Button
-									class="w-full"
-									disabled={returningToComposer}
-									onclick={() => void returnPersistedExportsToComposer()}
-								>
-									{#if returningToComposer}<LoaderIcon class="size-4 animate-spin" />{/if}
-									{m.video_studio_use_saved_export()}
-								</Button>
-							{/if}
-						</section>
-					{/if}
-				</div>
-			</main>
 		{/if}
 	</div>
 

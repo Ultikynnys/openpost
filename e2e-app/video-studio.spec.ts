@@ -112,6 +112,12 @@ test("guest chooses Quick Cut and can move into Full Studio", async ({
   page,
 }) => {
   test.setTimeout(90_000);
+  await page.addInitScript(() => {
+    Object.defineProperty(window, "showSaveFilePicker", {
+      configurable: true,
+      value: undefined,
+    });
+  });
   const browserErrors: string[] = [];
   page.on("pageerror", (error) => browserErrors.push(error.message));
   page.on("console", (message) => {
@@ -141,6 +147,24 @@ test("guest chooses Quick Cut and can move into Full Studio", async ({
   await expect(
     page.getByRole("button", { name: "Fast export" }).last(),
   ).toBeEnabled({ timeout: 20_000 });
+  await expect(
+    page.getByRole("button", { name: "Fast export section 1" }),
+  ).toBeEnabled();
+  const [quickCutDownload] = await Promise.all([
+    page.waitForEvent("download", { timeout: 60_000 }),
+    page.getByRole("button", { name: "Fast export" }).last().click(),
+  ]);
+  expect(quickCutDownload.suggestedFilename()).toBe(
+    "quick-cut-e2e-quick-cut.webm",
+  );
+  const quickCutStream = await quickCutDownload.createReadStream();
+  const quickCutChunks: Buffer[] = [];
+  for await (const chunk of quickCutStream) {
+    quickCutChunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+  const quickCutBytes = Buffer.concat(quickCutChunks);
+  expect(quickCutBytes.byteLength).toBeGreaterThan(1_000);
+  expect([...quickCutBytes.subarray(0, 4)]).toEqual([0x1a, 0x45, 0xdf, 0xa3]);
 
   await page.getByRole("button", { name: "Open Full Studio" }).click();
   await expect(
@@ -727,7 +751,7 @@ test("unsupported browser redirects before creating local work", async ({
   ).toBeVisible();
 });
 
-test("mobile shows preview and handoff guidance without a compressed timeline", async ({
+test("mobile keeps touch timeline editing, contextual tools, and export", async ({
   browser,
 }) => {
   const context = await browser.newContext({
@@ -737,9 +761,6 @@ test("mobile shows preview and handoff guidance without a compressed timeline", 
   });
   const page = await context.newPage();
   await page.goto("/video-studio");
-  await expect(
-    page.getByText(/complete timeline and render engine need desktop Chromium/),
-  ).toBeVisible();
   const video = await syntheticVideo(page);
   await page.locator("#video-studio-import").setInputFiles({
     name: "mobile-preview.webm",
@@ -748,17 +769,23 @@ test("mobile shows preview and handoff guidance without a compressed timeline", 
   });
   await expect(page).toHaveURL(/\/video-studio\/local_video_/);
   await expect(
-    page.getByRole("heading", {
-      name: "Timeline editing needs a desktop Chromium browser",
-    }),
-  ).toBeVisible();
-  await expect(
     page.getByRole("heading", { name: "Timeline", exact: true }),
-  ).toBeHidden();
-  await expect(
-    page.getByRole("button", { name: /desktop Chromium/ }),
-  ).toBeDisabled();
-  await page.getByRole("button", { name: "Play" }).click();
+  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "Export" })).toBeEnabled();
+  await page.getByRole("button", { name: "Text", exact: true }).click();
+  const toolSheet = page.getByRole("complementary", { name: "Text" });
+  await expect(toolSheet).toBeVisible();
+  await toolSheet.getByRole("button", { name: "Close" }).click();
+  await page
+    .getByRole("region", { name: "Timeline" })
+    .getByRole("button", { name: "mobile-preview.webm" })
+    .click();
+  const inspectorSheet = page.getByRole("complementary", {
+    name: "Properties",
+  });
+  await expect(inspectorSheet).toBeVisible();
+  await inspectorSheet.getByRole("button", { name: "Close" }).click();
+  await page.getByRole("button", { name: "Play", exact: true }).click();
   await expect(page.getByRole("button", { name: "Pause" })).toBeVisible();
   expect(
     await page.evaluate(

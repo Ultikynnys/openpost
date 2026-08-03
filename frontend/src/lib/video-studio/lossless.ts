@@ -27,6 +27,25 @@ export interface QuickCutCompatibility {
 	segments: QuickCutSegment[];
 }
 
+export function quickCutOutputPreference(project: VideoProjectDocumentV1): {
+	format: 'mp4' | 'webm';
+	mimeType: 'video/mp4' | 'video/webm';
+	fileName: string;
+} {
+	const compatibility = quickCutCompatibility(project);
+	const source = project.sources[compatibility.segments[0]?.source_id ?? ''];
+	const webm =
+		source?.mime_type.toLowerCase().includes('webm') ||
+		source?.video_codec === 'vp8' ||
+		source?.video_codec === 'vp9';
+	const format = webm ? 'webm' : 'mp4';
+	return {
+		format,
+		mimeType: webm ? 'video/webm' : 'video/mp4',
+		fileName: `${safeQuickCutFileName(project.title)}-quick-cut.${format}`
+	};
+}
+
 export function quickCutCompatibility(project: VideoProjectDocumentV1): QuickCutCompatibility {
 	const derived = derivePrimarySequence(project);
 	if (!derived.length) return { compatible: false, reason: 'empty', segments: [] };
@@ -54,6 +73,11 @@ export function quickCutCompatibility(project: VideoProjectDocumentV1): QuickCut
 		return { compatible: false, reason: 'composition-edits', segments: [] };
 	}
 	if (clips.some((clip) => !isStreamCopyClip(clip))) {
+		return { compatible: false, reason: 'clip-edits', segments: [] };
+	}
+	if (
+		clips.some((clip, index) => index > 0 && clip.source_in_us < clips[index - 1]!.source_out_us)
+	) {
 		return { compatible: false, reason: 'clip-edits', segments: [] };
 	}
 	return {
@@ -95,8 +119,23 @@ export function isKeyframeAligned(
 	timestampUS: number,
 	toleranceUS = 2_000
 ): boolean {
+	return resolveKeyframeAlignment(keyframesUS, timestampUS, toleranceUS) !== null;
+}
+
+export interface KeyframeAlignment {
+	timestamp_us: number;
+	delta_us: number;
+}
+
+/** Returns the canonical indexed packet timestamp when a boundary is aligned. */
+export function resolveKeyframeAlignment(
+	keyframesUS: number[],
+	timestampUS: number,
+	toleranceUS = 2_000
+): KeyframeAlignment | null {
 	const nearest = nearestKeyframeUS(keyframesUS, timestampUS);
-	return nearest !== null && Math.abs(nearest - timestampUS) <= toleranceUS;
+	if (nearest === null || Math.abs(nearest - timestampUS) > toleranceUS) return null;
+	return { timestamp_us: nearest, delta_us: nearest - timestampUS };
 }
 
 function isStreamCopyClip(clip: PrimarySequenceClip): boolean {
@@ -121,4 +160,13 @@ function isStreamCopyClip(clip: PrimarySequenceClip): boolean {
 		return false;
 	}
 	return JSON.stringify(clip.video) === JSON.stringify(defaultVideoPresentation());
+}
+
+function safeQuickCutFileName(value: string): string {
+	return (
+		value
+			.trim()
+			.replace(/[^a-z0-9_-]+/giu, '-')
+			.replace(/^-+|-+$/gu, '') || 'video'
+	);
 }

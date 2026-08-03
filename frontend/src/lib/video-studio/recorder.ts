@@ -1,10 +1,12 @@
-import { saveRecordingManifest } from './storage';
+import { estimateStorageBudget, saveRecordingManifest } from './storage';
 import { VIDEO_STUDIO_ROOT, type RecordingManifest, type RecordingTrackManifest } from './types';
 
 const CHUNK_INTERVAL_MS = 1_000;
 const MANIFEST_FLUSH_MS = 2_000;
 const BACKPRESSURE_PAUSE_BYTES = 64 * 1024 * 1024;
 const BACKPRESSURE_RESUME_BYTES = 16 * 1024 * 1024;
+const STORAGE_CHECK_MS = 5_000;
+const MINIMUM_RECORDING_RESERVE_BYTES = 64 * 1024 * 1024;
 
 export interface RecordingOptions {
 	projectID: string;
@@ -27,6 +29,8 @@ export interface RecordingSessionState {
 	camera_active: boolean;
 	microphone_active: boolean;
 	system_audio_active: boolean;
+	storage_available_bytes: number;
+	storage_status: 'ok' | 'low' | 'stopping';
 }
 
 interface ActiveTrack {
@@ -50,8 +54,13 @@ export class VideoRecordingSession {
 	private readonly startedAt = performance.now();
 	private flushTimer: number | undefined;
 	private stateTimer: number | undefined;
+	private storageTimer: number | undefined;
 	private lastStateSampleAt = performance.now();
 	private pausedForStorage = false;
+	private storageCheckInFlight = false;
+	private storageAvailableBytes = 0;
+	private storageStatus: RecordingSessionState['storage_status'] = 'ok';
+	private readonly recoveringInputs = new Set<'camera' | 'microphone'>();
 	private stopped = false;
 	private stopPromise: Promise<RecordingManifest> | null = null;
 	readonly manifest: RecordingManifest;
@@ -229,13 +238,15 @@ export class VideoRecordingSession {
 		}
 		this.flushTimer = window.setInterval(() => void this.flushManifest(), MANIFEST_FLUSH_MS);
 		this.stateTimer = window.setInterval(() => this.emitState(), 250);
+		this.storageTimer = window.setInterval(() => void this.checkStorage(), STORAGE_CHECK_MS);
+		void this.checkStorage();
 		this.emitState();
 	}
 
 	private async addTrack(
 		kind: RecordingTrackManifest['kind'],
 		stream: MediaStream,
-		reasonStarted: 'session-start' | 'device-switch' = 'session-start'
+		reasonStarted: 'session-start' | 'device-switch' | 'recovery' = 'session-start'
 	): Promise<ActiveTrack> {
 		const id = `${kind}_${crypto.randomUUID()}`;
 		const mimeType = selectRecordingMIME(kind === 'screen' || kind === 'camera');
@@ -295,6 +306,7 @@ export class VideoRecordingSession {
 		};
 		for (const mediaTrack of stream.getTracks()) {
 			mediaTrack.addEventListener('ended', () => {
+				const unexpectedlyEnded = !this.stopped && track.manifest.state === 'recording';
 				const atUS = this.sessionTimeUS();
 				if (recorder.state !== 'inactive') recorder.stop();
 				if (track.manifest.state === 'recording') track.manifest.state = 'interrupted';
@@ -311,6 +323,9 @@ export class VideoRecordingSession {
 					detail: kind
 				});
 				void this.flushManifest();
+				if (unexpectedlyEnded && (kind === 'camera' || kind === 'microphone')) {
+					void this.recoverLostInput(kind);
+				}
 			});
 		}
 		this.worker.postMessage({
@@ -437,6 +452,99 @@ export class VideoRecordingSession {
 		}
 	}
 
+	private async recoverLostInput(kind: 'camera' | 'microphone'): Promise<void> {
+		if (this.stopped || this.recoveringInputs.has(kind)) return;
+		this.recoveringInputs.add(kind);
+		try {
+			const preferredDeviceID =
+				kind === 'camera' ? this.options.cameraDeviceID : this.options.microphoneDeviceID;
+			const constraints = (deviceID?: string): MediaStreamConstraints => ({
+				video:
+					kind === 'camera'
+						? {
+								width: { ideal: 1280 },
+								height: { ideal: 720 },
+								...(deviceID ? { deviceId: { ideal: deviceID } } : {})
+							}
+						: false,
+				audio:
+					kind === 'microphone'
+						? {
+								echoCancellation: true,
+								noiseSuppression: true,
+								autoGainControl: true,
+								...(deviceID ? { deviceId: { ideal: deviceID } } : {})
+							}
+						: false
+			});
+			let stream: MediaStream;
+			try {
+				stream = await navigator.mediaDevices.getUserMedia(constraints(preferredDeviceID));
+			} catch {
+				stream = await navigator.mediaDevices.getUserMedia(constraints());
+			}
+			if (this.stopped) {
+				stream.getTracks().forEach((track) => track.stop());
+				return;
+			}
+			const recovered = await this.addTrack(kind, stream, 'recovery');
+			await recovered.ready;
+			recovered.recorder.start(CHUNK_INTERVAL_MS);
+			this.manifest.events.push({
+				type: 'device-switch',
+				session_time_us: this.sessionTimeUS(),
+				track_id: recovered.manifest.id,
+				detail: `${kind}:recovered`
+			});
+			await this.flushManifest();
+		} catch (cause) {
+			this.manifest.events.push({
+				type: 'device-loss',
+				session_time_us: this.sessionTimeUS(),
+				detail: `${kind}:recovery-failed:${cause instanceof Error ? cause.name : 'unknown'}`
+			});
+			await this.flushManifest();
+		} finally {
+			this.recoveringInputs.delete(kind);
+		}
+	}
+
+	private async checkStorage(): Promise<void> {
+		if (this.stopped || this.storageCheckInFlight) return;
+		this.storageCheckInFlight = true;
+		try {
+			const elapsedSeconds = Math.max(1, (performance.now() - this.startedAt) / 1_000);
+			const bytesWritten = Array.from(this.tracks.values()).reduce(
+				(total, track) => total + track.manifest.bytes_written + track.pendingBytes,
+				0
+			);
+			const oneMinuteAtCurrentRate = Math.ceil((bytesWritten / elapsedSeconds) * 60 * 1.2);
+			const reserve = Math.max(MINIMUM_RECORDING_RESERVE_BYTES, oneMinuteAtCurrentRate);
+			const budget = await estimateStorageBudget(reserve);
+			this.storageAvailableBytes = budget.available_bytes;
+			if (budget.can_continue) {
+				this.storageStatus =
+					budget.available_bytes < reserve * 2 || budget.available_bytes < 256 * 1024 * 1024
+						? 'low'
+						: 'ok';
+				return;
+			}
+			this.storageStatus = 'stopping';
+			const atUS = this.sessionTimeUS();
+			this.manifest.events.push({ type: 'storage-stop', session_time_us: atUS });
+			for (const track of this.tracks.values()) {
+				const segment = track.manifest.segments.at(-1);
+				if (segment && segment.session_end_us === undefined) {
+					segment.reason_ended = 'storage';
+				}
+			}
+			this.emitState();
+			void this.stop();
+		} finally {
+			this.storageCheckInFlight = false;
+		}
+	}
+
 	private async finish(): Promise<RecordingManifest> {
 		this.stopped = true;
 		this.manifest.finalization_state = 'finalizing';
@@ -448,7 +556,7 @@ export class VideoRecordingSession {
 			if (segment && segment.session_end_us === undefined) {
 				segment.session_end_us = stoppedAtUS;
 				segment.media_end_us = track.lastMediaTimestampUS;
-				segment.reason_ended = 'session-stop';
+				segment.reason_ended ??= 'session-stop';
 			}
 			track.manifest.duration_us = Math.max(
 				track.manifest.duration_us,
@@ -519,13 +627,16 @@ export class VideoRecordingSession {
 			),
 			system_audio_active: tracks.some(
 				(track) => track.manifest.kind === 'system-audio' && track.manifest.state === 'recording'
-			)
+			),
+			storage_available_bytes: this.storageAvailableBytes,
+			storage_status: this.storageStatus
 		});
 	}
 
 	private clearTimers(): void {
 		if (this.flushTimer !== undefined) clearInterval(this.flushTimer);
 		if (this.stateTimer !== undefined) clearInterval(this.stateTimer);
+		if (this.storageTimer !== undefined) clearInterval(this.storageTimer);
 	}
 
 	private sessionTimeUS(): number {
