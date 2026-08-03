@@ -5,8 +5,9 @@
 .DESCRIPTION
     Ensures the Docker engine is running, builds the local openpost-patched
     image from docker/Dockerfile when it is missing (or when -Rebuild is
-    passed), starts the docker-compose.yml service, waits for the health
-    endpoint, and prints the local URL.
+    passed), force-recreates the docker-compose.yml service so every run
+    starts a fresh container from the current image (a stale instance can
+    never survive), waits for the health endpoint, and prints the local URL.
 
     Configuration (secrets, provider credentials) comes from the repository
     root .env file through docker-compose.yml's env_file. This script never
@@ -86,10 +87,10 @@ if (-not $HasImage -or $Rebuild) {
     }
 }
 
-# --- 3. Compose up ------------------------------------------------------------
+# --- 3. Compose up (force-recreate so stale instances are never reused) ------
 Push-Location $RepoRoot
 try {
-    docker compose up -d
+    docker compose up -d --force-recreate
     if ($LASTEXITCODE -ne 0) {
         Fail 'docker compose up failed. See the output above.'
     }
