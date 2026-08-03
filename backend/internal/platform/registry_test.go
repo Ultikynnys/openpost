@@ -97,5 +97,5 @@ func TestIsAppProviderSupportedNormalizesProviderNames(t *testing.T) {
 
 	require.True(t, IsAppProviderSupported(" X "))
 	require.True(t, IsAppProviderSupported("mastodon"))
-	require.False(t, IsAppProviderSupported("reddit"))
+	require.True(t, IsAppProviderSupported("reddit"))
 }

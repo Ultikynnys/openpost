@@ -288,6 +288,7 @@ func RegisterHumaRoutes(api huma.API, deps RouteDeps) {
 	oauthHandler.Callback(api)
 	oauthHandler.ExchangeCode(api)
 	oauthHandler.BlueskyLogin(api)
+	oauthHandler.RedditLogin(api)
 	oauthHandler.DiscordWebhookLogin(api)
 	oauthHandler.GetAccountSelection(api)
 	oauthHandler.CompleteAccountSelection(api)

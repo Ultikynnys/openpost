@@ -33,6 +33,10 @@ export function getPlatformKey(platform: string): string {
 			return 'youtube';
 		case 'tiktok':
 			return 'tiktok';
+		case 'reddit':
+			return 'reddit';
+		case 'discord':
+			return 'discord';
 		default:
 			return key;
 	}
@@ -58,6 +62,10 @@ export function getPlatformName(platform: string): string {
 			return 'YouTube';
 		case 'tiktok':
 			return 'TikTok';
+		case 'reddit':
+			return 'Reddit';
+		case 'discord':
+			return 'Discord';
 		default:
 			return platform.split(':')[0];
 	}
@@ -89,7 +97,9 @@ export function getPlatformColor(platform: string): string {
 		instagram: 'bg-pink-500',
 		facebook: 'bg-blue-700',
 		youtube: 'bg-red-600',
-		tiktok: 'bg-zinc-900'
+		tiktok: 'bg-zinc-900',
+		reddit: 'bg-orange-600',
+		discord: 'bg-indigo-600'
 	};
 	return colors[getPlatformKey(platform)] || 'bg-gray-500';
 }

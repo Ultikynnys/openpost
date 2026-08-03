@@ -9,6 +9,7 @@
 	import facebook from '../../../../assets/logos/facebook.svg?raw';
 	import youtube from '../../../../assets/logos/youtube.svg?raw';
 	import tiktok from '../../../../assets/logos/tiktok.svg?raw';
+	import reddit from '../../../../assets/logos/reddit.svg?raw';
 	import { getPlatformKey } from '$lib/utils';
 
 	interface Props {
@@ -28,7 +29,8 @@
 		instagram,
 		facebook,
 		youtube,
-		tiktok
+		tiktok,
+		reddit
 	};
 	const platformKey = $derived(getPlatformKey(platform));
 

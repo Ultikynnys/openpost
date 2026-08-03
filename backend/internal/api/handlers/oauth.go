@@ -132,7 +132,7 @@ type ListMastodonServersOutput struct {
 }
 
 type GetAuthURLInput struct {
-	Platform    string `path:"platform" doc:"Social platform (x, mastodon, bluesky, linkedin, threads, instagram, facebook, tiktok, youtube)"`
+	Platform    string `path:"platform" doc:"Social platform (x, mastodon, bluesky, reddit, linkedin, threads, instagram, facebook, tiktok, youtube)"`
 	WorkspaceID string `query:"workspace_id" required:"true" doc:"Workspace ID to link account to"`
 	ServerName  string `query:"server_name" doc:"Mastodon server name from config (required for mastodon)"`
 	InstanceURL string `query:"instance_url" doc:"Mastodon instance URL to dynamically register"`
@@ -246,6 +246,13 @@ var providerCatalog = []ProviderInfo{
 		AuthMode:     "app_password",
 		Description:  "Handle and app-password connection with no server app setup.",
 		Capabilities: coreProviderCapabilities,
+	},
+	{
+		Platform:     "reddit",
+		DisplayName:  "Reddit",
+		AuthMode:     "webhook",
+		Description:  "Session cookie connection with subreddit selection. Copy your reddit_session cookie from your browser.",
+		Capabilities: []string{"Text posts", "Link posts", "Image posts", "Video posts", "Scheduling", "MCP workflows"},
 	},
 	{
 		Platform:     "discord",
@@ -546,6 +553,9 @@ func (h *OAuthHandler) GetAuthURL(api huma.API) {
 	}, func(ctx context.Context, input *GetAuthURLInput) (*GetAuthURLOutput, error) {
 		if input.Platform == "bluesky" {
 			return nil, huma.Error400BadRequest("bluesky uses app passwords, not OAuth redirect")
+		}
+		if input.Platform == "reddit" {
+			return nil, huma.Error400BadRequest("reddit uses a session cookie, not OAuth redirect")
 		}
 		if input.WorkspaceID == "" {
 			return nil, huma.Error400BadRequest(errWorkspaceIDRequired)
@@ -973,6 +983,70 @@ func (h *OAuthHandler) ExchangeCode(api huma.API) {
 		}
 
 		log.Printf("[ExchangeCode] Account saved successfully")
+
+		return nil, nil
+	})
+}
+
+type RedditLoginInput struct {
+	Body struct {
+		WorkspaceID string `json:"workspace_id" doc:"Workspace ID"`
+		Username    string `json:"username" doc:"Reddit username"`
+		Password    string `json:"password" doc:"Reddit password"`
+	}
+}
+
+func (h *OAuthHandler) RedditLogin(api huma.API) {
+	huma.Register(api, huma.Operation{
+		OperationID: "reddit-login",
+		Method:      http.MethodPost,
+		Path:        "/accounts/reddit/login",
+		Summary:     "Connect Reddit account using username and password",
+		Tags:        []string{tagAccounts},
+		Middlewares: huma.Middlewares{middleware.AuthMiddleware(api, h.auth)},
+		Errors:      []int{400, 403},
+	}, func(ctx context.Context, input *RedditLoginInput) (*struct{}, error) {
+		userID := middleware.GetUserID(ctx)
+		if err := h.ensureCanStartAccountConnection(ctx, input.Body.WorkspaceID, userID); err != nil {
+			return nil, err
+		}
+
+		adapter, ok := h.providers["reddit"]
+		if !ok {
+			return nil, huma.Error400BadRequest("reddit not configured")
+		}
+
+		redditAdapter, ok := adapter.(*platform.RedditAdapter)
+		if !ok {
+			return nil, huma.Error500InternalServerError("reddit adapter type mismatch")
+		}
+
+		modhash, cookie, expiresIn, err := redditAdapter.CreateSession(ctx, input.Body.Username, input.Body.Password)
+		if err != nil {
+			return nil, huma.Error500InternalServerError(fmt.Sprintf("reddit login failed: %s", err.Error()))
+		}
+
+		// Encode modhash into the access token: "cookie:modhash:session_cookie"
+		accessToken := "cookie:" + modhash + ":" + cookie
+		profile, err := redditAdapter.GetProfile(ctx, accessToken)
+		if err != nil {
+			return nil, huma.Error500InternalServerError(fmt.Sprintf("reddit profile fetch failed: %s", err.Error()))
+		}
+
+		tokenResp := &platform.TokenResult{
+			AccessToken:  accessToken,
+			RefreshToken: "",
+			ExpiresIn:    expiresIn,
+			Extra: map[string]string{
+				"modhash":         modhash,
+				"reddit_username": input.Body.Username,
+			},
+		}
+
+		if _, err := h.accountSaver.SaveAccount(ctx, userID, "reddit", input.Body.WorkspaceID, profile.ID, profile.Username, "", tokenResp); err != nil {
+			log.Printf("[RedditLogin] Failed to save account: %v", err)
+			return nil, huma.Error403Forbidden(accountConnectionErrorMessage(err))
+		}
 
 		return nil, nil
 	})

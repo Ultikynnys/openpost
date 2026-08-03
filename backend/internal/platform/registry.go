@@ -45,6 +45,9 @@ var appBuilders = map[string]appBuilder{
 		}
 		return NewMastodonAdapter(app.ClientID, app.ClientSecret, app.RedirectURI, app.InstanceURL), nil
 	},
+	providerReddit: func(app AppConfig, _ RegistryOptions) (Adapter, error) {
+		return NewRedditAdapter(app.ClientID, app.ClientSecret, app.RedirectURI), nil
+	},
 	providerBluesky: func(_ AppConfig, _ RegistryOptions) (Adapter, error) {
 		return NewBlueskyAdapter(""), nil
 	},

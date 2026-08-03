@@ -19,6 +19,7 @@ const (
 	ProviderInstagram = "instagram"
 	ProviderLinkedIn  = "linkedin"
 	ProviderMastodon  = "mastodon"
+	ProviderReddit    = "reddit"
 	ProviderThreads   = "threads"
 	ProviderTikTok    = "tiktok"
 	ProviderX         = "x"
@@ -315,6 +316,11 @@ func All() []Capability {
 		defaultQueued(Capability{Provider: ProviderMastodon, Profile: models.ContentProfileImagePost, Label: "Mastodon media", TextLimit: 500, Media: MediaConstraint{MinCount: 1, MaxCount: 4, AllowedMIMEs: []string{"image/jpeg", "image/png", "image/webp", "image/gif", "video/mp4"}}, Settings: mastodonSettings()}),
 		defaultQueued(Capability{Provider: ProviderMastodon, Profile: models.ContentProfileShortVideo, Label: "Mastodon video", TextLimit: 500, Media: mastodonVideo, Settings: mastodonSettings()}),
 		defaultQueued(Capability{Provider: ProviderMastodon, Profile: models.ContentProfileLongVideo, Label: "Mastodon video", TextLimit: 500, Media: mastodonVideo, Settings: mastodonSettings()}),
+
+		defaultQueued(Capability{Provider: ProviderReddit, Profile: models.ContentProfileShortText, Label: "Reddit text post", TextLimit: 40000, Media: text, TitleRequired: true, Settings: redditSettings()}),
+		defaultQueued(Capability{Provider: ProviderReddit, Profile: models.ContentProfileLinkShare, Label: "Reddit link post", TextLimit: 40000, Media: text, TitleRequired: true, Settings: append(linkSettings(), redditSettings()...)}),
+		defaultQueued(Capability{Provider: ProviderReddit, Profile: models.ContentProfileImagePost, Label: "Reddit image post", TextLimit: 40000, Media: MediaConstraint{MinCount: 1, MaxCount: 1, AllowedMIMEs: []string{"image/jpeg", "image/png", "image/webp", "image/gif"}, MaxSizeBytes: 20 * 1024 * 1024}, TitleRequired: true, Settings: redditSettings()}),
+		defaultQueued(Capability{Provider: ProviderReddit, Profile: models.ContentProfileShortVideo, Label: "Reddit video post", TextLimit: 40000, Media: MediaConstraint{MinCount: 1, MaxCount: 1, AllowedMIMEs: []string{"video/mp4"}, MaxSizeBytes: 1024 * 1024 * 1024, MaxDurationSeconds: 900}, TitleRequired: true, Settings: redditSettings()}),
 
 		defaultQueued(Capability{Provider: ProviderThreads, Profile: models.ContentProfileShortText, Label: "Threads post", TextLimit: 500, Media: text, Settings: threadsSettings()}),
 		defaultQueued(Capability{Provider: ProviderThreads, Profile: models.ContentProfileThread, Label: "Threads thread", TextLimit: 500, Media: publicMedia, RequiresPublicMedia: true, Settings: threadsSettings()}),
@@ -1685,6 +1691,17 @@ func instagramSettings() []SettingField {
 		{Key: "cover_media_id", Label: "Cover image", Type: "media", Control: "media_picker", Intents: []string{IntentShortVideo}},
 		{Key: "thumbnail_timestamp_ms", Label: "Cover frame", Type: "number", Control: "cover_frame", Intents: []string{IntentShortVideo}},
 		{Key: "share_to_feed", Label: "Share Reel to feed", Type: "boolean", Intents: []string{IntentShortVideo}},
+	}
+}
+
+func redditSettings() []SettingField {
+	return []SettingField{
+		{Key: "flair_id", Label: "Flair", Type: "select", Control: "remote_picker", OptionsSource: "reddit_flairs", Help: "Post flair for the selected subreddit."},
+		{Key: "flair_text", Label: "Custom flair text", Type: "text", Constraints: SettingConstraint{MaxLength: 64}},
+		{Key: "nsfw", Label: "NSFW (Not Safe For Work)", Type: "boolean"},
+		{Key: "spoiler", Label: "Spoiler", Type: "boolean"},
+		{Key: "sendreplies", Label: "Send replies to inbox", Type: "boolean", Default: true},
+		{Key: "alt_text", Label: "Alt text", Type: "text", Scope: SettingScopeMediaItem, MediaShapes: []string{MediaShapeSingleImage}, Constraints: SettingConstraint{MaxLength: 256}, Help: "Accessibility description for the image."},
 	}
 }
 

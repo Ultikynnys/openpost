@@ -72,6 +72,11 @@
 	let blueskyAppPassword = $state('');
 	let blueskyLoading = $state(false);
 	let blueskyError = $state('');
+	let redditModalOpen = $state(false);
+	let redditUsername = $state('');
+	let redditSessionCookie = $state('');
+	let redditLoading = $state(false);
+	let redditError = $state('');
 	let discordModalOpen = $state(false);
 	let discordWebhookUrl = $state('');
 	let discordLoading = $state(false);
@@ -377,6 +382,46 @@
 		blueskyModalOpen = true;
 	}
 
+	async function connectReddit() {
+		if (!selectedWorkspaceId) {
+			showToast(m.accounts_create_workspace_first());
+			return;
+		}
+		clearToast();
+		redditUsername = '';
+		redditSessionCookie = '';
+		redditError = '';
+		redditModalOpen = true;
+	}
+
+	async function submitRedditLogin() {
+		if (!redditUsername.trim() || !redditSessionCookie.trim()) {
+			redditError = 'Both fields are required.';
+			return;
+		}
+
+		redditLoading = true;
+		redditError = '';
+
+		try {
+			const { error: err } = await client.POST('/accounts/reddit/login', {
+				body: {
+					workspace_id: selectedWorkspaceId,
+					username: redditUsername.trim(),
+					password: redditSessionCookie.trim()
+				}
+			});
+			if (err) throw new Error(err.detail || m.accounts_login_failed());
+			redditModalOpen = false;
+			await loadAccounts();
+		} catch (e) {
+			redditError = e instanceof Error && e.message ? e.message : m.accounts_login_failed();
+			showConnectError(e, m.accounts_login_failed());
+		} finally {
+			redditLoading = false;
+		}
+	}
+
 	async function submitBlueskyLogin() {
 		if (!blueskyHandle.trim() || !blueskyAppPassword.trim()) {
 			blueskyError = m.accounts_bluesky_fields_required();
@@ -655,6 +700,9 @@
 				break;
 			case 'bluesky':
 				connectBluesky();
+				break;
+			case 'reddit':
+				connectReddit();
 				break;
 			case 'discord':
 				connectDiscord();
@@ -1048,6 +1096,63 @@
 				</Dialog.Close>
 				<Button type="submit" disabled={blueskyLoading}>
 					{blueskyLoading ? m.common_connecting() : m.common_connect()}
+				</Button>
+			</div>
+		</form>
+	</Dialog.Content>
+</Dialog.Root>
+
+<Dialog.Root bind:open={redditModalOpen}>
+	<Dialog.Content class="sm:max-w-md">
+		<Dialog.Header>
+			<Dialog.Title>Connect Reddit</Dialog.Title>
+			<Dialog.Description>
+				Paste your Reddit session cookie. Open reddit.com → F12 → Application → Cookies → reddit.com → copy the <strong>reddit_session</strong> value.
+			</Dialog.Description>
+		</Dialog.Header>
+		<form
+			class="space-y-4"
+			onsubmit={(e) => {
+				e.preventDefault();
+				submitRedditLogin();
+			}}
+		>
+			<div class="space-y-2">
+				<Label for="reddit-username">Reddit username</Label>
+				<Input
+					type="text"
+					id="reddit-username"
+					bind:value={redditUsername}
+					placeholder="Ultikynnys"
+					required
+				/>
+			</div>
+			<div class="space-y-2">
+				<Label for="reddit-cookie">Session cookie (reddit_session)</Label>
+				<Input
+					type="password"
+					id="reddit-cookie"
+					bind:value={redditSessionCookie}
+					placeholder="Paste your reddit_session cookie value"
+					required
+				/>
+			</div>
+			{#if redditError}
+				<InlineNotice
+					tone="error"
+					message={redditError}
+					dismissLabel={m.common_dismiss()}
+					onDismiss={() => (redditError = '')}
+				/>
+			{/if}
+			<div class="flex justify-end gap-2">
+				<Dialog.Close>
+					{#snippet child({ props })}
+						<Button {...props} variant="outline" type="button">{m.common_cancel()}</Button>
+					{/snippet}
+				</Dialog.Close>
+				<Button type="submit" disabled={redditLoading}>
+					{redditLoading ? m.common_connecting() : m.common_connect()}
 				</Button>
 			</div>
 		</form>

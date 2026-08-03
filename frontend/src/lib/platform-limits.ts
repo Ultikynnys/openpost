@@ -62,6 +62,13 @@ export const PLATFORM_LIMITS: Record<string, PlatformLimitDefinition> = {
 		media: 'Up to 4 images or 1 MP4 video',
 		note: 'Video is MP4-only and cannot be mixed with images.'
 	},
+	reddit: {
+		key: 'reddit',
+		name: 'Reddit',
+		charLimit: 40000,
+		media: 'One image, one video, or one link per post',
+		note: 'Subreddit rules may enforce shorter limits. Videos are MP4 under 1 GiB / 15 min.'
+	},
 	linkedin: {
 		key: 'linkedin',
 		name: 'LinkedIn',

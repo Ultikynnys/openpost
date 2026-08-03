@@ -101,6 +101,10 @@ type Config struct {
 	ThreadsClientSecret string
 	ThreadsRedirectURI  string
 
+	RedditClientID     string
+	RedditClientSecret string
+	RedditRedirectURI  string
+
 	ProviderApps []platform.AppConfig
 
 	StorageDriver     string
@@ -241,6 +245,10 @@ func Load() *Config {
 		ThreadsClientSecret: getEnvWithFallbacks("THREADS_CLIENT_SECRET", ""),
 		ThreadsRedirectURI:  oauthRedirectFromFrontend("THREADS_REDIRECT_URI", "", frontendURL, "/api/v1/accounts/threads/callback"),
 
+		RedditClientID:     getEnvWithFallbacks("REDDIT_CLIENT_ID", ""),
+		RedditClientSecret: getEnvWithFallbacks("REDDIT_CLIENT_SECRET", ""),
+		RedditRedirectURI:  oauthRedirectFromFrontend("REDDIT_REDIRECT_URI", "", frontendURL, "/api/v1/accounts/reddit/callback"),
+
 		StorageDriver:     getEnvEnum("OPENPOST_STORAGE_DRIVER", StorageDriverLocal, StorageDriverLocal, StorageDriverS3),
 		MediaPath:         getEnvDefault("OPENPOST_MEDIA_PATH", "./media"),
 		MediaURL:          getEnvDefault("OPENPOST_MEDIA_URL", "/media"),
@@ -316,7 +324,7 @@ func Load() *Config {
 }
 
 func providerAppsFromLegacyConfig(cfg *Config) []platform.AppConfig {
-	apps := []platform.AppConfig{{Provider: "bluesky"}, {Provider: "discord"}}
+	apps := []platform.AppConfig{{Provider: "bluesky"}, {Provider: "discord"}, {Provider: "reddit"}}
 	if cfg.TwitterClientID != "" {
 		apps = append(apps, platform.AppConfig{
 			Provider:     "x",
@@ -351,6 +359,14 @@ func providerAppsFromLegacyConfig(cfg *Config) []platform.AppConfig {
 			RedirectURI:  cfg.ThreadsRedirectURI,
 		})
 	}
+	if cfg.RedditClientID != "" {
+		apps = append(apps, platform.AppConfig{
+			Provider:     "reddit",
+			ClientID:     cfg.RedditClientID,
+			ClientSecret: cfg.RedditClientSecret,
+			RedirectURI:  cfg.RedditRedirectURI,
+		})
+	}
 	return defaultProviderAppConfig(cfg, apps)
 }
 
@@ -373,6 +389,7 @@ func providerRedirectURI(cfg *Config, provider string) string {
 		"instagram": oauthRedirectFromFrontend("", "", cfg.FrontendURL, "/api/v1/accounts/instagram/callback"),
 		"mastodon":  cfg.MastodonRedirectURI,
 		"linkedin":  cfg.LinkedInRedirectURI,
+		"reddit":    cfg.RedditRedirectURI,
 		"threads":   cfg.ThreadsRedirectURI,
 		"tiktok":    oauthRedirectFromFrontend("", "", cfg.FrontendURL, "/api/v1/accounts/tiktok/callback"),
 		"youtube":   oauthRedirectFromFrontend("", "", cfg.FrontendURL, "/api/v1/accounts/youtube/callback"),
