@@ -16,11 +16,9 @@
   let mobileOpen = $state(false);
   const currentPath = $derived(page.url.pathname);
   const navigationResourceItems = [
-    ...resourceItems,
-    {
-      label: "Discord community",
-      href: "https://discord.gg/u2QwukmY4W",
-    },
+    { label: "User docs", href: docsUrl },
+    ...resourceItems.filter((item) => item.href !== "/platforms"),
+    { label: "Discord community", href: "https://discord.gg/u2QwukmY4W" },
   ] as const;
 
   function isActive(href: string): boolean {
@@ -34,7 +32,7 @@
   }
 </script>
 
-<header class="sticky top-0 z-40 border-b bg-background/96">
+<header class="marketing-nav sticky top-0 z-40">
   <div class="marketing-shell flex min-h-16 items-center justify-between gap-4">
     <a
       class="focus-ring inline-flex min-h-11 items-center gap-2 rounded-md"
@@ -47,7 +45,7 @@
 
     <NavigationMenu.Root
       viewport={false}
-      class="hidden lg:flex"
+      class="absolute left-1/2 hidden -translate-x-1/2 lg:flex"
       aria-label="Primary navigation"
     >
       <NavigationMenu.List>
@@ -57,7 +55,7 @@
               href={item.href}
               active={isActive(item.href)}
               aria-current={isActive(item.href) ? "page" : undefined}
-              class="focus-ring min-h-11 rounded-md px-3 text-sm font-medium text-muted-foreground hover:bg-muted/70 hover:text-foreground data-[active=true]:bg-muted data-[active=true]:text-foreground"
+              class="focus-ring min-h-11 rounded-md px-3 text-sm font-medium text-muted-foreground hover:bg-muted/70 hover:text-foreground data-[active=true]:text-foreground"
             >
               {item.label}
             </NavigationMenu.Link>
@@ -87,15 +85,6 @@
               {/each}
             </ul>
           </NavigationMenu.Content>
-        </NavigationMenu.Item>
-
-        <NavigationMenu.Item>
-          <NavigationMenu.Link
-            href={docsUrl}
-            class="focus-ring min-h-11 rounded-md px-3 text-sm font-medium text-muted-foreground hover:bg-muted/70 hover:text-foreground"
-          >
-            Docs
-          </NavigationMenu.Link>
         </NavigationMenu.Item>
       </NavigationMenu.List>
     </NavigationMenu.Root>
@@ -139,7 +128,7 @@
   {#if mobileOpen}
     <nav
       id="mobile-navigation"
-      class="border-t bg-background lg:hidden"
+      class="max-h-[calc(100dvh-4rem)] overflow-y-auto border-t bg-background lg:hidden"
       aria-label="Mobile navigation"
     >
       <div class="marketing-shell grid gap-1 py-4">
@@ -170,12 +159,6 @@
             {item.label}
           </a>
         {/each}
-        <a
-          href={docsUrl}
-          class="focus-ring flex min-h-11 items-center rounded-md px-3 text-sm text-muted-foreground"
-        >
-          Docs
-        </a>
         <div class="mt-4 grid grid-cols-[auto_1fr_1fr] gap-2 border-t pt-4">
           <Button
             type="button"
@@ -198,3 +181,11 @@
     </nav>
   {/if}
 </header>
+
+<style>
+  .marketing-nav {
+    border-bottom: 1px solid color-mix(in oklch, var(--border) 70%, transparent);
+    background: color-mix(in oklch, var(--background) 88%, transparent);
+    backdrop-filter: blur(18px) saturate(140%);
+  }
+</style>

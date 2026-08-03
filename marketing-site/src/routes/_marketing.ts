@@ -34,6 +34,7 @@ export const demoVideoThumbnailUrl = "/assets/screenshots/main-dark.png";
 
 export const navItems = [
   { label: "Product", href: "/#product" },
+  { label: "Platforms", href: "/platforms" },
   { label: "Pricing", href: "/pricing" },
   { label: "Free tools", href: "/tools" },
 ] as const;
@@ -387,7 +388,7 @@ export const platforms = [
       label: "Carousel",
       headline: "Four media items, one Threads post",
       body: "Public image and video URLs are checked before Meta fetches the carousel.",
-      detail: "2-10 public media items",
+      detail: "2-20 public media items",
       chips: ["Image", "Video", "Reply chain"],
     },
     accountRequirement:
@@ -412,7 +413,7 @@ export const platforms = [
       {
         name: "Carousel",
         text: "500 characters",
-        media: "2-10 public HTTPS images or videos",
+        media: "2-20 public HTTPS images or videos",
       },
     ],
     limits: [
@@ -759,7 +760,7 @@ export const launchProviderMatrix = [
     short: "threads",
     state: "Available",
     text: "Posts and replies · 500 characters",
-    media: "1 item or a 2-10 item carousel",
+    media: "1 item or a 2-20 item carousel",
     threads: "Reply chains",
     schedule: "Supported",
     verify: "Approved Meta access and fetchable production HTTPS media URLs",
@@ -907,7 +908,7 @@ export const tools = [
     slug: "social-media-video-editor",
     name: "Social media video editor",
     description:
-      "Stream-copy simple cuts without transcoding or use the complete local editor for four social formats, captions, effects, and recording.",
+      "Stream-copy combined or per-section cuts without transcoding, or use the complete desktop or touch editor for four social formats, captions, effects, and recording.",
     icon: Clapperboard,
   },
   {

@@ -37,7 +37,8 @@
         Quick Cut removes sections and copies source streams without a video
         transcode. Full Studio adds four social formats, separate recording
         tracks, local transcript editing, effects, and streamed MP4 or WebM
-        export. Desktop Chromium gets the complete editor.
+        export. Desktop gets the full workbench; capable phones get a touch
+        timeline and contextual tools.
       </p>
 
       <ul
@@ -71,8 +72,8 @@
         <ArrowRight class="size-4" aria-hidden="true" />
       </Button>
       <p class="mt-3 text-xs leading-5 text-muted-foreground">
-        Mobile can review projects and continue to an OpenPost composer, but
-        timeline editing and rendering require desktop Chromium.
+        Requires current Chrome or Edge with WebCodecs, private file storage,
+        and WebGL2. Capture and export options vary by device.
       </p>
     </section>
 

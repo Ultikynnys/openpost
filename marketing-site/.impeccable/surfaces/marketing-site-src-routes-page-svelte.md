@@ -19,10 +19,11 @@ related_targets:
 # OpenPost marketing surfaces
 
 - **Scope and mode:** The homepage and commercial product pages use Persuade; changelog and legal pages use Read; free tools begin in Operate before a short product handoff.
-- **Audience and job:** Creators and small social teams deciding whether OpenPost can simplify multi-network publishing without hiding destination differences.
+- **Audience and job:** Founders, creators, and small social teams deciding whether OpenPost can keep a multi-network publishing practice consistent without hiding destination differences.
 - **Primary action:** Start the managed app. Self-hosting remains a clear secondary path.
-- **Proof:** A working destination editor and shared network-specific preview renderer, supported formats and constraints, the visible publishing workflow, current plan limits, source-backed comparisons, and inspectable security controls.
-- **Direction:** Warm technical minimalism with large carbon type, thin structural borders, scarce orange action, generous spacing, and real product or provider surfaces instead of repeated feature cards.
-- **Memorable moment:** The visitor changes a destination and its copy, then sees the provider-shaped result update beside it.
-- **Constraints:** Keep factual claims source-backed, normal provider state quiet, tables readable without phone overflow, themes paired, copy direct, and the homepage under roughly 500 words.
-- **Unresolved:** None for this release. Recapture canonical product screenshots when the product UI changes.
+- **Proof:** A working destination editor, real product screenshots, supported platforms and constraints, a visible source-to-destination workflow, current plan limits, opt-in public publishing profiles, source-backed comparisons, and inspectable security controls.
+- **Direction:** Centered product-led storytelling with warm technical minimalism, large carbon type, thin structural borders, scarce orange action, generous spacing, and dark framed product surfaces. Do not recreate a generic card grid or copy the prototype implementation.
+- **Memorable moment:** Orange activity cells resolve as the visitor reaches the publishing proof, then a restrained field of orange and neutral squares bounces above the shared dark footer. Public profiles use the same square language for real daily publishing activity.
+- **Motion:** Use short opacity, translate, blur, and clip reveals to clarify reading order. Animate transforms and opacity only where practical, keep each section legible before motion, and remove all non-essential motion under `prefers-reduced-motion`.
+- **Constraints:** Keep claims source-backed, do not invent testimonials or usage totals, keep normal provider state quiet, make wide data scroll safely at phone widths, pair light and dark themes, keep copy direct, and reuse the shared header, footer, controls, tokens, and platform icons.
+- **Unresolved:** Recapture canonical product screenshots when the product UI changes.
