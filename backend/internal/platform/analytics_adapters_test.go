@@ -2,12 +2,14 @@ package platform
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -149,6 +151,98 @@ func TestXAnalyticsUsesPublicMetricsAndKeepsMetricKindsDistinct(t *testing.T) {
 	require.Equal(t, int64(1), content[MetricQuotes])
 	require.Equal(t, int64(100), content[MetricImpressions])
 	require.Equal(t, int64(4), content[MetricSaves])
+}
+
+func TestXAnalyticsPreservesSnapshotsWhenCreditsOrBatchResultsAreIncomplete(t *testing.T) {
+	t.Run("credits depleted", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusPaymentRequired)
+			_, _ = w.Write([]byte(`{"type":"https://api.x.com/2/problems/credits"}`))
+		}))
+		defer server.Close()
+
+		adapter := NewXAdapter("consumer", "secret", "")
+		defer close(adapter.cleanupDone)
+		adapter.apiBaseURL = server.URL
+
+		_, err := adapter.FetchAccountAnalytics(context.Background(), "access|secret", AccountAnalyticsRequest{AccountID: "user"})
+		var analyticsErr *AnalyticsError
+		require.ErrorAs(t, err, &analyticsErr)
+		require.Equal(t, AnalyticsStatusRateLimited, analyticsErr.Status)
+		require.Equal(t, 24*time.Hour, analyticsErr.RetryAfter)
+	})
+
+	t.Run("partial batch", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"data":[{"public_metrics":{"like_count":8}}],"errors":[{"value":"missing"}]}`))
+		}))
+		defer server.Close()
+
+		adapter := NewXAdapter("consumer", "secret", "")
+		defer close(adapter.cleanupDone)
+		adapter.apiBaseURL = server.URL
+
+		_, err := adapter.FetchContentAnalytics(context.Background(), "access|secret", ContentAnalyticsRequest{ExternalIDs: []string{"first", "missing"}})
+		var analyticsErr *AnalyticsError
+		require.True(t, errors.As(err, &analyticsErr))
+		require.Equal(t, AnalyticsStatusFailed, analyticsErr.Status)
+		require.Equal(t, "partial_response", analyticsErr.Code)
+	})
+}
+
+func TestRedditAnalyticsUsesCredentialAndDestinationSpecificEndpoints(t *testing.T) {
+	originalClient := httpClient
+	defer func() { httpClient = originalClient }()
+
+	httpClient = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		switch {
+		case req.URL.Host == "oauth.reddit.com" && req.URL.Path == "/api/v1/me":
+			require.Equal(t, "Bearer oauth-token", req.Header.Get("Authorization"))
+			return jsonResponse(req, `{"subreddit":{"subscribers":12}}`), nil
+		case req.URL.Host == "www.reddit.com" && req.URL.Path == "/api/me.json":
+			require.Equal(t, "reddit_session=session", req.Header.Get("Cookie"))
+			return jsonResponse(req, `{"data":{"subreddit":{}}}`), nil
+		case req.URL.Path == "/api/info.json" && req.URL.Query().Get("id") == "t5_community":
+			return jsonResponse(req, `{"data":{"children":[{"data":{"subscribers":34}}]}}`), nil
+		default:
+			t.Fatalf("unexpected Reddit analytics request %s", req.URL.String())
+			return nil, nil
+		}
+	})}
+
+	adapter := NewRedditAdapter("", "", "")
+	oauthValues, err := adapter.FetchAccountAnalytics(context.Background(), "oauth-token", AccountAnalyticsRequest{AccountID: "u_user"})
+	require.NoError(t, err)
+	require.Equal(t, int64(12), oauthValues[MetricFollowers])
+
+	cookieValues, err := adapter.FetchAccountAnalytics(context.Background(), "cookie:modhash:session", AccountAnalyticsRequest{AccountID: "u_user"})
+	require.NoError(t, err)
+	require.NotContains(t, cookieValues, MetricFollowers)
+
+	subredditValues, err := adapter.FetchAccountAnalytics(context.Background(), "oauth-token", AccountAnalyticsRequest{AccountID: "community"})
+	require.NoError(t, err)
+	require.Equal(t, int64(34), subredditValues[MetricFollowers])
+}
+
+func TestRedditContentAnalyticsAggregatesPostsWithoutInventingViews(t *testing.T) {
+	originalClient := httpClient
+	defer func() { httpClient = originalClient }()
+
+	httpClient = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		require.Equal(t, "t3_first,t3_second", req.URL.Query().Get("id"))
+		return jsonResponse(req, `{"data":{"children":[{"data":{"score":5,"num_comments":2}},{"data":{"score":3,"num_comments":1,"view_count":20}}]}}`), nil
+	})}
+
+	values, err := NewRedditAdapter("", "", "").FetchContentAnalytics(
+		context.Background(),
+		"oauth-token",
+		ContentAnalyticsRequest{ExternalIDs: []string{`{"id":"first"}`, "t3_second"}},
+	)
+	require.NoError(t, err)
+	require.Equal(t, int64(8), values[MetricLikes])
+	require.Equal(t, int64(3), values[MetricComments])
+	require.Equal(t, int64(20), values[MetricViews])
 }
 
 func TestLinkedInAnalyticsSupportsMembersAndOrganizationPages(t *testing.T) {
