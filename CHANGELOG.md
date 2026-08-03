@@ -4,6 +4,8 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [1.51.1] - 2026-08-03
+
 ### Fixed
 
 - Updated the marketing browser contract to match the rebuilt homepage title on desktop and mobile.
