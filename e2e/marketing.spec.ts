@@ -6,11 +6,11 @@ test("marketing index links to the app and documentation", async ({ page }) => {
   await page.goto("/");
 
   await expect(page).toHaveTitle(
-    "OpenPost - Create, preview, and publish for every social account",
+    "OpenPost - Build the company. Keep it visible.",
   );
   await expect(
     page.getByRole("heading", {
-      name: "Write once. Preview every account.",
+      name: "Build the company. Keep it visible.",
     }),
   ).toBeVisible();
   await expect(page.getByText("Testimonials", { exact: true })).toHaveCount(0);
@@ -33,35 +33,38 @@ test("marketing index links to the app and documentation", async ({ page }) => {
   ).toBeVisible();
   await expect(
     page.getByRole("heading", {
-      name: "One post. The right version for each account.",
+      name: "Not another scheduler. The complete content workflow.",
     }),
   ).toBeVisible();
   await expect(
     page.getByRole("heading", {
-      name: "Keep each part of the post together.",
+      name: "One system from idea to published post.",
     }),
   ).toBeVisible();
-
-  const productAreas = page.getByRole("group", {
-    name: "OpenPost product areas",
-  });
-  await productAreas.getByRole("button", { name: "Accounts" }).click();
   await expect(
     page.getByRole("heading", {
-      name: "See each account and any setup it needs.",
+      name: "Each platform gets the version it needs.",
     }),
   ).toBeVisible();
+  await expect(page.getByAltText("OpenPost social accounts page")).toHaveCount(
+    0,
+  );
   await expect(
-    page.getByAltText("OpenPost social accounts page"),
+    page.getByAltText("OpenPost connected social accounts page"),
   ).toHaveAttribute("src", "/assets/screenshots/accounts-dark.png");
   await expect(
     page.getByRole("heading", {
-      name: "The same product, managed or self-hosted.",
+      name: "Make consistent work visible.",
+    }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("img", {
+      name: "Illustrative year of publishing activity across six social platforms",
     }),
   ).toBeVisible();
   await expect(
     page.getByRole("heading", {
-      name: "Check each account before you publish.",
+      name: "Managed for you. Or fully self-hosted.",
     }),
   ).toBeVisible();
   await expect(
@@ -77,7 +80,7 @@ test("marketing index links to the app and documentation", async ({ page }) => {
     page.getByRole("link", { name: "GitHub source" }),
   ).toHaveAttribute("href", "https://github.com/rodrgds/openpost");
   await expect(
-    page.getByRole("link", { name: "Discord community", exact: true }).last(),
+    page.getByRole("link", { name: "Discord", exact: true }).last(),
   ).toHaveAttribute("href", "https://discord.gg/u2QwukmY4W");
 });
 
