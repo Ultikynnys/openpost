@@ -215,7 +215,7 @@ func Profiles() []Profile {
 
 func All() []Capability {
 	text := MediaConstraint{MinCount: 0, MaxCount: 0}
-	image := MediaConstraint{MinCount: 1, MaxCount: 1, AllowedMIMEs: []string{"image/jpeg", "image/png", "image/webp"}}
+	linkedinImage := MediaConstraint{MinCount: 1, MaxCount: 1, AllowedMIMEs: []string{"image/jpeg", "image/png", "image/gif"}}
 	feedImages := MediaConstraint{MinCount: 1, MaxCount: 10, AllowedMIMEs: []string{"image/jpeg", "image/png", "image/webp"}}
 	document := MediaConstraint{MinCount: 1, MaxCount: 1, AllowedMIMEs: []string{
 		"application/pdf",
@@ -242,7 +242,7 @@ func All() []Capability {
 	publicMediaCarousel.MinCount = 2
 	threadsCarousel := MediaConstraint{
 		MinCount:               2,
-		MaxCount:               10,
+		MaxCount:               20,
 		AllowedMIMEs:           []string{"image/jpeg", "image/png", "image/webp", "video/mp4", "video/quicktime"},
 		RequiresPublicURL:      true,
 		RequiresHTTPSFetchable: true,
@@ -291,7 +291,7 @@ func All() []Capability {
 		c.MediaShapes = mediaShapesFor(c.Profile, c.Media)
 		c.Settings = normalizeSettingDefinitions(c)
 		c.ValidationCategories = validationCategories(c)
-		c.CapabilityRevision = "2026-07-27.1"
+		c.CapabilityRevision = "2026-08-03.1"
 		return c
 	}
 
@@ -326,9 +326,9 @@ func All() []Capability {
 		defaultQueued(Capability{Provider: ProviderLinkedIn, Profile: models.ContentProfileShortText, Label: "LinkedIn post", TextLimit: 3000, Media: text, Settings: linkedinSettings()}),
 		defaultQueued(Capability{Provider: ProviderLinkedIn, Profile: models.ContentProfileThread, Label: "LinkedIn root plus comments", TextLimit: 1250, Media: text, Settings: linkedinSettings()}),
 		defaultQueued(Capability{Provider: ProviderLinkedIn, Profile: models.ContentProfileLinkShare, Label: "LinkedIn article", TextLimit: 3000, Media: text, Settings: append(linkSettings(), linkedinSettings()...)}),
-		defaultQueued(Capability{Provider: ProviderLinkedIn, Profile: models.ContentProfileImagePost, Label: "LinkedIn image", TextLimit: 3000, Media: image, Settings: linkedinSettings()}),
+		defaultQueued(Capability{Provider: ProviderLinkedIn, Profile: models.ContentProfileImagePost, Label: "LinkedIn image", TextLimit: 3000, Media: linkedinImage, Settings: linkedinSettings()}),
 		defaultQueued(Capability{Provider: ProviderLinkedIn, Profile: models.ContentProfileCarousel, Label: "LinkedIn document", TextLimit: 3000, Media: document, Settings: append([]SettingField{{Key: "document_title", Label: "Document title", Type: "text", Required: true}}, linkedinSettings()...)}),
-		defaultQueued(Capability{Provider: ProviderLinkedIn, Profile: models.ContentProfileCarousel, OutputProfile: "linkedin.multi_image", Label: "LinkedIn multi-image post", TextLimit: 3000, Media: MediaConstraint{MinCount: 2, MaxCount: 20, AllowedMIMEs: []string{"image/jpeg", "image/png"}}, Settings: linkedinSettings()}),
+		defaultQueued(Capability{Provider: ProviderLinkedIn, Profile: models.ContentProfileCarousel, OutputProfile: "linkedin.multi_image", Label: "LinkedIn multi-image post", TextLimit: 3000, Media: MediaConstraint{MinCount: 2, MaxCount: 20, AllowedMIMEs: []string{"image/jpeg", "image/png", "image/gif"}}, Settings: linkedinSettings()}),
 		defaultQueued(Capability{Provider: ProviderLinkedIn, Profile: models.ContentProfileShortVideo, Label: "LinkedIn video", TextLimit: 3000, Media: linkedinVideo, Settings: linkedinSettings()}),
 		defaultQueued(Capability{Provider: ProviderLinkedIn, Profile: models.ContentProfileLongVideo, Label: "LinkedIn video", TextLimit: 3000, Media: linkedinVideo, Settings: linkedinSettings()}),
 
@@ -613,7 +613,7 @@ func Resolve(provider string, input ResolveInput) ResolvedCapability {
 				Provider:           provider,
 				Intents:            []string{intent},
 				MediaShapes:        []string{shape},
-				CapabilityRevision: "2026-07-27.1",
+				CapabilityRevision: "2026-08-03.1",
 			},
 			Compatible: false,
 			ActiveConstraints: map[string]any{

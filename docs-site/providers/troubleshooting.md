@@ -59,7 +59,7 @@ OpenPost saves the error type, status, safe error code, next retry time, and the
 - Custom instances must be public HTTPS and must allow app registration.
 - OpenPost rejects private, loopback, link-local, multicast, and local-address instance hosts.
 - Preconfigured instances must preserve the exact `instance_url`; the persisted provider key is `mastodon:<instance_url>`.
-- Video support is instance-dependent. MP4 and WebM are the safest formats.
+- Video support is instance-dependent. MP4, MOV, and WebM are the safest formats.
 
 ## Bluesky
 
@@ -80,7 +80,7 @@ OpenPost saves the error type, status, safe error code, next retry time, and the
 - Threads requires the Meta app's Threads product and scopes: `threads_basic`, `threads_content_publish`, and `threads_manage_replies`.
 - Media URLs must be public HTTPS. Meta fetches media server-side and cannot use localhost, private DNS, or plain local paths.
 - For local testing, expose both the app callback and `/media/...` paths through a tunnel.
-- Threads posts support up to 10 JPEG, PNG, WebP, MP4, or MOV attachments, including mixed-media carousels.
+- Threads posts support up to 20 JPEG, PNG, WebP, MP4, or MOV attachments, including mixed-media carousels.
 
 ## Facebook
 

@@ -238,7 +238,7 @@ func TestVideoCapabilitiesUseSafeProviderSpecificLimits(t *testing.T) {
 			require.Equal(t, tt.maxBytes, capability.Media.MaxSizeBytes)
 			require.Equal(t, tt.maxDuration, capability.Media.MaxDurationSeconds)
 			require.ElementsMatch(t, tt.allowedMIMEs, capability.Media.AllowedMIMEs)
-			require.Equal(t, "2026-07-27.1", capability.CapabilityRevision)
+			require.Equal(t, "2026-08-03.1", capability.CapabilityRevision)
 		})
 	}
 }
@@ -269,6 +269,20 @@ func TestApplyAccountConstraintsRefreshesVideoMIMEsAndSize(t *testing.T) {
 	require.NotContains(t, issueCodes(resolved.Issues), "media_size")
 	require.NotContains(t, issueCodes(resolved.Issues), "media_type")
 	require.Contains(t, resolved.Media.AllowedMIMEs, "video/webm")
+}
+
+func TestApplyAccountConstraintsUsesMastodonInstanceAttachmentCount(t *testing.T) {
+	media := make([]MediaItem, 6)
+	for index := range media {
+		media[index] = MediaItem{ID: "image", MimeType: "image/jpeg", Size: 1024}
+	}
+	segments := []ResolveSegment{{ID: "segment-1", Body: "Images", Media: media}}
+	resolved := Resolve(ProviderMastodon, ResolveInput{Intent: IntentPost, Segments: segments})
+	requireIssueCode(t, resolved.Issues, "media_count")
+
+	ApplyAccountConstraints(&resolved, segments, map[string]any{"media_max_count": 6})
+	require.Equal(t, 6, resolved.Media.MaxCount)
+	requireNoIssueCode(t, resolved.Issues, "media_count")
 }
 
 func TestValidateBlocksXMutuallyExclusiveSettings(t *testing.T) {
@@ -348,7 +362,7 @@ func TestPublicMediaCountsMatchAdapterPublishingModes(t *testing.T) {
 		max      int
 	}{
 		{ProviderThreads, models.ContentProfileImagePost, 1, 1},
-		{ProviderThreads, models.ContentProfileCarousel, 2, 10},
+		{ProviderThreads, models.ContentProfileCarousel, 2, 20},
 		{ProviderFacebook, models.ContentProfileImagePost, 1, 1},
 		{ProviderFacebook, models.ContentProfileCarousel, 2, 10},
 		{ProviderFacebook, models.ContentProfileStory, 1, 1},
@@ -398,6 +412,52 @@ func TestThreadsCarouselCapabilityAllowsMixedMedia(t *testing.T) {
 	require.True(t, ok)
 	require.Contains(t, capability.Media.AllowedMIMEs, "image/jpeg")
 	require.Contains(t, capability.Media.AllowedMIMEs, "video/mp4")
+	require.Equal(t, 20, capability.Media.MaxCount)
+}
+
+func TestLinkedInImageCapabilitiesMatchMultiImageAPI(t *testing.T) {
+	single, ok := Find(ProviderLinkedIn, models.ContentProfileImagePost)
+	require.True(t, ok)
+	require.ElementsMatch(t, []string{"image/jpeg", "image/png", "image/gif"}, single.Media.AllowedMIMEs)
+
+	var multi Capability
+	ok = false
+	for _, capability := range All() {
+		if capability.Provider == ProviderLinkedIn && capability.OutputProfile == "linkedin.multi_image" {
+			multi = capability
+			ok = true
+			break
+		}
+	}
+	require.True(t, ok)
+	require.Equal(t, 2, multi.Media.MinCount)
+	require.Equal(t, 20, multi.Media.MaxCount)
+	require.ElementsMatch(t, []string{"image/jpeg", "image/png", "image/gif"}, multi.Media.AllowedMIMEs)
+}
+
+func TestResolveTransitionsSingleImagesIntoMultiImageProfiles(t *testing.T) {
+	for _, provider := range []string{ProviderLinkedIn, ProviderThreads} {
+		t.Run(provider, func(t *testing.T) {
+			single := Resolve(provider, ResolveInput{
+				Intent: IntentPost,
+				Segments: []ResolveSegment{{ID: "segment-1", Body: "Caption", Media: []MediaItem{{
+					ID: "first", MimeType: "image/jpeg", Size: 1024, PublicURLReady: true, PublicURLStatus: 200,
+				}}}},
+			})
+			require.Equal(t, MediaShapeSingleImage, single.ActiveConstraints["media_shape"])
+			require.Equal(t, 1, single.Media.MaxCount)
+
+			multiple := Resolve(provider, ResolveInput{
+				Intent: IntentPost,
+				Segments: []ResolveSegment{{ID: "segment-1", Body: "Caption", Media: []MediaItem{
+					{ID: "first", MimeType: "image/jpeg", Size: 1024, PublicURLReady: true, PublicURLStatus: 200},
+					{ID: "second", MimeType: "image/png", Size: 1024, PublicURLReady: true, PublicURLStatus: 200},
+				}}},
+			})
+			require.Equal(t, MediaShapeMultipleImage, multiple.ActiveConstraints["media_shape"])
+			require.Equal(t, 20, multiple.Media.MaxCount)
+		})
+	}
 }
 
 func TestMetaCarouselAndStoryCapabilitiesMatchPublishingPaths(t *testing.T) {

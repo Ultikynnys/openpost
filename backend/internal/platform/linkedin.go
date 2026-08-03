@@ -988,14 +988,36 @@ func validateLinkedInMedia(media []MediaItem) []MediaValidationIssue {
 	if len(media) == 0 {
 		return nil
 	}
-	if len(media) > 1 {
+	if len(media) > 20 {
 		return []MediaValidationIssue{{
 			Provider: providerLinkedIn,
-			Severity: severityWarning,
-			Message:  "OpenPost currently publishes only the first LinkedIn attachment.",
+			Severity: severityError,
+			Message:  "LinkedIn multi-image posts support 2-20 images.",
 		}}
 	}
+	if len(media) > 1 {
+		for _, item := range media {
+			if isLinkedInImageMime(item.MimeType) {
+				continue
+			}
+			return []MediaValidationIssue{{
+				Provider: providerLinkedIn,
+				MediaID:  item.ID,
+				Severity: severityError,
+				Message:  "LinkedIn multi-image posts support JPEG, PNG, or GIF images only.",
+			}}
+		}
+		return nil
+	}
 	item := media[0]
+	if strings.HasPrefix(strings.ToLower(strings.TrimSpace(item.MimeType)), "image/") && !isLinkedInImageMime(item.MimeType) {
+		return []MediaValidationIssue{{
+			Provider: providerLinkedIn,
+			MediaID:  item.ID,
+			Severity: severityError,
+			Message:  "LinkedIn image posts support JPEG, PNG, or GIF images.",
+		}}
+	}
 	if isVideoMime(item.MimeType) && !isLinkedInVideoMime(item.MimeType) {
 		return []MediaValidationIssue{{
 			Provider: providerLinkedIn,
@@ -1005,6 +1027,15 @@ func validateLinkedInMedia(media []MediaItem) []MediaValidationIssue {
 		}}
 	}
 	return nil
+}
+
+func isLinkedInImageMime(mimeType string) bool {
+	switch strings.ToLower(strings.TrimSpace(mimeType)) {
+	case "image/jpeg", "image/png", "image/gif":
+		return true
+	default:
+		return false
+	}
 }
 
 func isLinkedInVideoMime(mimeType string) bool {

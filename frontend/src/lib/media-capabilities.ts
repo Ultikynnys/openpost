@@ -19,8 +19,11 @@ const videoTypeMP4 = 'video/mp4';
 const videoTypeQuickTime = 'video/quicktime';
 const blueskyVideoLimitBytes = 100 * 1024 * 1024;
 const maxCarouselMedia = 10;
+const maxThreadsCarouselMedia = 20;
 const maxTikTokPhotos = 35;
+export const MAX_COMPOSER_DRAFT_MEDIA = maxTikTokPhotos;
 const feedImageMimeTypes = new Set(['image/jpeg', 'image/png', 'image/webp']);
+const linkedInImageMimeTypes = new Set(['image/jpeg', 'image/png', 'image/gif']);
 const standardVideoMimeTypes = new Set([videoTypeMP4, videoTypeQuickTime]);
 const tiktokPhotoMimeTypes = new Set(['image/jpeg', 'image/webp']);
 
@@ -70,6 +73,8 @@ export function validateProviderMedia(
 			return validateTikTokMedia(media);
 		case 'youtube':
 			return validateYouTubeMedia(media);
+		case 'discord':
+			return validateDiscordMedia(media);
 		default:
 			return [];
 	}
@@ -118,16 +123,13 @@ function validateXMedia(media: MediaCapabilityItem[]): MediaCapabilityIssue[] {
 
 function validateMastodonMedia(media: MediaCapabilityItem[]): MediaCapabilityIssue[] {
 	if (media.length === 0) return [];
-	if (media.length > 4) {
-		return [issue('mastodon', 'error', 'Mastodon supports up to 4 media attachments per post.')];
-	}
 	for (const item of media) {
 		if (isVideoMime(item.mimeType) && !isMastodonLikelyVideoMime(item.mimeType)) {
 			return [
 				issue(
 					'mastodon',
 					'warning',
-					'Mastodon video support depends on the instance; MP4 and WebM are the safest formats.',
+					'Mastodon video support depends on the instance; MP4, MOV, and WebM are the safest formats.',
 					item.id
 				)
 			];
@@ -171,12 +173,34 @@ function validateBlueskyMedia(media: MediaCapabilityItem[]): MediaCapabilityIssu
 
 function validateLinkedInMedia(media: MediaCapabilityItem[]): MediaCapabilityIssue[] {
 	if (media.length === 0) return [];
+	if (media.length > 20) {
+		return [issue('linkedin', 'error', 'LinkedIn multi-image posts support 2-20 images.')];
+	}
 	if (media.length > 1) {
+		const unsupported = media.find(
+			(item) => !linkedInImageMimeTypes.has(normalizeMime(item.mimeType))
+		);
+		return unsupported
+			? [
+					issue(
+						'linkedin',
+						'error',
+						'LinkedIn multi-image posts support JPEG, PNG, or GIF images only.',
+						unsupported.id
+					)
+				]
+			: [];
+	}
+	if (
+		isImageMime(media[0].mimeType) &&
+		!linkedInImageMimeTypes.has(normalizeMime(media[0].mimeType))
+	) {
 		return [
 			issue(
 				'linkedin',
-				'warning',
-				'OpenPost currently publishes only the first LinkedIn attachment.'
+				'error',
+				'LinkedIn image posts support JPEG, PNG, or GIF images.',
+				media[0].id
 			)
 		];
 	}
@@ -195,8 +219,8 @@ function validateLinkedInMedia(media: MediaCapabilityItem[]): MediaCapabilityIss
 
 function validateThreadsMedia(media: MediaCapabilityItem[]): MediaCapabilityIssue[] {
 	if (media.length === 0) return [];
-	if (media.length > maxCarouselMedia) {
-		return [issue('threads', 'error', 'Threads supports up to 10 media attachments per post.')];
+	if (media.length > maxThreadsCarouselMedia) {
+		return [issue('threads', 'error', 'Threads supports up to 20 media attachments per post.')];
 	}
 
 	const issues: MediaCapabilityIssue[] = [];
@@ -328,6 +352,13 @@ function validateYouTubeMedia(media: MediaCapabilityItem[]): MediaCapabilityIssu
 	return [];
 }
 
+function validateDiscordMedia(media: MediaCapabilityItem[]): MediaCapabilityIssue[] {
+	if (media.length > 10) {
+		return [issue('discord', 'error', 'Discord webhook messages support up to 10 attachments.')];
+	}
+	return [];
+}
+
 function issue(
 	provider: string,
 	severity: MediaCapabilitySeverity,
@@ -352,7 +383,12 @@ function isThreadsVideoMime(mimeType: string): boolean {
 
 function isMastodonLikelyVideoMime(mimeType: string): boolean {
 	const normalized = normalizeMime(mimeType);
-	return normalized === videoTypeMP4 || normalized === 'video/webm' || normalized === 'image/gif';
+	return (
+		normalized === videoTypeMP4 ||
+		normalized === videoTypeQuickTime ||
+		normalized === 'video/webm' ||
+		normalized === 'image/gif'
+	);
 }
 
 function normalizeMime(mimeType: string): string {

@@ -10,6 +10,7 @@
 	import { getAuthenticatedMediaByID } from '$lib/media-url';
 	import { isSupportedMediaFile, uploadMediaFile } from '$lib/media-upload-client';
 	import {
+		MAX_COMPOSER_DRAFT_MEDIA,
 		mediaCapabilityItemsFromIds,
 		providerMediaWarningMessages
 	} from '$lib/media-capabilities';
@@ -327,12 +328,10 @@
 	);
 	const autoSavesDraft = $derived(!isEditMode || initialPost?.status === 'draft');
 	const selectedAccounts = $derived(accounts.filter((a) => selectedAccountIds.includes(a.id)));
-	const composerMediaLimit = $derived.by(() => {
-		const limits = selectedAccounts
-			.map((account) => resolvedCapabilities[account.id]?.media.max_count)
-			.filter((limit): limit is number => typeof limit === 'number' && limit > 0);
-		return limits.length > 0 ? Math.min(...limits) : 4;
-	});
+	// Keep drafts permissive so one attachment can transition into a provider's
+	// multi-image profile. Destination-specific limits are resolved and block
+	// validation/publishing without discarding the user's media selection.
+	const composerMediaLimit = MAX_COMPOSER_DRAFT_MEDIA;
 	const settingsAccount = $derived(
 		accounts.find((account) => account.id === settingsAccountId) ?? null
 	);

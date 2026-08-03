@@ -28,6 +28,19 @@ func TestValidateMediaThreadsUsesMimeTypeForVideo(t *testing.T) {
 	}
 }
 
+func TestValidateMediaMastodonDefersCountAndMOVSupportToInstanceCapabilities(t *testing.T) {
+	RegisterAllMediaValidators()
+	media := make([]MediaItem, 6)
+	for index := range media {
+		media[index] = MediaItem{ID: "image", MimeType: "image/jpeg"}
+	}
+	media[0] = MediaItem{ID: "video", MimeType: "video/quicktime"}
+
+	if issues := ValidateMedia(providerMastodon, media); len(issues) != 0 {
+		t.Fatalf("expected Mastodon instance capabilities to own count and MOV support, got %#v", issues)
+	}
+}
+
 func TestValidateMediaThreadsAcceptsMixedCarousel(t *testing.T) {
 	RegisterAllMediaValidators()
 	issues := ValidateMedia(providerThreads, []MediaItem{
@@ -42,13 +55,13 @@ func TestValidateMediaThreadsAcceptsMixedCarousel(t *testing.T) {
 
 func TestValidateMediaThreadsRejectsTooManyOrUnsupportedAttachments(t *testing.T) {
 	RegisterAllMediaValidators()
-	media := make([]MediaItem, 11)
+	media := make([]MediaItem, 21)
 	for index := range media {
 		media[index] = MediaItem{ID: "image", MimeType: "image/jpeg"}
 	}
 
 	issues := ValidateMedia(providerThreads, media)
-	if len(issues) != 1 || issues[0].Severity != severityError || issues[0].Message != "Threads supports up to 10 media attachments per post." {
+	if len(issues) != 1 || issues[0].Severity != severityError || issues[0].Message != "Threads supports up to 20 media attachments per post." {
 		t.Fatalf("expected a Threads carousel count error, got %#v", issues)
 	}
 
@@ -58,18 +71,32 @@ func TestValidateMediaThreadsRejectsTooManyOrUnsupportedAttachments(t *testing.T
 	}
 }
 
-func TestValidateMediaLinkedInWarnsForMultipleAttachments(t *testing.T) {
+func TestValidateMediaLinkedInAcceptsTwoToTwentyImages(t *testing.T) {
 	RegisterAllMediaValidators()
 	issues := ValidateMedia(providerLinkedIn, []MediaItem{
 		{ID: "first", MimeType: "image/png"},
-		{ID: "second", MimeType: "image/png"},
+		{ID: "second", MimeType: "image/gif"},
 	})
 
-	if len(issues) != 1 {
-		t.Fatalf("expected one issue, got %d", len(issues))
+	if len(issues) != 0 {
+		t.Fatalf("expected LinkedIn multi-image media to pass, got %#v", issues)
 	}
-	if issues[0].Severity != severityWarning {
-		t.Fatalf("expected warning severity, got %q", issues[0].Severity)
+
+	images := make([]MediaItem, 21)
+	for index := range images {
+		images[index] = MediaItem{ID: "image", MimeType: "image/jpeg"}
+	}
+	issues = ValidateMedia(providerLinkedIn, images)
+	if len(issues) != 1 || issues[0].Severity != severityError || issues[0].Message != "LinkedIn multi-image posts support 2-20 images." {
+		t.Fatalf("expected LinkedIn multi-image count error, got %#v", issues)
+	}
+
+	issues = ValidateMedia(providerLinkedIn, []MediaItem{
+		{ID: "image", MimeType: "image/png"},
+		{ID: "video", MimeType: "video/mp4"},
+	})
+	if len(issues) != 1 || issues[0].MediaID != "video" || issues[0].Severity != severityError {
+		t.Fatalf("expected LinkedIn mixed-media error, got %#v", issues)
 	}
 }
 

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+	MAX_COMPOSER_DRAFT_MEDIA,
 	mediaCapabilityItemsFromIds,
 	providerMediaWarningMessages,
 	validateProviderMedia,
@@ -59,8 +60,16 @@ describe('media-capabilities', () => {
 		).toContain('Bluesky video must be under 100MB.');
 	});
 
+	it('leaves Mastodon attachment counts and MOV support to the connected instance', () => {
+		const media = Array.from({ length: 6 }, (_, index) => ({
+			id: `mastodon-${index}`,
+			mimeType: index === 0 ? 'video/quicktime' : 'image/jpeg'
+		}));
+		expect(validateProviderMedia('mastodon', media)).toEqual([]);
+	});
+
 	it('accepts Threads mixed carousels and enforces their count and MIME rules', () => {
-		const carousel = Array.from({ length: 10 }, (_, index) => ({
+		const carousel = Array.from({ length: 20 }, (_, index) => ({
 			id: `media-${index}`,
 			mimeType: index % 2 === 0 ? 'image/webp' : 'video/quicktime'
 		}));
@@ -69,9 +78,9 @@ describe('media-capabilities', () => {
 		expect(
 			providerMediaWarningMessages('threads', [
 				...carousel,
-				{ id: 'media-10', mimeType: 'image/jpeg' }
+				{ id: 'media-20', mimeType: 'image/jpeg' }
 			])
-		).toContain('Threads supports up to 10 media attachments per post.');
+		).toContain('Threads supports up to 20 media attachments per post.');
 		expect(validateProviderMedia('threads', [{ id: 'video', mimeType: 'video/webm' }])).toEqual([
 			{
 				provider: 'threads',
@@ -80,6 +89,46 @@ describe('media-capabilities', () => {
 				message: 'Threads supports MP4 or MOV video.'
 			}
 		]);
+	});
+
+	it('keeps draft attachments independent from a destination single-media profile', () => {
+		expect(MAX_COMPOSER_DRAFT_MEDIA).toBe(35);
+		expect(
+			validateProviderMedia(
+				'x',
+				Array.from({ length: 5 }, (_, index) => ({
+					id: `image-${index}`,
+					mimeType: 'image/jpeg'
+				}))
+			)
+		).toContainEqual(expect.objectContaining({ provider: 'x', severity: 'error' }));
+	});
+
+	it('accepts LinkedIn multi-image posts and rejects mixed attachments', () => {
+		expect(
+			validateProviderMedia('linkedin', [
+				{ id: 'first', mimeType: 'image/jpeg' },
+				{ id: 'second', mimeType: 'image/gif' }
+			])
+		).toEqual([]);
+		expect(
+			validateProviderMedia('linkedin', [
+				{ id: 'image', mimeType: 'image/png' },
+				{ id: 'video', mimeType: 'video/mp4' }
+			])
+		).toContainEqual(
+			expect.objectContaining({ provider: 'linkedin', mediaId: 'video', severity: 'error' })
+		);
+	});
+
+	it('enforces Discord attachment count locally', () => {
+		const attachments = Array.from({ length: 11 }, (_, index) => ({
+			id: `file-${index}`,
+			mimeType: 'image/png'
+		}));
+		expect(validateProviderMedia('discord', attachments)).toContainEqual(
+			expect.objectContaining({ provider: 'discord', severity: 'error' })
+		);
 	});
 
 	it('allows Facebook multi-photo posts without treating videos as photos', () => {

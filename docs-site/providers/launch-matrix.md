@@ -33,7 +33,7 @@ Check the running server for its current setup. Open **Accounts**, call `GET /ap
 | Mastodon               | Text, links, up to four attachments, replies, scheduling                                      | Limits vary by instance; verify media processing and reply behavior           |
 | Bluesky                | Text, links, up to four images, one MP4 video, AT Protocol replies, scheduling                | Verify video and reply refs against the target account                        |
 | LinkedIn               | Text, links, image, document, video, comment-based child posts, scheduling                    | Permissions, app review, and video behavior can block the path                |
-| Threads                | Text, image, video, 2–10 item mixed carousels, replies, scheduling                            | Media must be publicly reachable and Meta access must be approved             |
+| Threads                | Text, image, video, 2–20 item mixed carousels, replies, scheduling                            | Media must be publicly reachable and Meta access must be approved             |
 | Facebook Pages         | Text, links, image, 2–10 image multi-photo, Story, video, comments, scheduling                | Permissions, review, Page identity, and public media apply                    |
 | Instagram Professional | Image, carousel, Story, Reel, comments, scheduling                                            | No text-only posts; Business or Creator account and public media are required |
 | TikTok                 | One video or 1–35 JPEG/WebP photo posts, scheduling                                           | Direct Post audit approval and public media apply                             |

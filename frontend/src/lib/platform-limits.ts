@@ -66,14 +66,14 @@ export const PLATFORM_LIMITS: Record<string, PlatformLimitDefinition> = {
 		key: 'linkedin',
 		name: 'LinkedIn',
 		charLimit: 3000,
-		media: 'One image, video, or document per account version',
+		media: 'One image, video, or document, or 2-20 images',
 		note: 'Thread replies publish as comments. Use the focused editor for videos and documents.'
 	},
 	threads: {
 		key: 'threads',
 		name: 'Threads',
 		charLimit: 500,
-		media: 'One media item or a 2-10 item carousel',
+		media: 'One media item or a 2-20 item carousel',
 		note: 'Media must be served from public HTTPS URLs.'
 	},
 	facebook: {

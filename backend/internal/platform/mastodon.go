@@ -33,20 +33,13 @@ func validateMastodonMedia(media []MediaItem) []MediaValidationIssue {
 	if len(media) == 0 {
 		return nil
 	}
-	if len(media) > 4 {
-		return []MediaValidationIssue{{
-			Provider: providerMastodon,
-			Severity: severityError,
-			Message:  "Mastodon supports up to 4 media attachments per post.",
-		}}
-	}
 	for _, item := range media {
 		if isVideoMime(item.MimeType) && !isMastodonLikelyVideoMime(item.MimeType) {
 			return []MediaValidationIssue{{
 				Provider: providerMastodon,
 				MediaID:  item.ID,
 				Severity: severityWarning,
-				Message:  "Mastodon video support depends on the instance; MP4 and WebM are the safest formats.",
+				Message:  "Mastodon video support depends on the instance; MP4, MOV, and WebM are the safest formats.",
 			}}
 		}
 	}
@@ -55,7 +48,7 @@ func validateMastodonMedia(media []MediaItem) []MediaValidationIssue {
 
 func isMastodonLikelyVideoMime(mimeType string) bool {
 	mimeType = strings.ToLower(mimeType)
-	return mimeType == videoTypeMP4 || mimeType == "video/webm" || mimeType == "image/gif"
+	return mimeType == videoTypeMP4 || mimeType == "video/quicktime" || mimeType == "video/webm" || mimeType == "image/gif"
 }
 
 func (m *MastodonAdapter) InstanceURL() string {

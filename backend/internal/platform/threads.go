@@ -199,8 +199,8 @@ func (t *ThreadsAdapter) Publish(ctx context.Context, accessToken, userID string
 		return "", fmt.Errorf("threads media publishing requires media metadata")
 	}
 	if len(req.PlatformMediaIDs) > 1 {
-		if len(req.PlatformMediaIDs) > 10 {
-			return "", fmt.Errorf("threads carousel requires 2-10 media items")
+		if len(req.PlatformMediaIDs) > 20 {
+			return "", fmt.Errorf("threads carousel requires 2-20 media items")
 		}
 		containerID, err := t.createCarouselContainer(ctx, accessToken, userID, req)
 		if err != nil {
@@ -743,11 +743,11 @@ func validateThreadsMedia(media []MediaItem) []MediaValidationIssue {
 	if len(media) == 0 {
 		return nil
 	}
-	if len(media) > 10 {
+	if len(media) > 20 {
 		return []MediaValidationIssue{{
 			Provider: providerThreads,
 			Severity: severityError,
-			Message:  "Threads supports up to 10 media attachments per post.",
+			Message:  "Threads supports up to 20 media attachments per post.",
 		}}
 	}
 
