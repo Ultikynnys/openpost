@@ -4,6 +4,8 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [1.51.0] - 2026-08-03
+
 ### Added
 
 - Added an instance-admin Configuration screen for optional account, email, authentication, feature, provider behavior, and provider-app settings, with encrypted database values, write-only secrets, environment precedence, validation, fallback controls, and explicit restart status.
