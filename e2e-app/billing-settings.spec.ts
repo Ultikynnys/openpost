@@ -591,6 +591,7 @@ test("plan selection from signup starts checkout after onboarding", async ({
   });
 
   await page.goto("/register?plan=creator");
+  await page.getByLabel("Username").fill(`plan-${unique}`);
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password", { exact: true }).fill(password);
   await page.getByLabel("Confirm Password").fill(password);
@@ -600,7 +601,7 @@ test("plan selection from signup starts checkout after onboarding", async ({
   await page.getByLabel("Workspace name").fill("Plan Handoff E2E");
   await page.getByRole("button", { name: "Create workspace" }).click();
 
-	await expect(page).toHaveURL(/\/settings\?checkout=creator/);
+  await expect(page).toHaveURL(/\/settings\?checkout=creator/);
   expect(checkoutURL).toContain("/organizations/");
   expect(checkoutBody?.plan_id).toBe("creator");
 });

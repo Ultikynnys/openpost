@@ -17,6 +17,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/openpost/backend/internal/api/middleware"
 	"github.com/openpost/backend/internal/models"
+	"github.com/openpost/backend/internal/queue"
 	"github.com/openpost/backend/internal/services/auth"
 	"github.com/openpost/backend/internal/services/identity"
 	"github.com/openpost/backend/internal/services/mediastore"
@@ -303,16 +304,16 @@ func (h *AccountLifecycleHandler) deleteAccount(ctx context.Context, input *Dele
 	if err != nil {
 		return nil, huma.Error500InternalServerError("failed to prepare instance administration transfer")
 	}
-	cleanupJobID, err := h.deleteDatabaseRecords(
+	cleanupJobIDs, err := h.deleteDatabaseRecords(
 		ctx, user.ID, adminSuccessorID, plan.personalOrganizationIDs, workspaceIDs, plan.retainedSuccessors, objectKeys,
 	)
 	if err != nil {
 		return nil, huma.Error500InternalServerError("failed to delete account records")
 	}
 	if err := h.deleteStoredObjectKeys(objectKeys); err != nil {
-		log.Printf("account %s deleted; deferred object cleanup job %s will retry: %v", user.ID, cleanupJobID, err)
-	} else if cleanupJobID != "" {
-		_, _ = h.db.NewDelete().Model((*models.Job)(nil)).Where("id = ?", cleanupJobID).Exec(ctx)
+		log.Printf("account %s deleted; %d deferred object cleanup jobs will retry: %v", user.ID, len(cleanupJobIDs), err)
+	} else if len(cleanupJobIDs) > 0 {
+		_, _ = h.db.NewDelete().Model((*models.Job)(nil)).Where("id IN (?)", bun.List(cleanupJobIDs)).Exec(ctx)
 	}
 
 	out := &DeleteAccountOutput{}
@@ -763,14 +764,14 @@ func (h *AccountLifecycleHandler) deleteDatabaseRecords(
 	workspaceIDs []string,
 	retainedSuccessors map[string]string,
 	objectKeys []string,
-) (string, error) {
-	cleanupJobID := ""
+) ([]string, error) {
+	var cleanupJobIDs []string
 	err := h.db.RunInTx(ctx, &sql.TxOptions{}, func(txCtx context.Context, tx bun.Tx) error {
 		if err := transferInstanceAdministration(txCtx, tx, userID, adminSuccessorID); err != nil {
 			return err
 		}
 		var err error
-		cleanupJobID, err = enqueueStorageCleanup(txCtx, tx, objectKeys)
+		cleanupJobIDs, err = enqueueStorageCleanup(txCtx, tx, objectKeys)
 		if err != nil {
 			return err
 		}
@@ -790,7 +791,7 @@ func (h *AccountLifecycleHandler) deleteDatabaseRecords(
 		}
 		return deleteUserRow(txCtx, tx, userID)
 	})
-	return cleanupJobID, err
+	return cleanupJobIDs, err
 }
 
 func transferInstanceAdministration(ctx context.Context, tx bun.Tx, userID, successorID string) error {
@@ -831,22 +832,31 @@ func transferInstanceAdministration(ctx context.Context, tx bun.Tx, userID, succ
 	return nil
 }
 
-func enqueueStorageCleanup(ctx context.Context, tx bun.Tx, objectKeys []string) (string, error) {
+const storageCleanupBatchSize = queue.StorageDeleteMaxKeys
+
+func enqueueStorageCleanup(ctx context.Context, tx bun.Tx, objectKeys []string) ([]string, error) {
 	if len(objectKeys) == 0 {
-		return "", nil
+		return nil, nil
 	}
-	payload, err := json.Marshal(struct {
-		Keys []string `json:"keys"`
-	}{Keys: objectKeys})
-	if err != nil {
-		return "", err
+	jobIDs := make([]string, 0, (len(objectKeys)+storageCleanupBatchSize-1)/storageCleanupBatchSize)
+	for start := 0; start < len(objectKeys); start += storageCleanupBatchSize {
+		end := min(start+storageCleanupBatchSize, len(objectKeys))
+		payload, err := json.Marshal(struct {
+			Keys []string `json:"keys"`
+		}{Keys: objectKeys[start:end]})
+		if err != nil {
+			return nil, err
+		}
+		jobID := uuid.NewString()
+		if _, err := tx.NewInsert().Model(&models.Job{
+			ID: jobID, Type: "storage_delete", Payload: string(payload),
+			Status: "pending", RunAt: time.Now().UTC(), MaxAttempts: 10,
+		}).Exec(ctx); err != nil {
+			return nil, err
+		}
+		jobIDs = append(jobIDs, jobID)
 	}
-	jobID := uuid.NewString()
-	_, err = tx.NewInsert().Model(&models.Job{
-		ID: jobID, Type: "storage_delete", Payload: string(payload),
-		Status: "pending", RunAt: time.Now().UTC(), MaxAttempts: 10,
-	}).Exec(ctx)
-	return jobID, err
+	return jobIDs, nil
 }
 
 func transferRetainedOrganizations(ctx context.Context, tx bun.Tx, userID string, successors map[string]string) error {
@@ -1063,6 +1073,7 @@ func workspaceDeletionPlan(workspaceIDs []string, ids workspaceDeletionIDs) []mo
 		(*models.XOAuthRequestToken)(nil),
 		(*models.WorkspaceInvitation)(nil),
 		(*models.WorkspaceMember)(nil),
+		(*models.UserNotification)(nil),
 		(*models.MCPToolCall)(nil))
 	return appendIDDeletions(deletions, workspaceIDs, "id IN (?)", (*models.Workspace)(nil))
 }

@@ -131,6 +131,40 @@ func TestSubscriptionServiceDoesNotApplyUsersPlanToAnotherOwnersWorkspace(t *tes
 	require.False(t, decision.Allowed)
 }
 
+func TestSubscriptionServiceDoesNotApplyMembershipPlanToOwnedWorkspace(t *testing.T) {
+	t.Parallel()
+
+	db := newSubscriptionEntitlementTestDB(t)
+	_, err := db.NewInsert().Model(&models.Organization{ID: "org-personal", Name: "Personal", CreatedByID: "user-1"}).Exec(t.Context())
+	require.NoError(t, err)
+	_, err = db.NewUpdate().Model((*models.Workspace)(nil)).
+		Set("organization_id = ?", "org-personal").
+		Where("id = ?", "ws-1").Exec(t.Context())
+	require.NoError(t, err)
+	_, err = db.NewUpdate().Model((*models.Organization)(nil)).
+		Set("created_by = ?", "user-2").
+		Where("id = ?", "org-1").Exec(t.Context())
+	require.NoError(t, err)
+	_, err = db.NewInsert().Model(&models.OrganizationMember{
+		OrganizationID: "org-1", UserID: "user-1", Role: models.OrganizationRoleMember,
+	}).Exec(t.Context())
+	require.NoError(t, err)
+	seedBillingSubscription(t, db, "active", `{"limits":{"social_accounts":10}}`)
+	service := NewSubscriptionService(db, NewCloudBootstrapService())
+
+	decision, err := service.Check(t.Context(), Request{
+		UserID:      "user-1",
+		WorkspaceID: "ws-1",
+		Limit:       LimitSocialAccounts,
+		Current:     0,
+		Amount:      1,
+	})
+
+	require.NoError(t, err)
+	require.False(t, decision.Allowed)
+	require.Equal(t, "active subscription required", decision.Reason)
+}
+
 func TestSubscriptionServiceAllowsWithinActiveSubscriptionLimit(t *testing.T) {
 	t.Parallel()
 

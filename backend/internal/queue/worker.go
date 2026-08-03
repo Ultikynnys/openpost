@@ -23,6 +23,8 @@ import (
 )
 
 const (
+	// StorageDeleteMaxKeys is the largest storage deletion payload the worker accepts.
+	StorageDeleteMaxKeys      = 10_000
 	jobTypePublishPost        = "publish_post"
 	jobTypePublishPublication = "publish_publication"
 	jobStatusPending          = "pending"
@@ -391,7 +393,7 @@ func (w *BackgroundWorker) handleStorageDelete(payload string) error {
 	if err := json.Unmarshal([]byte(payload), &cleanup); err != nil {
 		return fmt.Errorf("decode storage deletion payload: %w", err)
 	}
-	if len(cleanup.Keys) == 0 || len(cleanup.Keys) > 10_000 {
+	if len(cleanup.Keys) == 0 || len(cleanup.Keys) > StorageDeleteMaxKeys {
 		return fmt.Errorf("storage deletion payload must contain 1 to 10000 keys")
 	}
 	for _, key := range cleanup.Keys {

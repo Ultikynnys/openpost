@@ -1,7 +1,12 @@
 package handlers
 
 import (
+	"context"
+	"database/sql"
+	"encoding/json"
+	"fmt"
 	"net/http"
+	"sort"
 	"testing"
 	"time"
 
@@ -73,6 +78,12 @@ func TestDeleteWorkspaceRemovesWorkspaceContent(t *testing.T) {
 		MimeType: "image/png", CreatedAt: time.Now().UTC(),
 	}).Exec(ctx)
 	require.NoError(t, err)
+	_, err = server.db.NewInsert().Model(&models.UserNotification{
+		ID: "notification-1", UserID: "user-1", WorkspaceID: "workspace-1",
+		Type: "publish_failed", Title: "Publishing failed", Body: "Draft content",
+		CreatedAt: time.Now().UTC(),
+	}).Exec(ctx)
+	require.NoError(t, err)
 
 	rec := jsonRequest(t, server.echo, http.MethodDelete, "/api/v1/workspaces/workspace-1", nil, "web-token")
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
@@ -81,7 +92,44 @@ func TestDeleteWorkspaceRemovesWorkspaceContent(t *testing.T) {
 	require.Zero(t, countRows[models.Workspace](t, server.db, "id = ?", "workspace-1"))
 	require.Zero(t, countRows[models.WorkspaceMember](t, server.db, "workspace_id = ?", "workspace-1"))
 	require.Zero(t, countRows[models.MediaAttachment](t, server.db, "id = ?", "media-1"))
+	require.Zero(t, countRows[models.UserNotification](t, server.db, "id = ?", "notification-1"))
+	require.Equal(t, 1, countRows[models.Job](t, server.db, "type = ?", "storage_delete"))
 	require.Equal(t, 1, countRows[models.Workspace](t, server.db, ""))
+}
+
+func TestEnqueueStorageCleanupBatchesWorkerSizedPayloads(t *testing.T) {
+	t.Parallel()
+	server := newDeleteWorkspaceTestServer(t)
+	keys := make([]string, storageCleanupBatchSize+1)
+	for index := range keys {
+		keys[index] = fmt.Sprintf("media/%05d.bin", index)
+	}
+
+	err := server.db.RunInTx(t.Context(), &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
+		jobIDs, err := enqueueStorageCleanup(ctx, tx, keys)
+		if err != nil {
+			return err
+		}
+		require.Len(t, jobIDs, 2)
+		return nil
+	})
+	require.NoError(t, err)
+
+	var jobs []models.Job
+	require.NoError(t, server.db.NewSelect().Model(&jobs).Where("type = ?", "storage_delete").Scan(t.Context()))
+	require.Len(t, jobs, 2)
+	batchSizes := make([]int, 0, len(jobs))
+	for _, job := range jobs {
+		var payload struct {
+			Keys []string `json:"keys"`
+		}
+		require.NoError(t, json.Unmarshal([]byte(job.Payload), &payload))
+		require.NotEmpty(t, payload.Keys)
+		require.LessOrEqual(t, len(payload.Keys), storageCleanupBatchSize)
+		batchSizes = append(batchSizes, len(payload.Keys))
+	}
+	sort.Ints(batchSizes)
+	require.Equal(t, []int{1, storageCleanupBatchSize}, batchSizes)
 }
 
 func TestDeleteWorkspaceRejectsLastWorkspace(t *testing.T) {

@@ -91,7 +91,10 @@ func (s *SubscriptionService) loadActiveUserSubscription(ctx context.Context, us
 		ModelTableExpr("billing_subscriptions AS bs").
 		ColumnExpr("bs.*").
 		Join("JOIN organization_members AS om ON om.organization_id = bs.organization_id").
+		Join("JOIN organizations AS o ON o.id = bs.organization_id").
 		Where("om.user_id = ?", userID).
+		Where("o.created_by = ?", userID).
+		Where("om.role IN (?)", bun.List([]string{models.OrganizationRoleOwner, models.OrganizationRoleAdmin})).
 		Where("LOWER(bs.status) IN (?)", bun.List([]string{"active", "trialing"})).
 		OrderExpr("bs.updated_at DESC").
 		Limit(1).
