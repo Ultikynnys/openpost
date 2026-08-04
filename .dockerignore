@@ -21,7 +21,7 @@ docs/
 LICENSE
 
 # Frontend build artifacts (rebuilt in container)
-frontend/node_modules/
+**/node_modules/
 frontend/.svelte-kit/
 
 # Backend binary (rebuilt in container)
