@@ -391,6 +391,22 @@ func TestTikTokPhotoCapabilityMatchesDocumentedMediaLimits(t *testing.T) {
 	require.ElementsMatch(t, []string{"image/jpeg", "image/webp"}, capability.Media.AllowedMIMEs)
 }
 
+func TestTikTokPostingMethodDefaultsToDirectPost(t *testing.T) {
+	capability, ok := Find(ProviderTikTok, models.ContentProfileShortVideo)
+
+	require.True(t, ok)
+	var postingMethod *SettingDefinition
+	for index := range capability.Settings {
+		if capability.Settings[index].Key == "content_posting_method" {
+			postingMethod = &capability.Settings[index]
+			break
+		}
+	}
+	require.NotNil(t, postingMethod)
+	require.True(t, postingMethod.Required)
+	require.Equal(t, "DIRECT_POST", postingMethod.Default)
+}
+
 func TestProviderTextLimitUsesGenericPostOrConservativePublicationLimit(t *testing.T) {
 	tests := map[string]int{
 		ProviderInstagram: 2200,

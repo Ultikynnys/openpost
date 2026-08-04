@@ -152,6 +152,20 @@ func Load() *Config {
 	// (Vite's dev port) regardless of where the binary was actually
 	// deployed.
 	frontendURL := strings.TrimRight(getEnvWithFallbacks("OPENPOST_APP_URL", "http://localhost:8080", "OPENPOST_FRONTEND_URL"), "/")
+	// MediaURL is the public base URL providers use to pull attached media
+	// (TikTok, Facebook, Instagram, Threads, YouTube). An explicit absolute
+	// OPENPOST_MEDIA_URL (for example a CDN) wins; an unset or relative
+	// value is resolved against FrontendURL so the signed /media/<id> route
+	// advertised by this app is reachable without extra configuration. This
+	// mirrors the OAuth redirect derivation above and the startup warning
+	// that the public media URL advertises the app address.
+	mediaURL := strings.TrimSpace(getEnvDefault("OPENPOST_MEDIA_URL", ""))
+	if mediaURL == "" {
+		mediaURL = "/media"
+	}
+	if !isAbsoluteMediaURL(mediaURL) {
+		mediaURL = frontendURL + "/" + strings.TrimLeft(mediaURL, "/")
+	}
 	edition := getEnvEnum("OPENPOST_EDITION", EditionSelfHost, EditionSelfHost, EditionCloud)
 	legalRequired := edition == EditionCloud
 	defaultTermsURL := ""
@@ -251,7 +265,7 @@ func Load() *Config {
 
 		StorageDriver:     getEnvEnum("OPENPOST_STORAGE_DRIVER", StorageDriverLocal, StorageDriverLocal, StorageDriverS3),
 		MediaPath:         getEnvDefault("OPENPOST_MEDIA_PATH", "./media"),
-		MediaURL:          getEnvDefault("OPENPOST_MEDIA_URL", "/media"),
+		MediaURL:          mediaURL,
 		S3Endpoint:        getEnvDefault("OPENPOST_S3_ENDPOINT", ""),
 		S3Region:          getEnvDefault("OPENPOST_S3_REGION", ""),
 		S3Bucket:          getEnvDefault("OPENPOST_S3_BUCKET", ""),
@@ -657,6 +671,15 @@ func getEnvDefault(key, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+// isAbsoluteMediaURL reports whether the value is an absolute URL with a
+// scheme and host, matching the resolution semantics of the publicurl
+// package so an operator-set OPENPOST_MEDIA_URL like a CDN base URL is
+// never prefixed with the app URL.
+func isAbsoluteMediaURL(raw string) bool {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	return err == nil && parsed.Scheme != "" && parsed.Host != ""
 }
 
 func getEnvWithFallbacks(primary, fallback string, aliases ...string) string {

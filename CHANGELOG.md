@@ -11,6 +11,9 @@ All notable changes to this project are documented in this file.
 ### Fixed
 
 - Fixed X analytics handling for depleted API credits and incomplete batch responses, and corrected Reddit analytics endpoints, destination follower counts, thread aggregation, and missing metric handling.
+- Fixed TikTok (and other public-media providers) publishing when `OPENPOST_MEDIA_URL` is unset or relative: the public media base URL is now derived from `OPENPOST_APP_URL` (`<app-url>/media`), so provider media pulls work without extra configuration and no longer fail with "Provider publishing needs a public HTTPS media URL". Existing media marked with that configuration error is re-verified automatically.
+- Made the TikTok "Posting method" setting default to Direct Post so the composer no longer reports "Posting method is required" before the option is chosen.
+- Fixed the short-video and video composer keeping stale destination warnings after a setting is fixed: editing any destination, segment, or media setting now re-runs capability validation, so only requirements that are still missing or blocked are reported.
 
 ## [1.51.2] - 2026-08-03
 

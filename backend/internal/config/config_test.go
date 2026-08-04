@@ -149,6 +149,32 @@ func TestLoadProductionPrimitiveDefaults(t *testing.T) {
 	require.Equal(t, 180, cfg.ProviderUsageRetentionDays)
 }
 
+func TestLoadDerivesPublicMediaURLFromAppURL(t *testing.T) {
+	t.Setenv("OPENPOST_APP_URL", "https://openpost.example.com")
+
+	cfg := Load()
+
+	require.Equal(t, "https://openpost.example.com/media", cfg.MediaURL)
+}
+
+func TestLoadKeepsExplicitAbsoluteMediaURL(t *testing.T) {
+	t.Setenv("OPENPOST_APP_URL", "https://openpost.example.com")
+	t.Setenv("OPENPOST_MEDIA_URL", "https://media.example.com/base")
+
+	cfg := Load()
+
+	require.Equal(t, "https://media.example.com/base", cfg.MediaURL)
+}
+
+func TestLoadResolvesRelativeMediaURLAgainstAppURL(t *testing.T) {
+	t.Setenv("OPENPOST_APP_URL", "https://openpost.example.com")
+	t.Setenv("OPENPOST_MEDIA_URL", "/media")
+
+	cfg := Load()
+
+	require.Equal(t, "https://openpost.example.com/media", cfg.MediaURL)
+}
+
 func TestLoadProviderCostGuardrailConfiguration(t *testing.T) {
 	t.Setenv("OPENPOST_UPDATE_CHECK_ENABLED", "false")
 	t.Setenv("OPENPOST_X_MONTHLY_BUDGET_MICROUSD", "1230000")
