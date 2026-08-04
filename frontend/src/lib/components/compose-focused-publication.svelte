@@ -224,6 +224,7 @@
 	let readinessRequestSequence = 0;
 	let destinationOptionsRequestSequence = 0;
 	let capabilityResolveRequestSequence = 0;
+	let capabilityResolveTimer: ReturnType<typeof setTimeout> | null = null;
 	let nextSlotRequestSequence = 0;
 	let saveGeneration = 0;
 	const saveQueue = new SerializedSaveQueue(() => publicationId);
@@ -874,6 +875,14 @@
 			.join(', ');
 	}
 
+	function scheduleCapabilityResolve() {
+		if (capabilityResolveTimer) clearTimeout(capabilityResolveTimer);
+		capabilityResolveTimer = setTimeout(() => {
+			capabilityResolveTimer = null;
+			void resolveSelectedCapabilities();
+		}, 300);
+	}
+
 	async function resolveSelectedCapabilities(): Promise<boolean> {
 		const accountIds = selectedAccountIds;
 		if (!selectedWorkspaceId || accountIds.length === 0) {
@@ -1066,6 +1075,7 @@
 	function updateMediaAltText(mediaId: string, altText: string) {
 		media = media.map((item) => (item.id === mediaId ? { ...item, altText } : item));
 		validationIssues = [];
+		scheduleCapabilityResolve();
 		queueAutoSave();
 	}
 
@@ -1977,6 +1987,7 @@
 				);
 			}
 			validationIssues = [];
+			scheduleCapabilityResolve();
 			return;
 		}
 		const current = settingsForAccount(account);
@@ -1985,9 +1996,7 @@
 			[account.id]: { ...current, [key]: value }
 		};
 		validationIssues = [];
-		if (key === 'content_posting_method') {
-			void resolveSelectedCapabilities();
-		}
+		scheduleCapabilityResolve();
 	}
 
 	function visibleSettings(account: SocialAccount): SettingDefinition[] {
@@ -2085,6 +2094,7 @@
 			)
 		}));
 		validationIssues = [];
+		scheduleCapabilityResolve();
 	}
 
 	function setMediaAccountSettings(
